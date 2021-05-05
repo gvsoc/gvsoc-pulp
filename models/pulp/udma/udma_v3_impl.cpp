@@ -128,7 +128,6 @@ void Udma_channel::push_ready_req(vp::io_req *req)
 {
   current_cmd->received_size += req->get_size();
 
-  trace.msg("Received\n");
   trace.msg("Received data from L2 (cmd: %p, data_size: 0x%x, transfer_size: 0x%x, received_size: 0x%x, value: 0x%x)\n",
     current_cmd, req->get_size(), current_cmd->size, current_cmd->received_size, *(uint32_t *)req->get_data());
 
@@ -187,17 +186,25 @@ void Udma_channel::check_state()
 
   if (free_reqs->is_full())
   {
-    trace.msg("Inactive\n");;
     this->state_event.event(NULL);
   }
   else
   {
-    trace.msg("Active\n");;
     uint8_t one = 1;
     this->state_event.event(&one);
   }
 }
 
+
+void Udma_channel::build_reqs_and_enqueue(Udma_transfer *req)
+{
+  saddr = req->addr;
+  size = req->size;
+  transfer_size = req->transfer_size;
+  continuous_mode = req->continuous_mode;
+
+  enqueue_transfer();
+}
 
 
 void Udma_channel::enqueue_transfer()
@@ -403,13 +410,29 @@ vp::io_req_status_e Udma_periph::req(vp::io_req *req, uint64_t offset)
 
 
 
+// bool Udma_transfer::prepare_req(vp::io_req *req)
+// {
+//   req->prepare();
+//   // The UDMA is dropping the address LSB to always have 32 bits aligned
+//   // requests
+//   req->set_addr(current_addr & ~0x3);
+//   // The UDMA always sends 32 bits requests to L2 whatever the remaining size
+//   req->set_size(4);
+
+//   *(Udma_channel **)req->arg_get(0) = channel;
+//   req->set_actual_size(remaining_size > 4 ? 4 : remaining_size);
+
+//   current_addr += 4;
+//   remaining_size -= 4;
+
+//   return remaining_size <= 0;
+// }
+/* The UDMA cannot do misaligned access. It uses strobes to mask the byte to not overwrite the memory and split the request*/
 bool Udma_transfer::prepare_req(vp::io_req *req)
 {
   req->prepare();
-  // The UDMA is dropping the address LSB to always have 32 bits aligned
-  // requests
-  req->set_addr(current_addr & ~0x3);
-  // The UDMA always sends 32 bits requests to L2 whatever the remaining size
+  // The UDMA has current_addr always aligned to 32-bit word. The model not
+  req->set_addr(current_addr);
   req->set_size(4);
 
   *(Udma_channel **)req->arg_get(0) = channel;
@@ -583,7 +606,11 @@ vp::io_req_status_e udma::periph_req(vp::io_req *req, uint64_t offset)
 
   int periph_id = UDMA_PERIPH_GET(offset);
 
+#if HAS_HYPER
+  if (periph_id >= nb_periphs + HYPER_NB_CHANNELS || periphs[periph_id] == NULL)
+#else
   if (periph_id >= nb_periphs || periphs[periph_id] == NULL)
+#endif
   {
     trace.force_warning("Accessing invalid periph (id: %d)\n", periph_id);
     return vp::IO_REQ_INVALID;
@@ -743,10 +770,19 @@ int udma::build()
       else if (strcmp(name.c_str(), "hyper") == 0)
       {
         trace.msg("Instantiating HYPER channel (id: %d, offset: 0x%x)\n", id, offset);
-        if (version == 2)
+        // if (version == 2)
+        // {
+        //   Hyper_periph_v2 *periph = new Hyper_periph_v2(this, id, j);
+        //   periphs[id] = periph;
+        // }
+        if (version == 3)
         {
-          Hyper_periph_v2 *periph = new Hyper_periph_v2(this, id, j);
+          Hyper_periph_v3 *periph = new Hyper_periph_v3(this, id, j);
           periphs[id] = periph;
+          for(int channel_count=1; channel_count<=HYPER_NB_CHANNELS; channel_count++)
+          {
+            periphs[id+channel_count] = periph;
+          }
         }
         else
         {

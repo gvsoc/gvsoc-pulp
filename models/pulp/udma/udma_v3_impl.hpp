@@ -36,8 +36,14 @@
 #include <string.h>
 #include <vector>
 #include "archi/udma/udma_v3.h"
+
 #ifdef HAS_HYPER
+#if HYPER_VERSION == 2
 #include "archi/udma/hyper/udma_hyper_v2.h"
+#endif
+#if HYPER_VERSION == 3
+#include "archi/udma/hyper/udma_hyper_v3.h"
+#endif
 #endif
 
 class udma;
@@ -105,6 +111,8 @@ public:
   void check_state();
 
   Udma_transfer *current_cmd;
+
+  void build_reqs_and_enqueue(Udma_transfer *current_req);
 
 protected:
   vp::trace     trace;
@@ -204,11 +212,13 @@ class Udma_periph
 {
 public:
   Udma_periph(udma *top, int id);
-  vp::io_req_status_e req(vp::io_req *req, uint64_t offset);
+  virtual vp::io_req_status_e req(vp::io_req *req, uint64_t offset);
   virtual void reset(bool active);
   void clock_gate(bool is_on);
 
   int id;
+
+  bool get_periph_status() { return is_on; }
   
 protected:
   Udma_channel *channel0 = NULL;
@@ -342,7 +352,7 @@ protected:
 private:
   vp::io_req_status_e status_req(vp::io_req *req);
   vp::io_req_status_e setup_req(vp::io_req *req);
-  static void rx_sync(void *, int data);
+  static void rx_sync(void *, int scl, int data);
 
   vp::trace     trace;
 };
@@ -540,43 +550,243 @@ private:
  * HYPER
  */
 
-class Hyper_periph_v1;
+// class Hyper_periph_v1;
 
-class Hyper_rx_channel : public Udma_rx_channel
+// class Hyper_rx_channel : public Udma_rx_channel
+// {
+// public:
+//   Hyper_rx_channel(udma *top, Hyper_periph_v1 *periph, int id, string name);
+//   void handle_rx_data(int data);
+//   void handle_ready();
+
+// private:
+//   void reset(bool active);
+//   Hyper_periph_v1 *periph;
+// };
+
+
+// //#if defined(HAS_HYPER) && HYPER_VERSION == 2
+// class Hyper_periph_v2;
+
+// class Hyper_v2_rx_channel : public Udma_rx_channel
+// {
+// public:
+//   Hyper_v2_rx_channel(udma *top, Hyper_periph_v2 *periph, int id, string name);
+//   void handle_rx_data(int data);
+//   void handle_ready();
+//   void handle_transfer_end();
+
+// private:
+//   void reset(bool active);
+//   Hyper_periph_v2 *periph;
+// };
+// //#endif
+
+
+// typedef enum
+// {
+//   HYPER_STATE_IDLE,
+//   HYPER_STATE_DELAY,
+//   HYPER_STATE_CS,
+//   HYPER_STATE_CA,
+//   HYPER_STATE_DATA,
+//   HYPER_STATE_CS_OFF,
+// } hyper_state_e;
+
+
+
+// class Hyper_tx_channel : public Udma_tx_channel
+// {
+//   friend class Hyper_periph_v1;
+
+// public:
+//   Hyper_tx_channel(udma *top, Hyper_periph_v1 *periph, int id, string name);
+
+// protected:
+//   void handle_ready_reqs();
+
+// private:
+//   void reset(bool active);
+
+//   Hyper_periph_v1 *periph;
+
+// };
+
+// //#if defined(HAS_HYPER) && HYPER_VERSION == 2
+// class Hyper_v2_tx_channel : public Udma_tx_channel
+// {
+//   friend class Hyper_periph_v2;
+
+// public:
+//   Hyper_v2_tx_channel(udma *top, Hyper_periph_v2 *periph, int id, string name);
+//   void handle_transfer_end();
+
+// protected:
+//   void handle_ready_reqs();
+
+// private:
+//   void reset(bool active);
+
+//   Hyper_periph_v2 *periph;
+
+// };
+// //#endif
+
+
+// class Hyper_periph_v1 : public Udma_periph
+// {
+//   friend class Hyper_tx_channel;
+//   friend class Hyper_rx_channel;
+
+// public:
+//   Hyper_periph_v1(udma *top, int id, int itf_id);
+//   vp::io_req_status_e custom_req(vp::io_req *req, uint64_t offset);
+//   static void rx_sync(void *__this, int data);
+//   void reset(bool active);
+//   static void handle_pending_word(void *__this, vp::clock_event *event);
+//   void check_state();
+//   void handle_ready_reqs();
+
+// protected:
+//   vp::hyper_master hyper_itf;
+//   unsigned int *regs; 
+//   int clkdiv;
+//   Hyper_tx_channel *tx_channel;
+//   Hyper_rx_channel *rx_channel;
+
+// private:
+//   vp::trace     trace;
+
+//   vector<Udma_transfer *> pending_transfers;
+
+//   int pending_bytes;
+//   vp::clock_event *pending_word_event;
+//   int64_t next_bit_cycle;
+//   vp::io_req *pending_req;
+//   uint32_t pending_word;
+//   int transfer_size;
+//   hyper_state_e state;
+//   int ca_count;
+//   bool pending_tx;
+//   bool pending_rx;
+//   Udma_transfer *current_cmd;
+//   union
+//   {
+//     struct {
+//       unsigned int low_addr:3;
+//       unsigned int reserved:13;
+//       unsigned int high_addr:29;
+//       unsigned int burst_type:1;
+//       unsigned int address_space:1;
+//       unsigned int read:1;
+//     } __attribute__((packed));
+//     uint8_t raw[6];
+//   } ca;
+// };
+
+
+// //#if defined(HAS_HYPER) && HYPER_VERSION == 2
+// class Hyper_periph_v2 : public Udma_periph
+// {
+//   friend class Hyper_v2_tx_channel;
+//   friend class Hyper_v2_rx_channel;
+
+// public:
+//   Hyper_periph_v2(udma *top, int id, int itf_id);
+//   vp::io_req_status_e custom_req(vp::io_req *req, uint64_t offset);
+//   static void rx_sync(void *__this, int data);
+//   void reset(bool active);
+//   static void handle_pending_word(void *__this, vp::clock_event *event);
+//   void check_state();
+//   void handle_ready_reqs();
+
+// protected:
+//   vp::hyper_master hyper_itf;
+//   unsigned int *regs;
+//   Hyper_v2_tx_channel *tx_channel;
+//   Hyper_v2_rx_channel *rx_channel;
+
+// private:
+//   vp::trace     trace;
+
+//   vector<Udma_transfer *> pending_transfers;
+
+//   vp_hyper_timing_cfg r_timing_cfg;
+//   vp_hyper_clk_div r_clk_div;
+
+
+//   int eot_event;
+//   int pending_bytes;
+//   vp::clock_event *pending_word_event;
+//   int64_t next_bit_cycle;
+//   vp::io_req *pending_req;
+//   uint32_t pending_word;
+//   int transfer_size;
+//   hyper_state_e state;
+//   int delay;
+//   int ca_count;
+//   bool pending_tx;
+//   bool pending_rx;
+//   Udma_transfer *current_cmd;
+//   union
+//   {
+//     struct {
+//       unsigned int low_addr:3;
+//       unsigned int reserved:13;
+//       unsigned int high_addr:29;
+//       unsigned int burst_type:1;
+//       unsigned int address_space:1;
+//       unsigned int read:1;
+//     } __attribute__((packed));
+//     uint8_t raw[6];
+//   } ca;
+// };
+// //#endif
+
+
+class Hyper_periph_v3;
+
+class Hyper_transfer : public Udma_transfer
 {
 public:
-  Hyper_rx_channel(udma *top, Hyper_periph_v1 *periph, int id, string name);
+  uint32_t ex_addr;
+  int mem_sel;
+  int ca_setup;
+  int data;
+  int latency;
+  int en_add_latency;
+  bool cfg_setup;
+  int channel_id;
+  bool is_write;
+  bool twd_act;
+  int twd_count;
+  int twd_stride;
+  bool twd_is_l2;
+  int extra_size;
+
+  void set_next(Hyper_transfer *next) { this->next = next; }
+  Hyper_transfer *get_next() { return next; }
+  Hyper_transfer *next;
+
+};
+
+class Hyper_v3_rx_channel : public Udma_rx_channel
+{
+  friend class Hyper_periph_v3;
+
+public:
+  Hyper_v3_rx_channel(udma *top, Hyper_periph_v3 *periph, int id, string name);
   void handle_rx_data(int data);
   void handle_ready();
 
 private:
   void reset(bool active);
-  Hyper_periph_v1 *periph;
+  Hyper_periph_v3 *periph;
 };
-
-
-#ifdef HAS_HYPER
-class Hyper_periph_v2;
-
-class Hyper_v2_rx_channel : public Udma_rx_channel
-{
-public:
-  Hyper_v2_rx_channel(udma *top, Hyper_periph_v2 *periph, int id, string name);
-  void handle_rx_data(int data);
-  void handle_ready();
-  void handle_transfer_end();
-
-private:
-  void reset(bool active);
-  Hyper_periph_v2 *periph;
-};
-#endif
-
 
 typedef enum
 {
   HYPER_STATE_IDLE,
-  HYPER_STATE_DELAY,
   HYPER_STATE_CS,
   HYPER_STATE_CA,
   HYPER_STATE_DATA,
@@ -584,128 +794,75 @@ typedef enum
 } hyper_state_e;
 
 
-
-class Hyper_tx_channel : public Udma_tx_channel
+typedef enum
 {
-  friend class Hyper_periph_v1;
+  HYPER_PERIPH_STATE_IDLE,
+  HYPER_PERIPH_STATE_SETUP,
+  HYPER_PERIPH_STATE_WRITE,
+  HYPER_PERIPH_STATE_READ,
+  HYPER_PERIPH_STATE_REGWRITE,
+  HYPER_PERIPH_STATE_END,
+} hyper_periph_state_e;
+
+
+class Hyper_v3_tx_channel : public Udma_tx_channel
+{
+  friend class Hyper_periph_v3;
 
 public:
-  Hyper_tx_channel(udma *top, Hyper_periph_v1 *periph, int id, string name);
+  Hyper_v3_tx_channel(udma *top, Hyper_periph_v3 *periph, int id, string name);
 
 protected:
   void handle_ready_reqs();
 
 private:
   void reset(bool active);
-
-  Hyper_periph_v1 *periph;
-
-};
-
-#ifdef HAS_HYPER
-class Hyper_v2_tx_channel : public Udma_tx_channel
-{
-  friend class Hyper_periph_v2;
-
-public:
-  Hyper_v2_tx_channel(udma *top, Hyper_periph_v2 *periph, int id, string name);
-  void handle_transfer_end();
-
-protected:
-  void handle_ready_reqs();
-
-private:
-  void reset(bool active);
-
-  Hyper_periph_v2 *periph;
+  Hyper_periph_v3 *periph;
 
 };
-#endif
 
-
-class Hyper_periph_v1 : public Udma_periph
+class Hyper_periph_v3 : public Udma_periph
 {
-  friend class Hyper_tx_channel;
-  friend class Hyper_rx_channel;
+  friend class Hyper_v3_tx_channel;
+  friend class Hyper_v3_rx_channel;
 
 public:
-  Hyper_periph_v1(udma *top, int id, int itf_id);
-  vp::io_req_status_e custom_req(vp::io_req *req, uint64_t offset);
+  Hyper_periph_v3(udma *top, int id, int itf_id);
+  vp::io_req_status_e custom_req(vp::io_req *req, uint64_t offset, int id);
   static void rx_sync(void *__this, int data);
   void reset(bool active);
   static void handle_pending_word(void *__this, vp::clock_event *event);
   void check_state();
   void handle_ready_reqs();
 
+  bool get_cfg_status(int id) {return (cfg_setup[id] & command_word[id]);}
+  int unpack(int original_size);
+  void transfer_splitter();
+  void width_modulator_16b_32b();
+  void width_modulator_32b_16b();
+  int update_trans_id_alloc();
+  vp::io_req_status_e req(vp::io_req *req, uint64_t offset);
+  int transfer_arbiter(int id);
+  void fetch_from_fifos();
+  void set_device(int cs);
+  void set_busy_reg(int id, int value);
+  int get_busy_reg(int id);
+  void update_nb_tran(int id, int value);
+  int get_nb_tran(int id);
+
 protected:
   vp::hyper_master hyper_itf;
-  unsigned int *regs; 
+  unsigned int **regs;
+  unsigned int *common_regs;
   int clkdiv;
-  Hyper_tx_channel *tx_channel;
-  Hyper_rx_channel *rx_channel;
+  Hyper_v3_tx_channel *tx_channel;
+  Hyper_v3_rx_channel *rx_channel;
 
 private:
   vp::trace     trace;
 
   vector<Udma_transfer *> pending_transfers;
 
-  int pending_bytes;
-  vp::clock_event *pending_word_event;
-  int64_t next_bit_cycle;
-  vp::io_req *pending_req;
-  uint32_t pending_word;
-  int transfer_size;
-  hyper_state_e state;
-  int ca_count;
-  bool pending_tx;
-  bool pending_rx;
-  Udma_transfer *current_cmd;
-  union
-  {
-    struct {
-      unsigned int low_addr:3;
-      unsigned int reserved:13;
-      unsigned int high_addr:29;
-      unsigned int burst_type:1;
-      unsigned int address_space:1;
-      unsigned int read:1;
-    } __attribute__((packed));
-    uint8_t raw[6];
-  } ca;
-};
-
-
-#ifdef HAS_HYPER
-class Hyper_periph_v2 : public Udma_periph
-{
-  friend class Hyper_v2_tx_channel;
-  friend class Hyper_v2_rx_channel;
-
-public:
-  Hyper_periph_v2(udma *top, int id, int itf_id);
-  vp::io_req_status_e custom_req(vp::io_req *req, uint64_t offset);
-  static void rx_sync(void *__this, int data);
-  void reset(bool active);
-  static void handle_pending_word(void *__this, vp::clock_event *event);
-  void check_state();
-  void handle_ready_reqs();
-
-protected:
-  vp::hyper_master hyper_itf;
-  unsigned int *regs;
-  Hyper_v2_tx_channel *tx_channel;
-  Hyper_v2_rx_channel *rx_channel;
-
-private:
-  vp::trace     trace;
-
-  vector<Udma_transfer *> pending_transfers;
-
-  vp_hyper_timing_cfg r_timing_cfg;
-  vp_hyper_clk_div r_clk_div;
-
-
-  int eot_event;
   int pending_bytes;
   vp::clock_event *pending_word_event;
   int64_t next_bit_cycle;
@@ -717,6 +874,7 @@ private:
   int ca_count;
   bool pending_tx;
   bool pending_rx;
+
   Udma_transfer *current_cmd;
   union
   {
@@ -730,8 +888,26 @@ private:
     } __attribute__((packed));
     uint8_t raw[6];
   } ca;
+
+  bool *cfg_setup;
+  bool *command_word;
+  bool ending;
+  bool command_mode;
+  int twd_count;
+  bool write_trans;
+  bool continuous_mode;
+  int transfer_size_mode;
+  void enqueue_transfer(int id);
+  vp::io_req_status_e hyper_cfg_req(vp::io_req *req, int id);
+  vp::io_req_status_e access_common_regs(vp::io_req *req, uint64_t offset, int id);
+  vp::io_req_status_e access_private_regs(vp::io_req *req, uint64_t offset, int id);
+  Udma_queue<Hyper_transfer> *free_fifo[HYPER_NB_CHANNELS];
+  Udma_queue<Hyper_transfer> *pending_fifo[HYPER_NB_CHANNELS];
+  Hyper_transfer *current_command;
+  int channel_id;
+  int mem_sel;
+
 };
-#endif
 
 
 /*
