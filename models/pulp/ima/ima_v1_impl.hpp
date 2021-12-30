@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-/* 
+/*
  * Authors: Nazareno Bruschi, Unibo (nazareno.bruschi@unibo.it)
  */
 
@@ -36,7 +36,8 @@
 
 /* Returns values of Acquire state */
 #define IMA_ACQUIRE_LOCKED       -1
-#define IMA_ACQUIRE_READY         0
+#define IMA_ACQUIRE_READY        0
+
 
 class ima_job_t
 {
@@ -53,14 +54,15 @@ public:
   int dest_addr;
   int stride_src;
   int stride_dest;
-  int fetch_length;
-  int store_length;
+  int fetch_size;
+  int store_size;
   int line_length;
   int feat_stride;
   int feat_length;
   int roll_length;
   int memt;
   int dw_mode;
+  int first_data;
   /* Multi-jobs parameters */
   int jobs;
   int alpha_in_length;
@@ -195,7 +197,8 @@ private:
   vp::io_req *reqs;
   int port_id;
 
-  vp::wire_master<bool> irq;
+  vp::wire_master<bool> irq_0;
+  vp::wire_master<bool> irq_1;
 
   vp::clock_event *job_event;
   vp::clock_event *plot_event;
