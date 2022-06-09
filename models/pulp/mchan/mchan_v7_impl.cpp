@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* 
+/*
  * Authors: Germain Haugou, GreenWaves Technologies (germain.haugou@greenwaves-technologies.com)
  */
 
@@ -75,7 +75,7 @@ public:
   int broadcast;
 
   int id;
-  
+
   Mchan_channel *channel;  // The channel port from which the command arrived
 
   void set_next(Mchan_cmd *next) { this->next = next; }
@@ -286,7 +286,7 @@ int Mchan_channel::unpack_command(Mchan_cmd *cmd)
       }
     }
 
-    if (!cmd->is_2d) 
+    if (!cmd->is_2d)
     {
      top->trace.msg("New 1D command ready (input: %d, source: 0x%lx, dest: 0x%lx, size: 0x%x, loc2ext: %d, counter: %d)\n", id, cmd->source, cmd->dest, cmd->size, cmd->loc2ext, cmd->counter_id);
      goto unpackDone;
@@ -679,7 +679,7 @@ int mchan::alloc_counter(vp::io_req *req, Mchan_channel *channel)
   } else {
     trace.msg("No more counter, stalling core\n");
 
-    // In case no counter is available, put the request in the queue, 
+    // In case no counter is available, put the request in the queue,
     // this will stall the calling core
     if (first_alloc_pending_req == NULL)
       first_alloc_pending_req = req;
@@ -907,7 +907,7 @@ void mchan::check_ext_write_handler(void *__this, vp::clock_event *event)
 
   if (_this->current_ext_write_cmd != NULL)
   {
-    if (_this->nb_pending_ext_write_req < _this->max_nb_ext_write_req && 
+    if (_this->nb_pending_ext_write_req < _this->max_nb_ext_write_req &&
       _this->pending_loc_read_req == NULL)
     {
       _this->send_loc_read_req();
@@ -936,7 +936,7 @@ void mchan::account_transfered_bytes(Mchan_cmd *cmd, int bytes)
   if (pending_bytes[cmd->counter_id] == 0)
   {
     trace.msg("Counter reached zero, raising event\n");
-    
+
     if (cmd->broadcast)
     {
       for (unsigned int i=0; i<nb_channels; i++)
@@ -973,7 +973,7 @@ void mchan::check_loc_transfer_handler(void *__this, vp::clock_event *event)
     vp::io_req *ext_req;
     bool is_write;
 
-    if (i < 2)
+    if (i < (_this->nb_loc_ports/2))
     {
       ext_req = _this->pending_write_reqs->get_first();
       if (ext_req == NULL)
@@ -1012,7 +1012,7 @@ void mchan::check_loc_transfer_handler(void *__this, vp::clock_event *event)
     // TODO for now we assume this is synchronous
     vp::io_req_status_e err = _this->loc_itf[i].req(req);
 
-    if (err) 
+    if (err)
     {
 
     }

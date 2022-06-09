@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-/* 
+/*
  * Authors: Nazareno Bruschi, Unibo (nazareno.bruschi@unibo.it)
  */
 
@@ -39,7 +39,25 @@ void ima_v1::reset(bool active)
 {
   if (active)
   {
+    memset(this->buffer_in, 0, sizeof(int8_t)*this->xbar_y);
+    memset(this->buffer_out, 0, sizeof(int8_t)*this->xbar_x);
     memset(this->regs, 0, sizeof(unsigned int)*IMA_NB_REGS);
+
+    for(int j=0; j<this->xbar_y; j++)
+    {
+      for(int i=0; i<this->xbar_x; i++)
+      {
+        if(i == j)
+          this->crossbar[j][i] = 1;
+        else
+          this->crossbar[j][i] = 0;
+      }
+    }
+
+    /* Event cycles depend on analog time to perform the specific task and on the cluster frequency */
+    this->job->analog_latency    = (int)((float)this->eval_time / ((float)this->get_clock()->get_period() / 1000)) + 1;
+    this->pw_req->latency        = (int)((float)this->plot_write_time / ((float)this->get_clock()->get_period() / 1000)) + 1;
+    this->pr_req->latency        = (int)((float)this->plot_read_time  / ((float)this->get_clock()->get_period() / 1000)) + 1;
 
     this->clear_ima();
   }
@@ -53,9 +71,6 @@ void ima_v1::clear_ima()
 
   this->port_id = 0;
   this->job->port = this->port_id;
-
-  memset(this->buffer_in, 0, sizeof(int8_t)*xbar_y);
-  memset(this->buffer_out, 0, sizeof(int8_t)*xbar_x);
 
   this->regs[IMA_RUNNING_TASK/4] = -1;
   this->remaining_jobs = 0;
@@ -81,11 +96,6 @@ void ima_v1::clear_ima()
 
   this->line_fetch_lfover = 0;
   this->line_store_lfover = 0;
-
-  /* Event cycles depend on analog time to perform the specific task and on the cluster frequency */ 
-  this->job->analog_latency    = (((this->get_frequency() * this->eval_time) / 1000000000) + 1);
-  this->pw_req->latency        = (((this->get_frequency() * this->plot_write_time) / 1000000000) + 1);
-  this->pr_req->latency        = (((this->get_frequency() * this->plot_read_time) / 1000000000) + 1);
 
   this->count_stream_in  = 0;
   this->count_stream_out = 0;
@@ -128,7 +138,7 @@ void ima_v1::job_handler(void *__this, vp::clock_event *event)
       }
       else
       {
-        _this->extra_latency_in = 0;  
+        _this->extra_latency_in = 0;
       }
 
       _this->eval_state = IMA_EVAL_STATE_STREAM_IN;
@@ -137,6 +147,8 @@ void ima_v1::job_handler(void *__this, vp::clock_event *event)
       {
         if(_this->stats)
           printf("Job Statistics (cycles): Stream-in = %d, Compute = %d, Stream-out = %d\n", _this->count_stream_in, _this->count_compute, _this->count_stream_out);
+
+        _this->irq_0.sync(true);
         _this->set_state(IMA_STATE_IDLE);
       }
       else
@@ -146,6 +158,13 @@ void ima_v1::job_handler(void *__this, vp::clock_event *event)
           _this->job_update();
         }
       }
+
+      /* One more memory access if the address is misaligned and if it needed */
+      _this->remaining_in_req  += ((job->height + (job->src_addr & 0x3)) > job->height);
+      _this->remaining_out_req += ((job->width + (job->dest_addr & 0x3)) > job->width);
+
+      /* Size (in bytes) if a misaligned access request occurs */
+      job->first_data = 4 - (job->src_addr & 0x3);
 
       break;
     }
@@ -170,9 +189,14 @@ void ima_v1::job_handler(void *__this, vp::clock_event *event)
     case IMA_EVAL_STATE_COMPUTATION:
     {
       _this->exec_job();
-      _this->update_finished_jobs(1);
+      //_this->update_finished_jobs(1);
+      _this->job->analog_latency = (int)((float)_this->eval_time / ((float)_this->get_clock()->get_period() / 1000)) + 1;
       job->latency = job->analog_latency;
       _this->count_compute+=job->latency;
+
+      /* Size (in bytes) if a misaligned access request occurs */
+      job->first_data = 4 - (job->dest_addr & 0x3);
+
       _this->eval_state = IMA_EVAL_STATE_STREAM_OUT;
 
       break;
@@ -190,7 +214,7 @@ void ima_v1::job_handler(void *__this, vp::clock_event *event)
         job->latency+=2;
         _this->enqueued_req = 0;
         _this->remaining_jobs--;
-        _this->update_finished_jobs(-1);
+        _this->update_finished_jobs(1);
         _this->eval_state = IMA_EVAL_STATE_IDLE;
       }
       else
@@ -217,7 +241,7 @@ void ima_v1::plot_handler(void *__this, vp::clock_event *event)
     _this->trace.msg("Entered plot handler\n");
   else
     _this->warning.force_warning("Invalid state (current_state: %s)\n", get_state_name(_this->state).c_str());
-  
+
   switch (_this->state)
   {
     case IMA_STATE_P_WR:
@@ -238,12 +262,12 @@ void ima_v1::plot_handler(void *__this, vp::clock_event *event)
           _this->trace.msg("Finish writing crossbar values (written %d values)", (plot->index_y) * (plot->index_x));
           plot->index_x = -1;
           plot->index_y = -1;
-          _this->set_state(IMA_STATE_IDLE); 
+          _this->set_state(IMA_STATE_IDLE);
         }
         else
         {
           plot->index_x = plot->start_x;
-        }   
+        }
       }
 
       port->resp(plot->pending_plot_req);
@@ -315,8 +339,9 @@ vp::io_req_status_e ima_v1::acquire_req(vp::io_req *req)
           this->regs[IMA_ACQUIRE/4] = IMA_ACQUIRE_READY;
           this->trace.msg("IMA is ready\n");
           this->set_state(IMA_STATE_ACQUIRE);
+          this->irq_1.sync(true);
           /* TODO: find the id of running task */
-          this->set_id(0);     
+          this->set_id(0);
         }
         break;
       }
@@ -352,7 +377,7 @@ vp::io_req_status_e ima_v1::trigger_req(vp::io_req *req, int new_state)
       this->remaining_jobs = this->job->jobs;
       this->enqueue_job();
     }
-    return vp::IO_REQ_OK; 
+    return vp::IO_REQ_OK;
   }
 
   return vp::IO_REQ_INVALID;
@@ -381,14 +406,14 @@ vp::io_req_status_e ima_v1::submit_req(vp::io_req *req, int new_state)
         this->enqueue_write();
         this->pw_req->pending_plot_req = req;
         port->grant(this->pw_req->pending_plot_req);
-        return vp::IO_REQ_PENDING; 
+        return vp::IO_REQ_PENDING;
       }
       else
       {
-        return vp::IO_REQ_DENIED; 
+        return vp::IO_REQ_DENIED;
       }
     }
-    return vp::IO_REQ_OK; 
+    return vp::IO_REQ_OK;
   }
 
   return vp::IO_REQ_INVALID;
@@ -416,14 +441,14 @@ vp::io_req_status_e ima_v1::read_req(vp::io_req *req, int new_state)
         this->enqueue_read();
         this->pr_req->pending_plot_req = req;
         port->grant(this->pr_req->pending_plot_req);
-        return vp::IO_REQ_PENDING; 
+        return vp::IO_REQ_PENDING;
       }
       else
       {
-        return vp::IO_REQ_DENIED; 
+        return vp::IO_REQ_DENIED;
       }
-      return vp::IO_REQ_OK; 
-    } 
+      return vp::IO_REQ_OK;
+    }
   }
 
   return vp::IO_REQ_INVALID;
@@ -485,8 +510,8 @@ vp::io_req_status_e ima_v1::ima_req(vp::io_req *req, int new_state)
 
           this->job->adc_high           = this->regs[IMA_ADC_HIGH/4];
           this->job->adc_low            = this->regs[IMA_ADC_LOW/4];
-          this->job->fetch_length       = this->regs[IMA_FETCH_LENGTH/4];
-          this->job->store_length       = this->regs[IMA_STORE_LENGTH/4];
+          this->job->fetch_size         = this->regs[IMA_FETCH_LENGTH/4];
+          this->job->store_size         = this->regs[IMA_STORE_LENGTH/4];
 
           this->job->jobs               = this->regs[IMA_NUM_JOBS/4];
 
@@ -514,7 +539,7 @@ vp::io_req_status_e ima_v1::ima_req(vp::io_req *req, int new_state)
         }
       }
     }
-    return vp::IO_REQ_OK;    
+    return vp::IO_REQ_OK;
   }
 
   return vp::IO_REQ_INVALID;
@@ -544,13 +569,20 @@ vp::io_req_status_e ima_v1::req(void *__this, vp::io_req *req)
   if (!req->get_is_write())
   {
     *(uint32_t *)(req->get_data()) = _this->regs[reg_id];
+
+    switch(reg_id)
+    {
+      case IMA_FINISHED_JOBS/4:
+        _this->regs[reg_id] = 0;
+        break;
+    }
   }
   else
   {
     _this->regs[reg_id] = *(uint32_t *)(req->get_data());
   }
 
-  /* Reading/writing a register from peripherals interconnect requires 4 cycles */
+  /* Reading/writing a register from peripherals interconnect requires 4 cycles. TODO: Add a router with specific latency */
   req->inc_latency(1);
 
   switch (reg_id)
@@ -617,7 +649,7 @@ vp::io_req_status_e ima_v1::req(void *__this, vp::io_req *req)
       err = _this->ima_req(req, IMA_STATE_P_RREQ);
       break;
     }
- 
+
     case IMA_PR_VAL/4:
     {
       _this->trace.msg("Requesting new word to read in crossbar\n");
@@ -649,7 +681,7 @@ int8_t ima_v1::adc_clipping(float value)
   }
   else if(value <= -(((1 << (ADC_PRECISION - 1)) - 1)))
   {
-    value = -(((1 << (ADC_PRECISION - 1)) - 1)); 
+    value = -(((1 << (ADC_PRECISION - 1)) - 1));
   }
   /* Round float before casting */
   if(value >= 0)
@@ -673,6 +705,7 @@ void ima_v1::exec_job()
     for(int j=0; j<this->job->height; j++)
     {
       sum += ((float) this->buffer_in[this->job->start_y + j] / ((1 << (DAC_PRECISION - 1)) - 1)) * ((float) this->crossbar[this->job->start_y + j][this->job->start_x + i]) / ((1 << (STOR_DWIDTH - 1)) - 1);
+      //sum += this->buffer_in[this->job->start_y + j] * this->crossbar[this->job->start_y + j][this->job->start_x + i];
       //printf("in=%d, scaled_in=%f, cb=%d, scaled_cb=%f, sum=%f, scaled_sum=%f, ind_x=%d, ind_y=%d\n", this->buffer_in[this->job->start_y + j], \
               (float) this->buffer_in[this->job->start_y + j] / ((1 << (DAC_PRECISION - 1)) - 1), \
               this->crossbar[this->job->start_y + j][this->job->start_x + i], \
@@ -680,7 +713,8 @@ void ima_v1::exec_job()
               sum, (float) this->adc_clipping(sum), this->job->start_x + i, this->job->start_y + j);
     }
     this->buffer_out[this->job->start_x + i] = this->adc_clipping(sum);
-    this->trace.msg("Written in output buffer at index %d (sum: %f, out: %x)\n", this->job->start_x + i, sum, (uint8_t) this->buffer_out[this->job->start_x + i]);
+    //this->buffer_out[this->job->start_x + i] = sum;
+    this->trace.msg("Written in output buffer at index %d (sum: %f, out: %x)\n", this->job->start_x + i, sum, this->buffer_out[this->job->start_x + i]);
   }
 
   this->trace.msg("Computed %dx%d MVM (remaining_jobs: %d)\n", this->job->width, this->job->height, (this->remaining_jobs - 1));
@@ -742,6 +776,7 @@ void ima_v1::enqueue_write()
   if (!this->plot_event->is_enqueued())
   {
     /* Latency depends to the writing process */
+    this->pw_req->latency = (int)((float)this->plot_write_time / ((float)this->get_clock()->get_period() / 1000)) + 1;
     event_enqueue(this->plot_event, this->pw_req->latency);
   }
 }
@@ -751,6 +786,7 @@ void ima_v1::enqueue_read()
   if (!this->plot_event->is_enqueued())
   {
     /* Latency depends to the reading process */
+    this->pr_req->latency = (int)((float)this->plot_read_time / ((float)this->get_clock()->get_period() / 1000)) + 1;
     event_enqueue(this->plot_event, this->pr_req->latency);
   }
 }
@@ -833,7 +869,7 @@ void ima_v1::job_update()
       if(this->beta_in_count == job->beta_in_length)
         this->beta_in_count = 0;
     }
-    
+
     job->src_addr = this->regs[IMA_J_SRC_ADDR/4];
   }
 
@@ -866,7 +902,7 @@ int ima_v1::stream_access(int port, uint32_t addr, uint8_t *data, int size, bool
 {
   vp::io_req *req = &this->reqs[port];
 
-  req->set_addr(addr - 0x10000000);
+  req->set_addr(addr & (0x400000 - 1));
   req->set_size(size);
   req->set_data(data);
   req->set_is_write(is_write);
@@ -896,29 +932,54 @@ int ima_v1::stream_update(int port, bool is_write)
     {
       if(this->feat_count < job->feat_length)
       {
-        if(this->step_count < job->line_length)
-        {
-          addr += this->step_count;
+        addr += this->step_count;
 
-          if(this->step_count + 4 >= job->line_length)
+        /* Misaligned. Detect if the dest adrr is misaligned. If so, split the first access*/
+        if((this->step_count == 0) && (addr & 0x3))
+        {
+          if((this->step_count + job->first_data) <= job->width)
           {
-            this->line_store_lfover = (this->step_count + 4) & 0x3;
+            this->step_count+=job->first_data;
+
+            err = this->stream_access(port, addr, (uint8_t *)(this->buffer_out + job->start_x + this->enqueued_req), job->first_data, is_write, (int64_t *) &job->latency);
+          }
+          /* Leftover. if data to written are less than line size */
+          else
+          {
+            this->line_store_lfover = job->width;
+            this->step_count+=this->line_store_lfover;
 
             err = this->stream_access(port, addr, (uint8_t *)(this->buffer_out + job->start_x + this->enqueued_req), this->line_store_lfover, is_write, (int64_t *) &job->latency);
 
             this->line_store_lfover = 0;
           }
-          else
+        }
+        /* Aligned */
+        else
+        {
+          if((this->step_count + 4) <= job->width)
           {
+            this->step_count+=4;
+
             err = this->stream_access(port, addr, (uint8_t *)(this->buffer_out + job->start_x + this->enqueued_req), 4, is_write, (int64_t *) &job->latency);
           }
+          /* Leftover */
+          else
+          {
+            /* Keep track if there was a splitting because of misaligned access */
+            this->line_store_lfover = (job->width - job->first_data) & 0x3;
+            this->step_count+=this->line_store_lfover;
 
-          this->step_count+=4;
+            err = this->stream_access(port, addr, (uint8_t *)(this->buffer_out + job->start_x + this->enqueued_req), this->line_store_lfover, is_write, (int64_t *) &job->latency);
+
+            this->line_store_lfover = 0;
+          }
         }
 
-        if(this->step_count >= job->line_length)
+        /* End of the line */
+        if(this->step_count >= job->width)
         {
-          this->trace.msg("Line %d is fetched\n", this->feat_count); 
+          this->trace.msg("Line %d is stored\n", this->feat_count);
 
           this->port_id = -1;
           this->step_count = 0;
@@ -928,8 +989,8 @@ int ima_v1::stream_update(int port, bool is_write)
 
       if(this->feat_count == job->feat_length)
       {
-        this->trace.msg("Feat is finished\n");
-        
+        this->trace.msg("Feats are finished\n");
+
         this->step_count = 0;
         this->feat_count = 0;
         this->roll_count++;
@@ -938,7 +999,7 @@ int ima_v1::stream_update(int port, bool is_write)
 
     if(this->roll_count == job->roll_length)
     {
-      this->trace.msg("Roll is finished\n");
+      this->trace.msg("Rolls are finished\n");
 
       this->step_count = 0;
       this->feat_count = 0;
@@ -955,13 +1016,21 @@ int ima_v1::stream_update(int port, bool is_write)
     {
       if(this->feat_count < job->feat_length)
       {
+        addr += this->step_count;
+
         if(this->step_count < job->line_length)
         {
-          addr += this->step_count;
+          /* Leftover. It depends to misaligned requests */
+          if((this->step_count == 0) && (addr & 0x3))
+          {
+            this->step_count+=job->first_data;
+          }
+          else
+          {
+            this->step_count+=4;
+          }
 
-          err = this->stream_access(port, addr, new uint8_t[4], 4, is_write, (int64_t *) &job->latency);
-
-          this->step_count+=4;
+          err = this->stream_access(port, (addr - (addr & 0x3)), new uint8_t[4], 4, is_write, (int64_t *) &job->latency);
         }
 
         if(this->step_count >= job->line_length)
@@ -972,20 +1041,28 @@ int ima_v1::stream_update(int port, bool is_write)
           this->port_id = -1;
           this->step_count = 0;
           this->feat_count++;
-          this->line_fetch_lfover = job->line_length & 0x3;
+          /* line size could be less than store size */
+          if(job->line_length < 4)
+          {
+            this->line_fetch_lfover = job->line_length;
+          }
+          else
+          {
+            this->line_fetch_lfover = ((job->line_length - job->first_data) & 0x3);
+          }
         }
       }
-      
+
       if(this->feat_count == job->feat_length)
       {
-        this->trace.msg("Feat is finished\n");
+        this->trace.msg("Feats are finished\n");
 
         this->step_count = 0;
         this->feat_count = 0;
         this->roll_count++;
       }
     }
-    
+
     if(this->roll_count == job->roll_length)
     {
       this->trace.msg("Rolls are finished\n");
@@ -1000,7 +1077,7 @@ int ima_v1::stream_update(int port, bool is_write)
   return err;
 }
 
-/* Fetch/Store from/to L1 */ 
+/* Fetch/Store from/to L1 */
 void ima_v1::stream_reqs(bool is_write)
 {
   ima_job_t *job = this->job;
@@ -1037,17 +1114,24 @@ void ima_v1::stream_reqs(bool is_write)
       {
         this->port_id = -1;
       }
-
-      this->enqueued_req+=4;
+      /* Increse the size of the stored data taking into account the misaligned access */
+      if((this->step_count == job->first_data) && (job->dest_addr & 0x3))
+      {
+        this->enqueued_req+=job->first_data;
+      }
+      else
+      {
+        this->enqueued_req+=4;
+      }
     }
     else
     {
       /* Streamers fetch without considering leftovers. This block compute the amount of data to neglect, writing in DAC buffer just the right ones */
+      int8_t temp[4];
+      *(uint32_t *)(temp) = (*(uint32_t *)(this->reqs[job->port].get_data()));
+
       if(this->line_fetch_lfover)
       {
-        int8_t temp[4];
-        *(uint32_t *)(temp) = (*(uint32_t *)(this->reqs[job->port].get_data()));
-
         for(int i=0; i<line_fetch_lfover; i++)
         {
           *(uint8_t *)(this->buffer_in + job->start_y + this->enqueued_req + i) = temp[i];
@@ -1057,10 +1141,23 @@ void ima_v1::stream_reqs(bool is_write)
       }
       else
       {
-        *(uint32_t *)(this->buffer_in + job->start_y + this->enqueued_req) = *(uint32_t *)(this->reqs[job->port].get_data());
+        /* If is misaligned */
+        if(job->first_data == 4)
+        {
+          *(uint32_t *)(this->buffer_in + job->start_y + this->enqueued_req) = *(uint32_t *)(this->reqs[job->port].get_data());
+        }
+        else
+        {
+          for(int i=0; i<job->first_data; i++)
+          {
+            *(uint8_t *)(this->buffer_in + job->start_y + this->enqueued_req + i) = temp[(i + (job->src_addr & 0x3))];
+          }
+        }
       }
       this->remaining_in_req--;
-      this->enqueued_req+=4;
+      /* Misaligned request has size less than 4 just for the first access of the line */
+      this->enqueued_req+=job->first_data;
+      job->first_data = 4;
     }
   }
   /* Ports requests are sent in parallel. Add latency if port -1 is fetching/storing from/to L1 */
@@ -1086,49 +1183,50 @@ void ima_v1::stream_reqs(bool is_write)
 
 int ima_v1::build()
 {
-  traces.new_trace("trace", &trace, vp::DEBUG);
+  this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
-  nb_master_ports = get_config_int("nb_masters");
-  xbar_x = get_config_int("xbar_x");
-  xbar_y = get_config_int("xbar_y");
+  this->nb_master_ports = get_config_int("nb_masters");
+  this->xbar_x = get_config_int("xbar_x");
+  this->xbar_y = get_config_int("xbar_y");
 
-  eval_time = get_config_int("eval_ns");
-  plot_write_time = get_config_int("plot_write_ns");
-  plot_read_time = get_config_int("plot_read_ns");
+  this->eval_time = get_config_int("eval_ns");
+  this->plot_write_time = get_config_int("plot_write_ns");
+  this->plot_read_time = get_config_int("plot_read_ns");
 
-  stats = get_config_bool("statistics");
+  this->stats = get_config_bool("statistics");
 
-  out = new vp::io_master[nb_master_ports];
-  reqs = new vp::io_req[nb_master_ports];
+  this->out = new vp::io_master[this->nb_master_ports];
+  this->reqs = new vp::io_req[this->nb_master_ports];
 
-  in.set_req_meth(&ima_v1::req);
-  new_slave_port("input", &in);
+  this->in.set_req_meth(&this->ima_v1::req);
+  new_slave_port("input", &this->in);
 
-  for (int i=0; i<nb_master_ports; i++)
+  for (int i=0; i<this->nb_master_ports; i++)
   {
-    out[i].set_resp_meth(&ima_v1::response);
-    out[i].set_grant_meth(&ima_v1::grant);
-    new_master_port("out_" + std::to_string(i), &out[i]);
+    this->out[i].set_resp_meth(&this->ima_v1::response);
+    this->out[i].set_grant_meth(&this->ima_v1::grant);
+    new_master_port("out_" + std::to_string(i), &this->out[i]);
   }
 
-  new_master_port("irq", &irq);
+  new_master_port("irq_0", &this->irq_0);
+  new_master_port("irq_1", &this->irq_1);
 
-  plot_event = event_new(&ima_v1::plot_handler);
-  job_event = event_new(&ima_v1::job_handler);
+  this->plot_event = event_new(&this->ima_v1::plot_handler);
+  this->job_event = event_new(&this->ima_v1::job_handler);
 
-  regs = new unsigned int[IMA_NB_REGS];
-  buffer_in = new int8_t[xbar_y];
-  buffer_out = new int8_t[xbar_x];
+  this->regs = new unsigned int[IMA_NB_REGS];
+  this->buffer_in = new int8_t[this->xbar_y];
+  this->buffer_out = new int8_t[this->xbar_x];
 
-  crossbar = new int8_t*[xbar_y];
-  for(int i=0; i<xbar_y; i++)
+  this->crossbar = new int8_t*[this->xbar_y];
+  for(int i=0; i<this->xbar_y; i++)
   {
-    crossbar[i] = new int8_t[xbar_x];
+    this->crossbar[i] = new int8_t[this->xbar_x];
   }
 
-  job = new ima_job_t;
-  pw_req = new ima_pw_t;
-  pr_req = new ima_pr_t;
+  this->job = new ima_job_t;
+  this->pw_req = new ima_pw_t;
+  this->pr_req = new ima_pr_t;
 
   return 0;
 }
