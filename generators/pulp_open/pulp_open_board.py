@@ -21,6 +21,7 @@ from devices.flash.spiflash import Spiflash
 from devices.flash.atxp032 import Atxp032
 from devices.ram.hyperram import Hyperram
 from devices.testbench.testbench import Testbench
+from devices.uart.uart_checker import Uart_checker
 import gv.gvsoc_runner
 from gapylib.chips.pulp.flash import *
 
@@ -55,3 +56,6 @@ class Pulp_open_board(gv.gvsoc_runner.Runner):
 
         self.bind(pulp, 'hyper0_cs0', hyperram, 'cs')
         self.bind(pulp, 'hyper0_cs0_data', hyperram, 'input')
+
+        uart_checker = Uart_checker(self, 'uart_checker')
+        self.bind(pulp, 'uart0', uart_checker, 'input')
