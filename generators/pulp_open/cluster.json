@@ -147,6 +147,14 @@
             }
         },
 
+        "ne16": {
+            "mapping": {
+                "base": "0x10201000",
+                "size": "0x00000400",
+                "remove_offset": "0x10201000"
+            }
+        },
+
         "icache_ctrl": {
             "mapping": {
                 "base": "0x10201400",
