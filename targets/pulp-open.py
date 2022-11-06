@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-from pulp_open.pulp_open_board import Pulp_open_board
+from pulp.chips.pulp_open.pulp_open_board import Pulp_open_board
 
 
 class Target(Pulp_open_board):

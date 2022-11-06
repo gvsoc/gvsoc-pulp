@@ -15,8 +15,8 @@
 #
 
 import gsystree as st
-from pulp_open.soc import Soc
-from pulp_open.cluster import Cluster, get_cluster_name
+from pulp.chips.pulp_open.soc import Soc
+from pulp.chips.pulp_open.cluster import Cluster, get_cluster_name
 from ips.clock.clock_domain import Clock_domain
 from ips.clock.clock_generator import Clock_generator
 from ips.pmu.pmu_v4 import Pmu
@@ -26,7 +26,7 @@ import ips.interco.router_proxy as router_proxy
 
 class Pulp_open(st.Component):
 
-    def __init__(self, parent, name, soc_config_file='pulp_open/soc.json', cluster_config_file='pulp_open/cluster.json', padframe_config_file='pulp_open/padframe.json'):
+    def __init__(self, parent, name, soc_config_file='pulp/chips/pulp_open/soc.json', cluster_config_file='pulp/chips/pulp_open/cluster.json', padframe_config_file='pulp/chips/pulp_open/padframe.json'):
         super(Pulp_open, self).__init__(parent, name)
 
         #

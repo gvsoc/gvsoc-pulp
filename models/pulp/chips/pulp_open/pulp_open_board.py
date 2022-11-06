@@ -15,7 +15,7 @@
 #
 
 import gsystree as st
-from pulp_open.pulp_open import Pulp_open
+from pulp.chips.pulp_open.pulp_open import Pulp_open
 from devices.flash.hyperflash import Hyperflash
 from devices.flash.spiflash import Spiflash
 from devices.flash.atxp032 import Atxp032

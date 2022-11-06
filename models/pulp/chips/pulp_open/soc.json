@@ -13,7 +13,7 @@
             "riscv_dbg_unit": true,
             "debug_binaries": [],
             "debug_handler" : "0x1a190800",
-            "power_models_file": "pulp_open/power_models/core/riscy.json",
+            "power_models_file": "pulp/chips/pulp_open/power_models/core/riscy.json",
 
             "cluster_id"  : 31,
             "core_id"     : 0,
