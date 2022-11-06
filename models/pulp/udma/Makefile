@@ -20,10 +20,10 @@ pulp/udma/udma_v$(udma/version)_$(pulp_chip_family)_impl_CFLAGS += -DHAS_CPI
 pulp/udma/udma_v$(udma/version)_$(pulp_chip_family)_impl_SRCS += pulp/udma/cpi/udma_cpi_v1.cpp
 endif
 
-ifeq '$(udma/i2c/version)' '2'
-pulp/udma/udma_v$(udma/version)_$(pulp_chip_family)_impl_CFLAGS += -DHAS_I2C
-pulp/udma/udma_v$(udma/version)_$(pulp_chip_family)_impl_SRCS += pulp/udma/i2c/udma_i2c_v2.cpp
-endif
+# ifeq '$(udma/i2c/version)' '2'
+# pulp/udma/udma_v$(udma/version)_$(pulp_chip_family)_impl_CFLAGS += -DHAS_I2C
+# pulp/udma/udma_v$(udma/version)_$(pulp_chip_family)_impl_SRCS += pulp/udma/i2c/udma_i2c_v2.cpp
+# endif
 
 ifneq '$(udma/hyper/version)' ''
 UDMA_CFLAGS += -DHYPER_VERSION=$(udma/hyper/version)
