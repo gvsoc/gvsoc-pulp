@@ -6,7 +6,7 @@
 
     "fc": {
         "iss_config": {
-            "vp_component": "pulp/cpu/iss/iss_pulp_fc",
+            "vp_component": "pulp.cpu.iss.iss_pulp_fc",
             "isa"           : "rv32imfcXpulpv2Xf8Xf16XfvecXfauxXf16altXgap9Xint64",
             "misa": "0x40000000",
             "first_external_pcer": 12,

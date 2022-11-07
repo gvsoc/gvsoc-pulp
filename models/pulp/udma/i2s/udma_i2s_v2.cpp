@@ -72,8 +72,8 @@ void I2s_periph::handle_clkgen_tick(int clkgen, int channel)
 
   if (this->r_i2s_pdm_setup.pdm_en_get() && this->r_i2s_pdm_setup.pdm_mode_get() >= 2)
   {
-    this->ch_itf[0].sync(this->sck[clkgen], 1, 0);
-    this->ch_itf[1].sync(this->sck[clkgen], 1, 0);
+    this->ch_itf[0].sync(this->sck[clkgen], 1, 0, 0);
+    this->ch_itf[1].sync(this->sck[clkgen], 1, 0, 0);
     this->sck[clkgen] ^= 1;
   }
   else
@@ -83,7 +83,7 @@ void I2s_periph::handle_clkgen_tick(int clkgen, int channel)
     if (this->current_channel == 0)
       strobe = 1;
 
-    this->ch_itf[channel].sync(this->sck[clkgen], strobe, 0);
+    this->ch_itf[channel].sync(this->sck[clkgen], strobe, 0, 0);
 
     this->sck[clkgen] ^= 1;
 
@@ -318,7 +318,7 @@ error:
 
 
 
-void I2s_periph::rx_sync(void *__this, int sck, int ws, int sd, int channel)
+void I2s_periph::rx_sync(void *__this, int sck, int ws, int sd, bool full_duplex, int channel)
 {
   I2s_periph *_this = (I2s_periph *)__this;
 

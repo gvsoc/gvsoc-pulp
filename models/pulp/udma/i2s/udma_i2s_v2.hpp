@@ -86,7 +86,7 @@ public:
   void reset(bool active);
 
 protected:
-  static void rx_sync(void *, int sck, int ws, int sd, int channel);
+  static void rx_sync(void *, int sck, int ws, int sd, bool full_duplex,  int channel);
 
 private:
 

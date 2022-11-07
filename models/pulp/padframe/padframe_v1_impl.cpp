@@ -186,8 +186,8 @@ private:
   static void uart_chip_sync(void *__this, int data, int id);
   static void uart_master_sync(void *__this, int data, int id);
 
-  static void i2s_internal_edge(void *__this, int sck, int ws, int sd, int id);
-  static void i2s_external_edge(void *__this, int sck, int ws, int sd, int id);
+  static void i2s_internal_edge(void *__this, int sck, int ws, int sd, bool full_duplex, int id);
+  static void i2s_external_edge(void *__this, int sck, int ws, int sd, bool full_duplex, int id);
 
   static void i2c_chip_sync(void *__this, int scl, int sda, int id);
   static void i2c_master_sync(void *__this, int scl, int data, int id);
@@ -437,7 +437,7 @@ void padframe::uart_master_sync(void *__this, int data, int id)
 
 
 
-void padframe::i2s_internal_edge(void *__this, int sck, int ws, int sd, int id)
+void padframe::i2s_internal_edge(void *__this, int sck, int ws, int sd, bool full_duplex, int id)
 {
   padframe *_this = (padframe *)__this;
   I2s_group *group = static_cast<I2s_group *>(_this->groups[id]);
@@ -467,13 +467,13 @@ void padframe::i2s_internal_edge(void *__this, int sck, int ws, int sd, int id)
   }
   else
   {
-    group->slave.sync(sck, ws, sd);
+    group->slave.sync(sck, ws, sd, full_duplex);
   }
 }
 
 
 
-void padframe::i2s_external_edge(void *__this, int sck, int ws, int sd, int id)
+void padframe::i2s_external_edge(void *__this, int sck, int ws, int sd, bool full_duplex, int id)
 {
   padframe *_this = (padframe *)__this;
   I2s_group *group = static_cast<I2s_group *>(_this->groups[id]);
@@ -497,12 +497,12 @@ void padframe::i2s_external_edge(void *__this, int sck, int ws, int sd, int id)
 
   sd = sdi | (sdo << 2);
 
-  group->master.sync(sck, ws, sd);
+  group->master.sync(sck, ws, sd, full_duplex);
 
   // Resynchronized the pad value outside after they have been resolved between internal and external state
   if (group->slave.is_bound())
   {
-    group->slave.sync(sck, ws, sd);
+    group->slave.sync(sck, ws, sd, full_duplex);
   }
 }
 
@@ -576,13 +576,13 @@ void padframe::hyper_cs_sync(void *__this, int cs, int active, int id)
   group->cs_trace[cs]->event((uint8_t *)&active);
   group->active_cs = cs;
 
-  if (!group->cs_master[cs]->is_bound())
+  if (!group->master[cs]->is_bound())
   {
-    vp_warning_always(&_this->warning, "Trying to send HYPER stream while cs pad is not connected (interface: %s)\n", group->name.c_str());
+    vp_warning_always(&_this->warning, "Trying to send HYPER stream while pad is not connected (interface: %s)\n", group->name.c_str());
   }
   else
   {
-    group->cs_master[cs]->sync(!active);
+    group->master[cs]->cs_sync(cs, !active);
   }
 }
 

@@ -15,18 +15,15 @@
 #
 
 import gsystree as st
+import os
 
-class Apb_soc_ctrl(st.Component):
+class Udma(st.Component):
+    def __init__(self, parent, name, config_file):
 
-    def __init__(self, parent, name, soc):
-        super(Apb_soc_ctrl, self).__init__(parent, name)
+        super(Udma, self).__init__(parent, name)
 
-        self.set_component('pulp.chips.pulp.apb_soc_impl')
+        self.vcd_group(self, skip=True)
 
-        self.add_properties({
-            'cluster_power_event': soc.get_property('soc_events/soc_evt_cluster_pok'),
-            'cluster_clock_gate_event': soc.get_property('soc_events/soc_evt_cluster_cg_ok')
-        })
+        self.set_component('pulp.udma.udma_v3_pulp_impl')
 
-        self.add_properties(soc.get_property('peripherals/apb_soc_ctrl/config'))
-        
+        self.add_properties(self.load_property_file(config_file))

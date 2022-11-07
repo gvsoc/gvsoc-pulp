@@ -7,7 +7,7 @@
     },
 
     "iss_config": {
-        "vp_component": "pulp/cpu/iss/iss_pulp_cluster",
+        "vp_component": "pulp.cpu.iss.iss_pulp_cluster",
         "isa"           : "rv32imfcXpulpv2Xf8Xf16XfvecXfauxXf16altXgap9Xint64",
         "misa": "0x40000000",
         "first_external_pcer": 12,

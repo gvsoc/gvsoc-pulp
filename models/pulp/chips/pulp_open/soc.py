@@ -32,7 +32,7 @@ from ips.icache_ctrl.icache_ctrl_v2 import Icache_ctrl
 from ips.fll.fll_v1 import Fll
 from pulp.chips.pulp_open.cluster import get_cluster_name
 from ips.clock.clock_domain import Clock_domain
-from ips.udma.udma_v4 import Udma
+from pulp.chips.pulp_open.udma import Udma
 from ips.interco.bus_watchpoint import Bus_watchpoint
 from ips.debug.pulp_tap import Pulp_tap
 from ips.debug.riscv_tap import Riscv_tap
