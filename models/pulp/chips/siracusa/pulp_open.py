@@ -26,7 +26,7 @@ import ips.interco.router_proxy as router_proxy
 
 class Pulp_open(st.Component):
 
-    def __init__(self, parent, name, soc_config_file='pulp/chips/siracusa/soc.json', cluster_config_file='pulp/chips/siracusa/cluster.json', padframe_config_file='pulp_open/padframe.json'):
+    def __init__(self, parent, name, soc_config_file='pulp/chips/siracusa/soc.json', cluster_config_file='pulp/chips/siracusa/cluster.json', padframe_config_file='pulp/chips/siracusa/padframe.json'):
         super(Pulp_open, self).__init__(parent, name)
 
         #

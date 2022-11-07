@@ -24,7 +24,7 @@ from ips.interco.router import Router
 from ips.mchan.mchan_v7 import Mchan
 from ips.timer.timer_v2 import Timer
 from ips.cluster.cluster_control_v2 import Cluster_control
-from pulp.ips.neureka.neureka import Neureka
+from pulp.neureka.neureka import Neureka
 from ips.icache_ctrl.icache_ctrl_v2 import Icache_ctrl
 
 

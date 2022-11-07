@@ -51,10 +51,8 @@ class Pulp_open_board(gv.gvsoc_runner.Runner):
         self.bind(pulp, 'spim0_cs0', spiflash, 'cs')
         self.bind(pulp, 'spim0_cs0_data', spiflash, 'input')
 
-        self.bind(pulp, 'hyper0_cs1', hyperflash, 'cs')
         self.bind(pulp, 'hyper0_cs1_data', hyperflash, 'input')
 
-        self.bind(pulp, 'hyper0_cs0', hyperram, 'cs')
         self.bind(pulp, 'hyper0_cs0_data', hyperram, 'input')
 
         uart_checker = Uart_checker(self, 'uart_checker')

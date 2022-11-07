@@ -16,11 +16,7 @@ vp_model(NAME pulp.ne16.ne16
     SOURCES ${NE16_SRCS}
     )
 
-vp_model_link_options(NAME pulp.ne16.ne16 OPTIONS -fopenmp)
-
 vp_model_include_directories(
     NAME pulp.ne16.ne16
     DIRECTORY "include"
     )
-
-vp_model_compile_options(NAME pulp.ne16.ne16 OPTIONS -fopenmp)

@@ -21,8 +21,8 @@ import ips.memory.memory as memory
 import ips.interco.router as router
 import ips.cache.cache as cache
 import ips.interco.interleaver as interleaver
-import pulp_open.soc_interco as soc_interco
-import pulp_open.apb_soc_ctrl as apb_soc_ctrl
+import pulp.chips.siracusa.soc_interco as soc_interco
+import pulp.chips.siracusa.apb_soc_ctrl as apb_soc_ctrl
 import ips.itc.itc_v1 as itc
 import ips.gpio.gpio_v3 as gpio_module
 import ips.soc_eu.soc_eu_v2 as soc_eu_module
@@ -30,9 +30,9 @@ from ips.timer.timer_v2 import Timer
 from ips.stdout.stdout_v3 import Stdout
 from ips.icache_ctrl.icache_ctrl_v2 import Icache_ctrl
 from ips.fll.fll_v1 import Fll
-from pulp_open.cluster import get_cluster_name
+from pulp.chips.siracusa.cluster import get_cluster_name
 from ips.clock.clock_domain import Clock_domain
-from ips.udma.udma_v4 import Udma
+from pulp.chips.siracusa.udma import Udma
 from ips.interco.bus_watchpoint import Bus_watchpoint
 from ips.debug.pulp_tap import Pulp_tap
 from ips.debug.riscv_tap import Riscv_tap
