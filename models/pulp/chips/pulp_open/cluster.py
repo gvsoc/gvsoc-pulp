@@ -81,6 +81,7 @@ class Cluster(st.Component):
         timer_irq_0         = self.get_property('pe/irq').index('timer_0')
         timer_irq_1         = self.get_property('pe/irq').index('timer_1')
         first_external_pcer = self.get_property('iss_config/first_external_pcer')
+        has_ne16 = False
 
 
         #
@@ -119,8 +120,9 @@ class Cluster(st.Component):
         # Cluster control
         cluster_control = Cluster_control(self, 'cluster_ctrl', nb_core=nb_pe)
 
-        # NE16
-        ne16 = Ne16(self, 'ne16')
+        if has_ne16:
+            # NE16
+            ne16 = Ne16(self, 'ne16')
 
         # Icache controller
         icache_ctrl = Icache_ctrl(self, 'icache_ctrl')
@@ -198,8 +200,9 @@ class Cluster(st.Component):
         periph_ico.add_mapping('dma', **self._reloc_mapping(self.get_property('peripherals/dma/mapping')))
         self.bind(periph_ico, 'dma', mchan, 'in_%d' % nb_pe)
 
-        periph_ico.add_mapping('ne16', **self._reloc_mapping(self.get_property('peripherals/ne16/mapping')))
-        self.bind(periph_ico, 'ne16', ne16, 'input')
+        if has_ne16:
+            periph_ico.add_mapping('ne16', **self._reloc_mapping(self.get_property('peripherals/ne16/mapping')))
+            self.bind(periph_ico, 'ne16', ne16, 'input')
 
         size = int(self.get_property('peripherals/dbg_unit/size'), 0)
         base = int(self.get_property('peripherals/dbg_unit/base'), 0)
@@ -233,11 +236,12 @@ class Cluster(st.Component):
             self.bind(cluster_control, 'halt_%d' % i, pes[i], 'halt')
             self.bind(pes[i], 'halt_status', cluster_control, 'core_halt_%d' % i)
 
-        # NE16
-        for i in range(0, nb_pe):
-            self.bind(ne16, 'irq', event_unit, 'in_event_%d_pe_%d' % (ne16_irq, i))
+        if has_ne16:
+            # NE16
+            for i in range(0, nb_pe):
+                self.bind(ne16, 'irq', event_unit, 'in_event_%d_pe_%d' % (ne16_irq, i))
 
-        self.bind(ne16, 'out', l1, 'ne16_in')
+            self.bind(ne16, 'out', l1, 'ne16_in')
 
         # Icache controller
         self.bind(icache_ctrl, 'enable', icache, 'enable')
