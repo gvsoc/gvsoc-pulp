@@ -8,7 +8,7 @@
 
     "iss_config": {
         "vp_component": "pulp.cpu.iss.iss_pulp_cluster",
-        "isa"           : "rv32imfcXpulpv2Xf8Xf16XfvecXfauxXf16altXgap9Xint64",
+        "isa"           : "rv32imfcXpulpv2Xf8Xf16XfvecXfauxXf16altXgap9",
         "misa": "0x40000000",
         "first_external_pcer": 12,
         "riscv_dbg_unit": true,
@@ -38,12 +38,12 @@
     "l1": {
         "mapping": {
             "base": "0x10000000",
-            "size": "0x00020000",
+            "size": "0x00010000",
             "remove_offset": "0x10000000"
         },
         "ts_mapping": {
             "base": "0x10100000",
-            "size": "0x00020000",
+            "size": "0x00010000",
             "remove_offset": "0x10100000"
         },
         "banking_factor": 2,
@@ -187,15 +187,15 @@
         "event_unit": {
             "mapping": {
                 "base": "0x10204000",
-                "size": "0x00000800",
+                "size": "0x00000400",
                 "remove_offset": "0x10204000"
             }
         },
         "dma": {
             "mapping": {
-                "base": "0x10204800",
+                "base": "0x10204400",
                 "size": "0x00000400",
-                "remove_offset": "0x10204800"
+                "remove_offset": "0x10204400"
             }
         }
     }
