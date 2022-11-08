@@ -20,3 +20,12 @@ vp_model_include_directories(
     NAME pulp.neureka.neureka
     DIRECTORY "include"
     )
+
+vp_model_compile_definitions(
+    NAME pulp.neureka.neureka
+    DEFINITIONS
+    -DXTENSOR_USE_XSIMD
+    )
+    
+
+vp_model_compile_options(NAME pulp.neureka.neureka OPTIONS -I$ENV{XTENSOR_INCLUDE_DIR})

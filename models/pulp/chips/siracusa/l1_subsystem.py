@@ -44,7 +44,7 @@ class L1_subsystem(st.Component):
         l1_banking_factor = cluster.get_property('l1/banking_factor')
         nb_l1_banks = 1<<int(math.log(nb_pe * l1_banking_factor, 2.0))
         l1_bank_size = int(cluster.get_property('l1/mapping/size', int) / nb_l1_banks)
-        l1_interleaver_nb_masters = nb_pe + 4 + 1 # 1 port per PE + 4 for DMA + 1 for NE16
+        l1_interleaver_nb_masters = nb_pe + 4 + 1 # 1 port per PE + 4 for DMA + 1 for NEUREKA
         first_external_pcer = cluster.get_property('iss_config/first_external_pcer')
         power_models = cluster.get_property('l1/power_models')
 
@@ -122,7 +122,7 @@ class L1_subsystem(st.Component):
         for i in range(0, nb_l1_banks):
             self.bind(interleaver, 'out_%d' % i, l1_banks[i], 'input')
 
-        self.bind(self, 'ne16_in', interleaver, 'in_%d' % (nb_pe + 4))
+        self.bind(self, 'neureka_in', interleaver, 'in_%d' % (nb_pe + 4))
 
         for i in range(0, 4):
             self.bind(self, 'dma_in_%d' % i, interleaver, 'in_%d' % (nb_pe + i))

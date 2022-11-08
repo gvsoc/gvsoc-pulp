@@ -67,11 +67,11 @@
     
         "shared": {
             "nb_banks"          : 4,
-            "nb_regions"        : 12,
+            "nb_regions"        : 1,
             "interleaving_bits" : 2,
             "mapping": {
                 "base"         : "0x1C010000",
-                "size"         : "0x00180000"
+                "size"         : "0x001f0000"
             }
         },
         "xip": {

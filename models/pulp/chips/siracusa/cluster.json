@@ -192,15 +192,15 @@
         "event_unit": {
             "mapping": {
                 "base": "0x10204000",
-                "size": "0x00000800",
+                "size": "0x00000400",
                 "remove_offset": "0x10204000"
             }
         },
         "dma": {
             "mapping": {
-                "base": "0x10204800",
+                "base": "0x10204400",
                 "size": "0x00000400",
-                "remove_offset": "0x10204800"
+                "remove_offset": "0x10204400"
             }
         }
     }
