@@ -27,3 +27,18 @@ vp_model_compile_definitions(
     -DPCER_VERSION_2
     -DPRIV_1_10
     )
+
+generate_isa(NAME pulp.cpu.iss.iss_rv64
+    THINGY "--core=Rv64@pulp.cpu.iss.rv64"
+    SOURCES "default_iss_wrapper.cpp"
+    )
+vp_model_compile_definitions(
+    NAME pulp.cpu.iss.iss_rv64
+    DEFINITIONS
+    -DEXTERNAL_ISS_WRAPPER=1
+    -DPIPELINE_STAGES=2
+    -DISS_SINGLE_REGFILE
+    -DPCER_VERSION_2
+    -DPRIV_1_10
+    -DISS_WORD_64
+    )
