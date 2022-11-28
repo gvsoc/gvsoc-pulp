@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2020 ETH Zurich and University of Bologna
+# Copyright (C) 2020 GreenWaves Technologies, SAS, ETH Zurich and University of Bologna
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,12 +15,13 @@
 #
 
 import gsystree as st
-from pulp_open.pulp_open_board import Pulp_open_board
-import interco.router_proxy as router_proxy
 
+class Event_unit(st.Component):
 
-class Pulp_control_board(Pulp_open_board):
+    def __init__(self, parent, name, config):
 
-    def __init__(self, parent, name):
+        super(Event_unit, self).__init__(parent, name)
 
-        super(Pulp_control_board, self).__init__(parent, name)
+        self.set_component('pulp.event_unit.eu_v3_impl')
+
+        self.add_properties(config)

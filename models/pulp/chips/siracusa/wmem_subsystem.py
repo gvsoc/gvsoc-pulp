@@ -15,9 +15,9 @@
 #
 
 import gsystree as st
-from ips.memory.memory import Memory
-from ips.interco.router import Router
-from ips.interco.converter import Converter
+from memory.memory import Memory
+from interco.router import Router
+from interco.converter import Converter
 from pulp.wmem.wmem_interleaver import Wmem_interleaver
 import math
 

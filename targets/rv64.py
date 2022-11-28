@@ -15,10 +15,10 @@
 #
 
 import gv.gvsoc_runner
-import ips.iss.iss as iss
-import ips.memory.memory as memory
-from ips.clock.clock_domain import Clock_domain
-import ips.interco.router as router
+import cpu.iss.iss as iss
+import memory.memory as memory
+from vp.clock_domain import Clock_domain
+import interco.router as router
 import utils.loader.loader
 import gsystree as st
 

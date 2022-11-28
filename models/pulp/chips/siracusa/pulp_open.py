@@ -17,12 +17,10 @@
 import gsystree as st
 from pulp.chips.siracusa.soc import Soc
 from pulp.chips.siracusa.cluster import Cluster, get_cluster_name
-from ips.clock.clock_domain import Clock_domain
-from ips.clock.clock_generator import Clock_generator
-from ips.pmu.pmu_v4 import Pmu
-from ips.padframe.padframe_v1 import Padframe
-from ips.vendors.dolphin.rtc import Rtc
-import ips.interco.router_proxy as router_proxy
+from vp.clock_domain import Clock_domain
+from utils.clock_generator import Clock_generator
+from pulp.padframe.padframe_v1 import Padframe
+import interco.router_proxy as router_proxy
 
 class Pulp_open(st.Component):
 

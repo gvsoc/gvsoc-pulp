@@ -16,7 +16,7 @@
 
 import gsystree as st
 from pulp_open.pulp_open_board import Pulp_open_board
-import ips.interco.router_proxy as router_proxy
+import interco.router_proxy as router_proxy
 
 
 class Pulp_control_board(Pulp_open_board):

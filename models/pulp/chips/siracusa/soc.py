@@ -16,27 +16,27 @@
 
 import os
 import gsystree as st
-import ips.iss.iss as iss
-import ips.memory.memory as memory
-import ips.interco.router as router
-import ips.cache.cache as cache
-import ips.interco.interleaver as interleaver
+import cpu.iss.iss as iss
+import memory.memory as memory
+import interco.router as router
+import cache.cache as cache
+import interco.interleaver as interleaver
 import pulp.chips.siracusa.soc_interco as soc_interco
 import pulp.chips.siracusa.apb_soc_ctrl as apb_soc_ctrl
-import ips.itc.itc_v1 as itc
-import ips.gpio.gpio_v3 as gpio_module
-import ips.soc_eu.soc_eu_v2 as soc_eu_module
-from ips.timer.timer_v2 import Timer
-from ips.stdout.stdout_v3 import Stdout
-from ips.icache_ctrl.icache_ctrl_v2 import Icache_ctrl
-from ips.fll.fll_v1 import Fll
+import pulp.itc.itc_v1 as itc
+import pulp.gpio.gpio_v3 as gpio_module
+import pulp.soc_eu.soc_eu_v2 as soc_eu_module
+from pulp.timer.timer_v2 import Timer
+from pulp.stdout.stdout_v3 import Stdout
+from pulp.icache_ctrl.icache_ctrl_v2 import Icache_ctrl
+from pulp.fll.fll_v1 import Fll
 from pulp.chips.siracusa.cluster import get_cluster_name
-from ips.clock.clock_domain import Clock_domain
+from vp.clock_domain import Clock_domain
 from pulp.chips.siracusa.udma import Udma
-from ips.interco.bus_watchpoint import Bus_watchpoint
-from ips.debug.pulp_tap import Pulp_tap
-from ips.debug.riscv_tap import Riscv_tap
-from ips.gdbserver.gdbserver import Gdbserver
+from interco.bus_watchpoint import Bus_watchpoint
+from pulp.debug.pulp_tap import Pulp_tap
+from pulp.debug.riscv_tap import Riscv_tap
+from gdbserver.gdbserver import Gdbserver
 
 
 class Soc(st.Component):

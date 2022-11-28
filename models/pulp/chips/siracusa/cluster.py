@@ -15,17 +15,17 @@
 #
 
 import gsystree as st
-from ips.iss.iss import Iss
-from ips.cache.hierarchical_cache import Hierarchical_cache
+from cpu.iss.iss import Iss
+from cache.hierarchical_cache import Hierarchical_cache
 from pulp.chips.siracusa.l1_subsystem import L1_subsystem
 from pulp.chips.siracusa.wmem_subsystem import Wmem_subsystem
-from ips.event_unit.event_unit_v3 import Event_unit
-from ips.interco.router import Router
-from ips.mchan.mchan_v7 import Mchan
-from ips.timer.timer_v2 import Timer
-from ips.cluster.cluster_control_v2 import Cluster_control
+from pulp.event_unit.event_unit_v3 import Event_unit
+from interco.router import Router
+from pulp.mchan.mchan_v7 import Mchan
+from pulp.timer.timer_v2 import Timer
+from pulp.cluster.cluster_control_v2 import Cluster_control
 from pulp.neureka.neureka import Neureka
-from ips.icache_ctrl.icache_ctrl_v2 import Icache_ctrl
+from pulp.icache_ctrl.icache_ctrl_v2 import Icache_ctrl
 
 
 def get_cluster_name(cid: int):

@@ -16,10 +16,10 @@
 
 import gsystree as st
 from pulp.chips.pulp_open.pulp_open import Pulp_open
-from devices.flash.hyperflash import Hyperflash
+from devices.hyperbus.hyperflash import Hyperflash
 from devices.flash.spiflash import Spiflash
-from devices.flash.atxp032 import Atxp032
-from devices.ram.hyperram import Hyperram
+from devices.spiflash.atxp032 import Atxp032
+from devices.hyperbus.hyperram import Hyperram
 from devices.testbench.testbench import Testbench
 from devices.uart.uart_checker import Uart_checker
 import gv.gvsoc_runner

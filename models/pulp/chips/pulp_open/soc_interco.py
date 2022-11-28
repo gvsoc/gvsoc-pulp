@@ -15,7 +15,7 @@
 #
 
 import gsystree as st
-import ips.interco.router as router
+import interco.router as router
 
 class Soc_interco(st.Component):
 
