@@ -15,7 +15,7 @@
 #
 
 import gsystree as st
-from cpi.iss.iss import Iss
+from cpu.iss.iss import Iss
 from cache.hierarchical_cache import Hierarchical_cache
 from pulp.chips.pulp_open.l1_subsystem import L1_subsystem
 from pulp.event_unit.event_unit_v3 import Event_unit

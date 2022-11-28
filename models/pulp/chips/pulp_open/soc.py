@@ -34,8 +34,8 @@ from pulp.chips.pulp_open.cluster import get_cluster_name
 from vp.clock_domain import Clock_domain
 from pulp.chips.pulp_open.udma import Udma
 from interco.bus_watchpoint import Bus_watchpoint
-from pulp.debug.pulp_tap import Pulp_tap
-from pulp.debug.riscv_tap import Riscv_tap
+from pulp.adv_dbg_unit.pulp_tap import Pulp_tap
+from pulp.adv_dbg_unit.riscv_tap import Riscv_tap
 from gdbserver.gdbserver import Gdbserver
 
 
