@@ -30,7 +30,7 @@ class Rv64(Riscv_core):
                 IsaDecodeTree('i', [rv64i, rv32i]),
                 IsaDecodeTree('m', [rv32m]),
                 IsaDecodeTree('c', [rv64c]),
-                IsaDecodeTree('priv', [priv]),
+                IsaDecodeTree('priv', [priv, priv_pulp_v2]),
                 IsaDecodeTree('f', [rv32f]),
             ]
         )

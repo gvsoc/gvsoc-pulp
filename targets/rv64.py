@@ -21,26 +21,33 @@ from vp.clock_domain import Clock_domain
 import interco.router as router
 import utils.loader.loader
 import gsystree as st
+from interco.bus_watchpoint import Bus_watchpoint
 
 class Soc(st.Component):
 
-    def __init__(self, parent, name):
+    def __init__(self, parent, name, parser):
         super().__init__(parent, name)
+
+        [args, otherArgs] = parser.parse_known_args()
+        print (args.binary)
 
         mem = memory.Memory(self, 'mem', size=0x1000000)
 
         ico = router.Router(self, 'ico')
 
-        ico.add_mapping('mem', base=0, remove_offset=0, size=0x1000000)
+        ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
         self.bind(ico, 'mem', mem, 'input')
 
-        host = iss.Iss(self, 'host', vp_component='pulp.cpu.iss.iss_rv64',
-            boot_addr=0x00010000)
+        host = iss.Iss(self, 'host', vp_component='pulp.cpu.iss.iss_rv64')
 
-        loader = utils.loader.loader.ElfLoader(self, 'loader')
+        loader = utils.loader.loader.ElfLoader(self, 'loader', binary=args.binary)
+
+        # RISCV bus watchpoint
+        tohost = Bus_watchpoint(self, 'tohost', 0x80001000)
 
         self.bind(host, 'fetch', ico, 'input')
-        self.bind(host, 'data', ico, 'input')
+        self.bind(host, 'data', tohost, 'input')
+        self.bind(tohost, 'output', ico, 'input')
         self.bind(loader, 'out', ico, 'input')
         self.bind(loader, 'start', host, 'fetchen')
         self.bind(loader, 'entry', host, 'bootaddr')
@@ -49,13 +56,13 @@ class Soc(st.Component):
 
 class Target(gv.gvsoc_runner.Runner):
 
-    def __init__(self, options):
+    def __init__(self, parser, options):
 
-        super(Target, self).__init__(parent=None, name='top', options=options)
+        super(Target, self).__init__(parser=parser, parent=None, name='top', options=options)
 
         clock = Clock_domain(self, 'clock', frequency=50000000)
 
-        soc = Soc(self, 'soc')
+        soc = Soc(self, 'soc', parser)
 
         self.bind(clock, 'out', soc, 'clock')
 
