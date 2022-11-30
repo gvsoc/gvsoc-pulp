@@ -28,9 +28,9 @@ from gapylib.chips.pulp.flash import *
 
 class Pulp_open_board(gv.gvsoc_runner.Runner):
 
-    def __init__(self, options, parent=None, name='top'):
+    def __init__(self, parser, options, parent=None, name='top'):
 
-        super(Pulp_open_board, self).__init__(parent, name, options=options)
+        super(Pulp_open_board, self).__init__(parent, name, parser=parser, options=options)
 
         # Pulp
         pulp = Pulp_open(self, 'chip')

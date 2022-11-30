@@ -23,9 +23,10 @@ class Target(Pulp_open_board):
 
     """
 
-    def __init__(self, options):
+    def __init__(self, parser, options):
 
         super(Target, self).__init__(
+            parser=parser,
             options=options
         )
 
