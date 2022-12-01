@@ -23,6 +23,8 @@ import utils.loader.loader
 import gsystree as st
 from interco.bus_watchpoint import Bus_watchpoint
 
+gapy_target = True
+
 class Soc(st.Component):
 
     def __init__(self, parent, name, parser):

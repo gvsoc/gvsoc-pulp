@@ -16,6 +16,7 @@
 
 from pulp.chips.pulp_open.pulp_open_board import Pulp_open_board
 
+gapy_target = True
 
 class Target(Pulp_open_board):
     """
