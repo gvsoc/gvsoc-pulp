@@ -18,7 +18,7 @@ import gsystree as st
 from memory.memory import Memory
 from interco.router import Router
 from interco.converter import Converter
-from ips.cluster.l1_interleaver import L1_interleaver
+from pulp.cluster.l1_interleaver import L1_interleaver
 import math
 
 
