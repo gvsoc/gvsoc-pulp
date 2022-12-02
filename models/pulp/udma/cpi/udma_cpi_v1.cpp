@@ -21,8 +21,8 @@
 
 
 #include "../udma_impl.hpp"
-#include "archi/udma/cpi/udma_cpi_v1_old.h"
-#include "archi/utils.h"
+#include "../archi/udma_cpi_v1_old.h"
+#include "../archi/utils.h"
 #include "vp/itf/cpi.hpp"
 
 

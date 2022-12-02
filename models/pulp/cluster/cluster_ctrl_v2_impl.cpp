@@ -25,7 +25,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "archi/cluster_ctrl/cluster_ctrl_v2.h"
+#include "archi/cluster_ctrl_v2.h"
 
 class Core_cluster_ctrl
 {

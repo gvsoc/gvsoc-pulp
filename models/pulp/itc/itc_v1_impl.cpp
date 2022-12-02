@@ -24,7 +24,7 @@
 #include <vp/itf/wire.hpp>
 #include <stdio.h>
 #include <string.h>
-#include "archi/itc/itc_v1.h"
+#include "archi/itc_v1.h"
 
 class itc : public vp::component
 {

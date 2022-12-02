@@ -25,7 +25,7 @@
 #include <string.h>
 #include <vector>
 #include "archi/utils.h"
-#include "archi/udma/udma_v3.h"
+#include "archi/udma_v3.h"
 #include "udma_v3_impl.hpp"
 
 #ifdef HAS_MRAM

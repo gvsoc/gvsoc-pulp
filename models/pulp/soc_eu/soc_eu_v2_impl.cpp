@@ -25,7 +25,7 @@
 #include <vp/itf/wire.hpp>
 #include <vp/itf/clock.hpp>
 #include <string.h>
-#include <archi/soc_eu/soc_eu_v2.h>
+#include "archi/soc_eu_v2.h"
 
 class soc_eu;
 

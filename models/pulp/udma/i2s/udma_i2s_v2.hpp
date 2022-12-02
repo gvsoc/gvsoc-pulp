@@ -24,7 +24,7 @@
 
 #include <vp/vp.hpp>
 #include "../udma_impl.hpp"
-#include "archi/udma/i2s/udma_i2s_v2.h"
+#include "../archi/udma_i2s_v2.h"
 
 
 /*

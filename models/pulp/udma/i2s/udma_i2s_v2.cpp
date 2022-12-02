@@ -22,7 +22,7 @@
 
 #include "udma_i2s_v2.hpp"
 #include "../udma_impl.hpp"
-#include "archi/utils.h"
+#include "../archi/utils.h"
 #include "vp/itf/i2s.hpp"
 
 

@@ -20,8 +20,8 @@
 
 
 #include "../udma_impl.hpp"
-#include "archi/udma/hyper/udma_hyper_v3.h"
-#include "archi/utils.h"
+#include "../archi/udma_hyper_v3.h"
+#include "../archi/utils.h"
 #include "vp/itf/hyper.hpp"
 
 

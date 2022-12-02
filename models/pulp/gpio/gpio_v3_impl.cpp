@@ -26,7 +26,7 @@
 #include <string.h>
 #include <vector>
 
-#include "archi/gpio/gpio_v3.h"
+#include "archi/gpio_v3.h"
 
 class Gpio : public vp::component
 {

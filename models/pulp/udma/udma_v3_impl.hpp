@@ -35,14 +35,14 @@
 #include <stdio.h>
 #include <string.h>
 #include <vector>
-#include "archi/udma/udma_v3.h"
+#include "archi/udma_v3.h"
 
 #ifdef HAS_HYPER
 #if HYPER_VERSION == 2
 #include "archi/udma/hyper/udma_hyper_v2.h"
 #endif
 #if HYPER_VERSION == 3
-#include "archi/udma/hyper/udma_hyper_v3.h"
+#include "archi/udma_hyper_v3.h"
 #endif
 #endif
 

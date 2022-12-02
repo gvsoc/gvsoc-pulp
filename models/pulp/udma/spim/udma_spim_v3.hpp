@@ -32,7 +32,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <vector>
-#include "archi/udma/udma_v3.h"
+#include "../archi/udma_v3.h"
 
 /*
  * SPIM

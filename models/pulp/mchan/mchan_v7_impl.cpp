@@ -28,7 +28,7 @@
 
 using namespace std;
 
-#include "archi/dma/mchan_v7.h"
+#include "archi/mchan_v7.h"
 
 // The number of writes to an input port queue register, that triggers an enqueue
 #define MAX_CMD_WORDS 5

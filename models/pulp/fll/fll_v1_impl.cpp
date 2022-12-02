@@ -26,7 +26,7 @@
 #include <string.h>
 #include <math.h>
 
-#include "archi/fll/fll_v1.h"
+#include "archi/fll_v1.h"
 
 #define REG_MASK(offset,size) (((1<<(size))-1) << (offset))
 #define REG_GET(fullValue,offset,size) (((fullValue) & REG_MASK(offset, size)) >> offset)

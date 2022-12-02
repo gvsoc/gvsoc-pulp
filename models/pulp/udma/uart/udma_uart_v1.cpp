@@ -21,8 +21,8 @@
 
 
 #include "../udma_impl.hpp"
-#include "archi/udma/uart/udma_uart_v1.h"
-#include "archi/utils.h"
+#include "../archi/udma_uart_v1.h"
+#include "../archi/utils.h"
 #include "vp/itf/uart.hpp"
 
 

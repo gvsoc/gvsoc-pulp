@@ -24,7 +24,7 @@
 #include <vp/itf/wire.hpp>
 #include <stdio.h>
 #include <string.h>
-#include <archi/eu/eu_v3.h>
+#include "archi/eu_v3.h"
 
 class Core_event_unit;
 class Event_unit;

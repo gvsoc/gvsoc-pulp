@@ -26,7 +26,7 @@
 #include "vp/itf/wire.hpp"
 #include "vp/itf/clock.hpp"
 
-#include "archi/timer/timer_v2.h"
+#include "archi/timer_v2.h"
 
 class timer : public vp::component
 {
