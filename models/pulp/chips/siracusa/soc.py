@@ -65,13 +65,13 @@ class Soc(st.Component):
         # ROM
         rom = memory.Memory(self, 'rom',
             size=self.get_property('apb_ico/mappings/rom/size'),
-            stim_file=os.path.join(os.environ.get('INSTALL_DIR'), 'python', 'pulp', 'chips', 'pulp', 'rom.bin')
+            stim_file=self.get_file_path('pulp/chips/pulp/rom.bin')
         )
 
         # Debug ROM
         debug_rom = memory.Memory(self, 'debug_rom',
             size=self.get_property('apb_ico/mappings/debug_rom/size'),
-            stim_file=os.path.join(os.environ.get('INSTALL_DIR'), 'python', 'pulp', 'chips', 'pulp', 'debug_rom.bin')
+            stim_file=self.get_file_path('pulp/chips/pulp/debug_rom.bin')
         )
 
         # FLL
