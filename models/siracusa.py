@@ -16,7 +16,7 @@
 
 from pulp.chips.siracusa.pulp_open_board import Pulp_open_board
 
-gapy_target = True
+GAPY_TARGET = True
 
 class Target(Pulp_open_board):
     """

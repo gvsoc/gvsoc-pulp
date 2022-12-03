@@ -1,5 +1,7 @@
+#!/usr/bin/env python3
+
 #
-# Copyright (C) 2020 ETH Zurich and University of Bologna
+# Copyright (C) 2020 ETH Zurich
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,23 +16,21 @@
 # limitations under the License.
 #
 
-from pulp.chips.pulp_open.pulp_open_board import Pulp_open_board
+from isa_pulp_gen import *
 
-GAPY_TARGET = True
 
-class Target(Pulp_open_board):
-    """
-    Pulp-open board
+class Rv32(Riscv_core):
 
-    """
+    def __init__(self):
+        super().__init__()
 
-    def __init__(self, parser, options):
-
-        super(Target, self).__init__(
-            parser=parser,
-            options=options
+        self.isa = Isa(
+            'riscv',
+            [
+                IsaDecodeTree('i', [rv32i]),
+                IsaDecodeTree('m', [rv32m]),
+                IsaDecodeTree('c', [rv32c]),
+                IsaDecodeTree('priv', [priv, priv_pulp_v2]),
+                IsaDecodeTree('f', [rv32f]),
+            ]
         )
-
-
-    def __str__(self) -> str:
-        return "Pulp-open virtual board"
