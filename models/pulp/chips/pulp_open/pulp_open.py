@@ -24,7 +24,7 @@ import interco.router_proxy as router_proxy
 
 class Pulp_open(st.Component):
 
-    def __init__(self, parent, name, soc_config_file='pulp/chips/pulp_open/soc.json', cluster_config_file='pulp/chips/pulp_open/cluster.json', padframe_config_file='pulp/chips/pulp_open/padframe.json'):
+    def __init__(self, parent, name, parser, soc_config_file='pulp/chips/pulp_open/soc.json', cluster_config_file='pulp/chips/pulp_open/cluster.json', padframe_config_file='pulp/chips/pulp_open/padframe.json'):
         super(Pulp_open, self).__init__(parent, name)
 
         #
@@ -59,7 +59,7 @@ class Pulp_open(st.Component):
             clusters.append(Cluster(self, cluster_name, config_file=cluster_config_file, cid=cid))
 
         # Soc
-        soc = Soc(self, 'soc', config_file=soc_config_file, chip=self, cluster=clusters[0])
+        soc = Soc(self, 'soc', parser, config_file=soc_config_file, chip=self, cluster=clusters[0])
 
         # Fast clock
         fast_clock = Clock_domain(self, 'fast_clock', frequency=24576063*2)

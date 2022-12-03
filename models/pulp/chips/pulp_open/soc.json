@@ -16,9 +16,7 @@
             "power_models_file": "pulp/chips/pulp_open/power_models/core/riscy.json",
 
             "cluster_id"  : 31,
-            "core_id"     : 0,
-            "fetch_enable": true,
-            "boot_addr"   : "0x1A000080"
+            "core_id"     : 0
         },
         "riscv_fesvr_tohost_addr": null
     },
@@ -82,20 +80,8 @@
         }
     },
 
-    "rom": {
-        "version": 2,
-        "base": "0x1A000000",
-        "size": "0x00002000"
-    },
-
     "apb_ico": {
         "mappings": {
-            "rom": {
-                "base"          : "0x1A000000",
-                "size"          : "0x00002000",
-                "remove_offset" : "0x1A000000"
-            },
-
             "fll_soc": {
                 "base"          : "0x1A100000",
                 "size"          : "0x00000010",

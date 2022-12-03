@@ -33,31 +33,19 @@ class Pulp_open_board(gv.gvsoc_runner.Runner):
         super(Pulp_open_board, self).__init__(parent, name, parser=parser, options=options)
 
         # Pulp
-        pulp = Pulp_open(self, 'chip')
+        pulp = Pulp_open(self, 'chip', parser)
 
         # Flash
         hyperflash = Hyperflash(self, 'hyperflash')
-        spiflash = Spiflash(self, 'spiflash')
         hyperram = Hyperram(self, 'ram')
 
         self.register_flash(
-            DefaultFlashRomV2(self, 'flash', image_name=spiflash.get_image_path(),
-                flash_attributes={
-                    "flash_type": 'spi'
-                },
-                size=8*1024*1024
-            ))
-
-        self.register_flash(
-            DefaultFlashRomV2(self, 'hyperflash', image_name=hyperflash.get_image_path(),
+            DefaultFlashRomV2(self, 'flash', image_name=hyperflash.get_image_path(),
                 flash_attributes={
                     "flash_type": 'hyper'
                 },
                 size=8*1024*1024
             ))
-
-        self.bind(pulp, 'spim0_cs0', spiflash, 'cs')
-        self.bind(pulp, 'spim0_cs0_data', spiflash, 'input')
 
         self.bind(pulp, 'hyper0_cs1_data', hyperflash, 'input')
 
