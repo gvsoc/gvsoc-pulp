@@ -30,6 +30,12 @@ class Soc(st.Component):
     def __init__(self, parent, name, parser):
         super().__init__(parent, name)
 
+        # TODO, once supported, defaut isa should be rv32imafdc
+        parser.add_argument("--isa", dest="isa", type=str, default="rv32imfdc",
+            help="RISCV-V ISA string (default: %(default)s)")
+
+        [args, __] = parser.parse_known_args()
+
         binary = None
         if parser is not None:
             [args, otherArgs] = parser.parse_known_args()
@@ -42,7 +48,7 @@ class Soc(st.Component):
         ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
         self.bind(ico, 'mem', mem, 'input')
 
-        host = iss.Iss(self, 'host', vp_component='pulp.cpu.iss.iss_rv32')
+        host = iss.Iss(self, 'host', vp_component='pulp.cpu.iss.iss_rv32', isa=args.isa)
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 
