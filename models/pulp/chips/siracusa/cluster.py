@@ -175,7 +175,7 @@ class Cluster(st.Component):
         cluster_ico.add_mapping('l1', **self._reloc_mapping(self.get_property('l1/mapping')))
         self.bind(cluster_ico, 'l1', l1, 'ext2loc')
 
-        cluster_ico.add_mapping('wmem_soc', **self._reloc_mapping(self.get_property('wmem')))
+        cluster_ico.add_mapping('wmem_soc', base=self.get_property('wmem/base'), size=self.get_property('wmem/size'))
         self.bind(cluster_ico, 'wmem_soc', wmem, 'input')
 
         cluster_ico.add_mapping('l1_ts', **self._reloc_mapping(self.get_property('l1/ts_mapping')))

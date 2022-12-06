@@ -52,7 +52,8 @@
 
     "wmem": {
         "base": "0x10400000",
-        "size"  : "0x00800000"
+        "size"  : "0x00800000",
+        "remove_offset": "0x10400000"
     },
         
     "icache": {
