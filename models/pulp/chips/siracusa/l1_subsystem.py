@@ -129,8 +129,8 @@ class L1_subsystem(st.Component):
 
         # EXT2LOC
         self.bind(self, 'ext2loc', ext2loc, 'input')
-        self.bind(ext2loc, 'out', interleaver, 'in_%d' % nb_pe)
+        self.bind(ext2loc, 'out_0', interleaver, 'in_%d' % nb_pe)
 
         # EXT2LOC test-and-set
         self.bind(self, 'ext2loc_ts', ext2loc_ts, 'input')
-        self.bind(ext2loc_ts, 'out', interleaver, 'ts_in_%d' % nb_pe)
+        self.bind(ext2loc_ts, 'out_0', interleaver, 'ts_in_%d' % nb_pe)
