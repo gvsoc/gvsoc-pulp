@@ -142,9 +142,9 @@ class Soc(st.Component):
                 new_instance_below = 0
 
                 # Last level does not have a quadrant factor
-                try:
+                if chip.get_property('hierarchical_interconnect/structure/level%d/quadrant_factor' % level) is not None:
                     quadrant_factor.append(chip.get_property('hierarchical_interconnect/structure/level%d/quadrant_factor' % level, int))
-                except:
+                else:
                     quadrant_factor.append(nb_instance_below)
                 
                 # Collect mapping information for every instance below
@@ -322,7 +322,6 @@ class Soc(st.Component):
         #
 
         # Loader
-        self.bind(loader, 'out', axi_ico, 'input')
         self.bind(loader, 'start', fc, 'fetchen')
         self.bind(loader, 'entry', fc, 'bootaddr')
 
@@ -405,7 +404,6 @@ class Soc(st.Component):
         self.bind(axi_ico, 'soc', soc_ico, 'axi_slave')
 
         if has_noc:
-            self.bind(soc_ico, 'axi_proxy', axi_ico, 'input_0')
             instance_slaves = 0
             instance_below_id  = 0
             instance = 0
@@ -420,36 +418,20 @@ class Soc(st.Component):
                         elif level != network_levels:
                             self.bind(self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'soc', self.get_component('l%d_network_%d' % (level, instance)), 'input_%d' % instance_slaves)
                             instance_slaves += 1
-                            try:
-                                self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('mappings/net_up_lower')
-                            except:
-                                pass
-                            else:
+                            if self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('mappings/net_up_lower') is not None:
                                 self.bind(self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'net_up_lower', self.get_component('l%d_network_%d' % (level, instance)), 'input_%d' % instance_slaves)
                                 instance_slaves += 1
-                            try:
-                                self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('mappings/net_up_upper')
-                            except:
-                                pass
-                            else:
+                            if self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('mappings/net_up_upper') is not None:
                                 self.bind(self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'net_up_upper', self.get_component('l%d_network_%d' % (level, instance)), 'input_%d' % instance_slaves)
                                 instance_slaves += 1
                             self.bind(self.get_component('l%d_network_%d' % (level, instance)), 'net_%d_down' % instance_below, self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'input_%d' % (self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('nb_slaves') - 1))
                         else:
                             self.bind(self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'soc', axi_ico, 'input_%d' % instance_slaves)
                             instance_slaves += 1
-                            try:
-                                self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('mappings/net_up_lower')
-                            except:
-                                pass
-                            else:
+                            if self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('mappings/net_up_lower') is not None:
                                 self.bind(self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'net_up_lower', axi_ico, 'input_%d' % instance_slaves)
                                 instance_slaves += 1
-                            try:
-                                self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('mappings/net_up_upper')
-                            except:
-                                pass
-                            else:
+                            if self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('mappings/net_up_upper') is not None:
                                 self.bind(self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'net_up_upper', axi_ico, 'input_%d' % instance_slaves)
                                 instance_slaves += 1
                             self.bind(axi_ico, 'net_%d_down' % instance_below, self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'input_%d' % (self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('nb_slaves') - 1))
@@ -465,8 +447,12 @@ class Soc(st.Component):
                 nb_remained_instance_below = instance
                 instance = 0
             self.bind(soc_ico, 'axi_master', axi_ico, 'input_%d' % (axi_ico.get_property('nb_slaves') - 1))
+            self.bind(loader, 'out', axi_ico, 'input_%d' % (axi_ico.get_property('nb_slaves')))
+            self.bind(soc_ico, 'axi_proxy', axi_ico, 'input_%d' % (axi_ico.get_property('nb_slaves') + 1))
+            axi_ico.add_property('nb_slaves', (axi_ico.get_property('nb_slaves') + 2))
 
         else:
+            self.bind(loader, 'out', axi_ico, 'input')
             self.bind(soc_ico, 'axi_proxy', axi_ico, 'input')
             self.bind(soc_ico, 'axi_master', axi_ico, 'input')
             self.bind(self, 'soc_input', axi_ico, 'input')
