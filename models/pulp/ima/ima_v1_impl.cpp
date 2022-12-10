@@ -22,10 +22,8 @@
 #include <vp/itf/io.hpp>
 #include <stdio.h>
 #include <string.h>
-#include <archi/ima/ima_v1.h>
+#include "archi/ima_v1.h"
 #include "ima_v1_impl.hpp"
-
-#define TOTAL_REQ 10
 
 
 ima_v1::ima_v1(js::config *config)
@@ -39,20 +37,11 @@ void ima_v1::reset(bool active)
 {
   if (active)
   {
-    memset(this->buffer_in, 0, sizeof(int8_t)*this->xbar_y);
-    memset(this->buffer_out, 0, sizeof(int8_t)*this->xbar_x);
+    memset(this->buffer_in,          0, sizeof(int8_t)*this->xbar_y);
+    memset(this->buffer_out,         0, sizeof(int8_t)*this->xbar_x);
+    memset(this->buffer_in_compute,  0, sizeof(int8_t)*this->xbar_y);
+    memset(this->buffer_out_compute, 0, sizeof(int8_t)*this->xbar_x);
     memset(this->regs, 0, sizeof(unsigned int)*IMA_NB_REGS);
-
-    for(int j=0; j<this->xbar_y; j++)
-    {
-      for(int i=0; i<this->xbar_x; i++)
-      {
-        if(i == j)
-          this->crossbar[j][i] = 1;
-        else
-          this->crossbar[j][i] = 0;
-      }
-    }
 
     /* Event cycles depend on analog time to perform the specific task and on the cluster frequency */
     this->job->analog_latency    = (int)((float)this->eval_time / ((float)this->get_clock()->get_period() / 1000)) + 1;
@@ -68,6 +57,12 @@ void ima_v1::clear_ima()
 {
   this->state = IMA_STATE_IDLE;
   this->eval_state = IMA_EVAL_STATE_IDLE;
+
+#ifdef EXEC_PIPELINED
+  this->eval_pipeline_state = IMA_EVAL_PIPELINE_STATE_STREAM_IN;
+  this->stats_job_stream_in  = 0;
+  this->stats_job_stream_out = 0;
+#endif //EXEC_PIPELINED
 
   this->port_id = 0;
   this->job->port = this->port_id;
@@ -97,9 +92,13 @@ void ima_v1::clear_ima()
   this->line_fetch_lfover = 0;
   this->line_store_lfover = 0;
 
-  this->count_stream_in  = 0;
-  this->count_stream_out = 0;
-  this->count_compute    = 0;
+  this->stats_stream_in  = 0;
+  this->stats_stream_out = 0;
+  this->stats_compute    = 0;
+
+  this->stream_in_done  = 0;
+  this->compute_done    = 0;
+  this->stream_out_done = 0;
 }
 
 /* Stream-in - Compute - Stream-out */
@@ -123,8 +122,8 @@ void ima_v1::job_handler(void *__this, vp::clock_event *event)
       _this->feat_count = 0;
       _this->roll_count = 0;
 
-      _this->remaining_in_req = (job->height >> 2) + ((job->height & 0x3) != 0);
-      _this->remaining_out_req = (job->width >> 2) + ((job->width & 0x3) != 0);
+      _this->remaining_in_req  = (job->height >> 2) + ((job->height & 0x3) != 0);
+      _this->remaining_out_req = (job->width  >> 2) + ((job->width  & 0x3) != 0);
 
       /* Two cycles per idle */
       job->latency=2;
@@ -132,7 +131,7 @@ void ima_v1::job_handler(void *__this, vp::clock_event *event)
       /* Minimum delay between stream-out and new stream-in request is 5.
       It is mitigated by 2 cycles of FIFOs, 2 cycle of idle state and then other 1 cycle from stream-out
       itself, if it is larger than 1. Otherwise it has to be considered in the latency of the next stream-in */
-      if((_this->remaining_out_req / (_this->nb_master_ports >> 1)) <= 1)
+      if((_this->remaining_out_req / _this->nb_master_ports) <= 1)
       {
         _this->extra_latency_in = 1;
       }
@@ -146,22 +145,39 @@ void ima_v1::job_handler(void *__this, vp::clock_event *event)
       if(_this->remaining_jobs == 0)
       {
         if(_this->stats)
-          printf("Job Statistics (cycles): Stream-in = %d, Compute = %d, Stream-out = %d\n", _this->count_stream_in, _this->count_compute, _this->count_stream_out);
+        {
+          if(_this->silent)
+          {
+            _this->regs[IMA_PERF_STREAM_IN/4]  = _this->stats_stream_in;
+            _this->regs[IMA_PERF_COMPUTE/4]    = _this->stats_compute;
+            _this->regs[IMA_PERF_STREAM_OUT/4] = _this->stats_stream_out;
+          }
+          else
+          {
+            printf("Job Statistics (cycles): Stream-in = %d, Compute = %d, Stream-out = %d\n", _this->stats_stream_in, _this->stats_compute, _this->stats_stream_out);
+          }
+        }
 
         _this->irq_0.sync(true);
         _this->set_state(IMA_STATE_IDLE);
+        break;
       }
       else
       {
         if(_this->remaining_jobs < job->jobs)
         {
-          _this->job_update();
+#ifdef EXEC_PIPELINED
+          _this->stats_job_stream_in  = 0;
+          _this->stats_job_stream_out = 0;
+#endif //EXEC_PIPELINED
+          _this->job_update(1);
+          _this->job_update(0);
         }
       }
 
       /* One more memory access if the address is misaligned and if it needed */
-      _this->remaining_in_req  += ((job->height + (job->src_addr & 0x3)) > job->height);
-      _this->remaining_out_req += ((job->width + (job->dest_addr & 0x3)) > job->width);
+      _this->remaining_in_req  += ((job->height + (job->src_addr  & 0x3)) > job->height);
+      _this->remaining_out_req += ((job->width  + (job->dest_addr & 0x3)) > job->width);
 
       /* Size (in bytes) if a misaligned access request occurs */
       job->first_data = 4 - (job->src_addr & 0x3);
@@ -175,55 +191,233 @@ void ima_v1::job_handler(void *__this, vp::clock_event *event)
 
       if(_this->remaining_in_req == 0)
       {
+        /* Copy the input buffer to the input internal buffer */
+        for(int i=0; i<job->height; i++)
+        {
+          _this->buffer_in_compute[i] = _this->buffer_in[i];
+        }
+
         /* Due to the streamer FIFOs */
         job->latency+=(2 + _this->extra_latency_in);
         /* Count the number of memory fetches completed */
         _this->enqueued_req = 0;
         _this->eval_state = IMA_EVAL_STATE_COMPUTATION;
+
+        _this->stream_in_done++;
       }
-      _this->count_stream_in+=job->latency;
+      _this->stats_stream_in+=job->latency;
 
       break;
     }
 
+#ifndef EXEC_PIPELINED
     case IMA_EVAL_STATE_COMPUTATION:
     {
       _this->exec_job();
-      //_this->update_finished_jobs(1);
+
+      /* Copy the internal output buffer to the output buffer */
+      for(int i=0; i<job->width; i++)
+      {
+        _this->buffer_out[i] = _this->buffer_out_compute[i];
+      }
+
       _this->job->analog_latency = (int)((float)_this->eval_time / ((float)_this->get_clock()->get_period() / 1000)) + 1;
       job->latency = job->analog_latency;
-      _this->count_compute+=job->latency;
+      _this->stats_compute+=job->latency;
 
       /* Size (in bytes) if a misaligned access request occurs */
       job->first_data = 4 - (job->dest_addr & 0x3);
 
       _this->eval_state = IMA_EVAL_STATE_STREAM_OUT;
 
+      _this->compute_done++;
+
       break;
     }
+#endif //EXEC_PIPELINED
 
     case IMA_EVAL_STATE_STREAM_OUT:
     {
       _this->stream_reqs(1);
 
+      _this->stats_stream_out+=job->latency;
+
       if(_this->remaining_out_req == 0)
       {
-        _this->count_stream_out+=job->latency;
-        _this->count_stream_in+=2;
+        _this->stats_stream_in+=2;
         /* Due to the streamer FIFOs */
         job->latency+=2;
         _this->enqueued_req = 0;
         _this->remaining_jobs--;
         _this->update_finished_jobs(1);
         _this->eval_state = IMA_EVAL_STATE_IDLE;
-      }
-      else
-      {
-        _this->count_stream_out+=job->latency;
+
+        _this->stream_out_done++;
       }
 
       break;
     }
+
+#ifdef EXEC_PIPELINED
+    case IMA_EVAL_STATE_COMPUTATION:
+    {
+      switch(_this->eval_pipeline_state)
+      {
+        /* Stream-in the next input data */
+        case IMA_EVAL_PIPELINE_STATE_STREAM_IN:
+        {
+          if(_this->stream_in_done < job->jobs)
+          {
+            if(_this->remaining_in_req == 0)
+            {
+              /* Clear the streamers counter before starting new job */
+              _this->step_count = 0;
+              _this->feat_count = 0;
+              _this->roll_count = 0;
+              _this->remaining_in_req = (job->height >> 2) + ((job->height & 0x3) != 0);
+              /* Update the job for pipelined execution */
+              _this->job_update(1);
+              /* One more memory access if the address is misaligned and if it needed */
+              _this->remaining_in_req += ((job->height + (job->src_addr & 0x3)) > job->height);
+              /* Size (in bytes) if a misaligned access request occurs */
+              job->first_data = 4 - (job->src_addr & 0x3);
+            }
+
+            _this->stream_reqs(0);
+
+            if(_this->remaining_in_req == 0)
+            {
+              /* Due to the streamer FIFOs */
+              job->latency+=(2 + _this->extra_latency_in);
+              /* Count the number of memory fetches completed */
+              _this->enqueued_req = 0;
+
+              _this->stream_in_done++;
+
+              _this->eval_pipeline_state = IMA_EVAL_PIPELINE_STATE_COMPUTE;
+            }
+
+            _this->stats_stream_in+=job->latency;
+            _this->stats_job_stream_in+=job->latency;
+            break;
+          }
+        }
+
+        /* Stream-out the previous output data */
+        case IMA_EVAL_PIPELINE_STATE_STREAM_OUT:
+        {
+          if(_this->stream_out_done < job->jobs)
+          {
+            if(_this->remaining_out_req == 0)
+            {
+              /* Clear the streamers counter before starting new job */
+              _this->step_count = 0;
+              _this->feat_count = 0;
+              _this->roll_count = 0;
+              _this->remaining_out_req = (job->width >> 2) + ((job->width & 0x3) != 0);
+              /* Update the job for pipelined execution */
+              _this->job_update(0);
+              /* One more memory access if the address is misaligned and if it needed */
+              _this->remaining_out_req += ((job->width + (job->dest_addr & 0x3)) > job->width);
+              /* Size (in bytes) if a misaligned access request occurs */
+              job->first_data = 4 - (job->dest_addr & 0x3);
+            }
+
+            _this->stream_reqs(1);
+
+            _this->stats_stream_out+=job->latency;
+            _this->stats_job_stream_out+=job->latency;
+
+            if(_this->remaining_out_req == 0)
+            {
+              /* Due to the streamer FIFOs */
+              job->latency+=2;
+              _this->stats_stream_in+=2;
+              _this->stats_job_stream_in+=2;
+              /* IDLE */
+              job->latency+=2;
+              _this->stats_job_stream_in+=2;
+              _this->enqueued_req = 0;
+              _this->remaining_jobs--;
+              _this->update_finished_jobs(1);
+
+              _this->stream_out_done++;
+
+              if(_this->stream_in_done < job->jobs)
+              {
+                _this->eval_pipeline_state = IMA_EVAL_PIPELINE_STATE_STREAM_IN;
+              }
+              else
+              {
+                _this->eval_pipeline_state = IMA_EVAL_PIPELINE_STATE_COMPUTE;
+              }
+            }
+
+            break;
+          }
+        }
+
+        case IMA_EVAL_PIPELINE_STATE_COMPUTE:
+        {
+          if(_this->compute_done < job->jobs)
+          {
+            _this->exec_job();
+
+            _this->compute_done++;
+
+            if(_this->compute_done < job->jobs)
+            {
+              /* Copy the input buffer to the input internal buffer */
+              for(int i=0; i<job->height; i++)
+              {
+                _this->buffer_in_compute[i] = _this->buffer_in[i];
+              }
+            }
+
+            if(_this->compute_done <= job->jobs)
+            {
+              /* Copy the internal output buffer to the output buffer */
+              for(int i=0; i<job->width; i++)
+              {
+                _this->buffer_out[i] = _this->buffer_out_compute[i];
+              }
+            }
+
+            _this->job->analog_latency = (int)((float)_this->eval_time / ((float)_this->get_clock()->get_period() / 1000)) + 1;
+            /* Stream-in and stream-out are still serialized */
+            job->latency = MAX((job->analog_latency - _this->stats_job_stream_in - _this->stats_job_stream_out), 0);
+            _this->stats_compute+=job->analog_latency;
+            _this->stats_job_stream_in  = 0;
+            _this->stats_job_stream_out = 0;
+
+            if(_this->compute_done == job->jobs)
+            {
+              /* Clear the streamers counter before starting new job */
+              _this->step_count = 0;
+              _this->feat_count = 0;
+              _this->roll_count = 0;
+              _this->remaining_out_req = (job->width >> 2) + ((job->width & 0x3) != 0);
+              /* Update the job for pipelined execution */
+              _this->job_update(0);
+              /* One more memory access if the address is misaligned and if it needed */
+              _this->remaining_out_req += ((job->width + (job->dest_addr & 0x3)) > job->width);
+              /* Size (in bytes) if a misaligned access request occurs */
+              job->first_data = 4 - (job->dest_addr & 0x3);
+
+              _this->eval_state = IMA_EVAL_STATE_STREAM_OUT;
+              _this->eval_pipeline_state = IMA_EVAL_PIPELINE_STATE_STREAM_IN;
+            }
+            else
+            {
+              _this->eval_pipeline_state = IMA_EVAL_PIPELINE_STATE_STREAM_OUT;
+            }
+
+            break;
+          }
+        }
+      }
+    }
+#endif //EXEC_PIPELINED
   }
 
   if(_this->state != IMA_STATE_IDLE)
@@ -704,7 +898,7 @@ void ima_v1::exec_job()
 
     for(int j=0; j<this->job->height; j++)
     {
-      sum += ((float) this->buffer_in[this->job->start_y + j] / ((1 << (DAC_PRECISION - 1)) - 1)) * ((float) this->crossbar[this->job->start_y + j][this->job->start_x + i]) / ((1 << (STOR_DWIDTH - 1)) - 1);
+      sum += ((float) this->buffer_in_compute[this->job->start_y + j] / ((1 << (DAC_PRECISION - 1)) - 1)) * ((float) this->crossbar[this->job->start_y + j][this->job->start_x + i]) / ((1 << (STOR_DWIDTH - 1)) - 1);
       //sum += this->buffer_in[this->job->start_y + j] * this->crossbar[this->job->start_y + j][this->job->start_x + i];
       //printf("in=%d, scaled_in=%f, cb=%d, scaled_cb=%f, sum=%f, scaled_sum=%f, ind_x=%d, ind_y=%d\n", this->buffer_in[this->job->start_y + j], \
               (float) this->buffer_in[this->job->start_y + j] / ((1 << (DAC_PRECISION - 1)) - 1), \
@@ -712,9 +906,9 @@ void ima_v1::exec_job()
               (float) this->crossbar[this->job->start_y + j][this->job->start_x + i] / ((1 << (STOR_DWIDTH - 1)) - 1), \
               sum, (float) this->adc_clipping(sum), this->job->start_x + i, this->job->start_y + j);
     }
-    this->buffer_out[this->job->start_x + i] = this->adc_clipping(sum);
+    this->buffer_out_compute[this->job->start_x + i] = this->adc_clipping(sum);
     //this->buffer_out[this->job->start_x + i] = sum;
-    this->trace.msg("Written in output buffer at index %d (sum: %f, out: %x)\n", this->job->start_x + i, sum, this->buffer_out[this->job->start_x + i]);
+    this->trace.msg("Written in output buffer at index %d (sum: %f, out: %d)\n", this->job->start_x + i, sum, (int8_t)this->buffer_out_compute[this->job->start_x + i]);
   }
 
   this->trace.msg("Computed %dx%d MVM (remaining_jobs: %d)\n", this->job->width, this->job->height, (this->remaining_jobs - 1));
@@ -800,7 +994,6 @@ void ima_v1::check_requests()
   {
     event_enqueue(this->job_event, this->job->latency);
   }
-
 }
 
 
@@ -848,12 +1041,12 @@ void ima_v1::response(void *__this, vp::io_req *req)
 }
 
 
-void ima_v1::job_update()
+void ima_v1::job_update(bool is_source)
 {
   ima_job_t *job = this->job;
 
   /* Input tensor */
-  if(this->beta_in_count < job->beta_in_length)
+  if(is_source && this->beta_in_count < job->beta_in_length)
   {
     if(this->alpha_in_count < job->alpha_in_length)
     {
@@ -874,7 +1067,7 @@ void ima_v1::job_update()
   }
 
   /* Output tensor */
-  if(this->beta_out_count < job->beta_out_length)
+  if(!is_source && this->beta_out_count < job->beta_out_length)
   {
     if(this->alpha_out_count < job->alpha_out_length)
     {
@@ -894,7 +1087,7 @@ void ima_v1::job_update()
     job->dest_addr = this->regs[IMA_J_DST_ADDR/4];
   }
 
-  this->trace.msg("Updating job addresses (src: %x, dst: %x)\n", job->src_addr, job->dest_addr);
+  this->trace.msg("Updating job addresses (new_address: %x, is_source: %d)\n", is_source ? job->src_addr : job->dest_addr, is_source);
 }
 
 /* Mount request for L1 access */
@@ -903,8 +1096,12 @@ int ima_v1::stream_access(int port, uint32_t addr, uint8_t *data, int size, bool
   vp::io_req *req = &this->reqs[port];
 
   req->set_addr(addr & (0x400000 - 1));
+  //req->set_addr(addr);
   req->set_size(size);
-  req->set_data(data);
+  if(is_write)
+  {
+    req->set_data(data);
+  }
   req->set_is_write(is_write);
   req->set_latency(0);
 
@@ -1030,7 +1227,7 @@ int ima_v1::stream_update(int port, bool is_write)
             this->step_count+=4;
           }
 
-          err = this->stream_access(port, (addr - (addr & 0x3)), new uint8_t[4], 4, is_write, (int64_t *) &job->latency);
+          err = this->stream_access(port, (addr - (addr & 0x3)), NULL, 4, is_write, (int64_t *) &job->latency);
         }
 
         if(this->step_count >= job->line_length)
@@ -1134,7 +1331,7 @@ void ima_v1::stream_reqs(bool is_write)
       {
         for(int i=0; i<line_fetch_lfover; i++)
         {
-          *(uint8_t *)(this->buffer_in + job->start_y + this->enqueued_req + i) = temp[i];
+          *(int8_t *)(this->buffer_in + job->start_y + this->enqueued_req + i) = temp[i];
         }
 
         this->line_fetch_lfover = 0;
@@ -1150,7 +1347,7 @@ void ima_v1::stream_reqs(bool is_write)
         {
           for(int i=0; i<job->first_data; i++)
           {
-            *(uint8_t *)(this->buffer_in + job->start_y + this->enqueued_req + i) = temp[(i + (job->src_addr & 0x3))];
+            *(int8_t *)(this->buffer_in + job->start_y + this->enqueued_req + i) = temp[(i + (job->src_addr & 0x3))];
           }
         }
       }
@@ -1161,7 +1358,7 @@ void ima_v1::stream_reqs(bool is_write)
     }
   }
   /* Ports requests are sent in parallel. Add latency if port -1 is fetching/storing from/to L1 */
-  if(this->port_id == ((nb_master_ports >> 1) - 1))
+  if(this->port_id == (nb_master_ports - 1))
   {
     /* Reset ports counter */
     this->port_id = 0;
@@ -1173,11 +1370,41 @@ void ima_v1::stream_reqs(bool is_write)
     {
       job->latency++;
     }
+    // else
+    // {
+    //   if(job->latency > 0)
+    //   {
+    //     event_enqueue(this->job_event, 0);
+    //   }
+    // }
 
     this->port_id++;
   }
 
   job->port = this->port_id;
+}
+
+
+int ima_v1::preload_file(char *path)
+{
+  this->get_trace()->msg(vp::trace::LEVEL_INFO, "Preloading IMA crossbar with stimuli file (path: %s)\n", path);
+
+  FILE *file = fopen(path, "r");
+  if (file == NULL) {
+    printf("Unable to open stimulus file (path: %s, error: %s)\n", path, strerror(errno));
+    return -1;
+  }
+
+  /* Read the headers */
+  int header[4];
+
+  if(fread(header, sizeof(int), 4, file) != 4) return -1;
+
+  /* Read the data */
+  for(int j=0; j<header[3]; j++)
+    if(fread((int8_t *)(this->crossbar[j+header[1]]+header[0]), sizeof(int8_t), header[2], file) != header[2]) return -1;
+
+  return 0;
 }
 
 
@@ -1193,10 +1420,15 @@ int ima_v1::build()
   this->plot_write_time = get_config_int("plot_write_ns");
   this->plot_read_time = get_config_int("plot_read_ns");
 
-  this->stats = get_config_bool("statistics");
+  this->stats  = get_config_bool("statistics");
+  this->silent = get_config_bool("silent");
 
   this->out = new vp::io_master[this->nb_master_ports];
   this->reqs = new vp::io_req[this->nb_master_ports];
+  for (int i=0; i<this->nb_master_ports; i++)
+  {
+    this->reqs[i].set_data(new uint8_t[4]);
+  }
 
   this->in.set_req_meth(&this->ima_v1::req);
   new_slave_port("input", &this->in);
@@ -1215,8 +1447,12 @@ int ima_v1::build()
   this->job_event = event_new(&this->ima_v1::job_handler);
 
   this->regs = new unsigned int[IMA_NB_REGS];
-  this->buffer_in = new int8_t[this->xbar_y];
-  this->buffer_out = new int8_t[this->xbar_x];
+  /* Streaming buffers */
+  this->buffer_in          = new int8_t[this->xbar_y];
+  this->buffer_out         = new int8_t[this->xbar_x];
+  /* Computation buffers */
+  this->buffer_in_compute  = new int8_t[this->xbar_y];
+  this->buffer_out_compute = new int8_t[this->xbar_x];
 
   this->crossbar = new int8_t*[this->xbar_y];
   for(int i=0; i<this->xbar_y; i++)
@@ -1227,6 +1463,17 @@ int ima_v1::build()
   this->job = new ima_job_t;
   this->pw_req = new ima_pw_t;
   this->pr_req = new ima_pr_t;
+
+  /* Preloading */
+  js::config *conf = this->get_js_config();
+
+  js::config *preload_file_conf = conf->get("preload_file");
+
+  if (preload_file_conf)
+  {
+    if (this->preload_file((char *)preload_file_conf->get_str().c_str()))
+      return -1;
+  }
 
   return 0;
 }

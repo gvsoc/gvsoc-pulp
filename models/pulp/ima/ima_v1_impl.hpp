@@ -18,6 +18,8 @@
  * Authors: Nazareno Bruschi, Unibo (nazareno.bruschi@unibo.it)
  */
 
+#define EXEC_PIPELINED
+
 /* IMA main FSM States */
 #define IMA_STATE_IDLE            0
 #define IMA_STATE_ACQUIRE         1
@@ -34,10 +36,18 @@
 #define IMA_EVAL_STATE_COMPUTATION    2
 #define IMA_EVAL_STATE_STREAM_OUT     3
 
+#ifdef EXEC_PIPELINED
+#define IMA_EVAL_PIPELINE_STATE_STREAM_IN     0
+#define IMA_EVAL_PIPELINE_STATE_COMPUTE       1
+#define IMA_EVAL_PIPELINE_STATE_STREAM_OUT    2
+#endif //EXEC_PIPELINED
+
 /* Returns values of Acquire state */
 #define IMA_ACQUIRE_LOCKED       -1
 #define IMA_ACQUIRE_READY        0
 
+#define TOTAL_REQ 10
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 class ima_job_t
 {
@@ -149,9 +159,16 @@ private:
   int plot_read_time;
 
   bool stats;
+  bool silent;
 
   int state;
   int eval_state;
+
+#ifdef EXEC_PIPELINED
+  int eval_pipeline_state;
+#endif //EXEC_PIPELINED
+
+  int preload_file(char *path);
 
   void set_state(int new_state);
   void set_id(int id);
@@ -163,14 +180,20 @@ private:
   void exec_job();
   int8_t adc_clipping(float value);
 
-  void job_update();
+  void job_update(bool is_source);
   void stream_reqs(bool is_write);
   int stream_access(int port, uint32_t addr, uint8_t *data, int size, bool is_write, int64_t *latency);
   int stream_update(int port, bool is_write);
 
+  int stream_in_done;
+  int compute_done;
+  int stream_out_done;
+
   unsigned int *regs;
   int8_t *buffer_in;
+  int8_t *buffer_in_compute;
   int8_t *buffer_out;
+  int8_t *buffer_out_compute;
   int8_t **crossbar;
 
   ima_job_t *job;
@@ -224,9 +247,13 @@ private:
   int beta_in_count;
   int beta_out_count;
 
-  int count_stream_in;
-  int count_stream_out;
-  int count_compute;
+  int stats_stream_in;
+  int stats_stream_out;
+  int stats_compute;
+#ifdef EXEC_PIPELINED
+  int stats_job_stream_in;
+  int stats_job_stream_out;
+#endif //EXEC_PIPELINED
 
 };
 
