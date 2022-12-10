@@ -2,7 +2,7 @@
     "nb_cluster": 512,
 
     "hierarchical_interconnect": {
-        "has_noc": false,
+        "has_noc": true,
         "network_levels": 3,
         "structure": {
             "level0": {
