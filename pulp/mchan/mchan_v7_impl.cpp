@@ -236,6 +236,7 @@ private:
   int64_t *loc_port_ready_cycle;
 
   bool ext_is_stalled;
+  int nb_cmd_started;
 
   vp::Trace     cmd_events[MCHAN_NB_COUNTERS];
   vp::WireMaster<bool> ext_irq_itf;
@@ -394,8 +395,7 @@ bool Mchan_channel::check_command(Mchan_cmd *cmd)
   top->trace.msg("Incrementing counter (id: %d, bytes: %d, remaining bytes: %d)\n", current_counter, cmd->size, top->pending_bytes[current_counter]);
 
   // Enqueue the command to the core queue
-  uint8_t one = 1;
-  this->top->cmd_events[cmd->counter_id].event(&one);
+  this->top->cmd_start(cmd->counter_id);
 
   pending_cmds->push(cmd);
 
@@ -523,6 +523,21 @@ void Mchan_channel::trigger_event(Mchan_cmd *cmd)
   }
 }
 
+void mchan::cmd_start(int cmd_id)
+{
+    uint8_t one = 1;
+    this->cmd_events[cmd_id].event(&one);
+    this->channel_busy[cmd_id].set(1);
+    this->busy_set(1);
+    this->nb_cmd_started++;
+    if (this->nb_cmd_started == 1)
+    {
+        if (this->busy_itf.is_bound())
+        {
+            this->busy_itf.sync(1);
+        }
+    }
+}
 
 void mchan::ext_grant(vp::Block *__this, vp::IoReq *req)
 {
@@ -574,6 +589,7 @@ mchan::mchan(vp::ComponentConf &config)
   check_ext_read_event = event_new(mchan::check_ext_read_handler);
   check_ext_write_event = event_new(mchan::check_ext_write_handler);
   check_loc_transfer_event = event_new(mchan::check_loc_transfer_handler);
+  ext_req_event = event_new(mchan::ext_req_handler);
 
   pending_read_cmds = new Mchan_queue<Mchan_cmd>(global_queue_depth);
   pending_write_cmds = new Mchan_queue<Mchan_cmd>(global_queue_depth);
@@ -784,7 +800,8 @@ void mchan::send_req_to_ext(Mchan_cmd *cmd, vp::IoReq *req)
   vp::IoReqStatus err = ext_itf.req(req);
   if (err == vp::IO_REQ_OK)
   {
-    handle_ext_write_req_end(cmd, req);
+    // Check when the next step can be triggered
+    this->schedule_ext_req(req);
   }
 }
 
@@ -804,6 +821,7 @@ void mchan::send_loc_read_req()
   trace.msg("Preparing write request to external interface (req: %p, addr: 0x%x, size: 0x%x)\n",
     req, cmd->dest, size);
 
+  req->prepare();
   req->set_addr(cmd->dest);
   req->set_size(size);
 
@@ -850,6 +868,7 @@ void mchan::send_req()
   trace.msg("Sending read request to external interface (req: %p, addr: 0x%lx, size: 0x%x)\n",
     req, cmd->source, size);
 
+  req->prepare();
   req->set_addr(cmd->source);
   req->set_size(size);
 
@@ -880,11 +899,19 @@ void mchan::send_req()
   if (err == vp::IO_REQ_OK)
   {
     cmd->received_size += size;
-    push_req_to_loc(req);
+    // Check when the next step can be trigger
+    this->schedule_ext_req(req);
   }
   else if (err == vp::IO_REQ_DENIED)
   {
     ext_is_stalled = true;
+  }
+  else if (err == vp::IO_REQ_PENDING)
+  {
+  }
+  else
+  {
+    trace.force_warning("Got error during transfer (addr: 0x%lx, size: 0x%x)\n", cmd->source, size);
   }
 }
 
@@ -930,8 +957,18 @@ void mchan::check_ext_write_handler(vp::Block *__this, vp::ClockEvent *event)
 
 void mchan::handle_cmd_termination(Mchan_cmd *cmd)
 {
-  this->cmd_events[cmd->counter_id].event(NULL);
-  free_command(cmd);
+    this->cmd_events[cmd->counter_id].event(NULL);
+    this->channel_busy[cmd->counter_id].set(0);
+    this->busy_set(-1);
+    this->nb_cmd_started--;
+    if (this->nb_cmd_started == 0)
+    {
+        if (this->busy_itf.is_bound())
+        {
+            this->busy_itf.sync(0);
+        }
+    }
+    free_command(cmd);
 }
 
 void mchan::account_transfered_bytes(Mchan_cmd *cmd, int bytes)
@@ -947,7 +984,8 @@ void mchan::account_transfered_bytes(Mchan_cmd *cmd, int bytes)
   {
     trace.msg("Counter reached zero, raising event\n");
 
-    if (cmd->broadcast)
+    // Event is now always broadcasted
+    if (1) //cmd->broadcast)
     {
       for (unsigned int i=0; i<nb_channels; i++)
         channels[i]->trigger_event(cmd);
@@ -1113,7 +1151,16 @@ void mchan::check_queue()
     if (!ext_is_stalled)
     {
       if (!check_ext_read_event->is_enqueued())
-        event_enqueue(check_ext_read_event, 1);
+      {
+        // Be careful to schedule the next request when the external interface gets available.
+        // This is used to take into account bandwith limitation done by external router.
+        int64_t latency = this->ext_itf_next_req_time - this->get_cycles();
+        if (latency <= 0)
+        {
+          latency = 1;
+        }
+        event_enqueue(check_ext_read_event, latency);
+      }
     }
   }
 
@@ -1124,7 +1171,16 @@ void mchan::check_queue()
     if (!ext_is_stalled)
     {
       if (!check_ext_write_event->is_enqueued())
-        event_enqueue(check_ext_write_event, 1);
+      {
+        // Be careful to schedule the next request when the external interface gets available.
+        // This is used to take into account bandwith limitation done by external router.
+        int64_t latency = this->ext_itf_next_req_time - this->get_cycles();
+        if (latency <= 0)
+        {
+          latency = 1;
+        }
+        event_enqueue(check_ext_write_event, latency);
+      }
     }
   }
 
@@ -1175,6 +1231,7 @@ void mchan::reset(bool active)
       loc_port_ready_cycle[i] = 0;
     }
 
+    this->nb_cmd_started = 0;
     first_alloc_pending_req = NULL;
     last_alloc_pending_req = NULL;
     nb_core_read_cmd = 0;
@@ -1193,11 +1250,26 @@ void mchan::reset(bool active)
     for (int i=0; i<MCHAN_NB_COUNTERS; i++)
     {
       this->cmd_events[i].event(NULL);
+      this->channel_busy[i].set(0);
     }
+    this->busy_count = 0;
+    this->busy.set(this->busy_count != 0);
+    this->ext_itf_next_req_time = 0;
+    this->first_pending_ext_req = NULL;
   }
   else
   {
   }
+}
+
+void mchan::busy_set(int count)
+{
+    this->busy_count += count;
+    if (this->busy_count < 0)
+    {
+        this->busy_count = 0;
+    }
+    this->busy.set(this->busy_count != 0);
 }
 
 void Mchan_cmd::init()
