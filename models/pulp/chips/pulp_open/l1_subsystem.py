@@ -44,7 +44,7 @@ class L1_subsystem(st.Component):
         l1_banking_factor = cluster.get_property('l1/banking_factor')
         nb_l1_banks = 1<<int(math.log(nb_pe * l1_banking_factor, 2.0))
         l1_bank_size = int(cluster.get_property('l1/mapping/size', int) / nb_l1_banks)
-        l1_interleaver_nb_masters = nb_pe + 4 + 1 # 1 port per PE + 4 for DMA + 1 for NE16
+        l1_interleaver_nb_masters = nb_pe + 4 + 1 # 1 port per PE + 4 for DMA + 1 for ne16
         first_external_pcer = cluster.get_property('iss_config/first_external_pcer')
         power_models = cluster.get_property('l1/power_models')
 
@@ -129,8 +129,8 @@ class L1_subsystem(st.Component):
 
         # EXT2LOC
         self.bind(self, 'ext2loc', ext2loc, 'input')
-        self.bind(ext2loc, 'out', interleaver, 'in_%d' % nb_pe)
+        self.bind(ext2loc, 'out_0', interleaver, 'in_%d' % nb_pe)
 
         # EXT2LOC test-and-set
         self.bind(self, 'ext2loc_ts', ext2loc_ts, 'input')
-        self.bind(ext2loc_ts, 'out', interleaver, 'ts_in_%d' % nb_pe)
+        self.bind(ext2loc_ts, 'out_0', interleaver, 'ts_in_%d' % nb_pe)
