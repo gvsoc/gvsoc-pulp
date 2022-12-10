@@ -69,7 +69,7 @@ vp::io_req_status_e Stdout::req(void *__this, vp::io_req *req)
   _this->trace.msg("Stdout access (offset: 0x%x, size: 0x%x, is_write: %d)\n", offset, size, req->get_is_write());
 
   int core_id = (offset >> 3) & 0xf;
-  int cluster_id = (offset >> 7) & 0x3f;
+  int cluster_id = (offset >> 7) & 0x3ff;
 
   if (core_id >= _this->nb_core || cluster_id >= _this->nb_cluster)
   {
