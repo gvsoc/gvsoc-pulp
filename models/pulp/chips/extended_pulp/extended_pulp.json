@@ -1,0 +1,33 @@
+{
+    "nb_cluster": 512,
+
+    "hierarchical_interconnect": {
+        "has_noc": false,
+        "network_levels": 3,
+        "structure": {
+            "level0": {
+              "model": "router_shared",
+              "bandwidth": 64,
+              "latency": 4,
+              "quadrant_factor": 4
+            },
+            "level1": {
+              "model": "router_shared",
+              "bandwidth": 64,
+              "latency": 4,
+              "quadrant_factor": 4
+            },
+            "level2": {
+              "model": "router_shared",
+              "bandwidth": 64,
+              "latency": 4,
+              "quadrant_factor": 4
+            },
+            "level3": {
+              "model": "router_shared",
+              "bandwidth": 16,
+              "latency": 100
+            }
+        }
+    }
+}
