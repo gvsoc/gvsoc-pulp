@@ -706,14 +706,8 @@ void Hyper_periph_v3::set_device(int cs)
   switch (dev)
   {
     case 0:
-      this->mem_sel = dev;
-    break;
     case 1:
-      this->mem_sel = dev;
-    break;
     case 2:
-      this->mem_sel = dev;
-    break;
     case 3:
       this->mem_sel = dev;
     break;
