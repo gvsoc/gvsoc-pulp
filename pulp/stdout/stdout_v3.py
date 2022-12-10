@@ -24,6 +24,6 @@ class Stdout(st.Component):
 
         self.set_component('pulp.stdout.stdout_v3_impl')
         self.add_properties({
-            'max_cluster': 33,
+            'max_cluster': 1024,
             'max_core_per_cluster': 16
         })
