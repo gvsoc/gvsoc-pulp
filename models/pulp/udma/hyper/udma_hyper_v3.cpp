@@ -490,7 +490,7 @@ vp::io_req_status_e Hyper_periph_v3::access_private_regs(vp::io_req *req, uint64
   }
   else if (offset == HYPER_CA_SETUP(0))
   {
-    trace.msg(vp::trace::LEVEL_DEBUG, "Accessing CA setup register (value: 0x%x, cfg_setup: %d, id: %d)\n", *(uint32_t *)(req->get_data()), id);  
+    trace.msg(vp::trace::LEVEL_DEBUG, "Accessing CA setup register (value: 0x%x, cfg_setup: %d, id: %d)\n", *(uint32_t *)(req->get_data()), cfg_setup[id], id);
     command_word[id] = true;
   }
   else if (offset == REG_HYPER_CFG(0))
@@ -706,14 +706,8 @@ void Hyper_periph_v3::set_device(int cs)
   switch (dev)
   {
     case 0:
-      this->mem_sel = dev;
-    break;
     case 1:
-      this->mem_sel = dev;
-    break;
     case 2:
-      this->mem_sel = dev;
-    break;
     case 3:
       this->mem_sel = dev;
     break;
