@@ -29,7 +29,7 @@ import pulp.soc_eu.soc_eu_v2 as soc_eu_module
 from pulp.timer.timer_v2 import Timer
 from pulp.stdout.stdout_v3 import Stdout
 from pulp.icache_ctrl.icache_ctrl_v2 import Icache_ctrl
-from pulp.fll.fll_v1 import Fll
+from pulp.fll.ideal_fll import Fll
 from pulp.chips.extended_pulp.cluster import get_cluster_name
 from vp.clock_domain import Clock_domain
 from pulp.chips.extended_pulp.udma import Udma
@@ -366,9 +366,6 @@ class Soc(st.Component):
                 self.bind(self.get_component(comp_name), itf_name, fc_itc, 'in_event_%d' % irq)
 
         # APB soc controller
-        self.bind(self, 'ref_clock', fll_soc, 'ref_clock')
-        self.bind(self, 'ref_clock', fll_periph, 'ref_clock')
-        self.bind(self, 'ref_clock', fll_cluster, 'ref_clock')
 
         self.bind(soc_ctrl, 'bootaddr', fc, 'bootaddr')
         self.bind(self, 'bootsel', soc_ctrl, 'bootsel')
