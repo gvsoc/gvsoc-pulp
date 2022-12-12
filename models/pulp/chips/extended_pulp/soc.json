@@ -85,13 +85,13 @@
             "fll_periph": {
                 "base"          : "0x9A100010",
                 "size"          : "0x00000010",
-                "remove_offset" : "0x9A100000"
+                "remove_offset" : "0x9A100010"
             },
     
             "fll_cluster": {
                 "base"          : "0x9A100020",
                 "size"          : "0x00000010",
-                "remove_offset" : "0x9A100000"
+                "remove_offset" : "0x9A100020"
             },
     
             "gpio": {
@@ -177,10 +177,6 @@
 
         "fll": {
             "clocks"       : [ "periph", "soc", "cluster" ]
-        },
-
-        "fll_ctrl": {
-            "version"      : 3
         },
 
         "gpio": {
