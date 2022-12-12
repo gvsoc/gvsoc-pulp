@@ -9,3 +9,7 @@ vp_model(NAME pulp.fll.fll_v2_impl
 vp_model(NAME pulp.fll.fll_ctrl_impl
     SOURCES "fll_ctrl_impl.cpp"
     )
+
+vp_model(NAME pulp.fll.ideal_fll_impl
+    SOURCES "ideal_fll_impl.cpp"
+    )
