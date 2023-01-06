@@ -18,9 +18,10 @@
 #define __CPU_ISS_PULP_ISS_WRAPPER_HPP
 
 #include <vp/vp.hpp>
-#include <iss_wrapper.hpp>
+#include <types.hpp>
+#include ISS_CORE_INC(class.hpp)
 
-class pulp_iss_wrapper : public iss_wrapper
+class pulp_iss_wrapper : public IssWrapper
 {
 public:
     pulp_iss_wrapper(js::config *config);
