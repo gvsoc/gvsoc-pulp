@@ -12,6 +12,7 @@ vp_model_compile_definitions(
     -DISS_SINGLE_REGFILE
     -DPCER_VERSION_2
     -DPRIV_1_10
+    -DCONFIG_ISS_CORE=ri5cy
     )
 
 generate_isa(NAME pulp.cpu.iss.iss_pulp_cluster
@@ -26,6 +27,7 @@ vp_model_compile_definitions(
     -DISS_SINGLE_REGFILE
     -DPCER_VERSION_2
     -DPRIV_1_10
+    -DCONFIG_ISS_CORE=ri5cy
     )
 
 generate_isa(NAME pulp.cpu.iss.iss_rv64
@@ -40,6 +42,7 @@ vp_model_compile_definitions(
     -DISS_SINGLE_REGFILE
     -DPCER_VERSION_2
     -DPRIV_1_10
+    -DCONFIG_ISS_CORE=ri5cy
     -DISS_WORD_64
     )
 
@@ -55,4 +58,5 @@ vp_model_compile_definitions(
     -DISS_SINGLE_REGFILE
     -DPCER_VERSION_2
     -DPRIV_1_10
+    -DCONFIG_ISS_CORE=ri5cy
     )

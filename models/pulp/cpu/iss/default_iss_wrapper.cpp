@@ -22,10 +22,10 @@
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 #include "iss.hpp"
-#include <iss_wrapper.hpp>
+#include <iss_core.hpp>
 
 
 extern "C" vp::component *vp_constructor(js::config *config)
 {
-  return new iss_wrapper(config);
+  return new IssWrapper(config);
 }
