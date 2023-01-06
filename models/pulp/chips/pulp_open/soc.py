@@ -247,7 +247,6 @@ class Soc(st.Component):
         self.bind(apb_ico, 'fll_cluster', fll_cluster, 'input')
         self.bind(apb_ico, 'fc_timer', timer, 'input')
         self.bind(apb_ico, 'fc_timer_1', timer_1, 'input')
-        self.bind(apb_ico, 'fc_dbg_unit', fc, 'dbg_unit')
 
         # Soc interconnect 
         self.bind(soc_ico, 'apb', apb_ico, 'input')
