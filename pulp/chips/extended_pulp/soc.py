@@ -128,8 +128,8 @@ class Soc(st.Component):
             # Current router instance
             instance = 0
             # Remember bases to connect the other instances at the SAME level
-            lower_base = cluster_base
-            upper_base = (cluster_base + cluster_size*nb_cluster)
+            lower_base  = cluster_base
+            higher_base = (cluster_base + cluster_size*nb_cluster)
 
             level_icos = []
             # Current level of routing
@@ -174,7 +174,6 @@ class Soc(st.Component):
                             bandwidth=chip.get_property('hierarchical_interconnect/structure/level%d/bandwidth' % level),
                             latency=chip.get_property('hierarchical_interconnect/structure/level%d/latency' % level)
                             ))
-                        #level_icos[-1].add_property('nb_channels', chip.get_property('hierarchical_interconnect/structure/level%d/nb_channels' % level))
 
                         for i in range(0, new_instance_below):
                             level_icos[-1].add_mapping('net_%d_down' % i,
@@ -194,21 +193,21 @@ class Soc(st.Component):
                         # Create mappings for external connections with other level
                         if level > 0:
                             if instance != 0:
-                                level_icos[-1].add_mapping('net_up_lower',
+                                level_icos[-1].add_mapping('net_up_low',
                                     base=hex(lower_base),
                                     size=hex((cluster_size*network_info[(level - 1)][instance_below]["group"]*nb_done_instance_below)))
                             if nb_remained_instance_below != 0:
-                                level_icos[-1].add_mapping('net_up_upper',
+                                level_icos[-1].add_mapping('net_up_high',
                                     base=hex((cluster_base + cluster_size*network_info[(level - 1)][instance_below]["group"]*(instance_below + 1))),
                                     size=hex((cluster_size*network_info[(level - 1)][instance_below]["group"]*nb_remained_instance_below)))
                             network_info[level][instance]["group"] = network_info[(level - 1)][instance_below]["group"]*new_instance_below
                         else:
                             if instance != 0:
-                                level_icos[-1].add_mapping('net_up_lower',
+                                level_icos[-1].add_mapping('net_up_low',
                                     base=hex(lower_base),
                                     size=hex((cluster_size*nb_done_instance_below)))
                             if nb_remained_instance_below != 0:
-                                level_icos[-1].add_mapping('net_up_upper',
+                                level_icos[-1].add_mapping('net_up_high',
                                     base=hex((cluster_base + cluster_size*(instance_below + 1))),
                                     size=hex((cluster_size*nb_remained_instance_below)))
                             network_info[level][instance]["group"] = new_instance_below
@@ -242,6 +241,21 @@ class Soc(st.Component):
                     base=hex(network_mapping[network_levels][0]['net_%d_down' % i]['base']),
                     size=hex(network_mapping[network_levels][0]['net_%d_down' % i]['size'])
                     )
+            # If the architecture is chiplet-base, it requires an interposer that connects only the different chiplets
+            has_interposer = False
+            if chip.get_property('hierarchical_interconnect/structure/interposer') is not None:
+                has_interposer = True
+                interposer = router.Router(self,
+                    'interposer',
+                    component='interco.' + chip.get_property('hierarchical_interconnect/structure/interposer/model') + '_impl',
+                    bandwidth=chip.get_property('hierarchical_interconnect/structure/interposer/bandwidth'),
+                    latency=chip.get_property('hierarchical_interconnect/structure/interposer/latency')
+                    )
+                for i in range(0, quadrant_factor[-1]):
+                    interposer.add_mapping('net_%d_down' % i,
+                        base=hex(network_mapping[network_levels][0]['net_%d_down' % i]['base']),
+                        size=hex(network_mapping[network_levels][0]['net_%d_down' % i]['size'])
+                        )
 
         else:
             axi_ico = router.Router(self, 'axi_ico', latency=12)
@@ -401,6 +415,8 @@ class Soc(st.Component):
 
         if has_noc:
             instance_slaves = 0
+            if has_interposer:
+                instance_slaves_interposer = 0
             instance_below_id  = 0
             instance = 0
             nb_remained_instance_below = nb_cluster
@@ -414,38 +430,51 @@ class Soc(st.Component):
                         elif level != network_levels:
                             self.bind(self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'soc', self.get_component('l%d_network_%d' % (level, instance)), 'input_%d' % instance_slaves)
                             instance_slaves += 1
-                            if self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('mappings/net_up_lower') is not None:
-                                self.bind(self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'net_up_lower', self.get_component('l%d_network_%d' % (level, instance)), 'input_%d' % instance_slaves)
+                            if self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('mappings/net_up_low') is not None:
+                                self.bind(self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'net_up_low', self.get_component('l%d_network_%d' % (level, instance)), 'input_%d' % instance_slaves)
                                 instance_slaves += 1
-                            if self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('mappings/net_up_upper') is not None:
-                                self.bind(self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'net_up_upper', self.get_component('l%d_network_%d' % (level, instance)), 'input_%d' % instance_slaves)
+                            if self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('mappings/net_up_high') is not None:
+                                self.bind(self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'net_up_high', self.get_component('l%d_network_%d' % (level, instance)), 'input_%d' % instance_slaves)
                                 instance_slaves += 1
                             self.bind(self.get_component('l%d_network_%d' % (level, instance)), 'net_%d_down' % instance_below, self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'input_%d' % (self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('nb_slaves') - 1))
                         else:
                             self.bind(self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'soc', axi_ico, 'input_%d' % instance_slaves)
                             instance_slaves += 1
-                            if self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('mappings/net_up_lower') is not None:
-                                self.bind(self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'net_up_lower', axi_ico, 'input_%d' % instance_slaves)
-                                instance_slaves += 1
-                            if self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('mappings/net_up_upper') is not None:
-                                self.bind(self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'net_up_upper', axi_ico, 'input_%d' % instance_slaves)
-                                instance_slaves += 1
+                            if has_interposer:
+                                if self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('mappings/net_up_low') is not None:
+                                    self.bind(self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'net_up_low', interposer, 'input_%d' % instance_slaves_interposer)
+                                    instance_slaves_interposer += 1
+                                if self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('mappings/net_up_high') is not None:
+                                    self.bind(self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'net_up_high', interposer, 'input_%d' % instance_slaves_interposer)
+                                    instance_slaves_interposer += 1
+                                self.bind(interposer, 'net_%d_down' % instance_below, self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'input_%d' % (self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('nb_slaves') - 1))
+                            else:
+                                if self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('mappings/net_up_low') is not None:
+                                    self.bind(self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'net_up_low', axi_ico, 'input_%d' % instance_slaves)
+                                    instance_slaves += 1
+                                if self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('mappings/net_up_high') is not None:
+                                    self.bind(self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'net_up_high', axi_ico, 'input_%d' % instance_slaves)
+                                    instance_slaves += 1
+                            # Both interposer and HBM have the connection towards every chiplet
                             self.bind(axi_ico, 'net_%d_down' % instance_below, self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)), 'input_%d' % (self.get_component('l%d_network_%d' % ((level - 1), instance_below_id)).get_property('nb_slaves') - 1))
                         instance_below_id += 1
                     if level != network_levels:
                         self.get_component('l%d_network_%d' % (level, instance)).add_property('nb_slaves', (instance_slaves + 1))
                     else:
                         axi_ico.add_property('nb_slaves', (instance_slaves + 1))
+                        if has_interposer:
+                            interposer.add_property('nb_slaves', (instance_slaves_interposer + 1))
                     instance_slaves = 0
+                    if has_interposer:
+                        instance_slaves_interposer = 0
                     instance += 1
                     nb_remained_instance_below -= min(nb_remained_instance_below, quadrant_factor[level])
                 instance_below_id = 0
                 nb_remained_instance_below = instance
                 instance = 0
             self.bind(soc_ico, 'axi_master', axi_ico, 'input_%d' % (axi_ico.get_property('nb_slaves') - 1))
-            self.bind(loader, 'out', axi_ico, 'input_%d' % (axi_ico.get_property('nb_slaves')))
-            self.bind(soc_ico, 'axi_proxy', axi_ico, 'input_%d' % (axi_ico.get_property('nb_slaves') + 1))
-            axi_ico.add_property('nb_slaves', (axi_ico.get_property('nb_slaves') + 2))
+            self.bind(soc_ico, 'axi_proxy', axi_ico, 'input_%d' % (axi_ico.get_property('nb_slaves')))
+            axi_ico.add_property('nb_slaves', (axi_ico.get_property('nb_slaves') + 1))
 
         else:
             self.bind(loader, 'out', axi_ico, 'input')
