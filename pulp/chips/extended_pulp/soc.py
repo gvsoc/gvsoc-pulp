@@ -456,6 +456,9 @@ class Soc(st.Component):
             for cid in range(0, nb_cluster):
                 self.bind(axi_ico, get_cluster_name(cid), self, get_cluster_name(cid) + '_input')
 
+        # Loader
+        self.bind(loader, 'out', soc_ico, 'loader')
+
         # GPIO
         self.bind(gpio, 'irq', fc_itc, 'in_event_%d' % self.get_property('peripherals/fc_itc/irq/evt_gpio'))
         self.bind(gpio, 'event', soc_eu, 'event_in')
