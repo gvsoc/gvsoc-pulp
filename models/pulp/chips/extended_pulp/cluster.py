@@ -200,13 +200,6 @@ class Cluster(st.Component):
         periph_ico.add_mapping('ima', **self._reloc_mapping(self.get_property('peripherals/ima/mapping')))
         self.bind(periph_ico, 'ima', ima, 'input')
 
-        size = int(self.get_property('peripherals/dbg_unit/size'), 0)
-        base = int(self.get_property('peripherals/dbg_unit/base'), 0)
-        for i in range(0, nb_pe):
-            pe_base = base + cid*cluster_size + size * i
-            periph_ico.add_mapping('dbg_unit_%d' % i, base=pe_base, size=size, remove_offset=pe_base)
-            self.bind(periph_ico, 'dbg_unit_%d' % i, pes[i], 'dbg_unit')
-
         # MCHAN
         self.bind(mchan, 'ext_irq_itf', self, 'dma_irq')
         self.bind(mchan, 'ext_itf', cluster_ico, 'input')
