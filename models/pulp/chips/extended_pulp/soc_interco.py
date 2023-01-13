@@ -31,6 +31,7 @@ class Soc_interco(st.Component):
         ll_ico.add_mapping('l2_priv1'      , **soc.get_property('l2/priv1/mapping'))
         ll_ico.add_mapping('l2_shared'     , **soc.get_property('l2/shared/mapping'))
 
+        self.bind(self, 'loader', ll_ico, 'input')
         self.bind(self, 'debug', ll_ico, 'input')
         self.bind(self, 'axi_slave', ll_ico, 'input')
 
