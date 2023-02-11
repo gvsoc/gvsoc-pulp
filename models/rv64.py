@@ -22,6 +22,8 @@ import interco.router as router
 import utils.loader.loader
 import gsystree as st
 from interco.bus_watchpoint import Bus_watchpoint
+from elftools.elf.elffile import *
+
 
 GAPY_TARGET = True
 
@@ -54,11 +56,21 @@ class Soc(st.Component):
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 
         # RISCV bus watchpoint
-        tohost = Bus_watchpoint(self, 'tohost', 0x80001000)
+        tohost_addr = 0
+        if binary is not None:
+            with open(binary, 'rb') as file:
+                elffile = ELFFile(file)
+                for section in elffile.iter_sections():
+                    if isinstance(section, SymbolTableSection):
+                        for symbol in section.iter_symbols():
+                            if symbol.name == 'tohost':
+                                tohost_addr = symbol.entry['st_value']
 
-        self.bind(host, 'fetch', ico, 'input')
+        tohost = Bus_watchpoint(self, 'tohost', tohost_addr)
         self.bind(host, 'data', tohost, 'input')
         self.bind(tohost, 'output', ico, 'input')
+
+        self.bind(host, 'fetch', ico, 'input')
         self.bind(loader, 'out', ico, 'input')
         self.bind(loader, 'start', host, 'fetchen')
         self.bind(loader, 'entry', host, 'bootaddr')
