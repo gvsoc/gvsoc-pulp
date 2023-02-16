@@ -39,7 +39,6 @@ vp_model_compile_definitions(
     DEFINITIONS
     -DEXTERNAL_ISS_WRAPPER=1
     -DPIPELINE_STAGES=2
-    -DISS_SINGLE_REGFILE
     -DPCER_VERSION_2
     -DPRIV_1_10
     -DCONFIG_ISS_CORE=ri5cy
@@ -55,7 +54,6 @@ vp_model_compile_definitions(
     DEFINITIONS
     -DEXTERNAL_ISS_WRAPPER=1
     -DPIPELINE_STAGES=2
-    -DISS_SINGLE_REGFILE
     -DPCER_VERSION_2
     -DPRIV_1_10
     -DCONFIG_ISS_CORE=ri5cy
