@@ -32,6 +32,7 @@ vp_model_compile_definitions(
 
 generate_isa(NAME pulp.cpu.iss.iss_rv64
     THINGY "--core=Rv64@pulp.cpu.iss.rv64"
+    IRQ "riscv"
     SOURCES "default_iss_wrapper.cpp"
     )
 vp_model_compile_definitions(
@@ -47,6 +48,7 @@ vp_model_compile_definitions(
 
     generate_isa(NAME pulp.cpu.iss.iss_rv32
     THINGY "--core=Rv32@pulp.cpu.iss.rv32"
+    IRQ "riscv"
     SOURCES "default_iss_wrapper.cpp"
     )
 vp_model_compile_definitions(
