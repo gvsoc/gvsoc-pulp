@@ -46,14 +46,27 @@ class Soc(st.Component):
 
         ico = router.Router(self, 'ico')
 
-        ico.add_mapping('mem', base=0x1c000000, remove_offset=0x1c000000, size=0x1000000)
+        ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
         self.bind(ico, 'mem', mem, 'input')
 
         host = iss.Iss(self, 'host', vp_component='pulp.cpu.iss.iss_snitch', isa=args.isa)
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 
-        self.bind(host, 'data', ico, 'input')
+        # RISCV bus watchpoint
+        tohost_addr = 0
+        if binary is not None:
+            with open(binary, 'rb') as file:
+                elffile = ELFFile(file)
+                for section in elffile.iter_sections():
+                    if isinstance(section, SymbolTableSection):
+                        for symbol in section.iter_symbols():
+                            if symbol.name == 'tohost':
+                                tohost_addr = symbol.entry['st_value']
+
+        tohost = Bus_watchpoint(self, 'tohost', tohost_addr)
+        self.bind(host, 'data', tohost, 'input')
+        self.bind(tohost, 'output', ico, 'input')
 
         self.bind(host, 'fetch', ico, 'input')
         self.bind(loader, 'out', ico, 'input')
