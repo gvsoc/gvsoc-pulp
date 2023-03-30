@@ -55,6 +55,7 @@ class Soc(st.Component):
 
         # RISCV bus watchpoint
         tohost_addr = 0
+        fromhost_addr = 0
         if binary is not None:
             with open(binary, 'rb') as file:
                 elffile = ELFFile(file)
@@ -63,8 +64,10 @@ class Soc(st.Component):
                         for symbol in section.iter_symbols():
                             if symbol.name == 'tohost':
                                 tohost_addr = symbol.entry['st_value']
+                            if symbol.name == 'fromhost':
+                                fromhost_addr = symbol.entry['st_value']
 
-        tohost = Bus_watchpoint(self, 'tohost', tohost_addr)
+        tohost = Bus_watchpoint(self, 'tohost', tohost_addr, fromhost_addr, word_size=32)
         self.bind(host, 'data', tohost, 'input')
         self.bind(tohost, 'output', ico, 'input')
 
