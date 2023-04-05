@@ -69,6 +69,10 @@ class Soc(st.Component):
 
         tohost = Bus_watchpoint(self, 'tohost', tohost_addr, fromhost_addr, word_size=32)
         self.bind(host, 'data', tohost, 'input')
+        self.bind(host, 'vlsu_0', tohost, 'input')
+        self.bind(host, 'vlsu_1', tohost, 'input')
+        self.bind(host, 'vlsu_2', tohost, 'input')
+        self.bind(host, 'vlsu_3', tohost, 'input')
         self.bind(tohost, 'output', ico, 'input')
 
         self.bind(host, 'fetch', ico, 'input')
