@@ -52,7 +52,7 @@ class Soc(st.Component):
         rom = memory.Memory(self, 'rom', size=0x10000, stim_file=self.get_file_path('pulp/chips/rv64/rom.bin'))
         uart = ns16550.Ns16550(self, 'uart')
         clint = cpu.clint.Clint(self, 'clint')
-        plic = cpu.plic.Plic(self, 'plic')
+        plic = cpu.plic.Plic(self, 'plic', ndev=1)
 
         ico = router.Router(self, 'ico')
 
@@ -70,6 +70,7 @@ class Soc(st.Component):
 
         ico.add_mapping('plic', base=0xC000000, remove_offset=0xC000000, size=0x1000000)
         self.bind(ico, 'plic', plic, 'input')
+        self.bind(uart, 'irq', plic, 'irq1')
 
         host = iss.Iss(self, 'host', vp_component='pulp.cpu.iss.iss_rv64', isa=args.isa,
             supervisor=True, user=True, boot_addr=0x1000,
@@ -103,6 +104,8 @@ class Soc(st.Component):
 
         self.bind(clint, 'sw_irq_0', host, 'msi')
         self.bind(clint, 'timer_irq_0', host, 'mti')
+        self.bind(plic, 's_irq_0', host, 'sei')
+        self.bind(plic, 'm_irq_0', host, 'mei')
 
 
 class Target(gv.gvsoc_runner.Runner):
