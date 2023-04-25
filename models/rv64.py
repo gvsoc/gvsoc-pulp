@@ -48,7 +48,7 @@ class Soc(st.Component):
             [args, otherArgs] = parser.parse_known_args()
             binary = args.binary
 
-        mem = memory.Memory(self, 'mem', size=0x1000000, atomics=True)
+        mem = memory.Memory(self, 'mem', size=0x80000000, atomics=True)
         rom = memory.Memory(self, 'rom', size=0x10000, stim_file=self.get_file_path('pulp/chips/rv64/rom.bin'))
         uart = ns16550.Ns16550(self, 'uart')
         clint = cpu.clint.Clint(self, 'clint')
@@ -56,7 +56,7 @@ class Soc(st.Component):
 
         ico = router.Router(self, 'ico')
 
-        ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
+        ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x80000000)
         self.bind(ico, 'mem', mem, 'input')
 
         ico.add_mapping('rom', base=0x00001000, remove_offset=0x00001000, size=0x10000)
@@ -96,6 +96,7 @@ class Soc(st.Component):
         self.bind(tohost, 'output', ico, 'input')
 
         self.bind(host, 'fetch', ico, 'input')
+        self.bind(host, 'time', clint, 'time')
         self.bind(loader, 'out', ico, 'input')
         self.bind(loader, 'start', host, 'fetchen')
         # self.bind(loader, 'entry', host, 'bootaddr')
@@ -110,7 +111,7 @@ class Target(gv.gvsoc_runner.Runner):
 
         super(Target, self).__init__(parser=parser, parent=None, name='top', options=options)
 
-        clock = Clock_domain(self, 'clock', frequency=50000000)
+        clock = Clock_domain(self, 'clock', frequency=100000000)
 
         soc = Soc(self, 'soc', parser)
 
