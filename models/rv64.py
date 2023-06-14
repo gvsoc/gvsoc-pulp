@@ -74,7 +74,7 @@ class Soc(st.Component):
 
         host = iss.Iss(self, 'host', vp_component='pulp.cpu.iss.iss_rv64', isa=args.isa,
             supervisor=True, user=True, boot_addr=0x1000,
-            mmu=True, pmp=True, riscv_exceptions=True, internal_atomics=True)
+            mmu=True, pmp=True, riscv_exceptions=True, internal_atomics=True, timed=False)
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 

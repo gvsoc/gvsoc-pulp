@@ -32,7 +32,7 @@ class Soc(st.Component):
     def __init__(self, parent, name, parser):
         super().__init__(parent, name)
 
-        parser.add_argument("--isa", dest="isa", type=str, default="rv32imfvc",
+        parser.add_argument("--isa", dest="isa", type=str, default="rv32imfdvc",
             help="RISCV-V ISA string (default: %(default)s)")
 
         [args, __] = parser.parse_known_args()
