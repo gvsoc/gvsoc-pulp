@@ -331,9 +331,6 @@ class Soc(st.Component):
                 name = 'cluster%d_pe%d' % (cluster, pe)
                 self.bind(riscv_tap, name, self, 'halt_' + name)
 
-        # GDB server
-        self.bind(gdbserver, 'out', soc_ico, 'debug')
-    
         # Cluster
         self.bind(self, 'dma_irq', fc_itc, 'in_event_8')
 

@@ -15,22 +15,12 @@
 #
 
 from pulp.chips.pulp_open.pulp_open_board import Pulp_open_board
+import gv.gvsoc_runner as gvsoc
 
 GAPY_TARGET = True
 
-class Target(Pulp_open_board):
-    """
-    Pulp-open board
-
-    """
+class Target(gvsoc.Target):
 
     def __init__(self, parser, options):
-
-        super(Target, self).__init__(
-            parser=parser,
-            options=options
-        )
-
-
-    def __str__(self) -> str:
-        return "Pulp-open virtual board"
+        super(Target, self).__init__(parser, options,
+            model=Pulp_open_board, description="Pulp-open virtual board")
