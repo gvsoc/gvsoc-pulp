@@ -26,6 +26,7 @@ import utils.loader.loader
 import gsystree as st
 from interco.bus_watchpoint import Bus_watchpoint
 from elftools.elf.elffile import *
+import gv.gvsoc_runner as gvsoc
 
 
 GAPY_TARGET = True
@@ -108,11 +109,11 @@ class Soc(st.Component):
         self.bind(plic, 'm_irq_0', host, 'mei')
 
 
-class Target(gv.gvsoc_runner.Runner):
+class Rv64(st.Component):
 
-    def __init__(self, parser, options):
+    def __init__(self, parent, name, parser, options):
 
-        super(Target, self).__init__(parser=parser, parent=None, name='top', options=options)
+        super(Rv64, self).__init__(parent, name, options=options)
 
         clock = Clock_domain(self, 'clock', frequency=100000000)
 
@@ -121,5 +122,9 @@ class Target(gv.gvsoc_runner.Runner):
         self.bind(clock, 'out', soc, 'clock')
 
 
-    def __str__(self) -> str:
-        return "RV32 virtual board"
+class Target(gvsoc.Target):
+
+    def __init__(self, parser, options):
+        super(Target, self).__init__(parser, options,
+            model=Rv64, description="RV64 virtual board")
+

@@ -22,6 +22,7 @@ import interco.router as router
 import utils.loader.loader
 import gsystree as st
 from interco.bus_watchpoint import Bus_watchpoint
+import gv.gvsoc_runner as gvsoc
 
 GAPY_TARGET = True
 
@@ -54,7 +55,7 @@ class Soc(st.Component):
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 
         # RISCV bus watchpoint
-        tohost = Bus_watchpoint(self, 'tohost', 0x80001000)
+        tohost = Bus_watchpoint(self, 'tohost', 0x80001000, 0x80001000, word_size=64)
 
         self.bind(host, 'fetch', ico, 'input')
         self.bind(host, 'data', tohost, 'input')
@@ -64,12 +65,11 @@ class Soc(st.Component):
         self.bind(loader, 'entry', host, 'bootaddr')
 
 
+class Rv32(st.Component):
 
-class Target(gv.gvsoc_runner.Runner):
+    def __init__(self, parent, name, parser, options):
 
-    def __init__(self, parser, options):
-
-        super(Target, self).__init__(parser=parser, parent=None, name='top', options=options)
+        super(Rv32, self).__init__(parent, name, options=options)
 
         clock = Clock_domain(self, 'clock', frequency=50000000)
 
@@ -78,5 +78,9 @@ class Target(gv.gvsoc_runner.Runner):
         self.bind(clock, 'out', soc, 'clock')
 
 
-    def __str__(self) -> str:
-        return "RV64 virtual board"
+class Target(gvsoc.Target):
+
+    def __init__(self, parser, options):
+        super(Target, self).__init__(parser, options,
+            model=Rv32, description="RV32 virtual board")
+
