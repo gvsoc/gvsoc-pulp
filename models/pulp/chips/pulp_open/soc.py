@@ -198,6 +198,7 @@ class Soc(st.Component):
             self.bind(fc, 'data', bus_watchpoint, 'input')
         else:
             self.bind(fc, 'data', soc_ico, 'fc_data')
+        self.bind(fc, 'data_debug', soc_ico, 'fc_data')
         self.bind(fc, 'flush_cache_req', fc_icache, 'flush')
 
         # FC icache
