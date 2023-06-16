@@ -149,6 +149,7 @@ class Cluster(st.Component):
         # Cores
         for i in range(0, nb_pe):
             self.bind(pes[i], 'data', l1, 'data_pe_%d' % i)
+            self.bind(pes[i], 'data_debug', l1, 'data_pe_%d' % i)
             self.bind(pes[i], 'fetch', icache, 'input_%d' % i)
             self.bind(pes[i], 'irq_ack', event_unit, 'irq_ack_%d' % i)
             self.bind(self, 'halt_pe%d' % i, pes[i], 'halt')
