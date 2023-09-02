@@ -23,7 +23,6 @@ import utils.loader.loader
 import gsystree as st
 from interco.bus_watchpoint import Bus_watchpoint
 from elftools.elf.elffile import *
-import gv.gvsoc_runner as gvsoc
 
 
 GAPY_TARGET = True
@@ -43,6 +42,8 @@ class Soc(st.Component):
             [args, otherArgs] = parser.parse_known_args()
             binary = args.binary
 
+        rom = memory.Memory(self, 'rom', size=0x10000, stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
+
         mem = memory.Memory(self, 'mem', size=0x1000000)
 
         ico = router.Router(self, 'ico')
@@ -50,9 +51,12 @@ class Soc(st.Component):
         ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
         self.bind(ico, 'mem', mem, 'input')
 
+        ico.add_mapping('rom', base=0x00001000, remove_offset=0x00001000, size=0x10000)
+        self.bind(ico, 'rom', rom, 'input')
+
         host = iss.Iss(self, 'host', vp_component='pulp.cpu.iss.iss_snitch', isa=args.isa)
 
-        loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
+        loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x1000)
 
         # RISCV bus watchpoint
         tohost_addr = 0
@@ -83,22 +87,18 @@ class Soc(st.Component):
 
 
 
-class Snitch(st.Component):
+class Target(gv.gvsoc_runner.Runner):
 
-    def __init__(self, parent, name, parser, options):
+    def __init__(self, parser, options):
 
-        super(Snitch, self).__init__(parent, name, options=options)
+        super(Target, self).__init__(parser=parser, parent=None, name='top', options=options)
 
-        clock = Clock_domain(self, 'clock', frequency=100000000)
+        clock = Clock_domain(self, 'clock', frequency=50000000)
 
         soc = Soc(self, 'soc', parser)
 
         self.bind(clock, 'out', soc, 'clock')
 
 
-
-class Target(gvsoc.Target):
-
-    def __init__(self, parser, options):
-        super(Target, self).__init__(parser, options,
-            model=Snitch, description="RV32 virtual board")
+    def __str__(self) -> str:
+        return "RV32 virtual board"
