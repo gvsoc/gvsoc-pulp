@@ -74,4 +74,5 @@ vp_model_compile_definitions(
     -DPRIV_1_10
     -DCONFIG_ISS_CORE=ri5cy
     -DISS_WORD_32
+    -DCONFIG_RV32V=1
     )
