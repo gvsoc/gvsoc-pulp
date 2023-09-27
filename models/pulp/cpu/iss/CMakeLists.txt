@@ -61,8 +61,24 @@ vp_model_compile_definitions(
     -DCONFIG_ISS_CORE=ri5cy
     )
 
-    generate_isa(NAME pulp.cpu.iss.iss_snitch
+generate_isa(NAME pulp.cpu.iss.iss_snitch_64
     THINGY "--core=Rv64@pulp.cpu.iss.snitch"
+    SOURCES "default_iss_wrapper.cpp"
+    )
+vp_model_compile_definitions(
+    NAME pulp.cpu.iss.iss_snitch_64
+    DEFINITIONS
+    -DEXTERNAL_ISS_WRAPPER=1
+    -DPIPELINE_STAGES=1
+    -DPCER_VERSION_2
+    -DPRIV_1_10
+    -DCONFIG_ISS_CORE=ri5cy
+    -DISS_WORD_64
+    -DCONFIG_RV32V=1
+    )
+
+generate_isa(NAME pulp.cpu.iss.iss_snitch
+    THINGY "--core=Rv32@pulp.cpu.iss.snitch"
     SOURCES "default_iss_wrapper.cpp"
     )
 vp_model_compile_definitions(

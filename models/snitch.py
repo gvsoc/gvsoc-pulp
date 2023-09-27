@@ -50,7 +50,7 @@ class Soc(st.Component):
         ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
         self.bind(ico, 'mem', mem, 'input')
 
-        host = iss.Iss(self, 'host', vp_component='pulp.cpu.iss.iss_snitch', isa=args.isa)
+        host = iss.Iss(self, 'host', vp_component='pulp.cpu.iss.iss_snitch_64', isa=args.isa)
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 

@@ -37,3 +37,22 @@ class Rv64(Riscv_core):
                 IsaDecodeTree('v', [rv32v]),
             ]
         )
+
+class Rv32(Riscv_core):
+
+    def __init__(self):
+        super().__init__()
+
+        self.isa = Isa(
+            'riscv',
+            [
+                IsaDecodeTree('i', [rv64i, rv32i]),
+                IsaDecodeTree('m', [rv32m, rv64m]),
+                IsaDecodeTree('a', [rv32a, rv64a]),
+                IsaDecodeTree('c', [rv64c]),
+                IsaDecodeTree('priv', [priv]),
+                IsaDecodeTree('f', [rv32f]),
+                IsaDecodeTree('d', [rv32d]),
+                IsaDecodeTree('v', [rv32v]),
+            ]
+        )
