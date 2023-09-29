@@ -48,7 +48,7 @@ class Soc(st.Component):
 
         mem = memory.Memory(self, 'mem', size=0x1000000)
 
-        mem = memory.Memory(self, 'tcdm', size=0x40000)
+        tcdm = memory.Memory(self, 'tcdm', size=0x40000)
 
         ico = router.Router(self, 'ico')
 
@@ -56,7 +56,7 @@ class Soc(st.Component):
         self.bind(ico, 'mem', mem, 'input')
 
         ico.add_mapping('tcdm', base=0x100000, remove_offset=0x100000, size=0x40000)
-        self.bind(ico, 'tcdm', mem, 'input')
+        self.bind(ico, 'tcdm', tcdm, 'input')
 
         ico.add_mapping('rom', base=0x00001000, remove_offset=0x00001000, size=0x10000)
         self.bind(ico, 'rom', rom, 'input')
