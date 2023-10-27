@@ -21,10 +21,13 @@ from vp.clock_domain import Clock_domain
 from utils.clock_generator import Clock_generator
 from pulp.padframe.padframe_v1 import Padframe
 import interco.router_proxy as router_proxy
+import memory.dramsys
 
 class Pulp_open(st.Component):
 
-    def __init__(self, parent, name, parser, soc_config_file='pulp/chips/pulp_open/soc.json', cluster_config_file='pulp/chips/pulp_open/cluster.json', padframe_config_file='pulp/chips/pulp_open/padframe.json'):
+    def __init__(self, parent, name, parser, soc_config_file='pulp/chips/pulp_open/soc.json',
+            cluster_config_file='pulp/chips/pulp_open/cluster.json', padframe_config_file='pulp/chips/pulp_open/padframe.json',
+            use_ddr=False):
         super(Pulp_open, self).__init__(parent, name)
 
         #
@@ -71,6 +74,10 @@ class Pulp_open(st.Component):
 
         # AXI proxy
         axi_proxy = router_proxy.Router_proxy(self, 'axi_proxy')
+
+        # DRAMsys
+        if use_ddr:
+            ddr = memory.dramsys.Dramsys(self, 'ddr')
 
 
         #
@@ -119,6 +126,8 @@ class Pulp_open(st.Component):
         # Soc clock domain
         self.bind(soc_clock, 'out', soc, 'clock')
         self.bind(soc_clock, 'out', axi_proxy, 'clock')
+        if use_ddr:
+            self.bind(soc_clock, 'out', ddr, 'clock')
 
         # Clusters
         for cid in range(0, nb_cluster):
@@ -151,6 +160,8 @@ class Pulp_open(st.Component):
         self.bind(fast_clock, 'out', soc, 'fast_clock_out')
         self.bind(axi_proxy, 'out', soc, 'soc_input')
         self.bind(soc, 'axi_proxy', axi_proxy, 'input')
+        if use_ddr:
+            self.bind(soc, 'ddr', ddr, 'input')
 
 
     def gen_gtkw_conf(self, tree, traces):

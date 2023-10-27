@@ -259,6 +259,10 @@ class Soc(st.Component):
         self.bind(axi_ico, 'axi_proxy', self, 'axi_proxy')
         axi_ico.add_mapping('axi_proxy', base=0x20000000, size=0x10000000)
         self.bind(soc_ico, 'axi_proxy', axi_ico, 'input')
+        self.bind(soc_ico, 'ddr', axi_ico, 'input')
+
+        axi_ico.add_mapping('ddr', base=0x80000000, size=0x80000000)
+        self.bind(soc_ico, 'ddr', self, 'ddr')
 
         self.bind(axi_ico, 'soc', soc_ico, 'axi_slave')
         self.bind(self, 'soc_input', axi_ico, 'input')

@@ -59,6 +59,7 @@ class Soc_interco(st.Component):
 
         fc_data_ico.add_mapping('l2_shared', **soc.get_property('l2/shared/mapping'))
         fc_data_ico.add_mapping('axi_proxy', base=0x20000000, size=0x10000000)
+        fc_data_ico.add_mapping('ddr', base=0x80000000, size=0x80000000)
         fc_data_ico.add_mapping('ll_ico')
         
         udma_rx_ico = router.Router(self, 'udma_rx_ico')
@@ -82,6 +83,7 @@ class Soc_interco(st.Component):
         self.bind(fc_data_ico, 'l2_shared', hb_ico, 'input')
         self.bind(fc_data_ico, 'll_ico', ll_ico, 'input')
         self.bind(fc_data_ico, 'axi_proxy', self, 'axi_proxy')
+        self.bind(fc_data_ico, 'ddr', self, 'ddr')
 
         self.bind(udma_rx_ico, 'l2_shared', hb_ico, 'input')
         self.bind(udma_rx_ico, 'll_ico', ll_ico, 'input')

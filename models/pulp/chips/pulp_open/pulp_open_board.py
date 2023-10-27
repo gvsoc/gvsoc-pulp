@@ -28,12 +28,12 @@ from gapylib.chips.pulp.flash import *
 
 class Pulp_open_board(st.Component):
 
-    def __init__(self, parent, name, parser, options):
+    def __init__(self, parent, name, parser, options, use_ddr=False):
 
         super(Pulp_open_board, self).__init__(parent, name, options=options)
 
         # Pulp
-        pulp = Pulp_open(self, 'chip', parser)
+        pulp = Pulp_open(self, 'chip', parser, use_ddr=use_ddr)
 
         # Flash
         hyperflash = Hyperflash(self, 'hyperflash')
@@ -65,3 +65,10 @@ class Pulp_open_board(st.Component):
 
         uart_checker = Uart_checker(self, 'uart_checker')
         self.bind(pulp, 'uart0', uart_checker, 'input')
+
+
+
+class Pulp_open_board_ddr(Pulp_open_board):
+
+    def __init__(self, parent, name, parser, options):
+        super().__init__(parent, name, parser, options, use_ddr=True)
