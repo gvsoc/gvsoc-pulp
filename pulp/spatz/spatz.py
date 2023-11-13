@@ -15,7 +15,7 @@
 #
 
 import gv.gvsoc_runner
-import cpu.iss.iss as iss
+import cpu.iss.riscv as iss
 import memory.memory as memory
 from vp.clock_domain import Clock_domain
 import interco.router as router
@@ -34,7 +34,7 @@ class Soc(st.Component):
     def __init__(self, parent, name, parser):
         super().__init__(parent, name)
 
-        parser.add_argument("--isa", dest="isa", type=str, default="rv64imfdvc",
+        parser.add_argument("--isa", dest="isa", type=str, default="rv32imfdvc",
             help="RISCV-V ISA string (default: %(default)s)")
 
         [args, __] = parser.parse_known_args()
@@ -61,7 +61,7 @@ class Soc(st.Component):
         ico.add_mapping('rom', base=0x00001000, remove_offset=0x00001000, size=0x10000)
         self.bind(ico, 'rom', rom, 'input')
 
-        host = iss.Iss(self, 'host', vp_component='pulp.cpu.iss.iss_snitch', isa=args.isa, scoreboard=True)
+        host = iss.Spatz(self, 'host', isa=args.isa)
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x1000)
 
