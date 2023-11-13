@@ -18,11 +18,12 @@ import gsystree as st
 
 class Cluster_registers(st.Component):
 
-    def __init__(self, parent, name, boot_addr=0):
+    def __init__(self, parent, name, boot_addr=0, nb_cores=1):
         super(Cluster_registers, self).__init__(parent, name)
 
         self.set_component('pulp.spatz.cluster_registers')
 
         self.add_properties({
-            'boot_addr': boot_addr
+            'boot_addr': boot_addr,
+            'nb_cores': nb_cores
         })
