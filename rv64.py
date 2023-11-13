@@ -15,7 +15,7 @@
 #
 
 import gv.gvsoc_runner
-import cpu.iss.iss as iss
+import cpu.iss.riscv as iss
 import memory.memory as memory
 from vp.clock_domain import Clock_domain
 import interco.router as router
@@ -73,9 +73,7 @@ class Soc(st.Component):
         self.bind(ico, 'plic', plic, 'input')
         self.bind(uart, 'irq', plic, 'irq1')
 
-        host = iss.Iss(self, 'host', vp_component='pulp.cpu.iss.iss_rv64', isa=args.isa,
-            supervisor=True, user=True, boot_addr=0x1000,
-            mmu=True, pmp=True, riscv_exceptions=True, internal_atomics=True, timed=False)
+        host = iss.Riscv(self, 'host', isa=args.isa, boot_addr=0x1000)
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 

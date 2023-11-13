@@ -18,7 +18,7 @@
 #define __CPU_ISS_PULP_ISS_WRAPPER_HPP
 
 #include <vp/vp.hpp>
-#include <types.hpp>
+#include <cpu/iss/include/types.hpp>
 #include ISS_CORE_INC(class.hpp)
 
 class pulp_iss_wrapper : public IssWrapper

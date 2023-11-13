@@ -4,23 +4,6 @@
         "size": "0x06000000"
     },
 
-    "fc": {
-        "iss_config": {
-            "vp_component": "pulp.cpu.iss.iss_pulp_fc",
-            "isa"           : "rv32imfcXpulpv2Xf8Xf16XfvecXfauxXf16altXgap9Xint64",
-            "misa": "0x40000000",
-            "first_external_pcer": 12,
-            "riscv_dbg_unit": true,
-            "debug_binaries": [],
-            "debug_handler" : "0x1a190800",
-            "power_models_file": "pulp/chips/pulp_open/power_models/core/riscy.json",
-
-            "cluster_id"  : 31,
-            "core_id"     : 0
-        },
-        "riscv_fesvr_tohost_addr": null
-    },
-
     "pulp_tap": {
         "config": {
         "confreg_instr": 6,

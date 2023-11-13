@@ -21,8 +21,8 @@
 
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
-#include "iss.hpp"
-#include <iss_core.hpp>
+#include "cpu/iss/include/iss.hpp"
+#include <cpu/iss/include/iss_core.hpp>
 
 
 extern "C" vp::component *vp_constructor(js::config *config)

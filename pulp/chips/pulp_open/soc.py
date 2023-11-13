@@ -16,7 +16,7 @@
 
 import os
 import gsystree as st
-import cpu.iss.iss as iss
+import pulp.cpu.iss.pulp_cores as iss
 import memory.memory as memory
 import interco.router as router
 import cache.cache as cache
@@ -83,7 +83,7 @@ class Soc(st.Component):
         fll_cluster = Fll(self, 'fll_cluster')
 
         # FC
-        fc = iss.Iss(self, 'fc', **self.get_property('fc/iss_config'))
+        fc = iss.FcCore(self, 'fc')
 
         # FC ITC
         fc_itc = itc.Itc_v1(self, 'fc_itc')
@@ -155,7 +155,7 @@ class Soc(st.Component):
 
         # RISCV TAP
         harts = []
-        harts.append([(self.get_property('fc/iss_config/cluster_id') << 5) | (self.get_property('fc/iss_config/core_id') << 0), 'fc'])
+        harts.append([(0 << 5) | (31 << 0), 'fc'])
 
         for cid in range(0, nb_cluster):
             for pe in range(0, nb_pe):

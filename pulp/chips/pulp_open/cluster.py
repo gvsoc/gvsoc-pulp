@@ -15,7 +15,7 @@
 #
 
 import gsystree as st
-from cpu.iss.iss import Iss
+import pulp.cpu.iss.pulp_cores as iss
 from cache.hierarchical_cache import Hierarchical_cache
 from pulp.chips.pulp_open.l1_subsystem import L1_subsystem
 from pulp.event_unit.event_unit_v3 import Event_unit
@@ -80,7 +80,7 @@ class Cluster(st.Component):
         dma_irq_ext         = self.get_property('pe/irq').index('dma_ext')
         timer_irq_0         = self.get_property('pe/irq').index('timer_0')
         timer_irq_1         = self.get_property('pe/irq').index('timer_1')
-        first_external_pcer = self.get_property('iss_config/first_external_pcer')
+        first_external_pcer = 12
         has_ne16 = False
 
 
@@ -94,7 +94,7 @@ class Cluster(st.Component):
         # Cores
         pes = []
         for i in range(0, nb_pe):
-            pes.append(Iss(self, 'pe%d' % i, **self.get_property('iss_config'), cluster_id=cid, core_id=i))
+            pes.append(iss.ClusterCore(self, 'pe%d' % i, cluster_id=cid, core_id=i))
 
         # Icache
         icache = Hierarchical_cache(self, 'icache', self.get_property('icache/config'))

@@ -22,7 +22,7 @@
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 #include "pulp_iss_wrapper.hpp"
-#include <iss_core.hpp>
+#include <cpu/iss/include/iss_core.hpp>
 
 pulp_iss_wrapper::pulp_iss_wrapper(js::config *config)
 : IssWrapper(config)
