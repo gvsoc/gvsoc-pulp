@@ -37,15 +37,15 @@ void Ne16::load_setup() {
   auto k_in_major = this->depthwise ? this->k_out_major : this->k_in_major_iter;
 
   if(this->trace_level == L3_ALL) {
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   h_size_in=%d\n", this->h_size_in);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   w_size_in=%d\n", this->w_size_in);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   h_size_out=%d\n", this->h_size_out);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   w_size_out=%d\n", this->w_size_out);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   h_size_in_X_w_size_in=%d\n", this->h_size_in_X_w_size_in);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   h_size_out_X_w_size_out=%d\n", this->h_size_out_X_w_size_out);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   k_in_major=%d\n", k_in_major);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   h_size_in_hw=%d\n", this->h_size_in_hw);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   w_size_in_hw=%d\n", this->w_size_in_hw);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   h_size_in=%d\n", this->h_size_in);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   w_size_in=%d\n", this->w_size_in);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   h_size_out=%d\n", this->h_size_out);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   w_size_out=%d\n", this->w_size_out);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   h_size_in_X_w_size_in=%d\n", this->h_size_in_X_w_size_in);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   h_size_out_X_w_size_out=%d\n", this->h_size_out_X_w_size_out);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   k_in_major=%d\n", k_in_major);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   h_size_in_hw=%d\n", this->h_size_in_hw);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   w_size_in_hw=%d\n", this->w_size_in_hw);
   }
 
   auto infeat_hom_iter = this->FILTER_SIZE * this->infeat_d1_stride;

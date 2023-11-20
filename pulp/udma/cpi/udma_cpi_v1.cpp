@@ -34,7 +34,7 @@ Cpi_periph_v1::Cpi_periph_v1(udma *top, int id, int itf_id) : Udma_periph(top, i
 
   channel0 = new Cpi_rx_channel(top, this, UDMA_EVENT_ID(id), itf_name + "_rx");
 
-  top->new_slave_port(this, itf_name, &cpi_itf);
+  top->new_slave_port(itf_name, &cpi_itf, (vp::Block *)this);
 
   cpi_itf.set_sync_meth(&Cpi_periph_v1::sync);
   cpi_itf.set_sync_cycle_meth(&Cpi_periph_v1::sync_cycle);
@@ -50,7 +50,7 @@ void Cpi_periph_v1::reset(bool active)
 
 
 
-vp::io_req_status_e Cpi_periph_v1::handle_global_access(bool is_write, uint32_t *data) {
+vp::IoReqStatus Cpi_periph_v1::handle_global_access(bool is_write, uint32_t *data) {
   if (!is_write) *data = this->glob;
   else {
     this->glob = *data;
@@ -59,7 +59,7 @@ vp::io_req_status_e Cpi_periph_v1::handle_global_access(bool is_write, uint32_t 
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e Cpi_periph_v1::handle_l1_access(bool is_write, uint32_t *data) {
+vp::IoReqStatus Cpi_periph_v1::handle_l1_access(bool is_write, uint32_t *data) {
   if (!is_write) *data = this->ll;
   else {
     this->ll = *data;
@@ -68,7 +68,7 @@ vp::io_req_status_e Cpi_periph_v1::handle_l1_access(bool is_write, uint32_t *dat
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e Cpi_periph_v1::handle_ur_access(bool is_write, uint32_t *data) {
+vp::IoReqStatus Cpi_periph_v1::handle_ur_access(bool is_write, uint32_t *data) {
   if (!is_write) *data = this->ur;
   else {
     this->ur = *data;
@@ -78,7 +78,7 @@ vp::io_req_status_e Cpi_periph_v1::handle_ur_access(bool is_write, uint32_t *dat
 }
 
 
-vp::io_req_status_e Cpi_periph_v1::handle_size_access(bool is_write, uint32_t *data) {
+vp::IoReqStatus Cpi_periph_v1::handle_size_access(bool is_write, uint32_t *data) {
   if (!is_write) *data = this->size;
   else {
     this->size = *data;
@@ -87,7 +87,7 @@ vp::io_req_status_e Cpi_periph_v1::handle_size_access(bool is_write, uint32_t *d
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e Cpi_periph_v1::handle_filter_access(bool is_write, uint32_t *data) {
+vp::IoReqStatus Cpi_periph_v1::handle_filter_access(bool is_write, uint32_t *data) {
   if (!is_write) *data = this->filter;
   else {
     this->filter = *data;
@@ -99,7 +99,7 @@ vp::io_req_status_e Cpi_periph_v1::handle_filter_access(bool is_write, uint32_t 
 
 
 
-vp::io_req_status_e Cpi_periph_v1::custom_req(vp::io_req *req, uint64_t offset)
+vp::IoReqStatus Cpi_periph_v1::custom_req(vp::IoReq *req, uint64_t offset)
 {
   bool is_write = req->get_is_write();
   uint32_t *data = (uint32_t *)req->get_data();

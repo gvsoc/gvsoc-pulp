@@ -209,7 +209,7 @@ xt::xarray<T> NeurekaVectorLoad<T>::ex(int width, bool w_demux, int64_t& cycles)
   std::ostringstream stringStream;
 
   // if (this->neureka->trace_level == L3_ALL) {
-    this->neureka->trace.msg(vp::trace::LEVEL_DEBUG, "Issuing read request (addr=0x%08x, size=%dB, latency=%d)\n", addr & NE16_STREAM_L1_MASK, width*sizeof(T), cycles+1);
+    this->neureka->trace.msg(vp::Trace::LEVEL_DEBUG, "Issuing read request (addr=0x%08x, size=%dB, latency=%d)\n", addr & NE16_STREAM_L1_MASK, width*sizeof(T), cycles+1);
   // }
   xt::xarray<T> x = xt::zeros<T>({width});
   for(auto i=0; i<width; i++) {
@@ -219,7 +219,7 @@ xt::xarray<T> NeurekaVectorLoad<T>::ex(int width, bool w_demux, int64_t& cycles)
   stringStream << "Read data: " << (this->neureka->trace_format?std::hex:std::dec) << x << std::dec << "\n";
   string s = stringStream.str();
   if (this->neureka->trace_level == L3_ALL) {
-    this->neureka->trace.msg(vp::trace::LEVEL_DEBUG, s.c_str());
+    this->neureka->trace.msg(vp::Trace::LEVEL_DEBUG, s.c_str());
   }
   cycles += max_latency + 1;
   return x;
@@ -316,21 +316,21 @@ xt::xarray<T> NeurekaVectorStore<T>::ex(xt::xarray<T> data, int width, int64_t& 
   }
   std::ostringstream stringStream;
   if (this->neureka->trace_level == L3_ALL) {
-    this->neureka->trace.msg(vp::trace::LEVEL_DEBUG, "Issuing write request (addr=0x%08x, size=%dB, latency=%d)\n", addr & NE16_STREAM_L1_MASK, width*sizeof(T), cycles+max_latency+1);
+    this->neureka->trace.msg(vp::Trace::LEVEL_DEBUG, "Issuing write request (addr=0x%08x, size=%dB, latency=%d)\n", addr & NE16_STREAM_L1_MASK, width*sizeof(T), cycles+max_latency+1);
   }
   xt::print_options::set_line_width(1000);
   if(enable) {
     stringStream << "Write data: " << (this->neureka->trace_format?std::hex:std::dec) << data << std::dec << "\n";
     string s = stringStream.str();
     if (this->neureka->trace_level == L3_ALL) {
-      this->neureka->trace.msg(vp::trace::LEVEL_DEBUG, s.c_str());
+      this->neureka->trace.msg(vp::Trace::LEVEL_DEBUG, s.c_str());
     }
   }
   else {
     stringStream << "Write disabled" << "\n";
     string s = stringStream.str();
     if (this->neureka->trace_level == L3_ALL) {
-      this->neureka->trace.msg(vp::trace::LEVEL_DEBUG, s.c_str());
+      this->neureka->trace.msg(vp::Trace::LEVEL_DEBUG, s.c_str());
     }
   }
   cycles += max_latency + 1;

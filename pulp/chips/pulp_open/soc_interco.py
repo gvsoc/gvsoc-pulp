@@ -35,7 +35,7 @@ class Soc_interco(st.Component):
         self.bind(self, 'debug', ll_ico, 'input')
         self.bind(self, 'axi_slave', ll_ico, 'input')
 
-        hb_ico = router.Router(self, 'hb_ico', remove_offset=soc.get_property('l2/shared/mapping/base'))
+        hb_ico = router.Router(self, 'hb_ico')
 
         l2_shared_size = soc.get_property('l2/shared/mapping/size', int)
         l2_shared_nb_regions = soc.get_property('l2/shared/nb_regions')

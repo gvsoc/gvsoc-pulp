@@ -28,9 +28,54 @@
 #define TOTAL_REQ 10
 
 
-ima_v1::ima_v1(js::config *config)
-: vp::component(config)
+ima_v1::ima_v1(vp::ComponentConf &config)
+: vp::Component(config)
 {
+  this->traces.new_trace("trace", &this->trace, vp::DEBUG);
+
+  this->nb_master_ports = get_js_config()->get_child_int("nb_masters");
+  this->xbar_x = get_js_config()->get_child_int("xbar_x");
+  this->xbar_y = get_js_config()->get_child_int("xbar_y");
+
+  this->eval_time = get_js_config()->get_child_int("eval_ns");
+  this->plot_write_time = get_js_config()->get_child_int("plot_write_ns");
+  this->plot_read_time = get_js_config()->get_child_int("plot_read_ns");
+
+  this->stats = get_js_config()->get_child_bool("statistics");
+
+  this->out = new vp::IoMaster[this->nb_master_ports];
+  this->reqs = new vp::IoReq[this->nb_master_ports];
+
+  this->in.set_req_meth(&this->ima_v1::req);
+  new_slave_port("input", &this->in);
+
+  for (int i=0; i<this->nb_master_ports; i++)
+  {
+    this->out[i].set_resp_meth(&this->ima_v1::response);
+    this->out[i].set_grant_meth(&this->ima_v1::grant);
+    new_master_port("out_" + std::to_string(i), &this->out[i]);
+  }
+
+  new_master_port("irq_0", &this->irq_0);
+  new_master_port("irq_1", &this->irq_1);
+
+  this->plot_event = event_new(&this->ima_v1::plot_handler);
+  this->job_event = event_new(&this->ima_v1::job_handler);
+
+  this->regs = new unsigned int[IMA_NB_REGS];
+  this->buffer_in = new int8_t[this->xbar_y];
+  this->buffer_out = new int8_t[this->xbar_x];
+
+  this->crossbar = new int8_t*[this->xbar_y];
+  for(int i=0; i<this->xbar_y; i++)
+  {
+    this->crossbar[i] = new int8_t[this->xbar_x];
+  }
+
+  this->job = new ima_job_t;
+  this->pw_req = new ima_pw_t;
+  this->pr_req = new ima_pr_t;
+
 
 }
 
@@ -55,9 +100,9 @@ void ima_v1::reset(bool active)
     }
 
     /* Event cycles depend on analog time to perform the specific task and on the cluster frequency */
-    this->job->analog_latency    = (int)((float)this->eval_time / ((float)this->get_clock()->get_period() / 1000)) + 1;
-    this->pw_req->latency        = (int)((float)this->plot_write_time / ((float)this->get_clock()->get_period() / 1000)) + 1;
-    this->pr_req->latency        = (int)((float)this->plot_read_time  / ((float)this->get_clock()->get_period() / 1000)) + 1;
+    this->job->analog_latency    = (int)((float)this->eval_time / ((float)this->clock.get_engine()->get_period() / 1000)) + 1;
+    this->pw_req->latency        = (int)((float)this->plot_write_time / ((float)this->clock.get_engine()->get_period() / 1000)) + 1;
+    this->pr_req->latency        = (int)((float)this->plot_read_time  / ((float)this->clock.get_engine()->get_period() / 1000)) + 1;
 
     this->clear_ima();
   }
@@ -103,7 +148,7 @@ void ima_v1::clear_ima()
 }
 
 /* Stream-in - Compute - Stream-out */
-void ima_v1::job_handler(void *__this, vp::clock_event *event)
+void ima_v1::job_handler(vp::Block *__this, vp::ClockEvent *event)
 {
   ima_v1 *_this = (ima_v1 *)__this;
 
@@ -190,7 +235,7 @@ void ima_v1::job_handler(void *__this, vp::clock_event *event)
     {
       _this->exec_job();
       //_this->update_finished_jobs(1);
-      _this->job->analog_latency = (int)((float)_this->eval_time / ((float)_this->get_clock()->get_period() / 1000)) + 1;
+      _this->job->analog_latency = (int)((float)_this->eval_time / ((float)_this->clock.get_engine()->get_period() / 1000)) + 1;
       job->latency = job->analog_latency;
       _this->count_compute+=job->latency;
 
@@ -233,7 +278,7 @@ void ima_v1::job_handler(void *__this, vp::clock_event *event)
 }
 
 /* Writing and Reading Crossbar */
-void ima_v1::plot_handler(void *__this, vp::clock_event *event)
+void ima_v1::plot_handler(vp::Block *__this, vp::ClockEvent *event)
 {
   ima_v1 *_this = (ima_v1 *)__this;
 
@@ -247,7 +292,7 @@ void ima_v1::plot_handler(void *__this, vp::clock_event *event)
     case IMA_STATE_P_WR:
     {
       ima_pw_t *plot = _this->pw_req;
-      vp::io_slave *port = (vp::io_slave *)plot->pending_plot_req->arg_pop();
+      vp::IoSlave *port = (vp::IoSlave *)plot->pending_plot_req->arg_pop();
 
       _this->exec_write_plot();
       plot->pending_plot = 0;
@@ -279,7 +324,7 @@ void ima_v1::plot_handler(void *__this, vp::clock_event *event)
     case IMA_STATE_P_RD:
     {
       ima_pr_t *plot = _this->pr_req;
-      vp::io_slave *port = (vp::io_slave *)plot->pending_plot_req->arg_pop();
+      vp::IoSlave *port = (vp::IoSlave *)plot->pending_plot_req->arg_pop();
 
       _this->exec_read_plot();
 
@@ -325,7 +370,7 @@ void ima_v1::set_id(int id)
 
 
 /* Every core can request IMA acquiring but only when it is ready will be successfully done */
-vp::io_req_status_e ima_v1::acquire_req(vp::io_req *req)
+vp::IoReqStatus ima_v1::acquire_req(vp::IoReq *req)
 {
   if (!req->get_is_write())
   {
@@ -360,7 +405,7 @@ vp::io_req_status_e ima_v1::acquire_req(vp::io_req *req)
 }
 
 /* Enqueue a job request */
-vp::io_req_status_e ima_v1::trigger_req(vp::io_req *req, int new_state)
+vp::IoReqStatus ima_v1::trigger_req(vp::IoReq *req, int new_state)
 {
   if(req->get_is_write())
   {
@@ -384,7 +429,7 @@ vp::io_req_status_e ima_v1::trigger_req(vp::io_req *req, int new_state)
 }
 
 /* Enqueue a plote writing request */
-vp::io_req_status_e ima_v1::submit_req(vp::io_req *req, int new_state)
+vp::IoReqStatus ima_v1::submit_req(vp::IoReq *req, int new_state)
 {
   if(req->get_is_write())
   {
@@ -399,7 +444,7 @@ vp::io_req_status_e ima_v1::submit_req(vp::io_req *req, int new_state)
     {
       if(!this->pending_write)
       {
-        vp::io_slave *port = (vp::io_slave *)req->arg_pop();
+        vp::IoSlave *port = (vp::IoSlave *)req->arg_pop();
         this->pending_write = true;
         this->set_state(new_state);
         this->pw_req->pending_plot = this->regs[IMA_SUBMIT_PLOT/4];
@@ -420,7 +465,7 @@ vp::io_req_status_e ima_v1::submit_req(vp::io_req *req, int new_state)
 }
 
 /* Enqueue a plot reading request */
-vp::io_req_status_e ima_v1::read_req(vp::io_req *req, int new_state)
+vp::IoReqStatus ima_v1::read_req(vp::IoReq *req, int new_state)
 {
   if(!req->get_is_write())
   {
@@ -435,7 +480,7 @@ vp::io_req_status_e ima_v1::read_req(vp::io_req *req, int new_state)
     {
       if(!this->pending_read)
       {
-        vp::io_slave *port = (vp::io_slave *)req->arg_pop();
+        vp::IoSlave *port = (vp::IoSlave *)req->arg_pop();
         this->pending_read = true;
         this->set_state(new_state);
         this->enqueue_read();
@@ -455,7 +500,7 @@ vp::io_req_status_e ima_v1::read_req(vp::io_req *req, int new_state)
 }
 
 /* Build IMA requests */
-vp::io_req_status_e ima_v1::ima_req(vp::io_req *req, int new_state)
+vp::IoReqStatus ima_v1::ima_req(vp::IoReq *req, int new_state)
 {
   if(req->get_is_write())
   {
@@ -547,10 +592,10 @@ vp::io_req_status_e ima_v1::ima_req(vp::io_req *req, int new_state)
 
 
 /* Programming phase entry point */
-vp::io_req_status_e ima_v1::req(void *__this, vp::io_req *req)
+vp::IoReqStatus ima_v1::req(void *__this, vp::IoReq *req)
 {
   ima_v1 *_this = (ima_v1 *)__this;
-  vp::io_req_status_e err = vp::IO_REQ_OK;
+  vp::IoReqStatus err = vp::IO_REQ_OK;
 
   uint64_t offset = req->get_addr();
   uint8_t *data = req->get_data();
@@ -776,7 +821,7 @@ void ima_v1::enqueue_write()
   if (!this->plot_event->is_enqueued())
   {
     /* Latency depends to the writing process */
-    this->pw_req->latency = (int)((float)this->plot_write_time / ((float)this->get_clock()->get_period() / 1000)) + 1;
+    this->pw_req->latency = (int)((float)this->plot_write_time / ((float)this->clock.get_engine()->get_period() / 1000)) + 1;
     event_enqueue(this->plot_event, this->pw_req->latency);
   }
 }
@@ -786,7 +831,7 @@ void ima_v1::enqueue_read()
   if (!this->plot_event->is_enqueued())
   {
     /* Latency depends to the reading process */
-    this->pr_req->latency = (int)((float)this->plot_read_time / ((float)this->get_clock()->get_period() / 1000)) + 1;
+    this->pr_req->latency = (int)((float)this->plot_read_time / ((float)this->clock.get_engine()->get_period() / 1000)) + 1;
     event_enqueue(this->plot_event, this->pr_req->latency);
   }
 }
@@ -804,7 +849,7 @@ void ima_v1::check_requests()
 }
 
 
-void ima_v1::grant(void *__this, vp::io_req *req)
+void ima_v1::grant(void *__this, vp::IoReq *req)
 {
   ima_v1 *_this = (ima_v1 *)__this;
 
@@ -816,7 +861,7 @@ void ima_v1::grant(void *__this, vp::io_req *req)
 }
 
 
-void ima_v1::response(void *__this, vp::io_req *req)
+void ima_v1::response(void *__this, vp::IoReq *req)
 {
   ima_v1 *_this = (ima_v1 *)__this;
 
@@ -900,7 +945,7 @@ void ima_v1::job_update()
 /* Mount request for L1 access */
 int ima_v1::stream_access(int port, uint32_t addr, uint8_t *data, int size, bool is_write, int64_t *latency)
 {
-  vp::io_req *req = &this->reqs[port];
+  vp::IoReq *req = &this->reqs[port];
 
   req->set_addr(addr & (0x400000 - 1));
   req->set_size(size);
@@ -1181,63 +1226,8 @@ void ima_v1::stream_reqs(bool is_write)
 }
 
 
-int ima_v1::build()
-{
-  this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
-  this->nb_master_ports = get_config_int("nb_masters");
-  this->xbar_x = get_config_int("xbar_x");
-  this->xbar_y = get_config_int("xbar_y");
-
-  this->eval_time = get_config_int("eval_ns");
-  this->plot_write_time = get_config_int("plot_write_ns");
-  this->plot_read_time = get_config_int("plot_read_ns");
-
-  this->stats = get_config_bool("statistics");
-
-  this->out = new vp::io_master[this->nb_master_ports];
-  this->reqs = new vp::io_req[this->nb_master_ports];
-
-  this->in.set_req_meth(&this->ima_v1::req);
-  new_slave_port("input", &this->in);
-
-  for (int i=0; i<this->nb_master_ports; i++)
-  {
-    this->out[i].set_resp_meth(&this->ima_v1::response);
-    this->out[i].set_grant_meth(&this->ima_v1::grant);
-    new_master_port("out_" + std::to_string(i), &this->out[i]);
-  }
-
-  new_master_port("irq_0", &this->irq_0);
-  new_master_port("irq_1", &this->irq_1);
-
-  this->plot_event = event_new(&this->ima_v1::plot_handler);
-  this->job_event = event_new(&this->ima_v1::job_handler);
-
-  this->regs = new unsigned int[IMA_NB_REGS];
-  this->buffer_in = new int8_t[this->xbar_y];
-  this->buffer_out = new int8_t[this->xbar_x];
-
-  this->crossbar = new int8_t*[this->xbar_y];
-  for(int i=0; i<this->xbar_y; i++)
-  {
-    this->crossbar[i] = new int8_t[this->xbar_x];
-  }
-
-  this->job = new ima_job_t;
-  this->pw_req = new ima_pw_t;
-  this->pr_req = new ima_pr_t;
-
-  return 0;
-}
-
-
-void ima_v1::start()
-{
-}
-
-
-extern "C" void *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new ima_v1(config);
 }

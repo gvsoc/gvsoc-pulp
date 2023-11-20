@@ -20,12 +20,12 @@
 
 #include <ne16.hpp>
 
-void Ne16::fsm_start_handler(void *__this, vp::clock_event *event) {
+void Ne16::fsm_start_handler(vp::Block *__this, vp::ClockEvent *event) {
   Ne16 *_this = (Ne16 *)__this;
   _this->state.set(START);
   _this->running_job_id = _this->cxt_job_id[_this->cxt_use_ptr];
   if(_this->trace_level == L3_ALL) {
-    _this->trace.msg(vp::trace::LEVEL_DEBUG, "FSM START EVENT\n");
+    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "FSM START EVENT\n");
   }
 
   // clear state and propagate context
@@ -81,12 +81,12 @@ void Ne16::fsm_start_handler(void *__this, vp::clock_event *event) {
   _this->fsm_loop();
 }
 
-void Ne16::fsm_handler(void *__this, vp::clock_event *event) {
+void Ne16::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
   Ne16 *_this = (Ne16 *)__this;
   _this->fsm_loop();
 }
 
-void Ne16::fsm_end_handler(void *__this, vp::clock_event *event) {
+void Ne16::fsm_end_handler(vp::Block *__this, vp::ClockEvent *event) {
   Ne16 *_this = (Ne16 *)__this;
   int job_id = _this->cxt_job_id[_this->cxt_use_ptr];
   _this->job_running = 0;
@@ -94,10 +94,10 @@ void Ne16::fsm_end_handler(void *__this, vp::clock_event *event) {
   _this->cxt_use_ptr = 1-_this->cxt_use_ptr;
   _this->job_pending--;
   _this->irq.sync(true);
-  _this->trace.msg(vp::trace::LEVEL_INFO, "Ending job (id=%d).\n", job_id);
+  _this->trace.msg(vp::Trace::LEVEL_INFO, "Ending job (id=%d).\n", job_id);
   if (!_this->fsm_start_event->is_enqueued() && _this->job_pending > 0) {
       _this->event_enqueue(_this->fsm_start_event, 1);
-      _this->trace.msg(vp::trace::LEVEL_INFO, "Starting a new job from the queue.\n");
+      _this->trace.msg(vp::Trace::LEVEL_INFO, "Starting a new job from the queue.\n");
   }
   _this->activity.set(0);
   _this->state.set(IDLE);
@@ -157,7 +157,7 @@ int Ne16::fsm() {
     
     case START:
       this->activity.set(1);
-      this->trace.msg(vp::trace::LEVEL_INFO, "Starting a job (id=%d) with the following configuration:\n", this->cxt_job_id[this->cxt_use_ptr]);
+      this->trace.msg(vp::Trace::LEVEL_INFO, "Starting a job (id=%d) with the following configuration:\n", this->cxt_job_id[this->cxt_use_ptr]);
       this->printout();
 
       state_next = START_STREAMIN;
@@ -165,7 +165,7 @@ int Ne16::fsm() {
     
     case START_STREAMIN:
       if(this->fsm_traces) {
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "State START_STREAMIN\n");
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "State START_STREAMIN\n");
       }
       this->constant_setup();
       if(this->streamin) {
@@ -176,19 +176,19 @@ int Ne16::fsm() {
         state_next = STREAMIN_LOAD;
       }
       if(this->fsm_traces) {
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  k_in_major=%d\n", this->k_in_major_iter);
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  k_out_major=%d\n", this->k_out_major);
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  i_major=%d\n", this->i_major);
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  j_major=%d\n", this->j_major);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  k_in_major=%d\n", this->k_in_major_iter);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  k_out_major=%d\n", this->k_out_major);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  i_major=%d\n", this->i_major);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  j_major=%d\n", this->j_major);
       }
       break;
 
     case STREAMIN:
       if(this->fsm_traces) {
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "State STREAMIN\n");
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  streamin_k_out_iter=%d\n", this->streamin_k_out_iter);
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  streamin_j_out_iter=%d\n", this->streamin_j_out_iter);
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  streamin_i_out_iter=%d\n", this->streamin_i_out_iter);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "State STREAMIN\n");
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  streamin_k_out_iter=%d\n", this->streamin_k_out_iter);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  streamin_j_out_iter=%d\n", this->streamin_j_out_iter);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  streamin_i_out_iter=%d\n", this->streamin_i_out_iter);
       }
       latency = this->streamin_cycle();
       if(this->accum_traces) {
@@ -196,7 +196,7 @@ int Ne16::fsm() {
       }
       if(this->streamin_exit_idx()) {
         if(this->accum_traces_poststreamin) {
-          this->trace.msg(vp::trace::LEVEL_DEBUG, "State STREAMIN Finished\n");
+          this->trace.msg(vp::Trace::LEVEL_DEBUG, "State STREAMIN Finished\n");
           this->debug_accum();
         }
         state_next = STREAMIN_LOAD;
@@ -208,14 +208,14 @@ int Ne16::fsm() {
 
     case STREAMIN_LOAD:
       if(this->fsm_traces) {
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "State STREAMIN_LOAD\n");
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "State STREAMIN_LOAD\n");
       }
       this->load_setup();
       if(this->fsm_traces) {
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  load_fbuf_lim=%d\n", this->load_fbuf_lim);
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  load_i_fbuf_lim=%d\n", this->load_i_fbuf_lim);
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  load_j_fbuf_lim=%d\n", this->load_j_fbuf_lim);
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  load_k_in_lim=%d\n", this->load_k_in_lim);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  load_fbuf_lim=%d\n", this->load_fbuf_lim);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  load_i_fbuf_lim=%d\n", this->load_i_fbuf_lim);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  load_j_fbuf_lim=%d\n", this->load_j_fbuf_lim);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  load_k_in_lim=%d\n", this->load_k_in_lim);
       }
       state_next = LOAD;
 
@@ -225,13 +225,13 @@ int Ne16::fsm() {
       
     case LOAD:
       if(this->fsm_traces) {
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "State LOAD\n");
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  load_fbuf_lim=%d\n", this->load_fbuf_lim);
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  load_i_fbuf_lim=%d\n", this->load_i_fbuf_lim);
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  load_j_fbuf_lim=%d\n", this->load_j_fbuf_lim);
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  load_k_in_lim=%d\n", this->load_k_in_lim);
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  load_i_fbuf=%d\n", this->load_i_fbuf);
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  load_j_fbuf=%d\n", this->load_j_fbuf);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "State LOAD\n");
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  load_fbuf_lim=%d\n", this->load_fbuf_lim);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  load_i_fbuf_lim=%d\n", this->load_i_fbuf_lim);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  load_j_fbuf_lim=%d\n", this->load_j_fbuf_lim);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  load_k_in_lim=%d\n", this->load_k_in_lim);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  load_i_fbuf=%d\n", this->load_i_fbuf);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  load_j_fbuf=%d\n", this->load_j_fbuf);
       }
       if(this->mode_linear) {
         latency = this->load_cycle_linear();
@@ -259,13 +259,13 @@ int Ne16::fsm() {
 
     case LOAD_MATRIXVEC:
       if(this->fsm_traces) {
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "State LOAD_MATRIXVEC\n");
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "State LOAD_MATRIXVEC\n");
       }
       if(this->x_buffer_traces_postload) {
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  k_in_major=%d\n", this->k_in_major_iter);
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  k_out_major=%d\n", this->k_out_major);
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  i_major=%d\n", this->i_major);
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  j_major=%d\n", this->j_major);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  k_in_major=%d\n", this->k_in_major_iter);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  k_out_major=%d\n", this->k_out_major);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  i_major=%d\n", this->i_major);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  j_major=%d\n", this->j_major);
         this->debug_x_buffer();
         this->debug_x_array();
       }
@@ -275,8 +275,8 @@ int Ne16::fsm() {
       }
       this->matrixvec_setup();
       if(this->fsm_traces) {
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  mv_k_out_lim=%d\n", mv_k_out_lim);
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  mv_qw_lim=%d\n", mv_qw_lim); // was simply qw
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  mv_k_out_lim=%d\n", mv_k_out_lim);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  mv_qw_lim=%d\n", mv_qw_lim); // was simply qw
       }
       state_next = MATRIXVEC;
 
@@ -292,11 +292,11 @@ int Ne16::fsm() {
     
     case MATRIXVEC:
       if(this->fsm_traces) {
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "State MATRIXVEC\n");
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  mv_k_out_iter=%d\n", mv_k_out_iter);
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  mv_k_out_lim=%d\n", mv_k_out_lim);
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  mv_qw_iter=%d\n", mv_qw_iter); // was simply qw
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  mv_qw_lim=%d\n", mv_qw_lim); // was simply qw
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "State MATRIXVEC\n");
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  mv_k_out_iter=%d\n", mv_k_out_iter);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  mv_k_out_lim=%d\n", mv_k_out_lim);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  mv_qw_iter=%d\n", mv_qw_iter); // was simply qw
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  mv_qw_lim=%d\n", mv_qw_lim); // was simply qw
       }
       latency = this->matrixvec_cycle();
       if(this->psum_block_traces) {
@@ -313,7 +313,7 @@ int Ne16::fsm() {
         }
 
         if(this->fsm_traces) {
-          this->trace.msg(vp::trace::LEVEL_DEBUG, "Exiting MATRIXVEC\n");
+          this->trace.msg(vp::Trace::LEVEL_DEBUG, "Exiting MATRIXVEC\n");
         }
         if(this->accum_traces_postmatrixvec) {
           this->debug_accum();
@@ -347,7 +347,7 @@ int Ne16::fsm() {
       
     case NORMQUANT_SHIFT:
       if(this->fsm_traces) {
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "State NORMQUANT_SHIFT\n");
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "State NORMQUANT_SHIFT\n");
       }
       latency = this->normquant_shift_cycle();
       this->normquant_mult_setup();
@@ -356,8 +356,8 @@ int Ne16::fsm() {
     
     case NORMQUANT_MULT:
       if(this->fsm_traces) {
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "State NORMQUANT_MULT\n");
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  nq_iter=%d\n", this->nq_iter);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "State NORMQUANT_MULT\n");
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  nq_iter=%d\n", this->nq_iter);
       }
       latency = this->normquant_mult_cycle();
       if(this->accum_traces_normquant) {
@@ -374,8 +374,8 @@ int Ne16::fsm() {
     
     case NORMQUANT_BIAS:
       if(this->fsm_traces) {
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "State NORMQUANT_BIAS\n");
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  nqb_iter=%d\n", this->nqb_iter);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "State NORMQUANT_BIAS\n");
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  nqb_iter=%d\n", this->nqb_iter);
       }
       latency = this->normquant_bias_cycle();
       if(this->accum_traces_normquant) {
@@ -392,10 +392,10 @@ int Ne16::fsm() {
     
     case STREAMOUT:
       if(this->fsm_traces) {
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "State STREAMOUT\n");
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  streamout_k_out_iter=%d\n", this->streamout_k_out_iter);
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  streamout_i_out_iter=%d\n", this->streamout_i_out_iter);
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "  streamout_j_out_iter=%d\n", this->streamout_j_out_iter);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "State STREAMOUT\n");
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  streamout_k_out_iter=%d\n", this->streamout_k_out_iter);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  streamout_i_out_iter=%d\n", this->streamout_i_out_iter);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "  streamout_j_out_iter=%d\n", this->streamout_j_out_iter);
       }
       latency = this->streamout_cycle();
       if(this->streamout_exit_idx()) {
@@ -404,10 +404,10 @@ int Ne16::fsm() {
           latency += 9 - (this->streamout_i_out_iter+1)*(this->streamout_j_out_iter+1) * (this->output_quant ? this->quantization_bits/8 : 4);
         }
         if(this->accum_traces_streamout) {
-          this->trace.msg(vp::trace::LEVEL_DEBUG, "  k_in_major=%d\n", this->k_in_major_iter);
-          this->trace.msg(vp::trace::LEVEL_DEBUG, "  k_out_major=%d\n", this->k_out_major);
-          this->trace.msg(vp::trace::LEVEL_DEBUG, "  i_major=%d\n", this->i_major);
-          this->trace.msg(vp::trace::LEVEL_DEBUG, "  j_major=%d\n", this->j_major);
+          this->trace.msg(vp::Trace::LEVEL_DEBUG, "  k_in_major=%d\n", this->k_in_major_iter);
+          this->trace.msg(vp::Trace::LEVEL_DEBUG, "  k_out_major=%d\n", this->k_out_major);
+          this->trace.msg(vp::Trace::LEVEL_DEBUG, "  i_major=%d\n", this->i_major);
+          this->trace.msg(vp::Trace::LEVEL_DEBUG, "  j_major=%d\n", this->j_major);
           this->debug_accum();
         }
         if(this->streamout_to_end_idx()) {
@@ -427,7 +427,7 @@ int Ne16::fsm() {
 
     case END:
       if(this->fsm_traces) {
-        this->trace.msg(vp::trace::LEVEL_DEBUG, "State END\n");
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "State END\n");
       }
       latency = 1;
       break;

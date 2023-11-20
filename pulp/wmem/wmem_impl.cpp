@@ -24,24 +24,22 @@
 #include <stdio.h>
 #include <math.h>
 
-class wmem : public vp::component
+class wmem : public vp::Component
 {
 
 public:
 
-  wmem(js::config *config);
+  wmem(vp::ComponentConf &config);
 
-  int build();
-
-  static vp::io_req_status_e req(void *__this, vp::io_req *req);
+  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
 
 
 private:
-  vp::trace     trace;
+  vp::Trace     trace;
 
-  vp::io_master **out;
-  vp::io_slave **masters_in;
-  vp::io_slave in;
+  vp::IoMaster **out;
+  vp::IoSlave **masters_in;
+  vp::IoSlave in;
 
   int nb_slaves;
   int nb_masters;
@@ -49,13 +47,45 @@ private:
   int stage_bits;
 };
 
-wmem::wmem(js::config *config)
-: vp::component(config)
+wmem::wmem(vp::ComponentConf &config)
+: vp::Component(config)
 {
+  traces.new_trace("trace", &trace, vp::DEBUG);
+
+  in.set_req_meth(&wmem::req);
+  new_slave_port("in", &in);
+
+  nb_slaves = get_js_config()->get_child_int("nb_slaves");
+  nb_masters = get_js_config()->get_child_int("nb_masters");
+  stage_bits = get_js_config()->get_child_int("stage_bits");
+
+  if (stage_bits == 0)
+  {
+    stage_bits = log2(nb_slaves);
+  }
+
+  bank_mask = (1<<stage_bits) - 1;
+
+  out = new vp::IoMaster *[nb_slaves];
+  for (int i=0; i<nb_slaves; i++)
+  {
+    out[i] = new vp::IoMaster();
+    new_master_port("out_" + std::to_string(i), out[i]);
+  }
+
+  masters_in = new vp::IoSlave *[nb_masters];
+
+  for (int i=0; i<nb_masters; i++)
+  {
+    masters_in[i] = new vp::IoSlave();
+    masters_in[i]->set_req_meth(&wmem::req);
+    new_slave_port("in_" + std::to_string(i), masters_in[i]);
+  }
+
 
 }
 
-vp::io_req_status_e wmem::req(void *__this, vp::io_req *req)
+vp::IoReqStatus wmem::req(void *__this, vp::IoReq *req)
 {
   wmem *_this = (wmem *)__this;
   uint64_t offset = req->get_addr();
@@ -74,45 +104,7 @@ vp::io_req_status_e wmem::req(void *__this, vp::io_req *req)
 }
 
 
-int wmem::build()
-{
-
-  traces.new_trace("trace", &trace, vp::DEBUG);
-
-  in.set_req_meth(&wmem::req);
-  new_slave_port("in", &in);
-
-  nb_slaves = get_config_int("nb_slaves");
-  nb_masters = get_config_int("nb_masters");
-  stage_bits = get_config_int("stage_bits");
-
-  if (stage_bits == 0)
-  {
-    stage_bits = log2(nb_slaves);
-  }
-
-  bank_mask = (1<<stage_bits) - 1;
-
-  out = new vp::io_master *[nb_slaves];
-  for (int i=0; i<nb_slaves; i++)
-  {
-    out[i] = new vp::io_master();
-    new_master_port("out_" + std::to_string(i), out[i]);
-  }
-
-  masters_in = new vp::io_slave *[nb_masters];
-
-  for (int i=0; i<nb_masters; i++)
-  {
-    masters_in[i] = new vp::io_slave();
-    masters_in[i]->set_req_meth(&wmem::req);
-    new_slave_port("in_" + std::to_string(i), masters_in[i]);
-  }
-
-  return 0;
-}
-
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new wmem(config);
 }

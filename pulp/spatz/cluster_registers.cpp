@@ -22,40 +22,56 @@
 
 
 
-class Cluster_registers : public vp::component
+class Cluster_registers : public vp::Component
 {
 
 public:
 
-    Cluster_registers(js::config *config);
+    Cluster_registers(vp::ComponentConf &config);
 
-    int build();
     void reset(bool active);
 
-    static vp::io_req_status_e req(void *__this, vp::io_req *req);
+    static vp::IoReqStatus req(void *__this, vp::IoReq *req);
 
 private:
     static void barrier_sync(void *__this, bool value, int id);
 
-    vp::trace     trace;
+    vp::Trace     trace;
 
-    vp::io_slave in;
+    vp::IoSlave in;
     uint32_t bootaddr;
     uint32_t status;
     int nb_cores;
     vp::reg_32 barrier_status;
 
-    std::vector<vp::wire_slave<bool>> barrier_req_itf;
-    vp::wire_master<bool> barrier_ack_itf;
+    std::vector<vp::WireSlave<bool>> barrier_req_itf;
+    vp::WireMaster<bool> barrier_ack_itf;
 };
 
-Cluster_registers::Cluster_registers(js::config *config)
-: vp::component(config)
+Cluster_registers::Cluster_registers(vp::ComponentConf &config)
+: vp::Component(config)
 {
+    this->traces.new_trace("trace", &trace, vp::DEBUG);
+
+    this->in.set_req_meth(&Cluster_registers::req);
+    this->new_slave_port("input", &this->in);
+
+    this->bootaddr = this->get_js_config()->get("boot_addr")->get_int();
+    this->nb_cores = this->get_js_config()->get("nb_cores")->get_int();
+
+    this->barrier_req_itf.resize(this->nb_cores);
+    for (int i=0; i<this->nb_cores; i++)
+    {
+        this->barrier_req_itf[i].set_sync_meth_muxed(&Cluster_registers::barrier_sync, i);
+        this->new_slave_port("barrier_req_" + std::to_string(i), &this->barrier_req_itf[i]);
+    }
+
+    this->new_master_port("barrier_ack", &this->barrier_ack_itf);
+
 
 }
 
-vp::io_req_status_e Cluster_registers::req(void *__this, vp::io_req *req)
+vp::IoReqStatus Cluster_registers::req(void *__this, vp::IoReq *req)
 {
     Cluster_registers *_this = (Cluster_registers *)__this;
     uint64_t offset = req->get_addr();
@@ -110,11 +126,11 @@ void Cluster_registers::barrier_sync(void *__this, bool value, int id)
     Cluster_registers *_this = (Cluster_registers *)__this;
     _this->barrier_status.set(_this->barrier_status.get() | (value << id));
 
-    _this->trace.msg(vp::trace::LEVEL_DEBUG, "Barrier sync (id: %d, status: 0x%x)\n", id, _this->barrier_status.get());
+    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Barrier sync (id: %d, status: 0x%x)\n", id, _this->barrier_status.get());
 
     if (_this->barrier_status.get() == (1ULL << _this->nb_cores) - 1)
     {
-        _this->trace.msg(vp::trace::LEVEL_DEBUG, "Barrier reached\n");
+        _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Barrier reached\n");
 
         _this->barrier_status.set(0);
         _this->barrier_ack_itf.sync(1);
@@ -126,31 +142,9 @@ void Cluster_registers::reset(bool active)
     this->new_reg("barrier_status", &this->barrier_status, 0, true);
 }
 
-int Cluster_registers::build()
-{
-    this->traces.new_trace("trace", &trace, vp::DEBUG);
-
-    this->in.set_req_meth(&Cluster_registers::req);
-    this->new_slave_port("input", &this->in);
-
-    this->bootaddr = this->get_js_config()->get("boot_addr")->get_int();
-    this->nb_cores = this->get_js_config()->get("nb_cores")->get_int();
-
-    this->barrier_req_itf.resize(this->nb_cores);
-    for (int i=0; i<this->nb_cores; i++)
-    {
-        this->barrier_req_itf[i].set_sync_meth_muxed(&Cluster_registers::barrier_sync, i);
-        this->new_slave_port("barrier_req_" + std::to_string(i), &this->barrier_req_itf[i]);
-    }
-
-    this->new_master_port("barrier_ack", &this->barrier_ack_itf);
-
-  return 0;
-}
 
 
-
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
     return new Cluster_registers(config);
 }

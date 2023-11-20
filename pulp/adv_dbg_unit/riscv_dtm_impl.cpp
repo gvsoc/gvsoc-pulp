@@ -100,32 +100,30 @@ public:
   int id;
   int halted;
   int halt_requested;
-  vp::wire_master<bool> itf;
+  vp::WireMaster<bool> itf;
 };
 
 
-class riscv_dtm : public vp::component
+class riscv_dtm : public vp::Component
 {
 
 public:
 
-  riscv_dtm(js::config *config);
+  riscv_dtm(vp::ComponentConf &config);
 
-  int build();
-  void start();
   void reset(bool value);
 
 private:
 
   static void sync(void *__this, int tck, int tdi, int tms, int trst);
   static void sync_cycle(void *__this, int tdi, int tms, int trst);
-  static vp::io_req_status_e core_req(void *__this, vp::io_req *req);
-  vp::io_req_status_e going_req(int reg_offset, int size, bool is_write, uint8_t *data);
-  vp::io_req_status_e resume_req(int reg_offset, int size, bool is_write, uint8_t *data);
-  vp::io_req_status_e halted_req(int reg_offset, int size, bool is_write, uint8_t *data);
-  vp::io_req_status_e flags_req(int reg_offset, int size, bool is_write, uint8_t *data);
-  vp::io_req_status_e program_buffer_req(int reg_offset, int size, bool is_write, uint8_t *data);
-  vp::io_req_status_e data0_req(int reg_offset, int size, bool is_write, uint8_t *data);
+  static vp::IoReqStatus core_req(void *__this, vp::IoReq *req);
+  vp::IoReqStatus going_req(int reg_offset, int size, bool is_write, uint8_t *data);
+  vp::IoReqStatus resume_req(int reg_offset, int size, bool is_write, uint8_t *data);
+  vp::IoReqStatus halted_req(int reg_offset, int size, bool is_write, uint8_t *data);
+  vp::IoReqStatus flags_req(int reg_offset, int size, bool is_write, uint8_t *data);
+  vp::IoReqStatus program_buffer_req(int reg_offset, int size, bool is_write, uint8_t *data);
+  vp::IoReqStatus data0_req(int reg_offset, int size, bool is_write, uint8_t *data);
   void tck_edge(int tck, int tdi, int tms, int trst);
   void tap_update(int tdi, int tms, int tclk);
   void tap_init();
@@ -144,13 +142,13 @@ private:
   void handle_data0_access(uint32_t op, uint32_t data);
   void handle_dmi_access();
 
-  vp::trace     trace;
-  vp::trace     debug;
-  vp::jtag_slave  jtag_slave_itf;
-  vp::jtag_master jtag_master_itf;
+  vp::Trace     trace;
+  vp::Trace     debug;
+  vp::JtagSlave  jtag_slave_itf;
+  vp::JtagMaster jtag_master_itf;
   std::unordered_map<int, Dtm_slave *> slaves_map;
   std::vector<Dtm_slave *> slaves;
-  vp::io_slave  core_io_itf;
+  vp::IoSlave  core_io_itf;
 
   JTAG_STATE_e state;
   JTAG_STATE_e prev_state;
@@ -179,9 +177,38 @@ private:
   uint32_t flags;
 };
 
-riscv_dtm::riscv_dtm(js::config *config)
-: vp::component(config)
+riscv_dtm::riscv_dtm(vp::ComponentConf &config)
+: vp::Component(config)
 {
+  traces.new_trace("trace", &trace, vp::TRACE);
+  traces.new_trace("debug", &debug, vp::DEBUG);
+
+  core_io_itf.set_req_meth(&riscv_dtm::core_req);
+  new_slave_port("input", &core_io_itf);
+
+  jtag_slave_itf.set_sync_meth(&riscv_dtm::sync);
+  jtag_slave_itf.set_sync_cycle_meth(&riscv_dtm::sync_cycle);
+  new_slave_port("jtag_in", &jtag_slave_itf);
+
+  new_master_port("jtag_out", &jtag_master_itf);
+
+  this->new_reg("dm_control", &this->dm_control_r, 0);
+
+  this->tclk = 0;
+
+  for (auto hart: this->get_js_config()->get("harts")->get_elems())
+  {
+    int hart_id = hart->get_elem(0)->get_int();
+    string target = hart->get_elem(1)->get_str();
+
+    Dtm_slave *slave = new Dtm_slave(hart_id);
+
+    this->new_master_port(target, &slave->itf);
+
+    this->slaves_map[hart_id] = slave;
+    this->slaves.push_back(slave);
+  }
+
 
 }
 
@@ -630,7 +657,7 @@ void riscv_dtm::sync_cycle(void *__this, int tdi, int tms, int trst)
 
 
 
-vp::io_req_status_e riscv_dtm::going_req(int reg_offset, int size, bool is_write, uint8_t *data)
+vp::IoReqStatus riscv_dtm::going_req(int reg_offset, int size, bool is_write, uint8_t *data)
 {
   if (size != 4)
     return vp::IO_REQ_INVALID;
@@ -643,7 +670,7 @@ vp::io_req_status_e riscv_dtm::going_req(int reg_offset, int size, bool is_write
 
 
 
-vp::io_req_status_e riscv_dtm::resume_req(int reg_offset, int size, bool is_write, uint8_t *data)
+vp::IoReqStatus riscv_dtm::resume_req(int reg_offset, int size, bool is_write, uint8_t *data)
 {
   if (size != 4)
     return vp::IO_REQ_INVALID;
@@ -656,7 +683,7 @@ vp::io_req_status_e riscv_dtm::resume_req(int reg_offset, int size, bool is_writ
 
 
 
-vp::io_req_status_e riscv_dtm::halted_req(int reg_offset, int size, bool is_write, uint8_t *data)
+vp::IoReqStatus riscv_dtm::halted_req(int reg_offset, int size, bool is_write, uint8_t *data)
 {
   if (size != 4)
     return vp::IO_REQ_INVALID;
@@ -686,7 +713,7 @@ vp::io_req_status_e riscv_dtm::halted_req(int reg_offset, int size, bool is_writ
 
 
 
-vp::io_req_status_e riscv_dtm::data0_req(int offset, int size, bool is_write, uint8_t *data)
+vp::IoReqStatus riscv_dtm::data0_req(int offset, int size, bool is_write, uint8_t *data)
 {
   if (size != 4)
     return vp::IO_REQ_INVALID;
@@ -701,7 +728,7 @@ vp::io_req_status_e riscv_dtm::data0_req(int offset, int size, bool is_write, ui
 
 
 
-vp::io_req_status_e riscv_dtm::program_buffer_req(int offset, int size, bool is_write, uint8_t *data)
+vp::IoReqStatus riscv_dtm::program_buffer_req(int offset, int size, bool is_write, uint8_t *data)
 {
   if (!is_write)
   {
@@ -714,7 +741,7 @@ vp::io_req_status_e riscv_dtm::program_buffer_req(int offset, int size, bool is_
 
 
 
-vp::io_req_status_e riscv_dtm::flags_req(int reg_offset, int size, bool is_write, uint8_t *data)
+vp::IoReqStatus riscv_dtm::flags_req(int reg_offset, int size, bool is_write, uint8_t *data)
 {
   if (size != 1)
     return vp::IO_REQ_INVALID;
@@ -746,7 +773,7 @@ vp::io_req_status_e riscv_dtm::flags_req(int reg_offset, int size, bool is_write
 
 
 
-vp::io_req_status_e riscv_dtm::core_req(void *__this, vp::io_req *req)
+vp::IoReqStatus riscv_dtm::core_req(void *__this, vp::IoReq *req)
 {
   riscv_dtm *_this = (riscv_dtm *)__this;
 
@@ -754,7 +781,7 @@ vp::io_req_status_e riscv_dtm::core_req(void *__this, vp::io_req *req)
   uint8_t *data = req->get_data();
   uint64_t size = req->get_size();
   bool is_write = req->get_is_write();
-  vp::io_req_status_e err = vp::IO_REQ_INVALID;
+  vp::IoReqStatus err = vp::IO_REQ_INVALID;
 
   _this->debug.msg("IO access (offset: 0x%x, size: 0x%x, is_write: %d)\n", offset, size, req->get_is_write());
 
@@ -789,51 +816,13 @@ vp::io_req_status_e riscv_dtm::core_req(void *__this, vp::io_req *req)
 
 end:
   if (err != vp::IO_REQ_OK)
-    _this->get_trace()->force_warning("RISCV DTM invalid access (offset: 0x%x, size: 0x%x, is_write: %d)\n", offset, size, is_write);
+    _this->trace.force_warning("RISCV DTM invalid access (offset: 0x%x, size: 0x%x, is_write: %d)\n", offset, size, is_write);
 
   return err;
 }
 
 
-int riscv_dtm::build()
-{
-  traces.new_trace("trace", &trace, vp::TRACE);
-  traces.new_trace("debug", &debug, vp::DEBUG);
-
-  core_io_itf.set_req_meth(&riscv_dtm::core_req);
-  new_slave_port("input", &core_io_itf);
-
-  jtag_slave_itf.set_sync_meth(&riscv_dtm::sync);
-  jtag_slave_itf.set_sync_cycle_meth(&riscv_dtm::sync_cycle);
-  new_slave_port("jtag_in", &jtag_slave_itf);
-
-  new_master_port("jtag_out", &jtag_master_itf);
-
-  this->new_reg("dm_control", &this->dm_control_r, 0);
-
-  this->tclk = 0;
-
-  for (auto hart: this->get_js_config()->get("harts")->get_elems())
-  {
-    int hart_id = hart->get_elem(0)->get_int();
-    string target = hart->get_elem(1)->get_str();
-
-    Dtm_slave *slave = new Dtm_slave(hart_id);
-
-    this->new_master_port(target, &slave->itf);
-
-    this->slaves_map[hart_id] = slave;
-    this->slaves.push_back(slave);
-  }
-
-  return 0;
-}
-
-void riscv_dtm::start()
-{
-}
-
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new riscv_dtm(config);
 }

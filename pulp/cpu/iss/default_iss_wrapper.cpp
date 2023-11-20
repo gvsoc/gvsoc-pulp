@@ -25,7 +25,7 @@
 #include <cpu/iss/include/iss_core.hpp>
 
 
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new IssWrapper(config);
 }

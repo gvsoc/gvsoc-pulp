@@ -48,15 +48,15 @@ class Qspim_group : public Pad_group
 {
 public:
   Qspim_group(std::string name) : Pad_group(name) {}
-  vp::qspim_slave slave;
-  vp::trace data_0_trace;
-  vp::trace data_1_trace;
-  vp::trace data_2_trace;
-  vp::trace data_3_trace;
+  vp::QspimSlave slave;
+  vp::Trace data_0_trace;
+  vp::Trace data_1_trace;
+  vp::Trace data_2_trace;
+  vp::Trace data_3_trace;
   int nb_cs;
-  vector<vp::trace *> cs_trace;
-  vector<vp::qspim_master *> master;
-  vector<vp::wire_master<bool> *> cs_master;
+  vector<vp::Trace *> cs_trace;
+  vector<vp::QspimMaster *> master;
+  vector<vp::WireMaster<bool> *> cs_master;
   int active_cs;
 };
 
@@ -64,48 +64,48 @@ class Cpi_group : public Pad_group
 {
 public:
   Cpi_group(std::string name) : Pad_group(name) {}
-  vp::cpi_slave slave;
-  vp::cpi_master master;
-  vp::trace pclk_trace;
-  vp::trace href_trace;
-  vp::trace vsync_trace;
-  vp::trace data_trace;
+  vp::CpiSlave slave;
+  vp::CpiMaster master;
+  vp::Trace pclk_trace;
+  vp::Trace href_trace;
+  vp::Trace vsync_trace;
+  vp::Trace data_trace;
 };
 
 class Jtag_group : public Pad_group
 {
 public:
   Jtag_group(std::string name) : Pad_group(name) {}
-  vp::jtag_slave pad_slave;
-  vp::jtag_slave chip_slave;
-  vp::jtag_master master;
-  vp::trace tck_trace;
-  vp::trace tdi_trace;
-  vp::trace tms_trace;
-  vp::trace trst_trace;
-  vp::trace tdo_trace;
+  vp::JtagSlave pad_slave;
+  vp::JtagSlave chip_slave;
+  vp::JtagMaster master;
+  vp::Trace tck_trace;
+  vp::Trace tdi_trace;
+  vp::Trace tms_trace;
+  vp::Trace trst_trace;
+  vp::Trace tdo_trace;
 };
 
 class Uart_group : public Pad_group
 {
 public:
   Uart_group(std::string name) : Pad_group(name) {}
-  vp::uart_slave slave;
-  vp::uart_master master;
-  vp::trace tx_trace;
-  vp::trace rx_trace;
+  vp::UartSlave slave;
+  vp::UartMaster master;
+  vp::Trace tx_trace;
+  vp::Trace rx_trace;
 };
 
 class I2s_group : public Pad_group
 {
 public:
   I2s_group(std::string name) : Pad_group(name) {}
-  vp::i2s_slave slave;
-  vp::i2s_master master;
-  vp::trace sck_trace;
-  vp::trace ws_trace;
-  vp::trace sdi_trace;
-  vp::trace sdo_trace;
+  vp::I2sSlave slave;
+  vp::I2sMaster master;
+  vp::Trace sck_trace;
+  vp::Trace ws_trace;
+  vp::Trace sdi_trace;
+  vp::Trace sdo_trace;
   int sck_in;
   int ws_in;
   int sdi_in;
@@ -120,22 +120,22 @@ class I2c_group : public Pad_group
 {
 public:
   I2c_group(std::string name) : Pad_group(name) {}
-  vp::i2c_slave slave;
-  vp::i2c_master master;
-  vp::trace scl_trace;
-  vp::trace sda_trace;
+  vp::I2cSlave slave;
+  vp::I2cMaster master;
+  vp::Trace scl_trace;
+  vp::Trace sda_trace;
 };
 
 class Hyper_group : public Pad_group
 {
 public:
   Hyper_group(std::string name) : Pad_group(name) {}
-  vp::hyper_slave slave;
-  vp::trace data_trace;
+  vp::HyperSlave slave;
+  vp::Trace data_trace;
   int nb_cs;
-  vector<vp::trace *> cs_trace;
-  vector<vp::hyper_master *> master;
-  vector<vp::wire_master<bool> *> cs_master;
+  vector<vp::Trace *> cs_trace;
+  vector<vp::HyperMaster *> master;
+  vector<vp::WireMaster<bool> *> cs_master;
   int active_cs;
 };
 
@@ -143,28 +143,25 @@ class Wire_group : public Pad_group
 {
 public:
   Wire_group(std::string name) : Pad_group(name) {}
-  vp::wire_slave<int> slave;
-  vp::wire_master<int> master;
+  vp::WireSlave<int> slave;
+  vp::WireMaster<int> master;
 };
 
 class Gpio_group : public Pad_group
 {
 public:
   Gpio_group(std::string name) : Pad_group(name) {}
-  vp::wire_master<int> master;
+  vp::WireMaster<int> master;
 };
 
-class padframe : public vp::component
+class padframe : public vp::Component
 {
 
 public:
 
-  padframe(js::config *config);
+  padframe(vp::ComponentConf &config);
 
-  int build();
-  void start();
-
-  static vp::io_req_status_e req(void *__this, vp::io_req *req);
+  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
 
 private:
 
@@ -207,21 +204,238 @@ private:
 
   void set_pad(int *padin_value, int *padout_value, int *pad_value);
 
-  vp::trace     trace;
-  vp::io_slave in;
+  vp::Trace     trace;
+  vp::IoSlave in;
 
   vector<Pad_group *> groups;
-  vp::clock_slave    ref_clock_pad_itf;
-  vp::clock_master    ref_clock_itf;
+  vp::ClockSlave    ref_clock_pad_itf;
+  vp::ClockMaster    ref_clock_itf;
 
-  vp::trace ref_clock_trace;
+  vp::Trace ref_clock_trace;
 
   int nb_itf = 0;
 };
 
-padframe::padframe(js::config *config)
-: vp::component(config)
+padframe::padframe(vp::ComponentConf &config)
+: vp::Component(config)
 {
+  traces.new_trace("trace", &trace, vp::DEBUG);
+  in.set_req_meth(&padframe::req);
+
+  new_slave_port("in", &in);
+
+  ref_clock_pad_itf.set_sync_meth(&padframe::ref_clock_sync);
+  ref_clock_pad_itf.set_set_frequency_meth(&padframe::ref_clock_set_frequency);
+  new_slave_port("ref_clock_pad", &this->ref_clock_pad_itf);
+
+  new_master_port("ref_clock", &this->ref_clock_itf);
+
+  this->traces.new_trace_event("ref_clock", &this->ref_clock_trace, 1);
+
+  js::Config *groups = get_js_config()->get("groups");
+
+  for (auto& group: groups->get_childs())
+  {
+    std::string name = group.first;
+    js::Config *config = group.second;
+    js::Config *type_config = config->get("type");
+    if (type_config)
+    {
+      std::string type = type_config->get_str();
+
+      trace.msg("Found pad group (group: %s, type: %s)\n",
+        name.c_str(), type.c_str());
+
+      if (type == "qspim")
+      {
+        Qspim_group *group = new Qspim_group(name);
+        new_slave_port(name, &group->slave);
+        group->active_cs = -1;
+        group->slave.set_sync_meth_muxed(&padframe::qspim_sync, nb_itf);
+        group->slave.set_cs_sync_meth_muxed(&padframe::qspim_cs_sync, nb_itf);
+        this->groups.push_back(group);
+
+        traces.new_trace_event(name + "/data_0", &group->data_0_trace, 1);
+        traces.new_trace_event(name + "/data_1", &group->data_1_trace, 1);
+        traces.new_trace_event(name + "/data_2", &group->data_2_trace, 1);
+        traces.new_trace_event(name + "/data_3", &group->data_3_trace, 1);
+        js::Config *nb_cs_config = config->get("nb_cs");
+        group->nb_cs = nb_cs_config ? nb_cs_config->get_int() : 1;
+        for (int i=0; i<group->nb_cs; i++)
+        {
+          vp::Trace *trace = new vp::Trace;
+          traces.new_trace_event(name + "/cs_" + std::to_string(i), trace, 4);
+          group->cs_trace.push_back(trace);
+          vp::QspimMaster *itf = new vp::QspimMaster;
+          itf->set_sync_meth_muxed(&padframe::qspim_master_sync, nb_itf);
+
+          new_master_port(name + "_cs" + std::to_string(i) + "_data_pad", itf);
+          group->master.push_back(itf);
+
+          vp::WireMaster<bool> *cs_itf = new vp::WireMaster<bool>;
+          new_master_port(name + "_cs" + std::to_string(i) + "_pad", cs_itf);
+          group->cs_master.push_back(cs_itf);
+        }
+
+        nb_itf++;
+      }
+      else if (type == "jtag")
+      {
+        Jtag_group *group = new Jtag_group(name);
+        new_master_port(name, &group->master);
+        new_slave_port(name + "_pad", &group->pad_slave);
+        new_slave_port(name + "_out", &group->chip_slave);
+
+        group->pad_slave.set_sync_meth_muxed(&padframe::jtag_pad_slave_sync, nb_itf);
+        group->pad_slave.set_sync_cycle_meth_muxed(&padframe::jtag_pad_slave_sync_cycle, nb_itf);
+
+        group->chip_slave.set_sync_meth_muxed(&padframe::jtag_chip_slave_sync, nb_itf);
+        group->chip_slave.set_sync_cycle_meth_muxed(&padframe::jtag_chip_slave_sync_cycle, nb_itf);
+
+        this->groups.push_back(group);
+
+        traces.new_trace_event(name + "/tck", &group->tck_trace, 1);
+        traces.new_trace_event(name + "/tdi", &group->tdi_trace, 1);
+        traces.new_trace_event(name + "/tdo", &group->tdo_trace, 1);
+        traces.new_trace_event(name + "/tms", &group->tms_trace, 1);
+        traces.new_trace_event(name + "/trst", &group->trst_trace, 1);
+
+        nb_itf++;
+      }
+      else if (type == "cpi")
+      {
+        Cpi_group *group = new Cpi_group(name);
+        new_master_port(name, &group->master);
+        new_slave_port(name + "_pad", &group->slave);
+        group->slave.set_sync_meth_muxed(&padframe::cpi_sync, nb_itf);
+        group->slave.set_sync_cycle_meth_muxed(&padframe::cpi_sync_cycle, nb_itf);
+        this->groups.push_back(group);
+        traces.new_trace_event(name + "/pclk", &group->pclk_trace, 1);
+        traces.new_trace_event(name + "/href", &group->href_trace, 1);
+        traces.new_trace_event(name + "/vsync", &group->vsync_trace, 1);
+        traces.new_trace_event(name + "/data", &group->data_trace, 8);
+        nb_itf++;
+      }
+      else if (type == "uart")
+      {
+        Uart_group *group = new Uart_group(name);
+        new_master_port(name + "_pad", &group->master);
+        new_slave_port(name, &group->slave);
+        group->master.set_sync_meth_muxed(&padframe::uart_master_sync, nb_itf);
+        group->slave.set_sync_meth_muxed(&padframe::uart_chip_sync, nb_itf);
+        this->groups.push_back(group);
+        traces.new_trace_event(name + "/tx", &group->tx_trace, 1);
+        traces.new_trace_event(name + "/rx", &group->rx_trace, 1);
+        nb_itf++;
+      }
+      else if (type == "i2s")
+      {
+        I2s_group *group = new I2s_group(name);
+        new_slave_port(name + "_pad", &group->slave);
+        new_master_port(name, &group->master);
+        group->master.set_sync_meth_muxed(&padframe::i2s_internal_edge, nb_itf);
+        group->slave.set_sync_meth_muxed(&padframe::i2s_external_edge, nb_itf);
+        group->sck_in = 2;
+        group->ws_in = 2;
+        group->sdi_in = 2;
+        group->sdo_in = 2;
+        group->sck_out = 2;
+        group->ws_out = 2;
+        group->sdi_out = 2;
+        group->sdo_out = 2;
+        this->groups.push_back(group);
+        traces.new_trace_event(name + "/sck", &group->sck_trace, 1);
+        traces.new_trace_event(name + "/ws", &group->ws_trace, 1);
+        traces.new_trace_event(name + "/sdi", &group->sdi_trace, 1);
+        traces.new_trace_event(name + "/sdo", &group->sdo_trace, 1);
+        nb_itf++;
+      }
+      else if (type == "i2c")
+      {
+        I2c_group *group = new I2c_group(name);
+        new_master_port(name + "_pad", &group->master);
+        new_slave_port(name, &group->slave);
+        group->master.set_sync_meth_muxed(&padframe::i2c_master_sync, nb_itf);
+        group->slave.set_sync_meth_muxed(&padframe::i2c_chip_sync, nb_itf);
+        this->groups.push_back(group);
+        traces.new_trace_event(name + "/scl", &group->scl_trace, 1);
+        traces.new_trace_event(name + "/sda", &group->sda_trace, 1);
+        nb_itf++;
+      }
+      else if (type == "hyper")
+      {
+        Hyper_group *group = new Hyper_group(name);
+        new_slave_port(name, &group->slave);
+        group->slave.set_sync_cycle_meth_muxed(&padframe::hyper_sync_cycle, nb_itf);
+        group->slave.set_cs_sync_meth_muxed(&padframe::hyper_cs_sync, nb_itf);
+        this->groups.push_back(group);
+        traces.new_trace_event(name + "/data", &group->data_trace, 8);
+        js::Config *nb_cs_config = config->get("nb_cs");
+        group->nb_cs = nb_cs_config ? nb_cs_config->get_int() : 1;
+        for (int i=0; i<group->nb_cs; i++)
+        {
+          vp::Trace *trace = new vp::Trace;
+          traces.new_trace_event(name + "/cs_" + std::to_string(i), trace, 1);
+          group->cs_trace.push_back(trace);
+          vp::HyperMaster *itf = new vp::HyperMaster;
+          itf->set_sync_cycle_meth_muxed(&padframe::hyper_master_sync_cycle, nb_itf);
+
+          new_master_port(name + "_cs" + std::to_string(i) + "_data_pad", itf);
+          group->master.push_back(itf);
+
+          vp::WireMaster<bool> *cs_itf = new vp::WireMaster<bool>;
+          new_master_port(name + "_cs" + std::to_string(i) + "_pad", cs_itf);
+          group->cs_master.push_back(cs_itf);
+        }
+        nb_itf++;
+      }
+      else if (type == "wire")
+      {
+        Wire_group *group = new Wire_group(name);
+        this->groups.push_back(group);
+        js::Config *is_master_config = config->get("is_master");
+        js::Config *is_slave_config = config->get("is_slave");
+
+        if (is_master_config != NULL && is_master_config->get_bool())
+        {
+          group->master.set_sync_meth_muxed(&padframe::master_wire_sync, nb_itf);
+          this->new_master_port(name + "_pad", &group->master);
+          group->slave.set_sync_meth_muxed(&padframe::wire_sync, nb_itf);
+          this->new_slave_port(name, &group->slave);
+        }
+        else if (is_slave_config != NULL && is_slave_config->get_bool())
+        {
+          group->master.set_sync_meth_muxed(&padframe::master_wire_sync, nb_itf);
+          this->new_master_port(name, &group->master);
+          group->slave.set_sync_meth_muxed(&padframe::wire_sync, nb_itf);
+          this->new_slave_port(name + "_pad", &group->slave);
+        }
+
+        nb_itf++;
+      }
+      else if (type == "gpio")
+      {
+        Gpio_group *group = new Gpio_group(name);
+        this->groups.push_back(group);
+        js::Config *is_master_config = config->get("is_master");
+        js::Config *is_slave_config = config->get("is_slave");
+
+        if (is_master_config != NULL && is_master_config->get_bool())
+        {
+          group->master.set_sync_meth_muxed(&padframe::master_gpio_sync, nb_itf);
+          this->new_master_port(name + "_pad", &group->master);
+        }
+
+        nb_itf++;
+      }
+      else
+      {
+        trace.warning("Unknown pad group type (group: %s, type: %s)\n",
+          name.c_str(), type.c_str());
+      }
+    }
+  }
+
 
 }
 
@@ -274,11 +488,11 @@ void padframe::qspim_sync(void *__this, int sck, int data_0, int data_1, int dat
 
   if (group->active_cs == -1)
   {
-    vp_warning_always(&_this->warning, "Trying to send QSPIM stream while no cs is active\n");
+    vp_warning_always(&_this->trace, "Trying to send QSPIM stream while no cs is active\n");
   }
   else if (!group->master[group->active_cs]->is_bound())
   {
-    vp_warning_always(&_this->warning, "Trying to send QSPIM stream while pad is not connected (interface: %s)\n", group->name.c_str());
+    vp_warning_always(&_this->trace, "Trying to send QSPIM stream while pad is not connected (interface: %s)\n", group->name.c_str());
   }
   else
   {
@@ -294,7 +508,7 @@ void padframe::qspim_cs_sync(void *__this, int cs, int active, int id)
 
   if (cs >= group->nb_cs)
   {
-    vp_warning_always(&_this->warning, "Trying to activate invalid cs (interface: %s, cs: %d, nb_cs: %d)\n", group->name.c_str(), cs, group->nb_cs);
+    vp_warning_always(&_this->trace, "Trying to activate invalid cs (interface: %s, cs: %d, nb_cs: %d)\n", group->name.c_str(), cs, group->nb_cs);
     return;
   }
 
@@ -303,7 +517,7 @@ void padframe::qspim_cs_sync(void *__this, int cs, int active, int id)
 
   if (!group->cs_master[cs]->is_bound())
   {
-    vp_warning_always(&_this->warning, "Trying to send QSPIM stream while cs pad is not connected (interface: %s, cs: %d)\n", group->name.c_str(), cs);
+    vp_warning_always(&_this->trace, "Trying to send QSPIM stream while cs pad is not connected (interface: %s, cs: %d)\n", group->name.c_str(), cs);
   }
   else
   {
@@ -415,7 +629,7 @@ void padframe::uart_chip_sync(void *__this, int data, int id)
   group->tx_trace.event((uint8_t *)&data);
   if (!group->master.is_bound())
   {
-    vp_warning_always(&_this->warning, "Trying to send UART stream while pad is not connected (interface: %s)\n", group->name.c_str());
+    vp_warning_always(&_this->trace, "Trying to send UART stream while pad is not connected (interface: %s)\n", group->name.c_str());
   }
   else
   {
@@ -463,7 +677,7 @@ void padframe::i2s_internal_edge(void *__this, int sck, int ws, int sd, bool ful
 
   if (!group->slave.is_bound())
   {
-    //vp_warning_always(&_this->warning, "Trying to send I2S stream while pad is not connected (interface: %s)\n", group->name.c_str());
+    //vp_warning_always(&_this->trace, "Trying to send I2S stream while pad is not connected (interface: %s)\n", group->name.c_str());
   }
   else
   {
@@ -516,7 +730,7 @@ void padframe::i2c_chip_sync(void *__this, int scl, int sda, int id)
   group->sda_trace.event((uint8_t *)&sda);
   if (!group->master.is_bound())
   {
-    vp_warning_always(&_this->warning, "Trying to send I2C stream while pad is not connected (interface: %s)\n", group->name.c_str());
+    vp_warning_always(&_this->trace, "Trying to send I2C stream while pad is not connected (interface: %s)\n", group->name.c_str());
   }
   else
   {
@@ -553,7 +767,7 @@ void padframe::hyper_sync_cycle(void *__this, int data, int id)
   group->data_trace.event((uint8_t *)&data);
   if (!group->master[group->active_cs]->is_bound())
   {
-    vp_warning_always(&_this->warning, "Trying to send HYPER stream while pad is not connected (interface: %s)\n", group->name.c_str());
+    vp_warning_always(&_this->trace, "Trying to send HYPER stream while pad is not connected (interface: %s)\n", group->name.c_str());
   }
   else
   {
@@ -569,7 +783,7 @@ void padframe::hyper_cs_sync(void *__this, int cs, int active, int id)
 
   if (cs >= group->nb_cs)
   {
-    vp_warning_always(&_this->warning, "Trying to activate invalid cs (interface: %s, cs: %d, nb_cs: %d)\n", group->name.c_str(), cs, group->nb_cs);
+    vp_warning_always(&_this->trace, "Trying to activate invalid cs (interface: %s, cs: %d, nb_cs: %d)\n", group->name.c_str(), cs, group->nb_cs);
     return;
   }
 
@@ -578,7 +792,7 @@ void padframe::hyper_cs_sync(void *__this, int cs, int active, int id)
 
   if (!group->master[cs]->is_bound())
   {
-    vp_warning_always(&_this->warning, "Trying to send HYPER stream while pad is not connected (interface: %s)\n", group->name.c_str());
+    vp_warning_always(&_this->trace, "Trying to send HYPER stream while pad is not connected (interface: %s)\n", group->name.c_str());
   }
   else
   {
@@ -615,7 +829,7 @@ void padframe::wire_sync(void *__this, int value, int id)
 }
 
 
-vp::io_req_status_e padframe::req(void *__this, vp::io_req *req)
+vp::IoReqStatus padframe::req(void *__this, vp::IoReq *req)
 {
   padframe *_this = (padframe *)__this;
 
@@ -641,233 +855,7 @@ void padframe::ref_clock_set_frequency(void *__this, int64_t value)
   _this->ref_clock_itf.set_frequency(value);
 }
 
-int padframe::build()
-{
-  traces.new_trace("trace", &trace, vp::DEBUG);
-  in.set_req_meth(&padframe::req);
-
-  new_slave_port("in", &in);
-
-  ref_clock_pad_itf.set_sync_meth(&padframe::ref_clock_sync);
-  ref_clock_pad_itf.set_set_frequency_meth(&padframe::ref_clock_set_frequency);
-  new_slave_port("ref_clock_pad", &this->ref_clock_pad_itf);
-
-  new_master_port("ref_clock", &this->ref_clock_itf);
-
-  this->traces.new_trace_event("ref_clock", &this->ref_clock_trace, 1);
-
-  js::config *groups = get_js_config()->get("groups");
-
-  for (auto& group: groups->get_childs())
-  {
-    std::string name = group.first;
-    js::config *config = group.second;
-    js::config *type_config = config->get("type");
-    if (type_config)
-    {
-      std::string type = type_config->get_str();
-
-      trace.msg("Found pad group (group: %s, type: %s)\n",
-        name.c_str(), type.c_str());
-
-      if (type == "qspim")
-      {
-        Qspim_group *group = new Qspim_group(name);
-        new_slave_port(name, &group->slave);
-        group->active_cs = -1;
-        group->slave.set_sync_meth_muxed(&padframe::qspim_sync, nb_itf);
-        group->slave.set_cs_sync_meth_muxed(&padframe::qspim_cs_sync, nb_itf);
-        this->groups.push_back(group);
-
-        traces.new_trace_event(name + "/data_0", &group->data_0_trace, 1);
-        traces.new_trace_event(name + "/data_1", &group->data_1_trace, 1);
-        traces.new_trace_event(name + "/data_2", &group->data_2_trace, 1);
-        traces.new_trace_event(name + "/data_3", &group->data_3_trace, 1);
-        js::config *nb_cs_config = config->get("nb_cs");
-        group->nb_cs = nb_cs_config ? nb_cs_config->get_int() : 1;
-        for (int i=0; i<group->nb_cs; i++)
-        {
-          vp::trace *trace = new vp::trace;
-          traces.new_trace_event(name + "/cs_" + std::to_string(i), trace, 4);
-          group->cs_trace.push_back(trace);
-          vp::qspim_master *itf = new vp::qspim_master;
-          itf->set_sync_meth_muxed(&padframe::qspim_master_sync, nb_itf);
-
-          new_master_port(name + "_cs" + std::to_string(i) + "_data_pad", itf);
-          group->master.push_back(itf);
-
-          vp::wire_master<bool> *cs_itf = new vp::wire_master<bool>;
-          new_master_port(name + "_cs" + std::to_string(i) + "_pad", cs_itf);
-          group->cs_master.push_back(cs_itf);
-        }
-
-        nb_itf++;
-      }
-      else if (type == "jtag")
-      {
-        Jtag_group *group = new Jtag_group(name);
-        new_master_port(name, &group->master);
-        new_slave_port(name + "_pad", &group->pad_slave);
-        new_slave_port(name + "_out", &group->chip_slave);
-
-        group->pad_slave.set_sync_meth_muxed(&padframe::jtag_pad_slave_sync, nb_itf);
-        group->pad_slave.set_sync_cycle_meth_muxed(&padframe::jtag_pad_slave_sync_cycle, nb_itf);
-
-        group->chip_slave.set_sync_meth_muxed(&padframe::jtag_chip_slave_sync, nb_itf);
-        group->chip_slave.set_sync_cycle_meth_muxed(&padframe::jtag_chip_slave_sync_cycle, nb_itf);
-
-        this->groups.push_back(group);
-
-        traces.new_trace_event(name + "/tck", &group->tck_trace, 1);
-        traces.new_trace_event(name + "/tdi", &group->tdi_trace, 1);
-        traces.new_trace_event(name + "/tdo", &group->tdo_trace, 1);
-        traces.new_trace_event(name + "/tms", &group->tms_trace, 1);
-        traces.new_trace_event(name + "/trst", &group->trst_trace, 1);
-
-        nb_itf++;
-      }
-      else if (type == "cpi")
-      {
-        Cpi_group *group = new Cpi_group(name);
-        new_master_port(name, &group->master);
-        new_slave_port(name + "_pad", &group->slave);
-        group->slave.set_sync_meth_muxed(&padframe::cpi_sync, nb_itf);
-        group->slave.set_sync_cycle_meth_muxed(&padframe::cpi_sync_cycle, nb_itf);
-        this->groups.push_back(group);
-        traces.new_trace_event(name + "/pclk", &group->pclk_trace, 1);
-        traces.new_trace_event(name + "/href", &group->href_trace, 1);
-        traces.new_trace_event(name + "/vsync", &group->vsync_trace, 1);
-        traces.new_trace_event(name + "/data", &group->data_trace, 8);
-        nb_itf++;
-      }
-      else if (type == "uart")
-      {
-        Uart_group *group = new Uart_group(name);
-        new_master_port(name + "_pad", &group->master);
-        new_slave_port(name, &group->slave);
-        group->master.set_sync_meth_muxed(&padframe::uart_master_sync, nb_itf);
-        group->slave.set_sync_meth_muxed(&padframe::uart_chip_sync, nb_itf);
-        this->groups.push_back(group);
-        traces.new_trace_event(name + "/tx", &group->tx_trace, 1);
-        traces.new_trace_event(name + "/rx", &group->rx_trace, 1);
-        nb_itf++;
-      }
-      else if (type == "i2s")
-      {
-        I2s_group *group = new I2s_group(name);
-        new_slave_port(name + "_pad", &group->slave);
-        new_master_port(name, &group->master);
-        group->master.set_sync_meth_muxed(&padframe::i2s_internal_edge, nb_itf);
-        group->slave.set_sync_meth_muxed(&padframe::i2s_external_edge, nb_itf);
-        group->sck_in = 2;
-        group->ws_in = 2;
-        group->sdi_in = 2;
-        group->sdo_in = 2;
-        group->sck_out = 2;
-        group->ws_out = 2;
-        group->sdi_out = 2;
-        group->sdo_out = 2;
-        this->groups.push_back(group);
-        traces.new_trace_event(name + "/sck", &group->sck_trace, 1);
-        traces.new_trace_event(name + "/ws", &group->ws_trace, 1);
-        traces.new_trace_event(name + "/sdi", &group->sdi_trace, 1);
-        traces.new_trace_event(name + "/sdo", &group->sdo_trace, 1);
-        nb_itf++;
-      }
-      else if (type == "i2c")
-      {
-        I2c_group *group = new I2c_group(name);
-        new_master_port(name + "_pad", &group->master);
-        new_slave_port(name, &group->slave);
-        group->master.set_sync_meth_muxed(&padframe::i2c_master_sync, nb_itf);
-        group->slave.set_sync_meth_muxed(&padframe::i2c_chip_sync, nb_itf);
-        this->groups.push_back(group);
-        traces.new_trace_event(name + "/scl", &group->scl_trace, 1);
-        traces.new_trace_event(name + "/sda", &group->sda_trace, 1);
-        nb_itf++;
-      }
-      else if (type == "hyper")
-      {
-        Hyper_group *group = new Hyper_group(name);
-        new_slave_port(name, &group->slave);
-        group->slave.set_sync_cycle_meth_muxed(&padframe::hyper_sync_cycle, nb_itf);
-        group->slave.set_cs_sync_meth_muxed(&padframe::hyper_cs_sync, nb_itf);
-        this->groups.push_back(group);
-        traces.new_trace_event(name + "/data", &group->data_trace, 8);
-        js::config *nb_cs_config = config->get("nb_cs");
-        group->nb_cs = nb_cs_config ? nb_cs_config->get_int() : 1;
-        for (int i=0; i<group->nb_cs; i++)
-        {
-          vp::trace *trace = new vp::trace;
-          traces.new_trace_event(name + "/cs_" + std::to_string(i), trace, 1);
-          group->cs_trace.push_back(trace);
-          vp::hyper_master *itf = new vp::hyper_master;
-          itf->set_sync_cycle_meth_muxed(&padframe::hyper_master_sync_cycle, nb_itf);
-
-          new_master_port(name + "_cs" + std::to_string(i) + "_data_pad", itf);
-          group->master.push_back(itf);
-
-          vp::wire_master<bool> *cs_itf = new vp::wire_master<bool>;
-          new_master_port(name + "_cs" + std::to_string(i) + "_pad", cs_itf);
-          group->cs_master.push_back(cs_itf);
-        }
-        nb_itf++;
-      }
-      else if (type == "wire")
-      {
-        Wire_group *group = new Wire_group(name);
-        this->groups.push_back(group);
-        js::config *is_master_config = config->get("is_master");
-        js::config *is_slave_config = config->get("is_slave");
-
-        if (is_master_config != NULL && is_master_config->get_bool())
-        {
-          group->master.set_sync_meth_muxed(&padframe::master_wire_sync, nb_itf);
-          this->new_master_port(name + "_pad", &group->master);
-          group->slave.set_sync_meth_muxed(&padframe::wire_sync, nb_itf);
-          this->new_slave_port(name, &group->slave);
-        }
-        else if (is_slave_config != NULL && is_slave_config->get_bool())
-        {
-          group->master.set_sync_meth_muxed(&padframe::master_wire_sync, nb_itf);
-          this->new_master_port(name, &group->master);
-          group->slave.set_sync_meth_muxed(&padframe::wire_sync, nb_itf);
-          this->new_slave_port(name + "_pad", &group->slave);
-        }
-
-        nb_itf++;
-      }
-      else if (type == "gpio")
-      {
-        Gpio_group *group = new Gpio_group(name);
-        this->groups.push_back(group);
-        js::config *is_master_config = config->get("is_master");
-        js::config *is_slave_config = config->get("is_slave");
-
-        if (is_master_config != NULL && is_master_config->get_bool())
-        {
-          group->master.set_sync_meth_muxed(&padframe::master_gpio_sync, nb_itf);
-          this->new_master_port(name + "_pad", &group->master);
-        }
-
-        nb_itf++;
-      }
-      else
-      {
-        warning.warning("Unknown pad group type (group: %s, type: %s)\n",
-          name.c_str(), type.c_str());
-      }
-    }
-  }
-
-  return 0;
-}
-
-void padframe::start()
-{
-}
-
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new padframe(config);
 }

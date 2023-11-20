@@ -84,14 +84,14 @@ void Ne16::streamout_setup() {
   }
 
   if(this->trace_level == L3_ALL) {
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   k_out=%d\n", this->k_out);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   w_out=%d\n", this->w_out);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   h_size_out=%d\n", this->h_size_out);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   w_size_out=%d\n", this->w_size_out);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   i_major=%d\n", this->i_major);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   j_major=%d\n", this->j_major);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   k_out_major=%d\n", this->k_out_major);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   tp=%d\n", tp);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   k_out=%d\n", this->k_out);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   w_out=%d\n", this->w_out);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   h_size_out=%d\n", this->h_size_out);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   w_size_out=%d\n", this->w_size_out);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   i_major=%d\n", this->i_major);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   j_major=%d\n", this->j_major);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   k_out_major=%d\n", this->k_out_major);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   tp=%d\n", tp);
   }
 }
 

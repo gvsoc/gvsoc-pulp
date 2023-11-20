@@ -91,14 +91,14 @@ void Neureka::streamout_setup() {
   }
 
   if(this->trace_level == L3_ALL) {
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   k_out=%d\n", this->k_out);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   w_out=%d\n", this->w_out);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   h_size_out=%d\n", this->h_size_out);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   w_size_out=%d\n", this->w_size_out);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   i_major=%d\n", this->i_major);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   j_major=%d\n", this->j_major);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   k_out_major=%d\n", this->k_out_major);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   tp=%d\n", tp);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   k_out=%d\n", this->k_out);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   w_out=%d\n", this->w_out);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   h_size_out=%d\n", this->h_size_out);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   w_size_out=%d\n", this->w_size_out);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   i_major=%d\n", this->i_major);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   j_major=%d\n", this->j_major);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   k_out_major=%d\n", this->k_out_major);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   tp=%d\n", tp);
   }
 }
 
@@ -111,25 +111,25 @@ int Neureka::streamout_cycle() {
   
   xt::xarray<uint8_t> xx = xt::zeros<uint8_t>({32});
   if(this->quantization_bits == 32) {
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "  Before streamout_k_out_lim=%d\n", this->streamout_k_out_lim);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "  Before streamout_k_out_lim=%d\n", this->streamout_k_out_lim);
     auto k_out_last = (this->streamout_k_out_iter == this->streamout_k_out_lim-1) & (this->depthwise) ? ko_rem_index : (this->streamout_k_out_iter+1)*8;
     if(this->k_out_major == this->subtile_nb_ko-1 && this->subtile_rem_ko != tp && this->subtile_rem_ko != 0) { // last k_in tile, only if it requires padding
-      this->trace.msg(vp::trace::LEVEL_DEBUG, "  Inside the if before subtile_rem_ko=%d\n", this->subtile_rem_ko);
-      this->trace.msg(vp::trace::LEVEL_DEBUG, "  Inside the if before subtile_nb_ko=%d\n", this->subtile_nb_ko);
-      this->trace.msg(vp::trace::LEVEL_DEBUG, "  Inside the if before k_out_last=%d\n", k_out_last);
+      this->trace.msg(vp::Trace::LEVEL_DEBUG, "  Inside the if before subtile_rem_ko=%d\n", this->subtile_rem_ko);
+      this->trace.msg(vp::Trace::LEVEL_DEBUG, "  Inside the if before subtile_nb_ko=%d\n", this->subtile_nb_ko);
+      this->trace.msg(vp::Trace::LEVEL_DEBUG, "  Inside the if before k_out_last=%d\n", k_out_last);
       k_out_last = (k_out_last < (this->subtile_rem_ko)) ? k_out_last : (this->subtile_rem_ko);
       // k_out_last = this->subtile_rem_ko;
-      this->trace.msg(vp::trace::LEVEL_DEBUG, "  Inside the if after k_out_last=%d\n", k_out_last);
+      this->trace.msg(vp::Trace::LEVEL_DEBUG, "  Inside the if after k_out_last=%d\n", k_out_last);
     }
     for (auto i=this->streamout_k_out_iter*8; i<k_out_last; i++) {
       for(auto j=0; j<4; j++) {
         xt::view(xx, (i-this->streamout_k_out_iter*8)*4+j) = (xt::view(this->accum, i, this->streamout_i_out_iter*this->H_SIZE+this->streamout_j_out_iter) >> (j*8)) & 0xff;
       }
     }
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   k_out_last=%d\n", k_out_last);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   streamout_k_out_iter=%d\n", this->streamout_k_out_iter);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   streamout_i_out_iter=%d\n", this->streamout_i_out_iter);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "   streamout_j_out_iter=%d\n", this->streamout_j_out_iter);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   k_out_last=%d\n", k_out_last);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   streamout_k_out_iter=%d\n", this->streamout_k_out_iter);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   streamout_i_out_iter=%d\n", this->streamout_i_out_iter);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "   streamout_j_out_iter=%d\n", this->streamout_j_out_iter);
     this->vst_y.ex(xx, (k_out_last-this->streamout_k_out_iter*8)*4, cycles, this->col_enable (this->streamout_i_out_iter, this->streamout_j_out_iter));
   }
   else if(this->quantization_bits == 8) {

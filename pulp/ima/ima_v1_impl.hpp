@@ -88,7 +88,7 @@ class ima_plot_t
 public:
 
   unsigned int pending_plot;
-  vp::io_req *pending_plot_req;
+  vp::IoReq *pending_plot_req;
 
   int index_x;
   int index_y;
@@ -117,22 +117,20 @@ public:
 };
 
 
-class ima_v1 : public vp::component
+class ima_v1 : public vp::Component
 {
 
 public:
 
-  ima_v1(js::config *config);
+  ima_v1(vp::ComponentConf &config);
 
-  int build();
-  void start();
   void reset(bool active);
 
-  static vp::io_req_status_e req(void *__this, vp::io_req *req);
-  static void job_handler(void *_this, vp::clock_event *event);
-  static void plot_handler(void *_this, vp::clock_event *event);
-  static void grant(void *_this, vp::io_req *req);
-  static void response(void *_this, vp::io_req *req);
+  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
+  static void job_handler(vp::Block *_this, vp::ClockEvent *event);
+  static void plot_handler(vp::Block *_this, vp::ClockEvent *event);
+  static void grant(void *_this, vp::IoReq *req);
+  static void response(void *_this, vp::IoReq *req);
   void check_requests();
 
   void enqueue_write();
@@ -182,27 +180,27 @@ private:
   ima_pr_t *pr_req;
   bool pending_read;
 
-  vp::io_req_status_e ima_req(vp::io_req *req, int new_state);
-  vp::io_req_status_e trigger_req(vp::io_req *req, int new_state);
-  vp::io_req_status_e submit_req(vp::io_req *req, int new_state);
-  vp::io_req_status_e read_req(vp::io_req *req, int new_state);
-  vp::io_req_status_e acquire_req(vp::io_req *req);
+  vp::IoReqStatus ima_req(vp::IoReq *req, int new_state);
+  vp::IoReqStatus trigger_req(vp::IoReq *req, int new_state);
+  vp::IoReqStatus submit_req(vp::IoReq *req, int new_state);
+  vp::IoReqStatus read_req(vp::IoReq *req, int new_state);
+  vp::IoReqStatus acquire_req(vp::IoReq *req);
 
   void update_finished_jobs(int increment);
 
-  vp::trace trace;
+  vp::Trace trace;
 
-  vp::io_slave in;
-  vp::io_master *out;
-  vp::io_req *reqs;
+  vp::IoSlave in;
+  vp::IoMaster *out;
+  vp::IoReq *reqs;
   int port_id;
 
-  vp::wire_master<bool> irq_0;
-  vp::wire_master<bool> irq_1;
+  vp::WireMaster<bool> irq_0;
+  vp::WireMaster<bool> irq_1;
 
-  vp::clock_event *job_event;
-  vp::clock_event *plot_event;
-  vp::clock_event *stream_event;
+  vp::ClockEvent *job_event;
+  vp::ClockEvent *plot_event;
+  vp::ClockEvent *stream_event;
 
   int pending_req;
   int enqueued_req;

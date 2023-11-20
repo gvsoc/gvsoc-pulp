@@ -82,7 +82,7 @@ class I2s_periph : public Udma_periph
 
 public:
   I2s_periph(udma *top, int id, int itf_id);
-  vp::io_req_status_e custom_req(vp::io_req *req, uint64_t offset);
+  vp::IoReqStatus custom_req(vp::IoReq *req, uint64_t offset);
   void reset(bool active);
 
 protected:
@@ -90,28 +90,28 @@ protected:
 
 private:
 
-  vp::io_req_status_e i2s_clkcfg_setup_req(int reg_offset, int size, bool is_write, uint8_t *data);
-  vp::io_req_status_e i2s_slv_setup_req(int reg_offset, int size, bool is_write, uint8_t *data);
-  vp::io_req_status_e i2s_mst_setup_req(int reg_offset, int size, bool is_write, uint8_t *data);
-  vp::io_req_status_e i2s_pdm_setup_req(int reg_offset, int size, bool is_write, uint8_t *data);
+  vp::IoReqStatus i2s_clkcfg_setup_req(int reg_offset, int size, bool is_write, uint8_t *data);
+  vp::IoReqStatus i2s_slv_setup_req(int reg_offset, int size, bool is_write, uint8_t *data);
+  vp::IoReqStatus i2s_mst_setup_req(int reg_offset, int size, bool is_write, uint8_t *data);
+  vp::IoReqStatus i2s_pdm_setup_req(int reg_offset, int size, bool is_write, uint8_t *data);
 
-  static void clkgen_event_routine(void *__this, vp::clock_event *event);
-  vp::io_req_status_e check_clkgen0();
-  vp::io_req_status_e check_clkgen1();
-  vp::io_req_status_e reset_clkgen0();
-  vp::io_req_status_e reset_clkgen1();
+  static void clkgen_event_routine(vp::Block *__this, vp::ClockEvent *event);
+  vp::IoReqStatus check_clkgen0();
+  vp::IoReqStatus check_clkgen1();
+  vp::IoReqStatus reset_clkgen0();
+  vp::IoReqStatus reset_clkgen1();
   void handle_clkgen_tick(int clkgen, int itf);
 
-  vp::trace     trace;
-  vp::i2s_slave ch_itf[2];
+  vp::Trace     trace;
+  vp::I2sSlave ch_itf[2];
 
   vp_udma_i2s_i2s_clkcfg_setup  r_i2s_clkcfg_setup;
   vp_udma_i2s_i2s_slv_setup     r_i2s_slv_setup;
   vp_udma_i2s_i2s_mst_setup     r_i2s_mst_setup;
   vp_udma_i2s_i2s_pdm_setup     r_i2s_pdm_setup;
 
-  vp::clock_event *clkgen0_event;
-  vp::clock_event *clkgen1_event;
+  vp::ClockEvent *clkgen0_event;
+  vp::ClockEvent *clkgen1_event;
 
   int sck[2];
   int current_channel;

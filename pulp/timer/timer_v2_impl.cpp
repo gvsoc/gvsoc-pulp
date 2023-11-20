@@ -28,22 +28,19 @@
 
 #include "archi/timer_v2.h"
 
-class timer : public vp::component
+class timer : public vp::Component
 {
 
 public:
 
-  timer(js::config *config);
+  timer(vp::ComponentConf &config);
 
-  int build();
-  void start();
-
-  static vp::io_req_status_e req(void *__this, vp::io_req *req);
+  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
 
 private:
 
-  vp::trace     trace;
-  vp::io_slave in;
+  vp::Trace     trace;
+  vp::IoSlave in;
 
   static void ref_clock_sync(void *__this, bool value);
 
@@ -51,19 +48,19 @@ private:
   void reset(bool active);
   void depack_config(int counter, uint32_t configuration);
   void timer_reset(int counter);
-  vp::io_req_status_e handle_configure(int counter, uint32_t *data, unsigned int size, bool is_write);
-  vp::io_req_status_e handle_value(int counter, uint32_t *data, unsigned int size, bool is_write);
-  vp::io_req_status_e handle_compare(int counter, uint32_t *data, unsigned int size, bool is_write);
+  vp::IoReqStatus handle_configure(int counter, uint32_t *data, unsigned int size, bool is_write);
+  vp::IoReqStatus handle_value(int counter, uint32_t *data, unsigned int size, bool is_write);
+  vp::IoReqStatus handle_compare(int counter, uint32_t *data, unsigned int size, bool is_write);
   void check_state();
   uint64_t get_remaining_cycles(bool is_64, int counter);
   void check_state_counter(bool is_64, int counter);
-  static void event_handler(void *__this, vp::clock_event *event);
+  static void event_handler(vp::Block *__this, vp::ClockEvent *event);
   uint64_t get_compare_value(bool is_64, int counter);
   uint64_t get_value(bool is_64, int counter);
   void set_value(bool is_64, int counter, uint64_t new_value);
 
-  vp::wire_master<bool> irq_itf[2];
-  vp::clock_slave ref_clock_itf;
+  vp::WireMaster<bool> irq_itf[2];
+  vp::ClockSlave ref_clock_itf;
 
   uint32_t value[2];
   uint32_t config[2];
@@ -82,19 +79,32 @@ private:
 
   int64_t sync_time;
 
-  vp::clock_event *event;
+  vp::ClockEvent *event;
 };
 
-timer::timer(js::config *config)
-: vp::component(config)
+timer::timer(vp::ComponentConf &config)
+: vp::Component(config)
 {
+  traces.new_trace("trace", &trace, vp::DEBUG);
+
+  in.set_req_meth(&timer::req);
+  new_slave_port("input", &in);
+
+  event = event_new(timer::event_handler);
+
+  new_master_port("irq_itf_0", &irq_itf[0]);
+  new_master_port("irq_itf_1", &irq_itf[1]);
+
+  ref_clock_itf.set_sync_meth(&timer::ref_clock_sync);
+  new_slave_port("ref_clock", &ref_clock_itf);
+
 
 }
 
 void timer::sync()
 {
-  int64_t cycles = get_cycles() - sync_time;
-  sync_time = get_cycles();
+  int64_t cycles = clock.get_cycles() - sync_time;
+  sync_time = clock.get_cycles();
 
   if (is_64 && is_enabled[0])
   {
@@ -182,7 +192,7 @@ void timer::check_state_counter(bool is_64, int counter)
   }
 }
 
-void timer::event_handler(void *__this, vp::clock_event *event)
+void timer::event_handler(vp::Block *__this, vp::ClockEvent *event)
 {
   timer *_this = (timer *)__this;
   _this->sync();
@@ -239,7 +249,7 @@ void timer::timer_reset(int counter)
   else value[counter] = 0;
 }
 
-vp::io_req_status_e timer::handle_configure(int counter, uint32_t *data, unsigned int size, bool is_write)
+vp::IoReqStatus timer::handle_configure(int counter, uint32_t *data, unsigned int size, bool is_write)
 {
   if (is_write)
   {
@@ -267,7 +277,7 @@ vp::io_req_status_e timer::handle_configure(int counter, uint32_t *data, unsigne
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e timer::handle_value(int counter, uint32_t *data, unsigned int size, bool is_write)
+vp::IoReqStatus timer::handle_value(int counter, uint32_t *data, unsigned int size, bool is_write)
 {
   if (is_write)
   {
@@ -282,7 +292,7 @@ vp::io_req_status_e timer::handle_value(int counter, uint32_t *data, unsigned in
 
 }
 
-vp::io_req_status_e timer::handle_compare(int counter, uint32_t *data, unsigned int size, bool is_write)
+vp::IoReqStatus timer::handle_compare(int counter, uint32_t *data, unsigned int size, bool is_write)
 {
   if (is_write)
   {
@@ -311,7 +321,7 @@ void timer::depack_config(int counter, uint32_t configuration)
   if (counter == 0) is_64 = (configuration >> TIMER_CFG_LO_CASC_BIT) & 1;
 }
 
-vp::io_req_status_e timer::req(void *__this, vp::io_req *req)
+vp::IoReqStatus timer::req(void *__this, vp::IoReq *req)
 {
   timer *_this = (timer *)__this;
 
@@ -373,24 +383,6 @@ vp::io_req_status_e timer::req(void *__this, vp::io_req *req)
 }
 
 
-int timer::build()
-{
-  traces.new_trace("trace", &trace, vp::DEBUG);
-
-  in.set_req_meth(&timer::req);
-  new_slave_port("input", &in);
-
-  event = event_new(timer::event_handler);
-
-  new_master_port("irq_itf_0", &irq_itf[0]);
-  new_master_port("irq_itf_1", &irq_itf[1]);
-
-  ref_clock_itf.set_sync_meth(&timer::ref_clock_sync);
-  new_slave_port("ref_clock", &ref_clock_itf);
-
-  return 0;
-}
-
 void timer::reset(bool active)
 {
   if (active)
@@ -405,15 +397,11 @@ void timer::reset(bool active)
   }
   else
   {
-    sync_time = get_cycles();
+    sync_time = clock.get_cycles();
   }
 }
 
-void timer::start()
-{
-}
-
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new timer(config);
 }

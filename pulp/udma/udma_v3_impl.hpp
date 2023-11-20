@@ -62,7 +62,7 @@ public:
   uint64_t received_size;
   Udma_channel *channel;
 
-  bool prepare_req(vp::io_req *req);
+  bool prepare_req(vp::IoReq *req);
   void set_next(Udma_transfer *next) { this->next = next; }
   Udma_transfer *get_next() { return next; }
   Udma_transfer *next;
@@ -95,15 +95,15 @@ class Udma_channel
 {
 public:
   Udma_channel(udma *top, int id, std::string name);
-  virtual vp::io_req_status_e req(vp::io_req *req, uint64_t offset);
+  virtual vp::IoReqStatus req(vp::IoReq *req, uint64_t offset);
   virtual void reset(bool active);
   virtual bool is_tx() { return false; }
   void set_next(Udma_channel *next) { this->next = next; }
   Udma_channel *get_next() { return next; }
   void event_handler();
-  bool prepare_req(vp::io_req *req);
-  void push_ready_req(vp::io_req *req);
-  bool handle_ready_req_end(vp::io_req *req);
+  bool prepare_req(vp::IoReq *req);
+  void push_ready_req(vp::IoReq *req);
+  bool handle_ready_req_end(vp::IoReq *req);
   virtual bool is_busy() { return false; }
   virtual void handle_ready() { }
   virtual void handle_ready_reqs();
@@ -115,16 +115,16 @@ public:
   void build_reqs_and_enqueue(Udma_transfer *current_req);
 
 protected:
-  vp::trace     trace;
-  Udma_queue<vp::io_req> *ready_reqs;
+  vp::Trace     trace;
+  Udma_queue<vp::IoReq> *ready_reqs;
   udma *top;
 
 private:
-  virtual vp::io_req_status_e saddr_req(vp::io_req *req);
-  virtual vp::io_req_status_e size_req(vp::io_req *req);
-  virtual vp::io_req_status_e cfg_req(vp::io_req *req); 
+  virtual vp::IoReqStatus saddr_req(vp::IoReq *req);
+  virtual vp::IoReqStatus size_req(vp::IoReq *req);
+  virtual vp::IoReqStatus cfg_req(vp::IoReq *req); 
   void enqueue_transfer();
-  virtual void handle_ready_req(vp::io_req *req);
+  virtual void handle_ready_req(vp::IoReq *req);
 
   uint32_t saddr;
   uint32_t size;
@@ -136,12 +136,12 @@ private:
   string name;
   Udma_channel *next;
 
-  vp::clock_event *event;
+  vp::ClockEvent *event;
 
   Udma_queue<Udma_transfer> *free_reqs;
   Udma_queue<Udma_transfer> *pending_reqs;
 
-  vp::trace     state_event;
+  vp::Trace     state_event;
 };
 
 
@@ -168,7 +168,7 @@ public:
   Udma_tx_channel(udma *top, int id, string name) : Udma_channel(top, id, name) {}
   bool is_tx() { return true; }
 
-  void handle_pending_word(void *__this, vp::clock_event *event);
+  void handle_pending_word(vp::Block *__this, vp::ClockEvent *event);
 
 };
 
@@ -212,7 +212,7 @@ class Udma_periph
 {
 public:
   Udma_periph(udma *top, int id);
-  virtual vp::io_req_status_e req(vp::io_req *req, uint64_t offset);
+  virtual vp::IoReqStatus req(vp::IoReq *req, uint64_t offset);
   virtual void reset(bool active);
   void clock_gate(bool is_on);
 
@@ -227,7 +227,7 @@ protected:
   udma *top;
 
 private:
-  virtual vp::io_req_status_e custom_req(vp::io_req *req, uint64_t offset);
+  virtual vp::IoReqStatus custom_req(vp::IoReq *req, uint64_t offset);
   bool is_on;
 };
 
@@ -245,15 +245,15 @@ public:
   void set_eot_event(int event) { this->eot_event = event; }
 
 private:  
-  static void data_grant(void *_this, vp::io_req *req);
-  static void data_response(void *_this, vp::io_req *req);
-  static void handle_pending_word(void *__this, vp::clock_event *event);
+  static void data_grant(void *_this, vp::IoReq *req);
+  static void data_response(void *_this, vp::IoReq *req);
+  static void handle_pending_word(vp::Block *__this, vp::ClockEvent *event);
   void check_state();
 
-  vp::io_master io_itf;
-  vp::clock_event *pending_access_event;
-  vp::io_req *pending_req;
-  vp::io_req io_req;
+  vp::IoMaster io_itf;
+  vp::ClockEvent *pending_access_event;
+  vp::IoReq *pending_req;
+  vp::IoReq io_req;
   unsigned int addr;
   unsigned int current_addr;
   int eot_event = -1;
@@ -294,15 +294,15 @@ public:
 private:
   void reset(bool active);
   void check_state();
-  static void handle_pending_word(void *__this, vp::clock_event *event);
+  static void handle_pending_word(vp::Block *__this, vp::ClockEvent *event);
 
   I2c_periph_v2 *periph;
 
-  vp::clock_event *pending_word_event;
+  vp::ClockEvent *pending_word_event;
 
   uint32_t pending_word;
   int pending_bits;
-  vp::io_req *pending_req;
+  vp::IoReq *pending_req;
   int64_t next_bit_cycle;
 };
 
@@ -331,11 +331,11 @@ class I2c_periph_v2 : public Udma_periph
 
 public:
   I2c_periph_v2(udma *top, int id, int itf_id);
-  vp::io_req_status_e custom_req(vp::io_req *req, uint64_t offset);
+  vp::IoReqStatus custom_req(vp::IoReq *req, uint64_t offset);
   void reset(bool active);
 
 protected:
-  vp::i2c_master i2c_itf;
+  vp::I2cMaster i2c_itf;
   i2c_periph_state_e state;
   unsigned int pending_value;
   int pending_value_bits;
@@ -350,11 +350,11 @@ protected:
   int prev_scl;
 
 private:
-  vp::io_req_status_e status_req(vp::io_req *req);
-  vp::io_req_status_e setup_req(vp::io_req *req);
+  vp::IoReqStatus status_req(vp::IoReq *req);
+  vp::IoReqStatus setup_req(vp::IoReq *req);
   static void rx_sync(void *, int scl, int data);
 
-  vp::trace     trace;
+  vp::Trace     trace;
 };
 
 
@@ -411,16 +411,16 @@ public:
 private:
   void reset(bool active);
   void check_state();
-  static void handle_pending_word(void *__this, vp::clock_event *event);
+  static void handle_pending_word(vp::Block *__this, vp::ClockEvent *event);
 
   Uart_periph_v1 *periph;
 
-  vp::clock_event *pending_word_event;
+  vp::ClockEvent *pending_word_event;
 
   uint32_t pending_word;
   int pending_bits;
   uart_tx_state_e state;
-  vp::io_req *pending_req;
+  vp::IoReq *pending_req;
   int parity;
   int64_t next_bit_cycle;
   int stop_bits;
@@ -435,7 +435,7 @@ class Uart_periph_v1 : public Udma_periph
 
 public:
   Uart_periph_v1(udma *top, int id, int itf_id);
-  vp::io_req_status_e custom_req(vp::io_req *req, uint64_t offset);
+  vp::IoReqStatus custom_req(vp::IoReq *req, uint64_t offset);
   void reset(bool active);
 
   int parity;
@@ -447,17 +447,17 @@ public:
   int rx_pe;
 
 protected:
-  vp::uart_master uart_itf;
+  vp::UartMaster uart_itf;
 
 private:
-  vp::io_req_status_e status_req(vp::io_req *req);
-  vp::io_req_status_e setup_req(vp::io_req *req);
+  vp::IoReqStatus status_req(vp::IoReq *req);
+  vp::IoReqStatus setup_req(vp::IoReq *req);
   void set_setup_reg(uint32_t value);
   static void rx_sync(void *, int data);
 
   uint32_t setup_reg_value;
 
-  vp::trace     trace;
+  vp::Trace     trace;
 };
 
 
@@ -483,24 +483,24 @@ class Cpi_periph_v1 : public Udma_periph
 
 public:
   Cpi_periph_v1(udma *top, int id, int itf_id);
-  vp::io_req_status_e custom_req(vp::io_req *req, uint64_t offset);
+  vp::IoReqStatus custom_req(vp::IoReq *req, uint64_t offset);
   void reset(bool active);
   void handle_sof();
 
 protected:
-  vp::cpi_slave cpi_itf;
+  vp::CpiSlave cpi_itf;
 
 private:
   static void sync(void *__this, int pclk, int href, int vsync, int data);
   static void sync_cycle(void *__this, int href, int vsync, int data);
-  vp::io_req_status_e handle_global_access(bool is_write, uint32_t *data);
-  vp::io_req_status_e handle_l1_access(bool is_write, uint32_t *data);
-  vp::io_req_status_e handle_ur_access(bool is_write, uint32_t *data);
-  vp::io_req_status_e handle_size_access(bool is_write, uint32_t *data);
-  vp::io_req_status_e handle_filter_access(bool is_write, uint32_t *data);
+  vp::IoReqStatus handle_global_access(bool is_write, uint32_t *data);
+  vp::IoReqStatus handle_l1_access(bool is_write, uint32_t *data);
+  vp::IoReqStatus handle_ur_access(bool is_write, uint32_t *data);
+  vp::IoReqStatus handle_size_access(bool is_write, uint32_t *data);
+  vp::IoReqStatus handle_filter_access(bool is_write, uint32_t *data);
   void push_pixel(uint32_t pixel);
 
-  vp::trace     trace;
+  vp::Trace     trace;
 
   int pending_byte;
   bool has_pending_byte;
@@ -640,29 +640,29 @@ private:
 
 // public:
 //   Hyper_periph_v1(udma *top, int id, int itf_id);
-//   vp::io_req_status_e custom_req(vp::io_req *req, uint64_t offset);
+//   vp::IoReqStatus custom_req(vp::IoReq *req, uint64_t offset);
 //   static void rx_sync(void *__this, int data);
 //   void reset(bool active);
-//   static void handle_pending_word(void *__this, vp::clock_event *event);
+//   static void handle_pending_word(vp::Block *__this, vp::ClockEvent *event);
 //   void check_state();
 //   void handle_ready_reqs();
 
 // protected:
-//   vp::hyper_master hyper_itf;
+//   vp::HyperMaster hyper_itf;
 //   unsigned int *regs; 
 //   int clkdiv;
 //   Hyper_tx_channel *tx_channel;
 //   Hyper_rx_channel *rx_channel;
 
 // private:
-//   vp::trace     trace;
+//   vp::Trace     trace;
 
 //   vector<Udma_transfer *> pending_transfers;
 
 //   int pending_bytes;
-//   vp::clock_event *pending_word_event;
+//   vp::ClockEvent *pending_word_event;
 //   int64_t next_bit_cycle;
-//   vp::io_req *pending_req;
+//   vp::IoReq *pending_req;
 //   uint32_t pending_word;
 //   int transfer_size;
 //   hyper_state_e state;
@@ -693,21 +693,21 @@ private:
 
 // public:
 //   Hyper_periph_v2(udma *top, int id, int itf_id);
-//   vp::io_req_status_e custom_req(vp::io_req *req, uint64_t offset);
+//   vp::IoReqStatus custom_req(vp::IoReq *req, uint64_t offset);
 //   static void rx_sync(void *__this, int data);
 //   void reset(bool active);
-//   static void handle_pending_word(void *__this, vp::clock_event *event);
+//   static void handle_pending_word(vp::Block *__this, vp::ClockEvent *event);
 //   void check_state();
 //   void handle_ready_reqs();
 
 // protected:
-//   vp::hyper_master hyper_itf;
+//   vp::HyperMaster hyper_itf;
 //   unsigned int *regs;
 //   Hyper_v2_tx_channel *tx_channel;
 //   Hyper_v2_rx_channel *rx_channel;
 
 // private:
-//   vp::trace     trace;
+//   vp::Trace     trace;
 
 //   vector<Udma_transfer *> pending_transfers;
 
@@ -717,9 +717,9 @@ private:
 
 //   int eot_event;
 //   int pending_bytes;
-//   vp::clock_event *pending_word_event;
+//   vp::ClockEvent *pending_word_event;
 //   int64_t next_bit_cycle;
-//   vp::io_req *pending_req;
+//   vp::IoReq *pending_req;
 //   uint32_t pending_word;
 //   int transfer_size;
 //   hyper_state_e state;
@@ -828,10 +828,10 @@ class Hyper_periph_v3 : public Udma_periph
 
 public:
   Hyper_periph_v3(udma *top, int id, int itf_id);
-  vp::io_req_status_e custom_req(vp::io_req *req, uint64_t offset, int id);
+  vp::IoReqStatus custom_req(vp::IoReq *req, uint64_t offset, int id);
   static void rx_sync(void *__this, int data);
   void reset(bool active);
-  static void handle_pending_word(void *__this, vp::clock_event *event);
+  static void handle_pending_word(vp::Block *__this, vp::ClockEvent *event);
   void check_state();
   void handle_ready_reqs();
 
@@ -841,7 +841,7 @@ public:
   void width_modulator_16b_32b();
   void width_modulator_32b_16b();
   int update_trans_id_alloc();
-  vp::io_req_status_e req(vp::io_req *req, uint64_t offset);
+  vp::IoReqStatus req(vp::IoReq *req, uint64_t offset);
   int transfer_arbiter(int id);
   void fetch_from_fifos();
   void set_device(int cs);
@@ -851,7 +851,7 @@ public:
   int get_nb_tran(int id);
 
 protected:
-  vp::hyper_master hyper_itf;
+  vp::HyperMaster hyper_itf;
   unsigned int **regs;
   unsigned int *common_regs;
   int clkdiv;
@@ -859,14 +859,14 @@ protected:
   Hyper_v3_rx_channel *rx_channel;
 
 private:
-  vp::trace     trace;
+  vp::Trace     trace;
 
   vector<Udma_transfer *> pending_transfers;
 
   int pending_bytes;
-  vp::clock_event *pending_word_event;
+  vp::ClockEvent *pending_word_event;
   int64_t next_bit_cycle;
-  vp::io_req *pending_req;
+  vp::IoReq *pending_req;
   uint32_t pending_word;
   int transfer_size;
   hyper_state_e state;
@@ -898,9 +898,9 @@ private:
   bool continuous_mode;
   int transfer_size_mode;
   void enqueue_transfer(int id);
-  vp::io_req_status_e hyper_cfg_req(vp::io_req *req, int id);
-  vp::io_req_status_e access_common_regs(vp::io_req *req, uint64_t offset, int id);
-  vp::io_req_status_e access_private_regs(vp::io_req *req, uint64_t offset, int id);
+  vp::IoReqStatus hyper_cfg_req(vp::IoReq *req, int id);
+  vp::IoReqStatus access_common_regs(vp::IoReq *req, uint64_t offset, int id);
+  vp::IoReqStatus access_private_regs(vp::IoReq *req, uint64_t offset, int id);
   Udma_queue<Hyper_transfer> *free_fifo[HYPER_NB_CHANNELS];
   Udma_queue<Hyper_transfer> *pending_fifo[HYPER_NB_CHANNELS];
   Hyper_transfer *current_command;
@@ -941,49 +941,47 @@ T *Udma_queue<T>::pop()
 
 
 
-class udma : public vp::component
+class udma : public vp::Component
 {
   friend class Udma_periph;
   friend class Udma_rx_channel;
 
 public:
 
-  udma(js::config *config);
+  udma(vp::ComponentConf &config);
 
-  int build();
-  void start();
   void reset(bool active);
 
   void enqueue_ready(Udma_channel *channel);
 
-  static void channel_handler(void *__this, vp::clock_event *event);
-  void free_read_req(vp::io_req *req);
+  static void channel_handler(vp::Block *__this, vp::ClockEvent *event);
+  void free_read_req(vp::IoReq *req);
 
   void trigger_event(int event);
 
-  vp::trace *get_trace() { return &this->trace; }
-  vp::clock_engine *get_periph_clock() { return this->periph_clock; }
+  vp::Trace *get_trace() { return &this->trace; }
+  vp::ClockEngine *get_periph_clock() { return this->periph_clock; }
 
 protected:
-  vp::io_master l2_itf;
-  void push_l2_write_req(vp::io_req *req);
+  vp::IoMaster l2_itf;
+  void push_l2_write_req(vp::IoReq *req);
 
 private:
 
   void check_state();
 
-  vp::io_req_status_e conf_req(vp::io_req *req, uint64_t offset);
-  vp::io_req_status_e periph_req(vp::io_req *req, uint64_t offset);
-  static vp::io_req_status_e req(void *__this, vp::io_req *req);
-  static void event_handler(void *__this, vp::clock_event *event);
-  static void l2_grant(void *__this, vp::io_req *req);
-  static void l2_response(void *__this, vp::io_req *req);
-  static void clk_reg(component *_this, component *clock);
+  vp::IoReqStatus conf_req(vp::IoReq *req, uint64_t offset);
+  vp::IoReqStatus periph_req(vp::IoReq *req, uint64_t offset);
+  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
+  static void event_handler(vp::Block *__this, vp::ClockEvent *event);
+  static void l2_grant(void *__this, vp::IoReq *req);
+  static void l2_response(void *__this, vp::IoReq *req);
+  static void clk_reg(Component *_this, Component *clock);
 
-  vp::trace     trace;
-  vp::io_slave in;
-  vp::clk_slave    periph_clock_itf;
-  vp::clock_engine *periph_clock;
+  vp::Trace     trace;
+  vp::IoSlave in;
+  vp::ClkSlave    periph_clock_itf;
+  vp::ClockEngine *periph_clock;
   
   int nb_periphs;
   int l2_read_fifo_size;
@@ -991,12 +989,12 @@ private:
   Udma_queue<Udma_channel> *ready_rx_channels;
   Udma_queue<Udma_channel> *ready_tx_channels;
   uint32_t clock_gating;
-  vp::clock_event *event;
-  Udma_queue<vp::io_req> *l2_read_reqs;
-  Udma_queue<vp::io_req> *l2_write_reqs;
-  Udma_queue<vp::io_req> *l2_read_waiting_reqs;
+  vp::ClockEvent *event;
+  Udma_queue<vp::IoReq> *l2_read_reqs;
+  Udma_queue<vp::IoReq> *l2_write_reqs;
+  Udma_queue<vp::IoReq> *l2_read_waiting_reqs;
   
-  vp::wire_master<int>    event_itf;
+  vp::WireMaster<int>    event_itf;
 };
 
 

@@ -26,31 +26,30 @@
 #include <string.h>
 #include "archi/itc_v1.h"
 
-class itc : public vp::component
+class itc : public vp::Component
 {
 
 public:
 
-  itc(js::config *config);
+  itc(vp::ComponentConf &config);
 
-  int build();
   void reset(bool active);
 
 
 private:
 
-  static vp::io_req_status_e req(void *__this, vp::io_req *req);
+  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
 
-  vp::io_req_status_e itc_mask_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
-  vp::io_req_status_e itc_mask_set_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
-  vp::io_req_status_e itc_mask_clr_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
-  vp::io_req_status_e itc_status_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
-  vp::io_req_status_e itc_status_set_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
-  vp::io_req_status_e itc_status_clr_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
-  vp::io_req_status_e itc_ack_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
-  vp::io_req_status_e itc_ack_set_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
-  vp::io_req_status_e itc_ack_clr_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
-  vp::io_req_status_e itc_fifo_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
+  vp::IoReqStatus itc_mask_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
+  vp::IoReqStatus itc_mask_set_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
+  vp::IoReqStatus itc_mask_clr_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
+  vp::IoReqStatus itc_status_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
+  vp::IoReqStatus itc_status_set_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
+  vp::IoReqStatus itc_status_clr_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
+  vp::IoReqStatus itc_ack_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
+  vp::IoReqStatus itc_ack_set_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
+  vp::IoReqStatus itc_ack_clr_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
+  vp::IoReqStatus itc_fifo_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
 
   void itc_status_setValue(uint32_t value);
 
@@ -60,8 +59,8 @@ private:
   static void in_event_sync(void *__this, bool active, int id);
   static void soc_event_sync(void *__this, int event);
 
-  vp::trace     trace;
-  vp::io_slave in;
+  vp::Trace     trace;
+  vp::IoSlave in;
 
   uint32_t ack;
   uint32_t status;
@@ -77,18 +76,42 @@ private:
 
   int sync_irq;
 
-  vp::wire_master<int>    irq_req_itf;
-  vp::wire_slave<int>     irq_ack_itf;
-  vp::wire_slave<int>     soc_event_itf;
+  vp::WireMaster<int>    irq_req_itf;
+  vp::WireSlave<int>     irq_ack_itf;
+  vp::WireSlave<int>     soc_event_itf;
 
 
-  vp::wire_slave<bool> in_event_itf[32];
+  vp::WireSlave<bool> in_event_itf[32];
 
 };
 
-itc::itc(js::config *config)
-: vp::component(config)
+itc::itc(vp::ComponentConf &config)
+: vp::Component(config)
 {
+  traces.new_trace("trace", &trace, vp::DEBUG);
+
+  in.set_req_meth(&itc::req);
+  new_slave_port("input", &in);
+
+  new_master_port("irq_req", &irq_req_itf);
+
+  soc_event_itf.set_sync_meth(&itc::soc_event_sync);
+  new_slave_port("soc_event", &soc_event_itf);
+
+  irq_ack_itf.set_sync_meth(&itc::irq_ack_sync);
+  new_slave_port("irq_ack", &irq_ack_itf);
+
+  nb_fifo_events = get_js_config()->get_child_int("**/nb_fifo_events");
+  fifo_irq = get_js_config()->get_child_int("**/fifo_irq");
+
+  fifo_event = new int[nb_fifo_events];
+
+  for (int i=0; i<32; i++)
+  {
+    in_event_itf[i].set_sync_meth_muxed(&itc::in_event_sync, i);
+    new_slave_port("in_event_" + std::to_string(i), &in_event_itf[i]);
+  }
+
 
 }
 
@@ -113,7 +136,7 @@ void itc::check_state()
 
 }
 
-vp::io_req_status_e itc::itc_mask_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
+vp::IoReqStatus itc::itc_mask_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
 {
   if (!is_write) *data = mask;
   else {
@@ -126,7 +149,7 @@ vp::io_req_status_e itc::itc_mask_ioReq(uint32_t offset, uint32_t *data, uint32_
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e itc::itc_mask_set_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
+vp::IoReqStatus itc::itc_mask_set_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
 {
   if (!is_write) return vp::IO_REQ_INVALID;
 
@@ -138,7 +161,7 @@ vp::io_req_status_e itc::itc_mask_set_ioReq(uint32_t offset, uint32_t *data, uin
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e itc::itc_mask_clr_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
+vp::IoReqStatus itc::itc_mask_clr_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
 {
   if (!is_write) return vp::IO_REQ_INVALID;
 
@@ -150,7 +173,7 @@ vp::io_req_status_e itc::itc_mask_clr_ioReq(uint32_t offset, uint32_t *data, uin
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e itc::itc_status_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
+vp::IoReqStatus itc::itc_status_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
 {
   if (!is_write) *data = status;
   else {
@@ -160,7 +183,7 @@ vp::io_req_status_e itc::itc_status_ioReq(uint32_t offset, uint32_t *data, uint3
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e itc::itc_status_set_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
+vp::IoReqStatus itc::itc_status_set_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
 {
   if (!is_write) return vp::IO_REQ_INVALID;
 
@@ -169,7 +192,7 @@ vp::io_req_status_e itc::itc_status_set_ioReq(uint32_t offset, uint32_t *data, u
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e itc::itc_status_clr_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
+vp::IoReqStatus itc::itc_status_clr_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
 {
   if (!is_write) return vp::IO_REQ_INVALID;
 
@@ -178,7 +201,7 @@ vp::io_req_status_e itc::itc_status_clr_ioReq(uint32_t offset, uint32_t *data, u
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e itc::itc_ack_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
+vp::IoReqStatus itc::itc_ack_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
 {
   if (!is_write) *data = ack;
   else {
@@ -189,7 +212,7 @@ vp::io_req_status_e itc::itc_ack_ioReq(uint32_t offset, uint32_t *data, uint32_t
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e itc::itc_ack_set_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
+vp::IoReqStatus itc::itc_ack_set_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
 {
   if (!is_write) return vp::IO_REQ_INVALID;
 
@@ -199,7 +222,7 @@ vp::io_req_status_e itc::itc_ack_set_ioReq(uint32_t offset, uint32_t *data, uint
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e itc::itc_ack_clr_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
+vp::IoReqStatus itc::itc_ack_clr_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
 {
   if (!is_write) return vp::IO_REQ_INVALID;
 
@@ -209,7 +232,7 @@ vp::io_req_status_e itc::itc_ack_clr_ioReq(uint32_t offset, uint32_t *data, uint
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e itc::itc_fifo_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
+vp::IoReqStatus itc::itc_fifo_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
 {
   if (is_write) return vp::IO_REQ_INVALID;
 
@@ -230,7 +253,7 @@ vp::io_req_status_e itc::itc_fifo_ioReq(uint32_t offset, uint32_t *data, uint32_
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e itc::req(void *__this, vp::io_req *req)
+vp::IoReqStatus itc::req(void *__this, vp::IoReq *req)
 {
   itc *_this = (itc *)__this;
 
@@ -301,35 +324,6 @@ void itc::in_event_sync(void *__this, bool active, int id)
   _this->check_state();
 }
 
-int itc::build()
-{
-  traces.new_trace("trace", &trace, vp::DEBUG);
-
-  in.set_req_meth(&itc::req);
-  new_slave_port("input", &in);
-
-  new_master_port("irq_req", &irq_req_itf);
-
-  soc_event_itf.set_sync_meth(&itc::soc_event_sync);
-  new_slave_port("soc_event", &soc_event_itf);
-
-  irq_ack_itf.set_sync_meth(&itc::irq_ack_sync);
-  new_slave_port("irq_ack", &irq_ack_itf);
-
-  nb_fifo_events = get_config_int("**/nb_fifo_events");
-  fifo_irq = get_config_int("**/fifo_irq");
-
-  fifo_event = new int[nb_fifo_events];
-
-  for (int i=0; i<32; i++)
-  {
-    in_event_itf[i].set_sync_meth_muxed(&itc::in_event_sync, i);
-    new_slave_port("in_event_" + std::to_string(i), &in_event_itf[i]);
-  }
-
-  return 0;
-}
-
 
 void itc::reset(bool active)
 {
@@ -349,7 +343,7 @@ void itc::reset(bool active)
 
 
 
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new itc(config);
 }

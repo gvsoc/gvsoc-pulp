@@ -27,22 +27,19 @@
 
 #define MAX_PUTC_LENGTH 1024
 
-class Stdout : public vp::component
+class Stdout : public vp::Component
 {
 
 public:
 
-  Stdout(js::config *config);
+  Stdout(vp::ComponentConf &config);
 
-  int build();
-  void start();
-
-  static vp::io_req_status_e req(void *__this, vp::io_req *req);
+  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
 
 private:
 
-  vp::trace     trace;
-  vp::io_slave in;
+  vp::Trace     trace;
+  vp::IoSlave in;
 
   int nb_cluster;
   int nb_core;
@@ -52,13 +49,28 @@ private:
 
 };
 
-Stdout::Stdout(js::config *config)
-: vp::component(config)
+Stdout::Stdout(vp::ComponentConf &config)
+: vp::Component(config)
 {
+  traces.new_trace("trace", &trace, vp::DEBUG);
+  in.set_req_meth(&Stdout::req);
+  new_slave_port("input", &in);
+
+  nb_cluster = get_js_config()->get_child_int("max_cluster");
+  nb_core = get_js_config()->get_child_int("max_core_per_cluster");
+
+  putc_buffer_pos = new int[nb_cluster*nb_core];
+  for (int j=0; j<nb_cluster; j++) {
+    for (int i=0; i<nb_core; i++) {
+      putc_buffer.push_back(new char[MAX_PUTC_LENGTH]);
+      putc_buffer_pos[j*nb_core+i] = 0;
+    }
+  }
+
 
 }
 
-vp::io_req_status_e Stdout::req(void *__this, vp::io_req *req)
+vp::IoReqStatus Stdout::req(void *__this, vp::IoReq *req)
 {
   Stdout *_this = (Stdout *)__this;
 
@@ -89,31 +101,7 @@ vp::io_req_status_e Stdout::req(void *__this, vp::io_req *req)
   return vp::IO_REQ_OK;
 }
 
-int Stdout::build()
-{
-  traces.new_trace("trace", &trace, vp::DEBUG);
-  in.set_req_meth(&Stdout::req);
-  new_slave_port("input", &in);
-
-  nb_cluster = get_config_int("max_cluster");
-  nb_core = get_config_int("max_core_per_cluster");
-
-  putc_buffer_pos = new int[nb_cluster*nb_core];
-  for (int j=0; j<nb_cluster; j++) {
-    for (int i=0; i<nb_core; i++) {
-      putc_buffer.push_back(new char[MAX_PUTC_LENGTH]);
-      putc_buffer_pos[j*nb_core+i] = 0;
-    }
-  }
-
-  return 0;
-}
-
-void Stdout::start()
-{
-}
-
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new Stdout(config);
 }

@@ -28,20 +28,18 @@
 #include <errno.h>
 #include <string.h>
 
-class job_fifo : public vp::component {
+class job_fifo : public vp::Component {
 
 public:
 
-  job_fifo(js::config *config);
-
-  int build();
+  job_fifo(vp::ComponentConf &config);
 
 private:
 
-  vp::trace trace;
-  vp::wire_master<bool> irq; 
-  vp::io_slave in;
-  vp::io_slave fifo_in;
+  vp::Trace trace;
+  vp::WireMaster<bool> irq; 
+  vp::IoSlave in;
+  vp::IoSlave fifo_in;
 
   unsigned int size;
   unsigned int width;
@@ -52,18 +50,41 @@ private:
 
   uint8_t **fifo;
 
-  static vp::io_req_status_e fifo_push(void *__this, vp::io_req *req);
-  static vp::io_req_status_e req(void *__this, vp::io_req *req);
+  static vp::IoReqStatus fifo_push(void *__this, vp::IoReq *req);
+  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
 
 };
 
-job_fifo::job_fifo(js::config *config)
-: vp::component(config)
+job_fifo::job_fifo(vp::ComponentConf &config)
+: vp::Component(config)
 {
+  this->in.set_req_meth(&job_fifo::req);
+  new_slave_port("input", &this->in);
+
+  this->fifo_in.set_req_meth(&job_fifo::fifo_push);
+  new_slave_port("fifo", &this->fifo_in);
+
+  new_master_port("irq", &this->irq);
+
+  this->traces.new_trace("trace", &this->trace, vp::DEBUG);
+
+  this->fifo_head = 0;
+  this->fifo_tail = 0;
+  this->nb_elems = 0;
+
+  this->size = this->get_js_config()->get_child_int("size");
+  this->width = this->get_js_config()->get_child_int("width");
+
+  this->fifo = new uint8_t *[this->size];
+
+  for (unsigned int i=0; i<this->size; i++) {
+    this->fifo[i] = new uint8_t[this->width/8];
+  }
+
 
 }
 
-vp::io_req_status_e job_fifo::req(void *__this, vp::io_req *req)
+vp::IoReqStatus job_fifo::req(void *__this, vp::IoReq *req)
 {
   job_fifo *_this = (job_fifo *)__this;
 
@@ -108,7 +129,7 @@ vp::io_req_status_e job_fifo::req(void *__this, vp::io_req *req)
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e job_fifo::fifo_push(void *__this, vp::io_req *req)
+vp::IoReqStatus job_fifo::fifo_push(void *__this, vp::IoReq *req)
 {
   job_fifo *_this = (job_fifo *)__this;
 
@@ -135,35 +156,7 @@ vp::io_req_status_e job_fifo::fifo_push(void *__this, vp::io_req *req)
   return vp::IO_REQ_OK;
 }
 
-int job_fifo::build()
-{
-  this->in.set_req_meth(&job_fifo::req);
-  new_slave_port("input", &this->in);
-
-  this->fifo_in.set_req_meth(&job_fifo::fifo_push);
-  new_slave_port("fifo", &this->fifo_in);
-
-  new_master_port("irq", &this->irq);
-
-  this->traces.new_trace("trace", &this->trace, vp::DEBUG);
-
-  this->fifo_head = 0;
-  this->fifo_tail = 0;
-  this->nb_elems = 0;
-
-  this->size = this->get_config_int("size");
-  this->width = this->get_config_int("width");
-
-  this->fifo = new uint8_t *[this->size];
-
-  for (unsigned int i=0; i<this->size; i++) {
-    this->fifo[i] = new uint8_t[this->width/8];
-  }
-
-  return 0;
-}
-
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new job_fifo(config);
 }
