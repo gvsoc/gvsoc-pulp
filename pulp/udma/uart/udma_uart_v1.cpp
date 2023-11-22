@@ -132,7 +132,7 @@ vp::IoReqStatus Uart_periph_v1::custom_req(vp::IoReq *req, uint64_t offset)
 }
 
 
-void Uart_periph_v1::rx_sync(void *__this, int data)
+void Uart_periph_v1::rx_sync(vp::Block *__this, int data)
 {
   Uart_periph_v1 *_this = (Uart_periph_v1 *)__this;
   (static_cast<Uart_rx_channel *>(_this->channel0))->handle_rx_bit(data);
@@ -144,7 +144,7 @@ void Uart_periph_v1::rx_sync(void *__this, int data)
 Uart_tx_channel::Uart_tx_channel(udma *top, Uart_periph_v1 *periph, int id, string name)
 : Udma_tx_channel(top, id, name), periph(periph)
 {
-  pending_word_event = top->event_new(this, Uart_tx_channel::handle_pending_word);
+  pending_word_event = top->event_new((vp::Block *)this, Uart_tx_channel::handle_pending_word);
 }
 
 

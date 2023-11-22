@@ -44,7 +44,7 @@ Hyper_periph_v3::Hyper_periph_v3(udma *top, int id, int itf_id) : Udma_periph(to
   }
   this->common_regs = new unsigned int[HYPER_NB_COMMON_REGS];
 
-  this->pending_word_event = top->event_new(this, Hyper_periph_v3::handle_pending_word);
+  this->pending_word_event = top->event_new((vp::Block *)this, Hyper_periph_v3::handle_pending_word);
 
   this->pending_bytes = 0;
   this->next_bit_cycle = -1;
@@ -91,7 +91,7 @@ void Hyper_periph_v3::reset(bool active)
 }
 
 
-void Hyper_periph_v3::rx_sync(void *__this, int data)
+void Hyper_periph_v3::rx_sync(vp::Block *__this, int data)
 {
   Hyper_periph_v3 *_this = (Hyper_periph_v3 *)__this;
   (static_cast<Hyper_v3_rx_channel *>(_this->channel0))->handle_rx_data(data);

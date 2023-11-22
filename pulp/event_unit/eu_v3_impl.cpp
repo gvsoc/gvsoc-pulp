@@ -66,7 +66,7 @@ public:
   void check_state();
 
 private:
-  static void sync(void *__this, int event);
+  static void sync(vp::Block *__this, int event);
 
   Event_unit *top;
   vp::Trace     trace;
@@ -211,7 +211,7 @@ public:
 
   static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
   static vp::IoReqStatus demux_req(vp::Block *__this, vp::IoReq *req, int core);
-  static void irq_ack_sync(void *__this, int irq, int core);
+  static void irq_ack_sync(vp::Block *__this, int irq, int core);
 
 protected:
 
@@ -231,7 +231,7 @@ protected:
   vp::IoReqStatus sw_events_req(vp::IoReq *req, uint64_t offset, bool is_write, uint32_t *data);
   void trigger_event(int event, uint32_t core_mask);
   void send_event(int core, uint32_t mask);
-  static void in_event_sync(void *__this, bool active, int id);
+  static void in_event_sync(vp::Block *__this, bool active, int id);
 
 };
 
@@ -457,8 +457,8 @@ void Core_event_unit::build(Event_unit *top, int core_id)
   demux_in.set_req_meth_muxed(&Event_unit::demux_req, core_id);
   top->new_slave_port("demux_in_" + std::to_string(core_id), &demux_in);
 
-  wakeup_event = top->event_new((void *)this, Core_event_unit::wakeup_handler);
-  irq_wakeup_event = top->event_new((void *)this, Core_event_unit::irq_wakeup_handler);
+  wakeup_event = top->event_new((vp::Block *)this, Core_event_unit::wakeup_handler);
+  irq_wakeup_event = top->event_new((vp::Block *)this, Core_event_unit::irq_wakeup_handler);
 
   top->new_master_port("irq_req_" + std::to_string(core_id), &irq_req_itf);
 
@@ -580,7 +580,7 @@ vp::IoReqStatus Core_event_unit::req(vp::IoReq *req, uint64_t offset, bool is_wr
   return vp::IO_REQ_OK;
 }
 
-void Event_unit::irq_ack_sync(void *__this, int irq, int core)
+void Event_unit::irq_ack_sync(vp::Block *__this, int irq, int core)
 {
   Event_unit *_this = (Event_unit *)__this;
 
@@ -645,7 +645,7 @@ vp::IoReqStatus Event_unit::demux_req(vp::Block *__this, vp::IoReq *req, int cor
   return vp::IO_REQ_INVALID;
 }
 
-void Event_unit::in_event_sync(void *__this, bool active, int id)
+void Event_unit::in_event_sync(vp::Block *__this, bool active, int id)
 {
   Event_unit *_this = (Event_unit *)__this;
   int core_id = id >> 16;
@@ -1480,7 +1480,7 @@ void Soc_event_unit::check_state()
   }
 }
 
-void Soc_event_unit::sync(void *__this, int event)
+void Soc_event_unit::sync(vp::Block *__this, int event)
 {
   Soc_event_unit *_this = (Soc_event_unit *)__this;
   _this->trace.msg("Received soc event (event: %d)\n", event);

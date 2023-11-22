@@ -115,8 +115,8 @@ public:
 
 private:
 
-  static void sync(void *__this, int tck, int tdi, int tms, int trst);
-  static void sync_cycle(void *__this, int tdi, int tms, int trst);
+  static void sync(vp::Block *__this, int tck, int tdi, int tms, int trst);
+  static void sync_cycle(vp::Block *__this, int tdi, int tms, int trst);
   static vp::IoReqStatus core_req(vp::Block *__this, vp::IoReq *req);
   vp::IoReqStatus going_req(int reg_offset, int size, bool is_write, uint8_t *data);
   vp::IoReqStatus resume_req(int reg_offset, int size, bool is_write, uint8_t *data);
@@ -635,7 +635,7 @@ void riscv_dtm::tck_edge(int tck, int tdi, int tms, int trst)
   this->tap_update(tdi, tms, tck);
 }
 
-void riscv_dtm::sync(void *__this, int tck, int tdi, int tms, int trst)
+void riscv_dtm::sync(vp::Block *__this, int tck, int tdi, int tms, int trst)
 {
   riscv_dtm *_this = (riscv_dtm *)__this;
 
@@ -648,7 +648,7 @@ void riscv_dtm::sync(void *__this, int tck, int tdi, int tms, int trst)
 }
 
 
-void riscv_dtm::sync_cycle(void *__this, int tdi, int tms, int trst)
+void riscv_dtm::sync_cycle(vp::Block *__this, int tdi, int tms, int trst)
 {
   riscv_dtm *_this = (riscv_dtm *)__this;
   _this->tck_edge(1, tdi, tms, trst);

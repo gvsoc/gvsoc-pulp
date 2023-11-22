@@ -352,7 +352,7 @@ protected:
 private:
   vp::IoReqStatus status_req(vp::IoReq *req);
   vp::IoReqStatus setup_req(vp::IoReq *req);
-  static void rx_sync(void *, int scl, int data);
+  static void rx_sync(vp::Block *, int scl, int data);
 
   vp::Trace     trace;
 };
@@ -453,7 +453,7 @@ private:
   vp::IoReqStatus status_req(vp::IoReq *req);
   vp::IoReqStatus setup_req(vp::IoReq *req);
   void set_setup_reg(uint32_t value);
-  static void rx_sync(void *, int data);
+  static void rx_sync(vp::Block *, int data);
 
   uint32_t setup_reg_value;
 
@@ -491,8 +491,8 @@ protected:
   vp::CpiSlave cpi_itf;
 
 private:
-  static void sync(void *__this, int pclk, int href, int vsync, int data);
-  static void sync_cycle(void *__this, int href, int vsync, int data);
+  static void sync(vp::Block *__this, int pclk, int href, int vsync, int data);
+  static void sync_cycle(vp::Block *__this, int href, int vsync, int data);
   vp::IoReqStatus handle_global_access(bool is_write, uint32_t *data);
   vp::IoReqStatus handle_l1_access(bool is_write, uint32_t *data);
   vp::IoReqStatus handle_ur_access(bool is_write, uint32_t *data);
@@ -641,7 +641,7 @@ private:
 // public:
 //   Hyper_periph_v1(udma *top, int id, int itf_id);
 //   vp::IoReqStatus custom_req(vp::IoReq *req, uint64_t offset);
-//   static void rx_sync(void *__this, int data);
+//   static void rx_sync(vp::Block *__this, int data);
 //   void reset(bool active);
 //   static void handle_pending_word(vp::Block *__this, vp::ClockEvent *event);
 //   void check_state();
@@ -694,7 +694,7 @@ private:
 // public:
 //   Hyper_periph_v2(udma *top, int id, int itf_id);
 //   vp::IoReqStatus custom_req(vp::IoReq *req, uint64_t offset);
-//   static void rx_sync(void *__this, int data);
+//   static void rx_sync(vp::Block *__this, int data);
 //   void reset(bool active);
 //   static void handle_pending_word(vp::Block *__this, vp::ClockEvent *event);
 //   void check_state();
@@ -829,7 +829,7 @@ class Hyper_periph_v3 : public Udma_periph
 public:
   Hyper_periph_v3(udma *top, int id, int itf_id);
   vp::IoReqStatus custom_req(vp::IoReq *req, uint64_t offset, int id);
-  static void rx_sync(void *__this, int data);
+  static void rx_sync(vp::Block *__this, int data);
   void reset(bool active);
   static void handle_pending_word(vp::Block *__this, vp::ClockEvent *event);
   void check_state();

@@ -37,7 +37,7 @@ public:
 
 private:
 
-  static void gpio_sync(void *__this, bool value, int gpio);
+  static void gpio_sync(vp::Block *__this, bool value, int gpio);
   static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
   vp::IoReqStatus paddir_req(int reg_offset, int size, bool is_write, uint8_t *data);
@@ -268,7 +268,7 @@ error:
 
 
 
-void Gpio::gpio_sync(void *__this, bool value, int gpio)
+void Gpio::gpio_sync(vp::Block *__this, bool value, int gpio)
 {
   Gpio *_this = (Gpio *)__this;
 

@@ -55,9 +55,9 @@ private:
 
   void check_state();
 
-  static void irq_ack_sync(void *__this, int irq);
-  static void in_event_sync(void *__this, bool active, int id);
-  static void soc_event_sync(void *__this, int event);
+  static void irq_ack_sync(vp::Block *__this, int irq);
+  static void in_event_sync(vp::Block *__this, bool active, int id);
+  static void soc_event_sync(vp::Block *__this, int event);
 
   vp::Trace     trace;
   vp::IoSlave in;
@@ -282,7 +282,7 @@ vp::IoReqStatus itc::req(vp::Block *__this, vp::IoReq *req)
   return vp::IO_REQ_OK;
 }
 
-void itc::soc_event_sync(void *__this, int event)
+void itc::soc_event_sync(vp::Block *__this, int event)
 {
   itc *_this = (itc *)__this;
   _this->trace.msg("Received soc event (event: %d, fifo elems: %d)\n", event, _this->nb_fifo_events - _this->nb_free_events);
@@ -303,7 +303,7 @@ void itc::soc_event_sync(void *__this, int event)
   }
 }
 
-void itc::irq_ack_sync(void *__this, int irq)
+void itc::irq_ack_sync(vp::Block *__this, int irq)
 {
   itc *_this = (itc *)__this;
 
@@ -316,7 +316,7 @@ void itc::irq_ack_sync(void *__this, int irq)
   _this->trace.msg("Updated irq ack (value: 0x%x)\n", _this->ack);
 }
 
-void itc::in_event_sync(void *__this, bool active, int id)
+void itc::in_event_sync(vp::Block *__this, bool active, int id)
 {
   itc *_this = (itc *)__this;
   _this->trace.msg("Received input event (event: %d, active: %d)\n", id, active);

@@ -65,7 +65,7 @@ vp::IoReqStatus I2c_periph_v2::custom_req(vp::IoReq *req, uint64_t offset)
 }
 
 
-void I2c_periph_v2::rx_sync(void *__this, int scl, int data)
+void I2c_periph_v2::rx_sync(vp::Block *__this, int scl, int data)
 {
   I2c_periph_v2 *_this = (I2c_periph_v2 *)__this;
   (static_cast<I2c_rx_channel *>(_this->channel0))->handle_rx_bit(data);

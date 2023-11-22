@@ -53,8 +53,8 @@ private:
   double get_dco_frequency(int dco_input);
   void handle_req();
 
-  static void ref_clock_sync(void *__this, bool value);
-  static void ref_clock_set_frequency(void *__this, int64_t frequency);
+  static void ref_clock_sync(vp::Block *__this, bool value);
+  static void ref_clock_set_frequency(vp::Block *__this, int64_t frequency);
 
   vp::Trace trace;
 
@@ -104,11 +104,11 @@ fll::fll(vp::ComponentConf &config)
 
 }
 
-void fll::ref_clock_set_frequency(void *__this, int64_t frequency)
+void fll::ref_clock_set_frequency(vp::Block *__this, int64_t frequency)
 {
 }
 
-void fll::ref_clock_sync(void *__this, bool value)
+void fll::ref_clock_sync(vp::Block *__this, bool value)
 {
   fll *_this = (fll *)__this;
 

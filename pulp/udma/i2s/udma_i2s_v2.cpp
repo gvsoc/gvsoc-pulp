@@ -47,10 +47,10 @@ I2s_periph::I2s_periph(udma *top, int id, int itf_id) : Udma_periph(top, id)
   this->top->new_reg(itf_name + "i2s_mst_setup", &this->r_i2s_mst_setup, 0);
   this->top->new_reg(itf_name + "i2s_pdm_setup", &this->r_i2s_pdm_setup, 0);
 
-  this->clkgen0_event = this->top->event_new(this, I2s_periph::clkgen_event_routine);
+  this->clkgen0_event = this->top->event_new((vp::Block *)this, I2s_periph::clkgen_event_routine);
   this->clkgen0_event->get_args()[0] = (void *)0;
 
-  this->clkgen1_event = this->top->event_new(this, I2s_periph::clkgen_event_routine);
+  this->clkgen1_event = this->top->event_new((vp::Block *)this, I2s_periph::clkgen_event_routine);
   this->clkgen1_event->get_args()[0] = (void *)1;
 }
  
@@ -318,7 +318,7 @@ error:
 
 
 
-void I2s_periph::rx_sync(void *__this, int sck, int ws, int sd, bool full_duplex, int channel)
+void I2s_periph::rx_sync(vp::Block *__this, int sck, int ws, int sd, bool full_duplex, int channel)
 {
   I2s_periph *_this = (I2s_periph *)__this;
 

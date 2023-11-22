@@ -34,7 +34,7 @@ public:
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
-    static void barrier_sync(void *__this, bool value, int id);
+    static void barrier_sync(vp::Block *__this, bool value, int id);
 
     vp::Trace     trace;
 
@@ -121,7 +121,7 @@ vp::IoReqStatus Cluster_registers::req(vp::Block *__this, vp::IoReq *req)
     return vp::IO_REQ_INVALID;
 }
 
-void Cluster_registers::barrier_sync(void *__this, bool value, int id)
+void Cluster_registers::barrier_sync(vp::Block *__this, bool value, int id)
 {
     Cluster_registers *_this = (Cluster_registers *)__this;
     _this->barrier_status.set(_this->barrier_status.get() | (value << id));

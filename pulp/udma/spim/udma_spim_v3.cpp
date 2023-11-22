@@ -47,7 +47,7 @@ Spim_periph_v3::Spim_periph_v3(udma *top, int id, int itf_id) : Udma_periph(top,
     this->eot_event = -1;
 
 
-  pending_spi_word_event = top->event_new(this, Spim_periph_v3::handle_spi_pending_word);
+  pending_spi_word_event = top->event_new((vp::Block *)this, Spim_periph_v3::handle_spi_pending_word);
 }
 
 void Spim_periph_v3::reset(bool active)
@@ -73,7 +73,7 @@ void Spim_periph_v3::reset(bool active)
 }
 
   
-void Spim_periph_v3::slave_sync(void *__this, int sck, int data_0, int data_1, int data_2, int data_3, int mask)
+void Spim_periph_v3::slave_sync(vp::Block *__this, int sck, int data_0, int data_1, int data_2, int data_3, int mask)
 {
   Spim_periph_v3 *_this = (Spim_periph_v3 *)__this;
   (static_cast<Spim_v3_rx_channel *>(_this->channel0))->handle_rx_bits(data_0, data_1, data_2, data_3, mask);
@@ -109,7 +109,7 @@ void Spim_v3_rx_channel::handle_rx_bits(int data_0, int data_1, int data_2, int 
 Spim_v3_tx_channel::Spim_v3_tx_channel(udma *top, Spim_periph_v3 *periph, int id, string name)
 : Udma_tx_channel(top, id, name), periph(periph)
 {
-  pending_word_event = top->event_new(this, Spim_v3_tx_channel::handle_pending_word);
+  pending_word_event = top->event_new((vp::Block *)this, Spim_v3_tx_channel::handle_pending_word);
 }
 
 
@@ -188,7 +188,7 @@ void Spim_v3_tx_channel::check_state()
 Spim_v3_cmd_channel::Spim_v3_cmd_channel(udma *top, Spim_periph_v3 *periph, int id, string name)
 : Udma_tx_channel(top, id, name), periph(periph)
 {
-  pending_word_event = top->event_new(this, Spim_v3_cmd_channel::handle_pending_word);
+  pending_word_event = top->event_new((vp::Block *)this, Spim_v3_cmd_channel::handle_pending_word);
 }
 
 

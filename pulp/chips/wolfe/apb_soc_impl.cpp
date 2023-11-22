@@ -40,10 +40,10 @@ public:
   static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
-  static void bootsel_sync(void *__this, int value);
-  static void confreg_ext_sync(void *__this, uint32_t value);
-  static void wakeup_rtc_sync(void *__this, bool wakeup);
-  static void wakeup_gpio_sync(void *__this, int value, int gpio);
+  static void bootsel_sync(vp::Block *__this, int value);
+  static void confreg_ext_sync(vp::Block *__this, uint32_t value);
+  static void wakeup_rtc_sync(vp::Block *__this, bool wakeup);
+  static void wakeup_gpio_sync(vp::Block *__this, int value, int gpio);
   void set_wakeup(int value);
 
   vp::Trace     trace;
@@ -325,7 +325,7 @@ vp::IoReqStatus apb_soc_ctrl::req(vp::Block *__this, vp::IoReq *req)
 }
 
 
-void apb_soc_ctrl::wakeup_gpio_sync(void *__this, int value, int gpio)
+void apb_soc_ctrl::wakeup_gpio_sync(vp::Block *__this, int value, int gpio)
 {
   apb_soc_ctrl *_this = (apb_soc_ctrl *)__this;
   if (_this->extwake_en && gpio == _this->extwake_sel)
@@ -360,7 +360,7 @@ void apb_soc_ctrl::wakeup_gpio_sync(void *__this, int value, int gpio)
   }
 }
 
-void apb_soc_ctrl::wakeup_rtc_sync(void *__this, bool wakeup)
+void apb_soc_ctrl::wakeup_rtc_sync(vp::Block *__this, bool wakeup)
 {
   apb_soc_ctrl *_this = (apb_soc_ctrl *)__this;
   if (wakeup)
@@ -369,13 +369,13 @@ void apb_soc_ctrl::wakeup_rtc_sync(void *__this, bool wakeup)
   }
 }
 
-void apb_soc_ctrl::confreg_ext_sync(void *__this, uint32_t value)
+void apb_soc_ctrl::confreg_ext_sync(vp::Block *__this, uint32_t value)
 {
   apb_soc_ctrl *_this = (apb_soc_ctrl *)__this;
   _this->jtag_reg_ext.set(value);
 }
 
-void apb_soc_ctrl::bootsel_sync(void *__this, int value)
+void apb_soc_ctrl::bootsel_sync(vp::Block *__this, int value)
 {
   apb_soc_ctrl *_this = (apb_soc_ctrl *)__this;
   _this->bootsel = value;

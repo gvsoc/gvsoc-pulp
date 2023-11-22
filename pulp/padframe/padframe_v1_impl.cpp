@@ -165,42 +165,42 @@ public:
 
 private:
 
-  static void qspim_master_sync(void *__this, int sck, int data_0, int data_1, int data_2, int data_3, int mask, int id);
-  static void qspim_sync(void *__this, int sck, int data_0, int data_1, int data_2, int data_3, int mask, int id);
-  static void qspim_cs_sync(void *__this, int cs, int active, int id);
+  static void qspim_master_sync(vp::Block *__this, int sck, int data_0, int data_1, int data_2, int data_3, int mask, int id);
+  static void qspim_sync(vp::Block *__this, int sck, int data_0, int data_1, int data_2, int data_3, int mask, int id);
+  static void qspim_cs_sync(vp::Block *__this, int cs, int active, int id);
 
-  static void jtag_pad_slave_sync(void *__this, int tck, int tdi, int tms, int trst, int id);
-  static void jtag_pad_slave_sync_cycle(void *__this, int tdi, int tms, int trst, int id);
+  static void jtag_pad_slave_sync(vp::Block *__this, int tck, int tdi, int tms, int trst, int id);
+  static void jtag_pad_slave_sync_cycle(vp::Block *__this, int tdi, int tms, int trst, int id);
 
-  static void jtag_chip_slave_sync(void *__this, int tck, int tdi, int tms, int trst, int id);
-  static void jtag_chip_slave_sync_cycle(void *__this, int tdi, int tms, int trst, int id);
+  static void jtag_chip_slave_sync(vp::Block *__this, int tck, int tdi, int tms, int trst, int id);
+  static void jtag_chip_slave_sync_cycle(vp::Block *__this, int tdi, int tms, int trst, int id);
   
-  static void jtag_master_sync(void *__this, int tdo, int id);
+  static void jtag_master_sync(vp::Block *__this, int tdo, int id);
 
-  static void cpi_sync(void *__this, int pclk, int href, int vsync, int data, int id);
-  static void cpi_sync_cycle(void *__this, int href, int vsync, int data, int id);
+  static void cpi_sync(vp::Block *__this, int pclk, int href, int vsync, int data, int id);
+  static void cpi_sync_cycle(vp::Block *__this, int href, int vsync, int data, int id);
 
-  static void uart_chip_sync(void *__this, int data, int id);
-  static void uart_master_sync(void *__this, int data, int id);
+  static void uart_chip_sync(vp::Block *__this, int data, int id);
+  static void uart_master_sync(vp::Block *__this, int data, int id);
 
-  static void i2s_internal_edge(void *__this, int sck, int ws, int sd, bool full_duplex, int id);
-  static void i2s_external_edge(void *__this, int sck, int ws, int sd, bool full_duplex, int id);
+  static void i2s_internal_edge(vp::Block *__this, int sck, int ws, int sd, bool full_duplex, int id);
+  static void i2s_external_edge(vp::Block *__this, int sck, int ws, int sd, bool full_duplex, int id);
 
-  static void i2c_chip_sync(void *__this, int scl, int sda, int id);
-  static void i2c_master_sync(void *__this, int scl, int data, int id);
+  static void i2c_chip_sync(vp::Block *__this, int scl, int sda, int id);
+  static void i2c_master_sync(vp::Block *__this, int scl, int data, int id);
 
-  static void hyper_master_sync_cycle(void *__this, int data, int id);
-  static void hyper_sync_cycle(void *__this, int data, int id);
-  static void hyper_cs_sync(void *__this, int cs, int active, int id);
+  static void hyper_master_sync_cycle(vp::Block *__this, int data, int id);
+  static void hyper_sync_cycle(vp::Block *__this, int data, int id);
+  static void hyper_cs_sync(vp::Block *__this, int cs, int active, int id);
 
-  static void master_wire_sync(void *__this, int value, int id);
-  static void wire_sync(void *__this, int value, int id);
+  static void master_wire_sync(vp::Block *__this, int value, int id);
+  static void wire_sync(vp::Block *__this, int value, int id);
 
-  static void master_gpio_sync(void *__this, int value, int id);
-  static void gpio_sync(void *__this, int value, int id);
+  static void master_gpio_sync(vp::Block *__this, int value, int id);
+  static void gpio_sync(vp::Block *__this, int value, int id);
 
-  static void ref_clock_sync(void *__this, bool value);
-  static void ref_clock_set_frequency(void *, int64_t value);
+  static void ref_clock_sync(vp::Block *__this, bool value);
+  static void ref_clock_set_frequency(vp::Block *, int64_t value);
 
   void set_pad(int *padin_value, int *padout_value, int *pad_value);
 
@@ -471,7 +471,7 @@ void padframe::set_pad(int *padin_value, int *padout_value, int *pad_value)
 }
 
 
-void padframe::qspim_sync(void *__this, int sck, int data_0, int data_1, int data_2, int data_3, int mask, int id)
+void padframe::qspim_sync(vp::Block *__this, int sck, int data_0, int data_1, int data_2, int data_3, int mask, int id)
 {
   padframe *_this = (padframe *)__this;
   Qspim_group *group = static_cast<Qspim_group *>(_this->groups[id]);
@@ -501,7 +501,7 @@ void padframe::qspim_sync(void *__this, int sck, int data_0, int data_1, int dat
 }
 
 
-void padframe::qspim_cs_sync(void *__this, int cs, int active, int id)
+void padframe::qspim_cs_sync(vp::Block *__this, int cs, int active, int id)
 {
   padframe *_this = (padframe *)__this;
   Qspim_group *group = static_cast<Qspim_group *>(_this->groups[id]);
@@ -525,7 +525,7 @@ void padframe::qspim_cs_sync(void *__this, int cs, int active, int id)
   }
 } 
 
-void padframe::qspim_master_sync(void *__this, int sck, int data_0, int data_1, int data_2, int data_3, int mask, int id)
+void padframe::qspim_master_sync(vp::Block *__this, int sck, int data_0, int data_1, int data_2, int data_3, int mask, int id)
 {
   padframe *_this = (padframe *)__this;
   Qspim_group *group = static_cast<Qspim_group *>(_this->groups[id]);
@@ -544,7 +544,7 @@ void padframe::qspim_master_sync(void *__this, int sck, int data_0, int data_1, 
 
 
 
-void padframe::jtag_pad_slave_sync(void *__this, int tck, int tdi, int tms, int trst, int id)
+void padframe::jtag_pad_slave_sync(vp::Block *__this, int tck, int tdi, int tms, int trst, int id)
 {
   padframe *_this = (padframe *)__this;
   Jtag_group *group = static_cast<Jtag_group *>(_this->groups[id]);
@@ -558,7 +558,7 @@ void padframe::jtag_pad_slave_sync(void *__this, int tck, int tdi, int tms, int 
 }
 
 
-void padframe::jtag_pad_slave_sync_cycle(void *__this, int tdi, int tms, int trst, int id)
+void padframe::jtag_pad_slave_sync_cycle(vp::Block *__this, int tdi, int tms, int trst, int id)
 {
   padframe *_this = (padframe *)__this;
   Jtag_group *group = static_cast<Jtag_group *>(_this->groups[id]);
@@ -572,7 +572,7 @@ void padframe::jtag_pad_slave_sync_cycle(void *__this, int tdi, int tms, int trs
 
 
 
-void padframe::jtag_chip_slave_sync(void *__this, int tck, int tdi, int tms, int trst, int id)
+void padframe::jtag_chip_slave_sync(vp::Block *__this, int tck, int tdi, int tms, int trst, int id)
 {
   padframe *_this = (padframe *)__this;
   Jtag_group *group = static_cast<Jtag_group *>(_this->groups[id]);
@@ -583,7 +583,7 @@ void padframe::jtag_chip_slave_sync(void *__this, int tck, int tdi, int tms, int
 }
 
 
-void padframe::jtag_chip_slave_sync_cycle(void *__this, int tdi, int tms, int trst, int id)
+void padframe::jtag_chip_slave_sync_cycle(vp::Block *__this, int tdi, int tms, int trst, int id)
 {
   padframe *_this = (padframe *)__this;
   Jtag_group *group = static_cast<Jtag_group *>(_this->groups[id]);
@@ -595,7 +595,7 @@ void padframe::jtag_chip_slave_sync_cycle(void *__this, int tdi, int tms, int tr
 
 
 
-void padframe::cpi_sync(void *__this, int pclk, int href, int vsync, int data, int id)
+void padframe::cpi_sync(vp::Block *__this, int pclk, int href, int vsync, int data, int id)
 {
   padframe *_this = (padframe *)__this;
   Cpi_group *group = static_cast<Cpi_group *>(_this->groups[id]);
@@ -609,7 +609,7 @@ void padframe::cpi_sync(void *__this, int pclk, int href, int vsync, int data, i
 }
 
 
-void padframe::cpi_sync_cycle(void *__this, int href, int vsync, int data, int id)
+void padframe::cpi_sync_cycle(vp::Block *__this, int href, int vsync, int data, int id)
 {
   padframe *_this = (padframe *)__this;
   Cpi_group *group = static_cast<Cpi_group *>(_this->groups[id]);
@@ -622,7 +622,7 @@ void padframe::cpi_sync_cycle(void *__this, int href, int vsync, int data, int i
 }
 
 
-void padframe::uart_chip_sync(void *__this, int data, int id)
+void padframe::uart_chip_sync(vp::Block *__this, int data, int id)
 {
   padframe *_this = (padframe *)__this;
   Uart_group *group = static_cast<Uart_group *>(_this->groups[id]);
@@ -639,7 +639,7 @@ void padframe::uart_chip_sync(void *__this, int data, int id)
 
 
 
-void padframe::uart_master_sync(void *__this, int data, int id)
+void padframe::uart_master_sync(vp::Block *__this, int data, int id)
 {
   padframe *_this = (padframe *)__this;
   Uart_group *group = static_cast<Uart_group *>(_this->groups[id]);
@@ -651,7 +651,7 @@ void padframe::uart_master_sync(void *__this, int data, int id)
 
 
 
-void padframe::i2s_internal_edge(void *__this, int sck, int ws, int sd, bool full_duplex, int id)
+void padframe::i2s_internal_edge(vp::Block *__this, int sck, int ws, int sd, bool full_duplex, int id)
 {
   padframe *_this = (padframe *)__this;
   I2s_group *group = static_cast<I2s_group *>(_this->groups[id]);
@@ -687,7 +687,7 @@ void padframe::i2s_internal_edge(void *__this, int sck, int ws, int sd, bool ful
 
 
 
-void padframe::i2s_external_edge(void *__this, int sck, int ws, int sd, bool full_duplex, int id)
+void padframe::i2s_external_edge(vp::Block *__this, int sck, int ws, int sd, bool full_duplex, int id)
 {
   padframe *_this = (padframe *)__this;
   I2s_group *group = static_cast<I2s_group *>(_this->groups[id]);
@@ -722,7 +722,7 @@ void padframe::i2s_external_edge(void *__this, int sck, int ws, int sd, bool ful
 
 
 
-void padframe::i2c_chip_sync(void *__this, int scl, int sda, int id)
+void padframe::i2c_chip_sync(vp::Block *__this, int scl, int sda, int id)
 {
   padframe *_this = (padframe *)__this;
   I2c_group *group = static_cast<I2c_group *>(_this->groups[id]);
@@ -738,7 +738,7 @@ void padframe::i2c_chip_sync(void *__this, int scl, int sda, int id)
   }
 }
 
-void padframe::i2c_master_sync(void *__this, int scl, int sda, int id)
+void padframe::i2c_master_sync(vp::Block *__this, int scl, int sda, int id)
 {
   padframe *_this = (padframe *)__this;
   I2c_group *group = static_cast<I2c_group *>(_this->groups[id]);
@@ -751,7 +751,7 @@ void padframe::i2c_master_sync(void *__this, int scl, int sda, int id)
 
 
 
-void padframe::hyper_master_sync_cycle(void *__this, int data, int id)
+void padframe::hyper_master_sync_cycle(vp::Block *__this, int data, int id)
 {
   padframe *_this = (padframe *)__this;
 
@@ -760,7 +760,7 @@ void padframe::hyper_master_sync_cycle(void *__this, int data, int id)
   group->slave.sync_cycle(data);
 }
 
-void padframe::hyper_sync_cycle(void *__this, int data, int id)
+void padframe::hyper_sync_cycle(vp::Block *__this, int data, int id)
 {
   padframe *_this = (padframe *)__this;
   Hyper_group *group = static_cast<Hyper_group *>(_this->groups[id]);
@@ -776,7 +776,7 @@ void padframe::hyper_sync_cycle(void *__this, int data, int id)
 }
 
 
-void padframe::hyper_cs_sync(void *__this, int cs, int active, int id)
+void padframe::hyper_cs_sync(vp::Block *__this, int cs, int active, int id)
 {
   padframe *_this = (padframe *)__this;
   Hyper_group *group = static_cast<Hyper_group *>(_this->groups[id]);
@@ -800,28 +800,28 @@ void padframe::hyper_cs_sync(void *__this, int cs, int active, int id)
   }
 }
 
-void padframe::master_gpio_sync(void *__this, int value, int id)
+void padframe::master_gpio_sync(vp::Block *__this, int value, int id)
 {
   padframe *_this = (padframe *)__this;
   Gpio_group *group = static_cast<Gpio_group *>(_this->groups[id]);
   group->master.sync(value);  
 }
 
-void padframe::gpio_sync(void *__this, int value, int id)
+void padframe::gpio_sync(vp::Block *__this, int value, int id)
 {
   padframe *_this = (padframe *)__this;
   Gpio_group *group = static_cast<Gpio_group *>(_this->groups[id]);
   group->master.sync(value);  
 }
 
-void padframe::master_wire_sync(void *__this, int value, int id)
+void padframe::master_wire_sync(vp::Block *__this, int value, int id)
 {
   padframe *_this = (padframe *)__this;
   Wire_group *group = static_cast<Wire_group *>(_this->groups[id]);
   group->slave.sync(value);  
 }
 
-void padframe::wire_sync(void *__this, int value, int id)
+void padframe::wire_sync(vp::Block *__this, int value, int id)
 {
   padframe *_this = (padframe *)__this;
   Wire_group *group = static_cast<Wire_group *>(_this->groups[id]);
@@ -842,14 +842,14 @@ vp::IoReqStatus padframe::req(vp::Block *__this, vp::IoReq *req)
   return vp::IO_REQ_OK;
 }
 
-void padframe::ref_clock_sync(void *__this, bool value)
+void padframe::ref_clock_sync(vp::Block *__this, bool value)
 {
   padframe *_this = (padframe *)__this;
   _this->ref_clock_trace.event((uint8_t *)&value);
   _this->ref_clock_itf.sync(value);
 }
 
-void padframe::ref_clock_set_frequency(void *__this, int64_t value)
+void padframe::ref_clock_set_frequency(vp::Block *__this, int64_t value)
 {
   padframe *_this = (padframe *)__this;
   _this->ref_clock_itf.set_frequency(value);

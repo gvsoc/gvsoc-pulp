@@ -39,8 +39,8 @@ public:
 private:
 
   void reset(bool active);
-  static void bootsel_sync(void *__this, int value);
-  static void confreg_ext_sync(void *__this, uint32_t value);
+  static void bootsel_sync(vp::Block *__this, int value);
+  static void confreg_ext_sync(vp::Block *__this, uint32_t value);
 
   vp::Trace     trace;
   vp::IoSlave in;
@@ -156,13 +156,13 @@ vp::IoReqStatus apb_soc_ctrl::req(vp::Block *__this, vp::IoReq *req)
   return vp::IO_REQ_OK;
 }
 
-void apb_soc_ctrl::bootsel_sync(void *__this, int value)
+void apb_soc_ctrl::bootsel_sync(vp::Block *__this, int value)
 {
   apb_soc_ctrl *_this = (apb_soc_ctrl *)__this;
   _this->bootsel = value;
 }
 
-void apb_soc_ctrl::confreg_ext_sync(void *__this, uint32_t value)
+void apb_soc_ctrl::confreg_ext_sync(vp::Block *__this, uint32_t value)
 {
   apb_soc_ctrl *_this = (apb_soc_ctrl *)__this;
   _this->jtag_reg_ext.set(value);

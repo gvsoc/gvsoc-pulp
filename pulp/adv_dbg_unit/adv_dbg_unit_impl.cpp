@@ -100,8 +100,8 @@ public:
 
 private:
 
-  static void sync(void *__this, int tck, int tdi, int tms, int trst);
-  static void sync_cycle(void *__this, int tdi, int tms, int trst);
+  static void sync(vp::Block *__this, int tck, int tdi, int tms, int trst);
+  static void sync_cycle(vp::Block *__this, int tdi, int tms, int trst);
   void tck_edge(int tck, int tdi, int tms, int trst);
   void tap_update(int tms, int tclk);
   void tap_init();
@@ -112,7 +112,7 @@ private:
   void burst_cmd(int word_bytes, int is_read, uint64_t command);
   void capture_dr();
   void shift_dr();
-  static void confreg_soc_sync(void *__this, uint32_t value);
+  static void confreg_soc_sync(vp::Block *__this, uint32_t value);
 
   vp::Trace     trace;
   vp::Trace     debug;
@@ -603,21 +603,21 @@ void adv_dbg_unit::tck_edge(int tck, int tdi, int tms, int trst)
   this->jtag_out_itf.sync(tck, this->tdo, tms, trst);
 }
 
-void adv_dbg_unit::sync(void *__this, int tck, int tdi, int tms, int trst)
+void adv_dbg_unit::sync(vp::Block *__this, int tck, int tdi, int tms, int trst)
 {
   adv_dbg_unit *_this = (adv_dbg_unit *)__this;
   _this->tck_edge(tck, tdi, tms, trst);
 }
 
 
-void adv_dbg_unit::sync_cycle(void *__this, int tdi, int tms, int trst)
+void adv_dbg_unit::sync_cycle(vp::Block *__this, int tdi, int tms, int trst)
 {
   adv_dbg_unit *_this = (adv_dbg_unit *)__this;
   _this->tck_edge(1, tdi, tms, trst);
   _this->tck_edge(0, tdi, tms, trst);
 }
 
-void adv_dbg_unit::confreg_soc_sync(void *__this, uint32_t value)
+void adv_dbg_unit::confreg_soc_sync(vp::Block *__this, uint32_t value)
 {
   adv_dbg_unit *_this = (adv_dbg_unit *)__this;
   _this->tap.confreg_soc = value;

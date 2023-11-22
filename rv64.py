@@ -73,7 +73,7 @@ class Soc(st.Component):
         self.bind(ico, 'plic', plic, 'input')
         self.bind(uart, 'irq', plic, 'irq1')
 
-        host = iss.Riscv(self, 'host', isa=args.isa, boot_addr=0x1000)
+        host = iss.Riscv(self, 'host', isa=args.isa, boot_addr=0x1000, timed=False)
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 

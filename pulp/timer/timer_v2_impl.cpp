@@ -42,7 +42,7 @@ private:
   vp::Trace     trace;
   vp::IoSlave in;
 
-  static void ref_clock_sync(void *__this, bool value);
+  static void ref_clock_sync(vp::Block *__this, bool value);
 
   void sync();
   void reset(bool active);
@@ -212,7 +212,7 @@ void timer::check_state()
   }
 }
 
-void timer::ref_clock_sync(void *__this, bool value)
+void timer::ref_clock_sync(vp::Block *__this, bool value)
 {
   timer *_this = (timer *)__this;
   bool check = false;

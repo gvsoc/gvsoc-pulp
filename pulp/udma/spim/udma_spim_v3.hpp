@@ -125,7 +125,7 @@ class Spim_periph_v3 : public Udma_periph
 
 public:
   Spim_periph_v3(udma *top, int id, int itf_id);
-  static void slave_sync(void *_this, int sck, int data_0, int data_1, int data_2, int data_3, int mask);
+  static void slave_sync(vp::Block *_this, int sck, int data_0, int data_1, int data_2, int data_3, int mask);
   void reset(bool active);
   vp::IoReqStatus custom_req(vp::IoReq *req, uint64_t offset);
   static void handle_spi_pending_word(vp::Block *__this, vp::ClockEvent *event);

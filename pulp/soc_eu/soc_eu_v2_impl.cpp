@@ -53,8 +53,8 @@ public:
 
 private:
 
-  static void event_in_sync(void *__this, int event);
-  static void ref_clock_sync(void *_this, bool value);
+  static void event_in_sync(vp::Block *__this, int event);
+  static void ref_clock_sync(vp::Block *_this, bool value);
   void trigger_event(int event);
 
   vp::IoReqStatus trigger_event_req(int reg_offset, int size, bool is_write, uint8_t *data);
@@ -202,14 +202,14 @@ error:
   return vp::IO_REQ_INVALID;
 }
 
-void soc_eu::event_in_sync(void *__this, int event)
+void soc_eu::event_in_sync(vp::Block *__this, int event)
 {
   soc_eu *_this = (soc_eu *)__this;
   _this->trace.msg("Received incoming event (event: %d)\n", event);
   _this->trigger_event(event);
 }
 
-void soc_eu::ref_clock_sync(void *__this, bool value)
+void soc_eu::ref_clock_sync(vp::Block *__this, bool value)
 {
   soc_eu *_this = (soc_eu *)__this;
   _this->trace.msg("Received ref clock event, generating event (event: %d)\n", _this->ref_clock_event);

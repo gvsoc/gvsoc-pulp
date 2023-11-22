@@ -51,7 +51,7 @@ public:
 private:
 
 
-  static void halt_status_sync(void *__this, bool status, int id);
+  static void halt_status_sync(vp::Block *__this, bool status, int id);
   vp::IoReqStatus fetch_en_req(bool is_write, uint32_t *data);
   vp::IoReqStatus dbg_halt_status_req(bool is_write, uint32_t *data);
   vp::IoReqStatus dbg_halt_mask_req(bool is_write, uint32_t *data);
@@ -254,7 +254,7 @@ vp::IoReqStatus cluster_ctrl::bootaddr_req(int core, bool is_write, uint32_t *da
 
 
 
-void cluster_ctrl::halt_status_sync(void *__this, bool status, int id)
+void cluster_ctrl::halt_status_sync(vp::Block *__this, bool status, int id)
 {
   cluster_ctrl *_this = (cluster_ctrl *)__this;
 

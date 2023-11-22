@@ -184,7 +184,7 @@ void Cpi_periph_v1::push_pixel(uint32_t pixel)
 }
 
 
-void Cpi_periph_v1::sync(void *__this, int pclk, int href, int vsync, int data)
+void Cpi_periph_v1::sync(vp::Block *__this, int pclk, int href, int vsync, int data)
 {
   Cpi_periph_v1 *_this = (Cpi_periph_v1 *)__this;
   _this->trace.msg("Sync (pclk: %d, href: %d, vsync: %d, data: %d)\n", pclk, href, vsync, data);
@@ -260,7 +260,7 @@ void Cpi_periph_v1::handle_sof()
   }
 }
 
-void Cpi_periph_v1::sync_cycle(void *__this, int href, int vsync, int data)
+void Cpi_periph_v1::sync_cycle(vp::Block *__this, int href, int vsync, int data)
 {
   Cpi_periph_v1 *_this = (Cpi_periph_v1 *)__this;
 
