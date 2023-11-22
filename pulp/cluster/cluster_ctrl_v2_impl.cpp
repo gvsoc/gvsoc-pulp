@@ -46,7 +46,7 @@ public:
 
   void reset(bool active);
 
-  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
 
@@ -95,7 +95,7 @@ cluster_ctrl::cluster_ctrl(vp::ComponentConf &config)
 
 }
 
-vp::IoReqStatus cluster_ctrl::req(void *__this, vp::IoReq *req)
+vp::IoReqStatus cluster_ctrl::req(vp::Block *__this, vp::IoReq *req)
 {
   cluster_ctrl *_this = (cluster_ctrl *)__this;
 

@@ -31,7 +31,7 @@ public:
 
   icache_ctrl(vp::ComponentConf &config);
 
-  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
 
@@ -59,7 +59,7 @@ icache_ctrl::icache_ctrl(vp::ComponentConf &config)
 
 }
 
-vp::IoReqStatus icache_ctrl::req(void *__this, vp::IoReq *req)
+vp::IoReqStatus icache_ctrl::req(vp::Block *__this, vp::IoReq *req)
 {
   icache_ctrl *_this = (icache_ctrl *)__this;
 

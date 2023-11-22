@@ -50,8 +50,8 @@ private:
 
   uint8_t **fifo;
 
-  static vp::IoReqStatus fifo_push(void *__this, vp::IoReq *req);
-  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
+  static vp::IoReqStatus fifo_push(vp::Block *__this, vp::IoReq *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 };
 
@@ -84,7 +84,7 @@ job_fifo::job_fifo(vp::ComponentConf &config)
 
 }
 
-vp::IoReqStatus job_fifo::req(void *__this, vp::IoReq *req)
+vp::IoReqStatus job_fifo::req(vp::Block *__this, vp::IoReq *req)
 {
   job_fifo *_this = (job_fifo *)__this;
 
@@ -129,7 +129,7 @@ vp::IoReqStatus job_fifo::req(void *__this, vp::IoReq *req)
   return vp::IO_REQ_OK;
 }
 
-vp::IoReqStatus job_fifo::fifo_push(void *__this, vp::IoReq *req)
+vp::IoReqStatus job_fifo::fifo_push(vp::Block *__this, vp::IoReq *req)
 {
   job_fifo *_this = (job_fifo *)__this;
 

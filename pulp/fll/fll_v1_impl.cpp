@@ -40,7 +40,7 @@ public:
 
   void reset(bool active);
 
-  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
 
@@ -341,7 +341,7 @@ end:
 
 
 
-vp::IoReqStatus fll::req(void *__this, vp::IoReq *req)
+vp::IoReqStatus fll::req(vp::Block *__this, vp::IoReq *req)
 {
   fll *_this = (fll *)__this;
 

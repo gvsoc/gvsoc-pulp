@@ -592,7 +592,7 @@ vp::IoReqStatus ima_v1::ima_req(vp::IoReq *req, int new_state)
 
 
 /* Programming phase entry point */
-vp::IoReqStatus ima_v1::req(void *__this, vp::IoReq *req)
+vp::IoReqStatus ima_v1::req(vp::Block *__this, vp::IoReq *req)
 {
   ima_v1 *_this = (ima_v1 *)__this;
   vp::IoReqStatus err = vp::IO_REQ_OK;
@@ -849,7 +849,7 @@ void ima_v1::check_requests()
 }
 
 
-void ima_v1::grant(void *__this, vp::IoReq *req)
+void ima_v1::grant(vp::Block *__this, vp::IoReq *req)
 {
   ima_v1 *_this = (ima_v1 *)__this;
 
@@ -861,7 +861,7 @@ void ima_v1::grant(void *__this, vp::IoReq *req)
 }
 
 
-void ima_v1::response(void *__this, vp::IoReq *req)
+void ima_v1::response(vp::Block *__this, vp::IoReq *req)
 {
   ima_v1 *_this = (ima_v1 *)__this;
 

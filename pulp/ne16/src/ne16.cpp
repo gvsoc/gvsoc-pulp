@@ -83,7 +83,7 @@ void Ne16::reset(bool active)
 }
 
 // The `hwpe_slave` member function models an access to the NE16 SLAVE interface
-vp::IoReqStatus Ne16::hwpe_slave(void *__this, vp::IoReq *req)
+vp::IoReqStatus Ne16::hwpe_slave(vp::Block *__this, vp::IoReq *req)
 {
     Ne16 *_this = (Ne16 *)__this;
 

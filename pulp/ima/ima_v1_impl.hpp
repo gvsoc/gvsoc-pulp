@@ -126,11 +126,11 @@ public:
 
   void reset(bool active);
 
-  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
   static void job_handler(vp::Block *_this, vp::ClockEvent *event);
   static void plot_handler(vp::Block *_this, vp::ClockEvent *event);
-  static void grant(void *_this, vp::IoReq *req);
-  static void response(void *_this, vp::IoReq *req);
+  static void grant(vp::Block *__this, vp::IoReq *req);
+  static void response(vp::Block *__this, vp::IoReq *req);
   void check_requests();
 
   void enqueue_write();

@@ -31,7 +31,7 @@ public:
 
   wmem(vp::ComponentConf &config);
 
-  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 
 private:
@@ -85,7 +85,7 @@ wmem::wmem(vp::ComponentConf &config)
 
 }
 
-vp::IoReqStatus wmem::req(void *__this, vp::IoReq *req)
+vp::IoReqStatus wmem::req(vp::Block *__this, vp::IoReq *req)
 {
   wmem *_this = (wmem *)__this;
   uint64_t offset = req->get_addr();

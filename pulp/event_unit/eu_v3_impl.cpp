@@ -209,8 +209,8 @@ public:
 
   void reset(bool active);
 
-  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
-  static vp::IoReqStatus demux_req(void *__this, vp::IoReq *req, int core);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
+  static vp::IoReqStatus demux_req(vp::Block *__this, vp::IoReq *req, int core);
   static void irq_ack_sync(void *__this, int irq, int core);
 
 protected:
@@ -240,7 +240,7 @@ protected:
 class Core_event_unit
 {
 public:
-  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
   void build(Event_unit *top, int core_id);
   void set_status(uint32_t new_value);
   void clear_status(uint32_t mask);
@@ -329,7 +329,7 @@ void Event_unit::reset(bool active)
   }
 }
 
-vp::IoReqStatus Event_unit::req(void *__this, vp::IoReq *req)
+vp::IoReqStatus Event_unit::req(vp::Block *__this, vp::IoReq *req)
 {
   Event_unit *_this = (Event_unit *)__this;
 
@@ -589,7 +589,7 @@ void Event_unit::irq_ack_sync(void *__this, int irq, int core)
   _this->core_eu[core].irq_ack_sync(irq, core);
 }
 
-vp::IoReqStatus Event_unit::demux_req(void *__this, vp::IoReq *req, int core)
+vp::IoReqStatus Event_unit::demux_req(vp::Block *__this, vp::IoReq *req, int core)
 {
   Event_unit *_this = (Event_unit *)__this;
 
@@ -768,7 +768,7 @@ vp::IoReqStatus Core_event_unit::wait_event(vp::IoReq *req, Event_unit_core_stat
 #endif
 }
 
-vp::IoReqStatus Core_event_unit::req(void *__this, vp::IoReq *req)
+vp::IoReqStatus Core_event_unit::req(vp::Block *__this, vp::IoReq *req)
 {
   Event_unit *_this = (Event_unit *)__this;
 

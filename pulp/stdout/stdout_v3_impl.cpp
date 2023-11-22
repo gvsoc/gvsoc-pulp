@@ -34,7 +34,7 @@ public:
 
   Stdout(vp::ComponentConf &config);
 
-  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
 
@@ -70,7 +70,7 @@ Stdout::Stdout(vp::ComponentConf &config)
 
 }
 
-vp::IoReqStatus Stdout::req(void *__this, vp::IoReq *req)
+vp::IoReqStatus Stdout::req(vp::Block *__this, vp::IoReq *req)
 {
   Stdout *_this = (Stdout *)__this;
 

@@ -49,7 +49,7 @@ public:
 
   void reset(bool active);
 
-  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
 
@@ -157,7 +157,7 @@ vp::IoReqStatus soc_eu::mask_req(int target_id, int reg_id, int reg_offset, int 
   return vp::IO_REQ_OK;
 }
 
-vp::IoReqStatus soc_eu::req(void *__this, vp::IoReq *req)
+vp::IoReqStatus soc_eu::req(vp::Block *__this, vp::IoReq *req)
 {
   soc_eu *_this = (soc_eu *)__this;
 

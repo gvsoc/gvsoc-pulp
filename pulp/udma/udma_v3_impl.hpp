@@ -245,8 +245,8 @@ public:
   void set_eot_event(int event) { this->eot_event = event; }
 
 private:  
-  static void data_grant(void *_this, vp::IoReq *req);
-  static void data_response(void *_this, vp::IoReq *req);
+  static void data_grant(vp::Block *__this, vp::IoReq *req);
+  static void data_response(vp::Block *__this, vp::IoReq *req);
   static void handle_pending_word(vp::Block *__this, vp::ClockEvent *event);
   void check_state();
 
@@ -972,10 +972,10 @@ private:
 
   vp::IoReqStatus conf_req(vp::IoReq *req, uint64_t offset);
   vp::IoReqStatus periph_req(vp::IoReq *req, uint64_t offset);
-  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
   static void event_handler(vp::Block *__this, vp::ClockEvent *event);
-  static void l2_grant(void *__this, vp::IoReq *req);
-  static void l2_response(void *__this, vp::IoReq *req);
+  static void l2_grant(vp::Block *__this, vp::IoReq *req);
+  static void l2_response(vp::Block *__this, vp::IoReq *req);
   static void clk_reg(Component *_this, Component *clock);
 
   vp::Trace     trace;

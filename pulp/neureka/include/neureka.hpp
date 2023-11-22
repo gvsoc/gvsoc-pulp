@@ -225,7 +225,7 @@ private:
     int OVERHEAD_MV;
     int QUANT_PER_CYCLE;
 
-    static vp::IoReqStatus hwpe_slave(void *__this, vp::IoReq *req);
+    static vp::IoReqStatus hwpe_slave(vp::Block *__this, vp::IoReq *req);
 
     // DEBUG settings
     bool fsm_traces;

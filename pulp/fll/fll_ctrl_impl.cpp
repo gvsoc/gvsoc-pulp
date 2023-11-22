@@ -32,7 +32,7 @@ public:
 
   fll_ctrl(vp::ComponentConf &config);
 
-  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
 
@@ -51,7 +51,7 @@ fll_ctrl::fll_ctrl(vp::ComponentConf &config)
 
 }
 
-vp::IoReqStatus fll_ctrl::req(void *__this, vp::IoReq *req)
+vp::IoReqStatus fll_ctrl::req(vp::Block *__this, vp::IoReq *req)
 {
   fll_ctrl *_this = (fll_ctrl *)__this;
 

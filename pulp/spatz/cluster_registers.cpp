@@ -31,7 +31,7 @@ public:
 
     void reset(bool active);
 
-    static vp::IoReqStatus req(void *__this, vp::IoReq *req);
+    static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
     static void barrier_sync(void *__this, bool value, int id);
@@ -71,7 +71,7 @@ Cluster_registers::Cluster_registers(vp::ComponentConf &config)
 
 }
 
-vp::IoReqStatus Cluster_registers::req(void *__this, vp::IoReq *req)
+vp::IoReqStatus Cluster_registers::req(vp::Block *__this, vp::IoReq *req)
 {
     Cluster_registers *_this = (Cluster_registers *)__this;
     uint64_t offset = req->get_addr();

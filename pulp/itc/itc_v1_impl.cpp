@@ -38,7 +38,7 @@ public:
 
 private:
 
-  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
   vp::IoReqStatus itc_mask_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
   vp::IoReqStatus itc_mask_set_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write);
@@ -253,7 +253,7 @@ vp::IoReqStatus itc::itc_fifo_ioReq(uint32_t offset, uint32_t *data, uint32_t si
   return vp::IO_REQ_OK;
 }
 
-vp::IoReqStatus itc::req(void *__this, vp::IoReq *req)
+vp::IoReqStatus itc::req(vp::Block *__this, vp::IoReq *req)
 {
   itc *_this = (itc *)__this;
 

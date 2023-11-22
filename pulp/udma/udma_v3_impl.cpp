@@ -827,7 +827,7 @@ vp::IoReqStatus udma::periph_req(vp::IoReq *req, uint64_t offset)
 
 
 
-vp::IoReqStatus udma::req(void *__this, vp::IoReq *req)
+vp::IoReqStatus udma::req(vp::Block *__this, vp::IoReq *req)
 {
   udma *_this = (udma *)__this;
 
@@ -850,13 +850,13 @@ vp::IoReqStatus udma::req(void *__this, vp::IoReq *req)
   return vp::IO_REQ_INVALID;
 }
 
-void udma::l2_grant(void *__this, vp::IoReq *req)
+void udma::l2_grant(vp::Block *__this, vp::IoReq *req)
 {
   udma *_this = (udma *)__this;
   _this->trace.warning("UNIMPLEMENTED AT %s %d\n", __FILE__, __LINE__);
 }
 
-void udma::l2_response(void *__this, vp::IoReq *req)
+void udma::l2_response(vp::Block *__this, vp::IoReq *req)
 {
   udma *_this = (udma *)__this;
   _this->trace.warning("UNIMPLEMENTED AT %s %d\n", __FILE__, __LINE__);

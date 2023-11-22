@@ -117,7 +117,7 @@ private:
 
   static void sync(void *__this, int tck, int tdi, int tms, int trst);
   static void sync_cycle(void *__this, int tdi, int tms, int trst);
-  static vp::IoReqStatus core_req(void *__this, vp::IoReq *req);
+  static vp::IoReqStatus core_req(vp::Block *__this, vp::IoReq *req);
   vp::IoReqStatus going_req(int reg_offset, int size, bool is_write, uint8_t *data);
   vp::IoReqStatus resume_req(int reg_offset, int size, bool is_write, uint8_t *data);
   vp::IoReqStatus halted_req(int reg_offset, int size, bool is_write, uint8_t *data);
@@ -773,7 +773,7 @@ vp::IoReqStatus riscv_dtm::flags_req(int reg_offset, int size, bool is_write, ui
 
 
 
-vp::IoReqStatus riscv_dtm::core_req(void *__this, vp::IoReq *req)
+vp::IoReqStatus riscv_dtm::core_req(vp::Block *__this, vp::IoReq *req)
 {
   riscv_dtm *_this = (riscv_dtm *)__this;
 

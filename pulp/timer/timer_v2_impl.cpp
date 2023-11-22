@@ -35,7 +35,7 @@ public:
 
   timer(vp::ComponentConf &config);
 
-  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
 
@@ -321,7 +321,7 @@ void timer::depack_config(int counter, uint32_t configuration)
   if (counter == 0) is_64 = (configuration >> TIMER_CFG_LO_CASC_BIT) & 1;
 }
 
-vp::IoReqStatus timer::req(void *__this, vp::IoReq *req)
+vp::IoReqStatus timer::req(vp::Block *__this, vp::IoReq *req)
 {
   timer *_this = (timer *)__this;
 

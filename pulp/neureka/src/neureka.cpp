@@ -85,7 +85,7 @@ void Neureka::reset(bool active)
 }
 
 // The `hwpe_slave` member function models an access to the NEUREKA SLAVE interface
-vp::IoReqStatus Neureka::hwpe_slave(void *__this, vp::IoReq *req)
+vp::IoReqStatus Neureka::hwpe_slave(vp::Block *__this, vp::IoReq *req)
 {
     Neureka *_this = (Neureka *)__this;
 

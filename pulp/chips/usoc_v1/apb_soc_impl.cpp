@@ -36,7 +36,7 @@ public:
 
   void reset(bool active);
 
-  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
 
@@ -85,7 +85,7 @@ apb_soc_ctrl::apb_soc_ctrl(vp::ComponentConf &config)
 
 }
 
-vp::IoReqStatus apb_soc_ctrl::req(void *__this, vp::IoReq *req)
+vp::IoReqStatus apb_soc_ctrl::req(vp::Block *__this, vp::IoReq *req)
 {
   apb_soc_ctrl *_this = (apb_soc_ctrl *)__this;
 

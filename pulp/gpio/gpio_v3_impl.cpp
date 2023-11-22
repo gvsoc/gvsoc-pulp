@@ -38,7 +38,7 @@ public:
 private:
 
   static void gpio_sync(void *__this, bool value, int gpio);
-  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
   vp::IoReqStatus paddir_req(int reg_offset, int size, bool is_write, uint8_t *data);
   vp::IoReqStatus padin_req(int reg_offset, int size, bool is_write, uint8_t *data);
@@ -194,7 +194,7 @@ vp::IoReqStatus Gpio::padcfg_req(int id, int reg_offset, int size, bool is_write
 
 
 
-vp::IoReqStatus Gpio::req(void *__this, vp::IoReq *req)
+vp::IoReqStatus Gpio::req(vp::Block *__this, vp::IoReq *req)
 {
   Gpio *_this = (Gpio *)__this;
 

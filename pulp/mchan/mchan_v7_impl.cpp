@@ -162,7 +162,7 @@ public:
   void reset(bool active);
 
 protected:
-  static vp::IoReqStatus req(void *__this, vp::IoReq *req, int id);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req, int id);
   uint32_t get_status();
   void free_counters(uint32_t counter_mask);
   int alloc_counter(vp::IoReq *req, Mchan_channel *channel);
@@ -185,10 +185,10 @@ private:
   void push_req_to_loc(vp::IoReq *req);
   void send_req();
   void send_loc_read_req();
-  static void ext_grant(void *_this, vp::IoReq *req);
-  static void ext_response(void *_this, vp::IoReq *req);
-  static void loc_grant(void *_this, vp::IoReq *req);
-  static void loc_response(void *_this, vp::IoReq *req);
+  static void ext_grant(vp::Block *__this, vp::IoReq *req);
+  static void ext_response(vp::Block *__this, vp::IoReq *req);
+  static void loc_grant(vp::Block *__this, vp::IoReq *req);
+  static void loc_response(vp::Block *__this, vp::IoReq *req);
   void handle_cmd_termination(Mchan_cmd *cmd);
   void account_transfered_bytes(Mchan_cmd *cmd, int bytes);
   void send_req_to_ext(Mchan_cmd *cmd, vp::IoReq *req);
@@ -524,7 +524,7 @@ void Mchan_channel::trigger_event(Mchan_cmd *cmd)
 }
 
 
-void mchan::ext_grant(void *__this, vp::IoReq *req)
+void mchan::ext_grant(vp::Block *__this, vp::IoReq *req)
 {
   mchan *_this = (mchan *)__this;
   _this->trace.msg("Received grant (req: %p\n", req);
@@ -532,7 +532,7 @@ void mchan::ext_grant(void *__this, vp::IoReq *req)
   _this->check_queue();
 }
 
-void mchan::ext_response(void *__this, vp::IoReq *req)
+void mchan::ext_response(vp::Block *__this, vp::IoReq *req)
 {
   mchan *_this = (mchan *)__this;
   _this->trace.msg("Received response (req: %p\n", req);
@@ -548,11 +548,11 @@ void mchan::ext_response(void *__this, vp::IoReq *req)
   _this->check_queue();
 }
 
-void mchan::loc_grant(void *_this, vp::IoReq *req)
+void mchan::loc_grant(vp::Block *__this, vp::IoReq *req)
 {
 }
 
-void mchan::loc_response(void *_this, vp::IoReq *req)
+void mchan::loc_response(vp::Block *__this, vp::IoReq *req)
 {
 }
 
@@ -635,7 +635,7 @@ mchan::mchan(vp::ComponentConf &config)
   this->new_master_port("ext_irq_itf", &ext_irq_itf);
 }
 
-vp::IoReqStatus mchan::req(void *__this, vp::IoReq *req, int id)
+vp::IoReqStatus mchan::req(vp::Block *__this, vp::IoReq *req, int id)
 {
   mchan *_this = (mchan *)__this;
   return _this->channels[id]->req(req);

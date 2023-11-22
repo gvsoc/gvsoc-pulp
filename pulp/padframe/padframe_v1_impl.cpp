@@ -161,7 +161,7 @@ public:
 
   padframe(vp::ComponentConf &config);
 
-  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
 
@@ -829,7 +829,7 @@ void padframe::wire_sync(void *__this, int value, int id)
 }
 
 
-vp::IoReqStatus padframe::req(void *__this, vp::IoReq *req)
+vp::IoReqStatus padframe::req(vp::Block *__this, vp::IoReq *req)
 {
   padframe *_this = (padframe *)__this;
 

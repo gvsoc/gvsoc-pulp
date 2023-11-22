@@ -31,8 +31,8 @@ public:
 
   interleaver(vp::ComponentConf &config);
 
-  static vp::IoReqStatus req(void *__this, vp::IoReq *req);
-  static vp::IoReqStatus req_ts(void *__this, vp::IoReq *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
+  static vp::IoReqStatus req_ts(vp::Block *__this, vp::IoReq *req);
 
 
 private:
@@ -93,7 +93,7 @@ interleaver::interleaver(vp::ComponentConf &config)
 
 }
 
-vp::IoReqStatus interleaver::req(void *__this, vp::IoReq *req)
+vp::IoReqStatus interleaver::req(vp::Block *__this, vp::IoReq *req)
 {
   interleaver *_this = (interleaver *)__this;
   uint64_t offset = req->get_addr();
@@ -110,7 +110,7 @@ vp::IoReqStatus interleaver::req(void *__this, vp::IoReq *req)
   return _this->out[bank_id]->req_forward(req);
 }
 
-vp::IoReqStatus interleaver::req_ts(void *__this, vp::IoReq *req)
+vp::IoReqStatus interleaver::req_ts(vp::Block *__this, vp::IoReq *req)
 {
   interleaver *_this = (interleaver *)__this;
   uint64_t offset = req->get_addr();
