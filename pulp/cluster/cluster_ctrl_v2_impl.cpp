@@ -30,38 +30,36 @@
 class Core_cluster_ctrl
 {
 public:
-  vp::wire_master<uint32_t> bootaddr_itf;
-  vp::wire_master<bool> fetchen_itf;
-  vp::wire_master<bool> halt_itf;
-  vp::wire_slave<bool> halt_status_itf;
+  vp::WireMaster<uint32_t> bootaddr_itf;
+  vp::WireMaster<bool> fetchen_itf;
+  vp::WireMaster<bool> halt_itf;
+  vp::WireSlave<bool> halt_status_itf;
   uint32_t bootaddr;
 };
 
-class cluster_ctrl : public vp::component
+class cluster_ctrl : public vp::Component
 {
 
 public:
 
-  cluster_ctrl(js::config *config);
+  cluster_ctrl(vp::ComponentConf &config);
 
-  int build();
-  void start();
   void reset(bool active);
 
-  static vp::io_req_status_e req(void *__this, vp::io_req *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
 
 
-  static void halt_status_sync(void *__this, bool status, int id);
-  vp::io_req_status_e fetch_en_req(bool is_write, uint32_t *data);
-  vp::io_req_status_e dbg_halt_status_req(bool is_write, uint32_t *data);
-  vp::io_req_status_e dbg_halt_mask_req(bool is_write, uint32_t *data);
-  vp::io_req_status_e bootaddr_req(int core, bool is_write, uint32_t *data);
+  static void halt_status_sync(vp::Block *__this, bool status, int id);
+  vp::IoReqStatus fetch_en_req(bool is_write, uint32_t *data);
+  vp::IoReqStatus dbg_halt_status_req(bool is_write, uint32_t *data);
+  vp::IoReqStatus dbg_halt_mask_req(bool is_write, uint32_t *data);
+  vp::IoReqStatus bootaddr_req(int core, bool is_write, uint32_t *data);
   void check_dbg_halt();
 
-  vp::trace     trace;
-  vp::io_slave in;
+  vp::Trace     trace;
+  vp::IoSlave in;
   int nb_core;
   Core_cluster_ctrl *cores;
 
@@ -70,13 +68,34 @@ private:
   uint32_t dbg_halt_status_sync;
 };
 
-cluster_ctrl::cluster_ctrl(js::config *config)
-: vp::component(config)
+cluster_ctrl::cluster_ctrl(vp::ComponentConf &config)
+: vp::Component(config)
 {
-  nb_core = get_config_int("nb_core");
+  nb_core = get_js_config()->get_child_int("nb_core");
+
+  cores = (Core_cluster_ctrl *)new Core_cluster_ctrl[nb_core];
+
+  traces.new_trace("trace", &trace, vp::DEBUG);
+
+  in.set_req_meth(&cluster_ctrl::req);
+  new_slave_port("input", &in);
+
+  for (int i; i<nb_core; i++)
+  {
+    cores[i].bootaddr = 0x57575757;
+
+    new_master_port("bootaddr_" + std::to_string(i), &cores[i].bootaddr_itf);
+    new_master_port("fetchen_" + std::to_string(i), &cores[i].fetchen_itf);
+    new_master_port("halt_" + std::to_string(i), &cores[i].halt_itf);
+
+    cores[i].halt_status_itf.set_sync_meth_muxed(&cluster_ctrl::halt_status_sync, i);
+    new_slave_port("core_halt_" + std::to_string(i), &cores[i].halt_status_itf);
+
+  }
+
 }
 
-vp::io_req_status_e cluster_ctrl::req(void *__this, vp::io_req *req)
+vp::IoReqStatus cluster_ctrl::req(vp::Block *__this, vp::IoReq *req)
 {
   cluster_ctrl *_this = (cluster_ctrl *)__this;
 
@@ -123,14 +142,14 @@ vp::io_req_status_e cluster_ctrl::req(void *__this, vp::io_req *req)
   }
 
 
-  vp_warning_always(&_this->warning, "Invalid access\n");
+  vp_warning_always(&_this->trace, "Invalid access\n");
 
   return vp::IO_REQ_INVALID;
 }
 
 
 
-vp::io_req_status_e cluster_ctrl::dbg_halt_status_req(bool is_write, uint32_t *data)
+vp::IoReqStatus cluster_ctrl::dbg_halt_status_req(bool is_write, uint32_t *data)
 {
   if (is_write)
   {
@@ -152,7 +171,7 @@ vp::io_req_status_e cluster_ctrl::dbg_halt_status_req(bool is_write, uint32_t *d
 
 
 
-vp::io_req_status_e cluster_ctrl::dbg_halt_mask_req(bool is_write, uint32_t *data)
+vp::IoReqStatus cluster_ctrl::dbg_halt_mask_req(bool is_write, uint32_t *data)
 {
   if (is_write)
   {
@@ -206,7 +225,7 @@ void cluster_ctrl::check_dbg_halt()
 
 
 
-vp::io_req_status_e cluster_ctrl::fetch_en_req(bool is_write, uint32_t *data)
+vp::IoReqStatus cluster_ctrl::fetch_en_req(bool is_write, uint32_t *data)
 {
   for (int i=0; i<nb_core; i++)
   {
@@ -217,7 +236,7 @@ vp::io_req_status_e cluster_ctrl::fetch_en_req(bool is_write, uint32_t *data)
 
 
 
-vp::io_req_status_e cluster_ctrl::bootaddr_req(int core, bool is_write, uint32_t *data)
+vp::IoReqStatus cluster_ctrl::bootaddr_req(int core, bool is_write, uint32_t *data)
 {
   if (is_write)
   {
@@ -235,7 +254,7 @@ vp::io_req_status_e cluster_ctrl::bootaddr_req(int core, bool is_write, uint32_t
 
 
 
-void cluster_ctrl::halt_status_sync(void *__this, bool status, int id)
+void cluster_ctrl::halt_status_sync(vp::Block *__this, bool status, int id)
 {
   cluster_ctrl *_this = (cluster_ctrl *)__this;
 
@@ -249,35 +268,6 @@ void cluster_ctrl::halt_status_sync(void *__this, bool status, int id)
 
 
 
-int cluster_ctrl::build()
-{
-  cores = (Core_cluster_ctrl *)new Core_cluster_ctrl[nb_core];
-
-  traces.new_trace("trace", &trace, vp::DEBUG);
-
-  in.set_req_meth(&cluster_ctrl::req);
-  new_slave_port("input", &in);
-
-  for (int i; i<nb_core; i++)
-  {
-    cores[i].bootaddr = 0x57575757;
-
-    new_master_port("bootaddr_" + std::to_string(i), &cores[i].bootaddr_itf);
-    new_master_port("fetchen_" + std::to_string(i), &cores[i].fetchen_itf);
-    new_master_port("halt_" + std::to_string(i), &cores[i].halt_itf);
-
-    cores[i].halt_status_itf.set_sync_meth_muxed(&cluster_ctrl::halt_status_sync, i);
-    new_slave_port("core_halt_" + std::to_string(i), &cores[i].halt_status_itf);
-
-  }
-
-  return 0;
-}
-
-void cluster_ctrl::start()
-{
-}
-
 void cluster_ctrl::reset(bool active)
 {
   if (active)
@@ -288,7 +278,7 @@ void cluster_ctrl::reset(bool active)
   }
 }
 
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new cluster_ctrl(config);
 }

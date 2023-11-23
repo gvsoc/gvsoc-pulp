@@ -23,8 +23,8 @@
 
 using namespace std::placeholders;
 
-Ne16::Ne16(js::config *config)
-    : vp::component(config)
+Ne16::Ne16(vp::ComponentConf &config)
+    : vp::Component(config)
 {
     // FIXME these parameters might be settable through config, later...
     this->TP_IN           = 16;
@@ -41,6 +41,27 @@ Ne16::Ne16(js::config *config)
     this->OVERHEAD_LD_3X3 = 31;
     this->OVERHEAD_MV     = 17;
     this->QUANT_PER_CYCLE = 4;
+
+    this->traces.new_trace("trace", &this->trace, vp::DEBUG);
+    this->new_reg("fsm_state", &this->state, 32);
+    this->new_reg("ne16_busy", &this->activity, 8);
+    this->activity.set(0);
+    this->state.set(IDLE);
+
+    this->new_master_port("out", &this->out);
+
+    this->new_master_port("irq", &this->irq);
+
+    this->in.set_req_meth(&Ne16::hwpe_slave);
+    this->new_slave_port("input", &this->in); // how to change this name?
+
+    this->fsm_start_event = this->event_new(&Ne16::fsm_start_handler);
+    this->fsm_event = this->event_new(&Ne16::fsm_handler);
+    this->fsm_end_event = this->event_new(&Ne16::fsm_end_handler);
+
+    this->trace_level = L0_CONFIG;
+    this->trace_format = 1;
+
 }
 
 void Ne16::reset(bool active)
@@ -62,12 +83,12 @@ void Ne16::reset(bool active)
 }
 
 // The `hwpe_slave` member function models an access to the NE16 SLAVE interface
-vp::io_req_status_e Ne16::hwpe_slave(void *__this, vp::io_req *req)
+vp::IoReqStatus Ne16::hwpe_slave(vp::Block *__this, vp::IoReq *req)
 {
     Ne16 *_this = (Ne16 *)__this;
 
     if (_this->trace_level == L1_ACTIV_INOUT || _this->trace_level == L2_DEBUG || _this->trace_level == L3_ALL) {
-      _this->trace.msg(vp::trace::LEVEL_DEBUG, "Received request (addr: 0x%x, size: 0x%x, is_write: %d, data: %p\n", req->get_addr(), req->get_size(), req->get_is_write(), req->get_data());
+      _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received request (addr: 0x%x, size: 0x%x, is_write: %d, data: %p\n", req->get_addr(), req->get_size(), req->get_is_write(), req->get_data());
     }
     uint8_t *data = req->get_data(); // size depends on data get_size
 
@@ -105,7 +126,7 @@ vp::io_req_status_e Ne16::hwpe_slave(void *__this, vp::io_req *req)
         }
         else {
             if (_this->trace_level == L1_ACTIV_INOUT || _this->trace_level == L2_DEBUG || _this->trace_level == L3_ALL) {
-                _this->trace.msg(vp::trace::LEVEL_DEBUG, "offset: %d data: %08x\n", ((req->get_addr() & 0x17f) - 0x20) >> 2, *(uint32_t *) data);
+                _this->trace.msg(vp::Trace::LEVEL_DEBUG, "offset: %d data: %08x\n", ((req->get_addr() & 0x17f) - 0x20) >> 2, *(uint32_t *) data);
             }
             _this->regfile_wr(((req->get_addr() & 0x17f) - 0x20)>> 2, *(uint32_t *) data);
         }
@@ -141,32 +162,7 @@ vp::io_req_status_e Ne16::hwpe_slave(void *__this, vp::io_req *req)
     return vp::IO_REQ_OK;
 }
 
-int Ne16::build()
-{
-    this->traces.new_trace("trace", &this->trace, vp::DEBUG);
-    this->new_reg("fsm_state", &this->state, 32);
-    this->new_reg("ne16_busy", &this->activity, 8);
-    this->activity.set(0);
-    this->state.set(IDLE);
-
-    this->new_master_port("out", &this->out);
-
-    this->new_master_port("irq", &this->irq);
-
-    this->in.set_req_meth(&Ne16::hwpe_slave);
-    this->new_slave_port("input", &this->in); // how to change this name?
-
-    this->fsm_start_event = this->event_new(&Ne16::fsm_start_handler);
-    this->fsm_event = this->event_new(&Ne16::fsm_handler);
-    this->fsm_end_event = this->event_new(&Ne16::fsm_end_handler);
-
-    this->trace_level = L0_CONFIG;
-    this->trace_format = 1;
-
-    return 0;
-}
-
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
     return new Ne16(config);
 }

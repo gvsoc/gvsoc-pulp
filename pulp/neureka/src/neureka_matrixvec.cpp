@@ -144,7 +144,7 @@ void Neureka::__BinConvArray(
         std::ostringstream stringStream;
         stringStream << "binconv: weight=" << xt::view(weight, r)*mac_enable << "activ=" << activ << " scale=" << scale_loc << " ==> " << xt::view(weight, r)*mac_enable * activ << " ==> " << std::hex << xt::sum(xt::view(weight, r)*mac_enable*activ, 0)*scale << std::dec << "\n";
         std::string copyOfStr = stringStream.str();
-        this->trace.msg(vp::trace::LEVEL_DEBUG, copyOfStr.c_str());
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, copyOfStr.c_str());
       }
       
       xt::view(this->psum_block, c, r) = __BinConvBlock(xt::view(weight, r) * mac_enable, activ, activ, this->signed_activation,  scale_loc, this->TP_IN);
@@ -292,7 +292,7 @@ int Neureka::matrixvec_cycle() {
   std::ostringstream stringStream;
   stringStream << "Weight Read =" << xt::view(weight_ld, xt::all())<<"\n";
   std::string copyOfStr = stringStream.str();
-  this->trace.msg(vp::trace::LEVEL_DEBUG, copyOfStr.c_str());
+  this->trace.msg(vp::Trace::LEVEL_DEBUG, copyOfStr.c_str());
 
   auto shape = xt::adapt(weight_ld.shape());
 

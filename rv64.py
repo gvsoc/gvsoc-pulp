@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-import gv.gvsoc_runner
+import gvsoc.runner
 import cpu.iss.riscv as iss
 import memory.memory as memory
 from vp.clock_domain import Clock_domain
@@ -23,10 +23,10 @@ import devices.uart.ns16550 as ns16550
 import cpu.clint
 import cpu.plic
 import utils.loader.loader
-import gsystree as st
+import gvsoc.systree as st
 from interco.bus_watchpoint import Bus_watchpoint
 from elftools.elf.elffile import *
-import gv.gvsoc_runner as gvsoc
+import gvsoc.runner as gvsoc
 
 
 GAPY_TARGET = True
@@ -73,7 +73,7 @@ class Soc(st.Component):
         self.bind(ico, 'plic', plic, 'input')
         self.bind(uart, 'irq', plic, 'irq1')
 
-        host = iss.Riscv(self, 'host', isa=args.isa, boot_addr=0x1000)
+        host = iss.Riscv(self, 'host', isa=args.isa, boot_addr=0x1000, timed=False)
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 

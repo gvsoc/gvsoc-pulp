@@ -59,17 +59,17 @@ public:
   int *fifo_event;
   int fifo_soc_event;
 
-  vp::wire_slave<int>     soc_event_itf;
+  vp::WireSlave<int>     soc_event_itf;
 
-  vp::io_req_status_e ioReq(uint32_t offset, bool is_write, uint32_t *data);
+  vp::IoReqStatus ioReq(uint32_t offset, bool is_write, uint32_t *data);
 
   void check_state();
 
 private:
-  static void sync(void *__this, int event);
+  static void sync(vp::Block *__this, int event);
 
   Event_unit *top;
-  vp::trace     trace;
+  vp::Trace     trace;
 
 };
 
@@ -81,7 +81,7 @@ public:
   bool locked;
   uint32_t waiting_mask;
   uint32_t value;
-  vp::io_req *waiting_reqs[32];
+  vp::IoReq *waiting_reqs[32];
   //void sleepCancel(int coreId);
   //function<void (int)> sleepCancelCallback;
 };
@@ -95,12 +95,12 @@ public:
   //Plp3_ckg *top;
   //gv::trace trace;
   Mutex *mutexes;
-  vp::io_req_status_e req(vp::io_req *req, uint64_t offset, bool is_write, uint32_t *data, int core);
+  vp::IoReqStatus req(vp::IoReq *req, uint64_t offset, bool is_write, uint32_t *data, int core);
 
 private:
-  vp::io_req_status_e enqueue_sleep(Mutex *mutex, vp::io_req *req, int core_id) ;
+  vp::IoReqStatus enqueue_sleep(Mutex *mutex, vp::IoReq *req, int core_id) ;
   Event_unit *top;
-  vp::trace     trace;
+  vp::Trace     trace;
   int nb_mutexes;
   int mutex_event;
 };
@@ -115,7 +115,7 @@ public:
   uint32_t status_mask;     // Cores that must get the value before it can be written again
   uint32_t config_mask;     // Cores that will get a valid value
   uint32_t waiting_mask;
-  vp::io_req *waiting_reqs[32];
+  vp::IoReq *waiting_reqs[32];
 //
 //  //gv::ioSlave_ioReq stallRetryCallbackPtr;
 //  //function<void (int)> sleepCancelCallback;
@@ -136,10 +136,10 @@ class Dispatch_unit {
 public:
   Dispatch_unit(Event_unit *top);
 
-  vp::io_req_status_e req(vp::io_req *req, uint64_t offset, bool is_write, uint32_t *data, int core);
+  vp::IoReqStatus req(vp::IoReq *req, uint64_t offset, bool is_write, uint32_t *data, int core);
   void reset();
 
-  vp::io_req_status_e enqueue_sleep(Dispatch *dispatch, vp::io_req *req, int core_id, bool is_caller=true);
+  vp::IoReqStatus enqueue_sleep(Dispatch *dispatch, vp::IoReq *req, int core_id, bool is_caller=true);
 
   //Plp3_ckg *top;
   //gv::trace trace;
@@ -172,14 +172,14 @@ class Barrier_unit {
 public:
   Barrier_unit(Event_unit *top);
 
-  vp::io_req_status_e req(vp::io_req *req, uint64_t offset, bool is_write, uint32_t *data, int core);
+  vp::IoReqStatus req(vp::IoReq *req, uint64_t offset, bool is_write, uint32_t *data, int core);
   void reset();
 
 private:
   void check_barrier(int barrier_id);
 
   Event_unit *top;
-  vp::trace     trace;
+  vp::Trace     trace;
   Barrier *barriers;
   int nb_barriers;
   int barrier_event;
@@ -194,7 +194,7 @@ typedef enum
   CORE_STATE_SKIP_ELW
 } Event_unit_core_state_e;
 
-class Event_unit : public vp::component
+class Event_unit : public vp::Component
 {
 
   friend class Core_event_unit;
@@ -205,21 +205,19 @@ class Event_unit : public vp::component
 
 public:
 
-  Event_unit(js::config *config);
+  Event_unit(vp::ComponentConf &config);
 
-  int build();
-  void start();
   void reset(bool active);
 
-  static vp::io_req_status_e req(void *__this, vp::io_req *req);
-  static vp::io_req_status_e demux_req(void *__this, vp::io_req *req, int core);
-  static void irq_ack_sync(void *__this, int irq, int core);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
+  static vp::IoReqStatus demux_req(vp::Block *__this, vp::IoReq *req, int core);
+  static void irq_ack_sync(vp::Block *__this, int irq, int core);
 
 protected:
 
-  vp::trace     trace;
+  vp::Trace     trace;
 
-  vp::io_slave in;
+  vp::IoSlave in;
 
   Mutex_unit *mutex;
   Core_event_unit *core_eu;
@@ -230,10 +228,10 @@ protected:
   int nb_core;
 
 
-  vp::io_req_status_e sw_events_req(vp::io_req *req, uint64_t offset, bool is_write, uint32_t *data);
+  vp::IoReqStatus sw_events_req(vp::IoReq *req, uint64_t offset, bool is_write, uint32_t *data);
   void trigger_event(int event, uint32_t core_mask);
   void send_event(int core, uint32_t mask);
-  static void in_event_sync(void *__this, bool active, int id);
+  static void in_event_sync(vp::Block *__this, bool active, int id);
 
 };
 
@@ -242,25 +240,25 @@ protected:
 class Core_event_unit
 {
 public:
-  static vp::io_req_status_e req(void *__this, vp::io_req *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
   void build(Event_unit *top, int core_id);
   void set_status(uint32_t new_value);
   void clear_status(uint32_t mask);
   void reset();
   void check_state();
-  vp::io_req_status_e req(vp::io_req *req, uint64_t offset, bool is_write, uint32_t *data);
+  vp::IoReqStatus req(vp::IoReq *req, uint64_t offset, bool is_write, uint32_t *data);
   void check_wait_mask();
   void check_pending_req();
   void cancel_pending_req();
-  vp::io_req_status_e wait_event(vp::io_req *req, Event_unit_core_state_e wait_state=CORE_STATE_WAITING_EVENT);
-  vp::io_req_status_e put_to_sleep(vp::io_req *req, Event_unit_core_state_e wait_state=CORE_STATE_WAITING_EVENT);
+  vp::IoReqStatus wait_event(vp::IoReq *req, Event_unit_core_state_e wait_state=CORE_STATE_WAITING_EVENT);
+  vp::IoReqStatus put_to_sleep(vp::IoReq *req, Event_unit_core_state_e wait_state=CORE_STATE_WAITING_EVENT);
   Event_unit_core_state_e get_state() { return state; }
   void set_state(Event_unit_core_state_e state) { this->state = state; }
   void irq_ack_sync(int irq, int core);
-  static void wakeup_handler(void *__this, vp::clock_event *event);
-  static void irq_wakeup_handler(void *__this, vp::clock_event *event);
+  static void wakeup_handler(vp::Block *__this, vp::ClockEvent *event);
+  static void irq_wakeup_handler(vp::Block *__this, vp::ClockEvent *event);
 
-  vp::io_slave demux_in;
+  vp::IoSlave demux_in;
 
   uint32_t status;
   uint32_t evt_mask;
@@ -274,18 +272,18 @@ private:
   Event_unit *top;
   int core_id;
   Event_unit_core_state_e state;
-  vp::io_req *pending_req;
+  vp::IoReq *pending_req;
 
-  vp::wire_master<bool> barrier_itf;
-  vp::wire_slave<bool> in_event_itf[32];
+  vp::WireMaster<bool> barrier_itf;
+  vp::WireSlave<bool> in_event_itf[32];
 
-  vp::wire_master<bool>    clock_itf;
+  vp::WireMaster<bool>    clock_itf;
 
-  vp::wire_master<int>    irq_req_itf;
-  vp::wire_slave<int>     irq_ack_itf;
+  vp::WireMaster<int>    irq_req_itf;
+  vp::WireSlave<int>     irq_ack_itf;
 
-  vp::clock_event *wakeup_event;
-  vp::clock_event *irq_wakeup_event;
+  vp::ClockEvent *wakeup_event;
+  vp::ClockEvent *irq_wakeup_event;
 
   vp::reg_1  is_active;
 
@@ -293,10 +291,27 @@ private:
 
 
 
-Event_unit::Event_unit(js::config *config)
-: vp::component(config)
+Event_unit::Event_unit(vp::ComponentConf &config)
+: vp::Component(config)
 {
-  nb_core = get_config_int("nb_core");
+  nb_core = get_js_config()->get_child_int("nb_core");
+
+  traces.new_trace("trace", &trace, vp::DEBUG);
+
+  in.set_req_meth(&Event_unit::req);
+  new_slave_port("input", &in);
+
+  core_eu = (Core_event_unit *)new Core_event_unit[nb_core];
+  mutex = new Mutex_unit(this);
+  dispatch = new Dispatch_unit(this);
+  barrier_unit = new Barrier_unit(this);
+  soc_event_unit = new Soc_event_unit(this);
+
+  for (int i=0; i<nb_core; i++)
+  {
+    core_eu[i].build(this, i);
+  }
+
 }
 
 void Event_unit::reset(bool active)
@@ -314,7 +329,7 @@ void Event_unit::reset(bool active)
   }
 }
 
-vp::io_req_status_e Event_unit::req(void *__this, vp::io_req *req)
+vp::IoReqStatus Event_unit::req(vp::Block *__this, vp::IoReq *req)
 {
   Event_unit *_this = (Event_unit *)__this;
 
@@ -361,7 +376,7 @@ vp::io_req_status_e Event_unit::req(void *__this, vp::io_req *req)
 
 
 
-vp::io_req_status_e Event_unit::sw_events_req(vp::io_req *req, uint64_t offset, bool is_write, uint32_t *data)
+vp::IoReqStatus Event_unit::sw_events_req(vp::IoReq *req, uint64_t offset, bool is_write, uint32_t *data)
 {
   if (offset >= EU_CORE_TRIGG_SW_EVENT && offset <  EU_CORE_TRIGG_SW_EVENT_SIZE)
   {
@@ -442,8 +457,8 @@ void Core_event_unit::build(Event_unit *top, int core_id)
   demux_in.set_req_meth_muxed(&Event_unit::demux_req, core_id);
   top->new_slave_port("demux_in_" + std::to_string(core_id), &demux_in);
 
-  wakeup_event = top->event_new((void *)this, Core_event_unit::wakeup_handler);
-  irq_wakeup_event = top->event_new((void *)this, Core_event_unit::irq_wakeup_handler);
+  wakeup_event = top->event_new((vp::Block *)this, Core_event_unit::wakeup_handler);
+  irq_wakeup_event = top->event_new((vp::Block *)this, Core_event_unit::irq_wakeup_handler);
 
   top->new_master_port("irq_req_" + std::to_string(core_id), &irq_req_itf);
 
@@ -460,7 +475,7 @@ void Core_event_unit::build(Event_unit *top, int core_id)
 
 }
 
-vp::io_req_status_e Core_event_unit::req(vp::io_req *req, uint64_t offset, bool is_write, uint32_t *data)
+vp::IoReqStatus Core_event_unit::req(vp::IoReq *req, uint64_t offset, bool is_write, uint32_t *data)
 {
   if (offset == EU_CORE_BUFFER)
   {
@@ -516,7 +531,7 @@ vp::io_req_status_e Core_event_unit::req(vp::io_req *req, uint64_t offset, bool 
   {
     if (is_write) return vp::IO_REQ_INVALID;
     top->trace.msg("Wait\n");
-    vp::io_req_status_e err = wait_event(req);
+    vp::IoReqStatus err = wait_event(req);
     *data = evt_mask & status;
     return err;
   }
@@ -525,7 +540,7 @@ vp::io_req_status_e Core_event_unit::req(vp::io_req *req, uint64_t offset, bool 
   {
     top->trace.msg("Wait and clear\n");
     clear_evt_mask = evt_mask;
-    vp::io_req_status_e err = wait_event(req);
+    vp::IoReqStatus err = wait_event(req);
     *data = evt_mask & status;
     return err;
   }
@@ -565,7 +580,7 @@ vp::io_req_status_e Core_event_unit::req(vp::io_req *req, uint64_t offset, bool 
   return vp::IO_REQ_OK;
 }
 
-void Event_unit::irq_ack_sync(void *__this, int irq, int core)
+void Event_unit::irq_ack_sync(vp::Block *__this, int irq, int core)
 {
   Event_unit *_this = (Event_unit *)__this;
 
@@ -574,7 +589,7 @@ void Event_unit::irq_ack_sync(void *__this, int irq, int core)
   _this->core_eu[core].irq_ack_sync(irq, core);
 }
 
-vp::io_req_status_e Event_unit::demux_req(void *__this, vp::io_req *req, int core)
+vp::IoReqStatus Event_unit::demux_req(vp::Block *__this, vp::IoReq *req, int core)
 {
   Event_unit *_this = (Event_unit *)__this;
 
@@ -630,7 +645,7 @@ vp::io_req_status_e Event_unit::demux_req(void *__this, vp::io_req *req, int cor
   return vp::IO_REQ_INVALID;
 }
 
-void Event_unit::in_event_sync(void *__this, bool active, int id)
+void Event_unit::in_event_sync(vp::Block *__this, bool active, int id)
 {
   Event_unit *_this = (Event_unit *)__this;
   int core_id = id >> 16;
@@ -641,32 +656,9 @@ void Event_unit::in_event_sync(void *__this, bool active, int id)
   eu->check_state();
 }
 
-int Event_unit::build()
-{
-  traces.new_trace("trace", &trace, vp::DEBUG);
 
-  in.set_req_meth(&Event_unit::req);
-  new_slave_port("input", &in);
 
-  core_eu = (Core_event_unit *)new Core_event_unit[nb_core];
-  mutex = new Mutex_unit(this);
-  dispatch = new Dispatch_unit(this);
-  barrier_unit = new Barrier_unit(this);
-  soc_event_unit = new Soc_event_unit(this);
-
-  for (int i=0; i<nb_core; i++)
-  {
-    core_eu[i].build(this, i);
-  }
-
-  return 0;
-}
-
-void Event_unit::start()
-{
-}
-
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new Event_unit(config);
 }
@@ -717,7 +709,7 @@ void Core_event_unit::check_wait_mask()
   }
 }
 
-vp::io_req_status_e Core_event_unit::put_to_sleep(vp::io_req *req, Event_unit_core_state_e wait_state)
+vp::IoReqStatus Core_event_unit::put_to_sleep(vp::IoReq *req, Event_unit_core_state_e wait_state)
 {
   state = wait_state;
   this->is_active.set(0);
@@ -726,7 +718,7 @@ vp::io_req_status_e Core_event_unit::put_to_sleep(vp::io_req *req, Event_unit_co
   return vp::IO_REQ_PENDING;
 }
 
-vp::io_req_status_e Core_event_unit::wait_event(vp::io_req *req, Event_unit_core_state_e wait_state)
+vp::IoReqStatus Core_event_unit::wait_event(vp::IoReq *req, Event_unit_core_state_e wait_state)
 {
   top->trace.msg("Wait request (status: 0x%x, evt_mask: 0x%x)\n", status, evt_mask);
 
@@ -776,7 +768,7 @@ vp::io_req_status_e Core_event_unit::wait_event(vp::io_req *req, Event_unit_core
 #endif
 }
 
-vp::io_req_status_e Core_event_unit::req(void *__this, vp::io_req *req)
+vp::IoReqStatus Core_event_unit::req(vp::Block *__this, vp::IoReq *req)
 {
   Event_unit *_this = (Event_unit *)__this;
 
@@ -912,7 +904,7 @@ void Core_event_unit::reset()
   this->clock_itf.sync(1);
 }
 
-void Core_event_unit::wakeup_handler(void *__this, vp::clock_event *event)
+void Core_event_unit::wakeup_handler(vp::Block *__this, vp::ClockEvent *event)
 {
   Core_event_unit *_this = (Core_event_unit *)__this;
   _this->top->trace.msg("Replying to core after wakeup (core: %d)\n", _this->core_id);
@@ -922,7 +914,7 @@ void Core_event_unit::wakeup_handler(void *__this, vp::clock_event *event)
   _this->check_state();
 }
 
-void Core_event_unit::irq_wakeup_handler(void *__this, vp::clock_event *event)
+void Core_event_unit::irq_wakeup_handler(vp::Block *__this, vp::ClockEvent *event)
 {
   Core_event_unit *_this = (Core_event_unit *)__this;
   _this->top->trace.msg("IRQ wakeup\n");
@@ -1009,13 +1001,13 @@ Mutex_unit::Mutex_unit(Event_unit *top)
 : top(top)
 {
   top->traces.new_trace("mutex/trace", &trace, vp::DEBUG);
-  nb_mutexes = top->get_config_int("**/properties/mutex/nb_mutexes");
-  mutex_event = top->get_config_int("**/properties/events/mutex");
+  nb_mutexes = top->get_js_config()->get_child_int("**/properties/mutex/nb_mutexes");
+  mutex_event = top->get_js_config()->get_child_int("**/properties/events/mutex");
   mutexes = new Mutex[nb_mutexes];
 }
 
 
-vp::io_req_status_e Mutex_unit::enqueue_sleep(Mutex *mutex, vp::io_req *req, int core_id) {
+vp::IoReqStatus Mutex_unit::enqueue_sleep(Mutex *mutex, vp::IoReq *req, int core_id) {
   Core_event_unit *core_eu = &top->core_eu[core_id];
 
   // Enqueue the request so that the core can be unstalled when a value is pushed
@@ -1055,7 +1047,7 @@ void Mutex::sleepCancel(int coreId)
 }
 #endif
 
-vp::io_req_status_e Mutex_unit::req(vp::io_req *req, uint64_t offset, bool is_write, uint32_t *data, int core)
+vp::IoReqStatus Mutex_unit::req(vp::IoReq *req, uint64_t offset, bool is_write, uint32_t *data, int core)
 {
   unsigned int id = EU_MUTEX_AREA_MUTEXID_GET(offset);
   offset = offset - (id << 2);
@@ -1098,7 +1090,7 @@ vp::io_req_status_e Mutex_unit::req(vp::io_req *req, uint64_t offset, bool is_wr
           // Clear the mask and wake-up the elected core. Don't unlock the mutex, as it is
           // taken by the new core
           top->trace.msg("Waking-up core waiting for dispatch value (coreId: %d)\n", i);
-          vp::io_req *waiting_req = mutex->waiting_reqs[i];
+          vp::IoReq *waiting_req = mutex->waiting_reqs[i];
 
           mutex->waiting_mask &= ~(1<<i);
 
@@ -1132,7 +1124,7 @@ vp::io_req_status_e Mutex_unit::req(vp::io_req *req, uint64_t offset, bool is_wr
  ****************/
 
 
-vp::io_req_status_e Dispatch_unit::enqueue_sleep(Dispatch *dispatch, vp::io_req *req, int core_id, bool is_caller) {
+vp::IoReqStatus Dispatch_unit::enqueue_sleep(Dispatch *dispatch, vp::IoReq *req, int core_id, bool is_caller) {
   Core_event_unit *core_eu = &top->core_eu[core_id];
 
   // Enqueue the request so that the core can be unstalled when a value is pushed
@@ -1153,8 +1145,8 @@ vp::io_req_status_e Dispatch_unit::enqueue_sleep(Dispatch *dispatch, vp::io_req 
 Dispatch_unit::Dispatch_unit(Event_unit *top)
 : top(top)
 {
-  dispatch_event = top->get_config_int("**/properties/events/dispatch");
-  size = top->get_config_int("**/properties/dispatch/size");
+  dispatch_event = top->get_js_config()->get_child_int("**/properties/events/dispatch");
+  size = top->get_js_config()->get_child_int("**/properties/dispatch/size");
   core = new Dispatch_core[top->nb_core];
   dispatches = new Dispatch[size];
 }
@@ -1176,7 +1168,7 @@ Dispatch_unit::Dispatch_unit(Event_unit *top)
     }
   }
 
-  vp::io_req_status_e Dispatch_unit::req(vp::io_req *req, uint64_t offset, bool is_write, uint32_t *data, int core_id)
+  vp::IoReqStatus Dispatch_unit::req(vp::IoReq *req, uint64_t offset, bool is_write, uint32_t *data, int core_id)
   {
     if (offset == EU_DISPATCH_FIFO_ACCESS)
     {
@@ -1206,7 +1198,7 @@ Dispatch_unit::Dispatch_unit(Event_unit *top)
             if (dispatch->config_mask & (1<<i))
             {
               top->trace.msg("Waking-up core waiting for dispatch value (coreId: %d)\n", i);
-              vp::io_req *waiting_req = dispatch->waiting_reqs[i];
+              vp::IoReq *waiting_req = dispatch->waiting_reqs[i];
 
               // Clear the status bit as the waking core takes the data
               dispatch->status_mask &= ~(1<<i);
@@ -1233,7 +1225,7 @@ Dispatch_unit::Dispatch_unit(Event_unit *top)
               // Cancel current dispatch sleep
               dispatch->status_mask &= ~(1<<i);
               dispatch->waiting_mask &= ~(1<<i);
-              vp::io_req *pending_req = dispatch->waiting_reqs[i];
+              vp::IoReq *pending_req = dispatch->waiting_reqs[i];
 
               // Bypass the current entry
               core[i].tail++;
@@ -1315,8 +1307,8 @@ Barrier_unit::Barrier_unit(Event_unit *top)
 : top(top)
 {
   top->traces.new_trace("barrier/trace", &trace, vp::DEBUG);
-  nb_barriers = top->get_config_int("**/properties/barriers/nb_barriers");
-  barrier_event = top->get_config_int("**/properties/events/barrier");
+  nb_barriers = top->get_js_config()->get_child_int("**/properties/barriers/nb_barriers");
+  barrier_event = top->get_js_config()->get_child_int("**/properties/events/barrier");
   barriers = new Barrier[nb_barriers];
 }
 
@@ -1334,7 +1326,7 @@ void Barrier_unit::check_barrier(int barrier_id)
 }
 
 
-vp::io_req_status_e Barrier_unit::req(vp::io_req *req, uint64_t offset, bool is_write, uint32_t *data, int core)
+vp::IoReqStatus Barrier_unit::req(vp::IoReq *req, uint64_t offset, bool is_write, uint32_t *data, int core)
 {
   unsigned int barrier_id = EU_BARRIER_AREA_BARRIERID_GET(offset);
   offset = offset - EU_BARRIER_AREA_OFFSET_GET(barrier_id);
@@ -1460,15 +1452,15 @@ void Barrier_unit::reset()
 
 Soc_event_unit::Soc_event_unit(Event_unit *top) : top(top)
 {
-  this->nb_fifo_events = top->get_config_int("**/nb_fifo_events");
-  this->fifo_soc_event = top->get_config_int("**/fifo_event");
+  this->nb_fifo_events = top->get_js_config()->get_child_int("**/nb_fifo_events");
+  this->fifo_soc_event = top->get_js_config()->get_child_int("**/fifo_event");
 
   top->traces.new_trace("soc_eu/trace", &trace, vp::DEBUG);
 
   this->fifo_event = new int[nb_fifo_events];
 
   this->soc_event_itf.set_sync_meth(&Soc_event_unit::sync);
-  top->new_slave_port(this, "soc_event", &this->soc_event_itf);
+  top->new_slave_port("soc_event", &this->soc_event_itf, (vp::Block *)this);
 
   this->reset();
 }
@@ -1488,7 +1480,7 @@ void Soc_event_unit::check_state()
   }
 }
 
-void Soc_event_unit::sync(void *__this, int event)
+void Soc_event_unit::sync(vp::Block *__this, int event)
 {
   Soc_event_unit *_this = (Soc_event_unit *)__this;
   _this->trace.msg("Received soc event (event: %d)\n", event);
@@ -1505,7 +1497,7 @@ void Soc_event_unit::sync(void *__this, int event)
   _this->check_state();
 }
 
-vp::io_req_status_e Soc_event_unit::ioReq(uint32_t offset, bool is_write, uint32_t *data)
+vp::IoReqStatus Soc_event_unit::ioReq(uint32_t offset, bool is_write, uint32_t *data)
 {
   if (is_write) return vp::IO_REQ_INVALID;
 

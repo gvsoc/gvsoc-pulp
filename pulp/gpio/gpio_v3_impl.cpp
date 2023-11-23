@@ -28,36 +28,35 @@
 
 #include "archi/gpio_v3.h"
 
-class Gpio : public vp::component
+class Gpio : public vp::Component
 {
 
 public:
 
-  Gpio(js::config *config);
-
-  int build();
-  void start();
+  Gpio(vp::ComponentConf &config);
 
 private:
 
-  static void gpio_sync(void *__this, bool value, int gpio);
-  static vp::io_req_status_e req(void *__this, vp::io_req *req);
+  static void gpio_sync(vp::Block *__this, bool value, int gpio);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
-  vp::io_req_status_e paddir_req(int reg_offset, int size, bool is_write, uint8_t *data);
-  vp::io_req_status_e padin_req(int reg_offset, int size, bool is_write, uint8_t *data);
-  vp::io_req_status_e padout_req(int reg_offset, int size, bool is_write, uint8_t *data);
-  vp::io_req_status_e inten_req(int reg_offset, int size, bool is_write, uint8_t *data);
-  vp::io_req_status_e inttype0_req(int reg_offset, int size, bool is_write, uint8_t *data);
-  vp::io_req_status_e inttype1_req(int reg_offset, int size, bool is_write, uint8_t *data);
-  vp::io_req_status_e intstatus_req(int reg_offset, int size, bool is_write, uint8_t *data);
-  vp::io_req_status_e gpioen_req(int reg_offset, int size, bool is_write, uint8_t *data);
-  vp::io_req_status_e padcfg_req(int id, int reg_offset, int size, bool is_write, uint8_t *data);
+  vp::IoReqStatus paddir_req(int reg_offset, int size, bool is_write, uint8_t *data);
+  vp::IoReqStatus padin_req(int reg_offset, int size, bool is_write, uint8_t *data);
+  vp::IoReqStatus padout_req(int reg_offset, int size, bool is_write, uint8_t *data);
+  vp::IoReqStatus inten_req(int reg_offset, int size, bool is_write, uint8_t *data);
+  vp::IoReqStatus inttype0_req(int reg_offset, int size, bool is_write, uint8_t *data);
+  vp::IoReqStatus inttype1_req(int reg_offset, int size, bool is_write, uint8_t *data);
+  vp::IoReqStatus intstatus_req(int reg_offset, int size, bool is_write, uint8_t *data);
+  vp::IoReqStatus gpioen_req(int reg_offset, int size, bool is_write, uint8_t *data);
+  vp::IoReqStatus padcfg_req(int id, int reg_offset, int size, bool is_write, uint8_t *data);
 
-  vp::io_slave in;
+  vp::Trace trace;
 
-  std::vector<vp::wire_slave<bool> *> gpio_itf;
-  vp::wire_master<int>  event_itf;
-  vp::wire_master<bool> irq_itf;
+  vp::IoSlave in;
+
+  std::vector<vp::WireSlave<bool> *> gpio_itf;
+  vp::WireMaster<int>  event_itf;
+  vp::WireMaster<bool> irq_itf;
 
   int nb_gpio;
   int soc_event;
@@ -75,9 +74,43 @@ private:
 
 
 
-Gpio::Gpio(js::config *config)
-: vp::component(config)
+Gpio::Gpio(vp::ComponentConf &config)
+: vp::Component(config)
 {
+  this->traces.new_trace("trace", &this->trace, vp::DEBUG);
+
+  this->in.set_req_meth(&Gpio::req);
+  this->new_slave_port("input", &this->in);
+  this->new_master_port("event", &this->event_itf);
+  this->new_master_port("irq", &this->irq_itf);
+
+  this->soc_event = this->get_js_config()->get_child_int("soc_event");
+  this->nb_gpio = this->get_js_config()->get_int("nb_gpio");
+
+  for (int i=0; i<this->nb_gpio; i++)
+  {
+    vp::WireSlave<bool> *itf = new vp::WireSlave<bool>();
+    itf->set_sync_meth_muxed(&Gpio::gpio_sync, i);
+    new_slave_port("gpio" + std::to_string(i), itf);
+    this->gpio_itf.push_back(itf);
+  }
+
+  this->new_reg("paddir", &this->r_paddir, 0);
+  this->new_reg("padin", &this->r_padin, 0);
+  this->new_reg("padout", &this->r_padout, 0);
+  this->new_reg("inten", &this->r_inten, 0);
+  this->new_reg("inttype0", &this->r_inttype0, 0);
+  this->new_reg("inttype1", &this->r_inttype1, 0);
+  this->new_reg("intstatus", &this->r_intstatus, 0);
+  this->new_reg("gpioen", &this->r_gpioen, 0);
+
+  this->r_padcfg.resize(this->nb_gpio/4);
+
+  for (int i=0; i<this->nb_gpio/4; i++)
+  {
+    this->new_reg("padcfg" + std::to_string(i), &this->r_padcfg[i], 0);
+  }
+
 
 }
 
@@ -85,19 +118,19 @@ Gpio::Gpio(js::config *config)
 
 
 
-vp::io_req_status_e Gpio::paddir_req(int reg_offset, int size, bool is_write, uint8_t *data)
+vp::IoReqStatus Gpio::paddir_req(int reg_offset, int size, bool is_write, uint8_t *data)
 {
   this->r_paddir.access(reg_offset, size, data, is_write);
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e Gpio::padin_req(int reg_offset, int size, bool is_write, uint8_t *data)
+vp::IoReqStatus Gpio::padin_req(int reg_offset, int size, bool is_write, uint8_t *data)
 {
   this->r_padin.access(reg_offset, size, data, is_write);
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e Gpio::padout_req(int reg_offset, int size, bool is_write, uint8_t *data)
+vp::IoReqStatus Gpio::padout_req(int reg_offset, int size, bool is_write, uint8_t *data)
 {
   // TODO GPIO output should be propagated to pads. This should take gpioen into account only on some architecture
   uint32_t old_val = this->r_padout.get();
@@ -123,37 +156,37 @@ vp::io_req_status_e Gpio::padout_req(int reg_offset, int size, bool is_write, ui
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e Gpio::inten_req(int reg_offset, int size, bool is_write, uint8_t *data)
+vp::IoReqStatus Gpio::inten_req(int reg_offset, int size, bool is_write, uint8_t *data)
 {
   this->r_inten.access(reg_offset, size, data, is_write);
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e Gpio::inttype0_req(int reg_offset, int size, bool is_write, uint8_t *data)
+vp::IoReqStatus Gpio::inttype0_req(int reg_offset, int size, bool is_write, uint8_t *data)
 {
   this->r_inttype0.access(reg_offset, size, data, is_write);
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e Gpio::inttype1_req(int reg_offset, int size, bool is_write, uint8_t *data)
+vp::IoReqStatus Gpio::inttype1_req(int reg_offset, int size, bool is_write, uint8_t *data)
 {
   this->r_inttype1.access(reg_offset, size, data, is_write);
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e Gpio::intstatus_req(int reg_offset, int size, bool is_write, uint8_t *data)
+vp::IoReqStatus Gpio::intstatus_req(int reg_offset, int size, bool is_write, uint8_t *data)
 {
   this->r_intstatus.access(reg_offset, size, data, is_write);
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e Gpio::gpioen_req(int reg_offset, int size, bool is_write, uint8_t *data)
+vp::IoReqStatus Gpio::gpioen_req(int reg_offset, int size, bool is_write, uint8_t *data)
 {
   this->r_gpioen.access(reg_offset, size, data, is_write);
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e Gpio::padcfg_req(int id, int reg_offset, int size, bool is_write, uint8_t *data)
+vp::IoReqStatus Gpio::padcfg_req(int id, int reg_offset, int size, bool is_write, uint8_t *data)
 {
   this->r_padcfg[id].access(reg_offset, size, data, is_write);
   return vp::IO_REQ_OK;
@@ -161,24 +194,24 @@ vp::io_req_status_e Gpio::padcfg_req(int id, int reg_offset, int size, bool is_w
 
 
 
-vp::io_req_status_e Gpio::req(void *__this, vp::io_req *req)
+vp::IoReqStatus Gpio::req(vp::Block *__this, vp::IoReq *req)
 {
   Gpio *_this = (Gpio *)__this;
 
-  vp::io_req_status_e err = vp::IO_REQ_INVALID;
+  vp::IoReqStatus err = vp::IO_REQ_INVALID;
 
   uint64_t offset = req->get_addr();
   uint8_t *data = req->get_data();
   uint64_t size = req->get_size();
   uint64_t is_write = req->get_is_write();
 
-  _this->get_trace()->msg("GPIO access (offset: 0x%x, size: 0x%x, is_write: %d)\n", offset, size, req->get_is_write());
+  _this->trace.msg("GPIO access (offset: 0x%x, size: 0x%x, is_write: %d)\n", offset, size, req->get_is_write());
 
   int reg_id = offset / 4;
   int reg_offset = offset % 4;
 
   if (reg_offset + size > 4) {
-    _this->get_trace()->force_warning("Accessing 2 registers in one access\n");
+    _this->trace.force_warning("Accessing 2 registers in one access\n");
     goto error;
   }
 
@@ -228,18 +261,18 @@ vp::io_req_status_e Gpio::req(void *__this, vp::io_req *req)
   return vp::IO_REQ_OK;
 
 error:
-  _this->get_trace()->force_warning("GPIO invalid access (offset: 0x%x, size: 0x%x, is_write: %d)\n", offset, size, is_write);
+  _this->trace.force_warning("GPIO invalid access (offset: 0x%x, size: 0x%x, is_write: %d)\n", offset, size, is_write);
 
   return vp::IO_REQ_INVALID;
 }
 
 
 
-void Gpio::gpio_sync(void *__this, bool value, int gpio)
+void Gpio::gpio_sync(vp::Block *__this, bool value, int gpio)
 {
   Gpio *_this = (Gpio *)__this;
 
-  _this->get_trace()->msg("Received new gpio value (gpio: %d, value: %d)\n", gpio, value);
+  _this->trace.msg("Received new gpio value (gpio: %d, value: %d)\n", gpio, value);
 
   unsigned int old_val = (_this->r_padin.get() >> gpio) & 1;
   _this->r_padin.set((_this->r_padin.get() & ~(1<<gpio)) | (value << gpio));
@@ -262,7 +295,7 @@ void Gpio::gpio_sync(void *__this, bool value, int gpio)
     {
       _this->r_intstatus.set(_this->r_intstatus.get() | (1 << gpio));
 
-      _this->get_trace()->msg("Raising interrupt (intstatus: 0x%x)\n", _this->r_intstatus.get());
+      _this->trace.msg("Raising interrupt (intstatus: 0x%x)\n", _this->r_intstatus.get());
 
       if (_this->event_itf.is_bound())
         _this->event_itf.sync(_this->soc_event);
@@ -275,52 +308,8 @@ void Gpio::gpio_sync(void *__this, bool value, int gpio)
 
 
 
-int Gpio::build()
-{
-  this->in.set_req_meth(&Gpio::req);
-  this->new_slave_port("input", &this->in);
-  this->new_master_port("event", &this->event_itf);
-  this->new_master_port("irq", &this->irq_itf);
 
-  this->soc_event = this->get_js_config()->get_child_int("soc_event");
-  this->nb_gpio = this->get_js_config()->get_int("nb_gpio");
-
-  for (int i=0; i<this->nb_gpio; i++)
-  {
-    vp::wire_slave<bool> *itf = new vp::wire_slave<bool>();
-    itf->set_sync_meth_muxed(&Gpio::gpio_sync, i);
-    new_slave_port("gpio" + std::to_string(i), itf);
-    this->gpio_itf.push_back(itf);
-  }
-
-  this->new_reg("paddir", &this->r_paddir, 0);
-  this->new_reg("padin", &this->r_padin, 0);
-  this->new_reg("padout", &this->r_padout, 0);
-  this->new_reg("inten", &this->r_inten, 0);
-  this->new_reg("inttype0", &this->r_inttype0, 0);
-  this->new_reg("inttype1", &this->r_inttype1, 0);
-  this->new_reg("intstatus", &this->r_intstatus, 0);
-  this->new_reg("gpioen", &this->r_gpioen, 0);
-
-  this->r_padcfg.resize(this->nb_gpio/4);
-
-  for (int i=0; i<this->nb_gpio/4; i++)
-  {
-    this->new_reg("padcfg" + std::to_string(i), &this->r_padcfg[i], 0);
-  }
-
-  return 0;
-}
-
-
-
-void Gpio::start()
-{
-}
-
-
-
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new Gpio(config);
 }

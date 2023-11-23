@@ -35,50 +35,81 @@ public:
 
   soc_eu_target(soc_eu *top, std::string name, std::string itf_name);
 
-  vp::wire_master<int>    event_itf;
+  vp::WireMaster<int>    event_itf;
   unsigned int event_mask[SOC_NB_EVENT_REGS];
   std::string name;
 };
 
-class soc_eu : public vp::component
+class soc_eu : public vp::Component
 {
 
 public:
 
-  soc_eu(js::config *config);
+  soc_eu(vp::ComponentConf &config);
 
-  int build();
-  void start();
   void reset(bool active);
 
-  static vp::io_req_status_e req(void *__this, vp::io_req *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
 
-  static void event_in_sync(void *__this, int event);
-  static void ref_clock_sync(void *_this, bool value);
+  static void event_in_sync(vp::Block *__this, int event);
+  static void ref_clock_sync(vp::Block *_this, bool value);
   void trigger_event(int event);
 
-  vp::io_req_status_e trigger_event_req(int reg_offset, int size, bool is_write, uint8_t *data);
-  vp::io_req_status_e mask_req(int target_id, int reg_id, int reg_offset, int size, bool is_write, uint8_t *data);
+  vp::IoReqStatus trigger_event_req(int reg_offset, int size, bool is_write, uint8_t *data);
+  vp::IoReqStatus mask_req(int target_id, int reg_id, int reg_offset, int size, bool is_write, uint8_t *data);
 
   int nb_fc_events;
   int first_fc_event;
   int ref_clock_event;
 
-  vp::trace     trace;
-  vp::io_slave in;
+  vp::Trace     trace;
+  vp::IoSlave in;
 
-  vp::wire_slave<int>      event_in_itf;
-  vp::clock_slave          ref_clock;
-  vp::wire_master<bool>     ref_clock_event_itf;
+  vp::WireSlave<int>      event_in_itf;
+  vp::ClockSlave          ref_clock;
+  vp::WireMaster<bool>     ref_clock_event_itf;
 
   vector<soc_eu_target *> targets;
 };
 
-soc_eu::soc_eu(js::config *config)
-: vp::component(config)
+soc_eu::soc_eu(vp::ComponentConf &config)
+: vp::Component(config)
 {
+  traces.new_trace("trace", &trace, vp::DEBUG);
+  in.set_req_meth(&soc_eu::req);
+  new_slave_port("input", &in);
+
+  this->ref_clock_event = this->get_js_config()->get_child_int("ref_clock_event");
+  this->ref_clock.set_sync_meth(&soc_eu::ref_clock_sync);
+  this->new_slave_port("ref_clock", &this->ref_clock);
+
+  event_in_itf.set_sync_meth(&soc_eu::event_in_sync);
+  new_slave_port("event_in", &event_in_itf);
+
+  nb_fc_events = get_js_config()->get_child_int("properties/nb_fc_events");
+  first_fc_event = get_js_config()->get_child_int("properties/first_fc_event");
+
+  new_master_port("ref_clock_event", &ref_clock_event_itf);
+
+  this->targets.push_back(new soc_eu_target(this, "FC", "fc_event_itf"));
+  this->targets.push_back(new soc_eu_target(this, "PR", "pr_event_itf"));
+  this->targets.push_back(new soc_eu_target(this, "CL", "cl_event_itf"));
+}
+
+void soc_eu::reset(bool active)
+{
+  if (active)
+  {
+    for (auto target: this->targets)
+    {
+      for (int i=0; i<SOC_NB_EVENT_REGS; i++)
+      {
+        target->event_mask[i] = 0xffffffff;
+      }
+    }
+  }
 
 }
 
@@ -100,7 +131,7 @@ void soc_eu::trigger_event(int event)
   }
 }
 
-vp::io_req_status_e soc_eu::trigger_event_req(int reg_offset, int size, bool is_write, uint8_t *data)
+vp::IoReqStatus soc_eu::trigger_event_req(int reg_offset, int size, bool is_write, uint8_t *data)
 {
   if (!is_write) return vp::IO_REQ_INVALID;
   for (unsigned int i=0; i<this->nb_fc_events; i++) {
@@ -111,7 +142,7 @@ vp::io_req_status_e soc_eu::trigger_event_req(int reg_offset, int size, bool is_
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e soc_eu::mask_req(int target_id, int reg_id, int reg_offset, int size, bool is_write, uint8_t *data)
+vp::IoReqStatus soc_eu::mask_req(int target_id, int reg_id, int reg_offset, int size, bool is_write, uint8_t *data)
 {
   soc_eu_target *target = this->targets[target_id];
 
@@ -126,11 +157,11 @@ vp::io_req_status_e soc_eu::mask_req(int target_id, int reg_id, int reg_offset, 
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e soc_eu::req(void *__this, vp::io_req *req)
+vp::IoReqStatus soc_eu::req(vp::Block *__this, vp::IoReq *req)
 {
   soc_eu *_this = (soc_eu *)__this;
 
-  vp::io_req_status_e err = vp::IO_REQ_INVALID;
+  vp::IoReqStatus err = vp::IO_REQ_INVALID;
 
   uint64_t offset = req->get_addr();
   uint8_t *data = req->get_data();
@@ -143,7 +174,7 @@ vp::io_req_status_e soc_eu::req(void *__this, vp::io_req *req)
   int reg_offset = offset % 4;
 
   if (reg_offset + size > 4) {
-    _this->get_trace()->warning("Accessing 2 registers in one access\n");
+    _this->trace.warning("Accessing 2 registers in one access\n");
     goto error;
   }
 
@@ -166,67 +197,24 @@ vp::io_req_status_e soc_eu::req(void *__this, vp::io_req *req)
   return vp::IO_REQ_OK;
 
 error:
-  _this->get_trace()->force_warning("Soc event unit invalid access (offset: 0x%x, size: 0x%x, is_write: %d)\n", offset, size, is_write);
+  _this->trace.force_warning("Soc event unit invalid access (offset: 0x%x, size: 0x%x, is_write: %d)\n", offset, size, is_write);
 
   return vp::IO_REQ_INVALID;
 }
 
-void soc_eu::event_in_sync(void *__this, int event)
+void soc_eu::event_in_sync(vp::Block *__this, int event)
 {
   soc_eu *_this = (soc_eu *)__this;
   _this->trace.msg("Received incoming event (event: %d)\n", event);
   _this->trigger_event(event);
 }
 
-void soc_eu::ref_clock_sync(void *__this, bool value)
+void soc_eu::ref_clock_sync(vp::Block *__this, bool value)
 {
   soc_eu *_this = (soc_eu *)__this;
   _this->trace.msg("Received ref clock event, generating event (event: %d)\n", _this->ref_clock_event);
   _this->ref_clock_event_itf.sync(true);
   _this->trigger_event(_this->ref_clock_event);
-}
-
-int soc_eu::build()
-{
-  traces.new_trace("trace", &trace, vp::DEBUG);
-  in.set_req_meth(&soc_eu::req);
-  new_slave_port("input", &in);
-
-  this->ref_clock_event = this->get_config_int("ref_clock_event");
-  this->ref_clock.set_sync_meth(&soc_eu::ref_clock_sync);
-  this->new_slave_port("ref_clock", &this->ref_clock);
-
-  event_in_itf.set_sync_meth(&soc_eu::event_in_sync);
-  new_slave_port("event_in", &event_in_itf);
-
-  nb_fc_events = get_config_int("properties/nb_fc_events");
-  first_fc_event = get_config_int("properties/first_fc_event");
-
-  new_master_port("ref_clock_event", &ref_clock_event_itf);
-
-  this->targets.push_back(new soc_eu_target(this, "FC", "fc_event_itf"));
-  this->targets.push_back(new soc_eu_target(this, "PR", "pr_event_itf"));
-  this->targets.push_back(new soc_eu_target(this, "CL", "cl_event_itf"));
-
-  return 0;
-}
-
-void soc_eu::reset(bool active)
-{
-  if (active)
-  {
-    for (auto target: this->targets)
-    {
-      for (int i=0; i<SOC_NB_EVENT_REGS; i++)
-      {
-        target->event_mask[i] = 0xffffffff;
-      }
-    }
-  }
-}
-
-void soc_eu::start()
-{
 }
 
 soc_eu_target::soc_eu_target(soc_eu *top, std::string name, std::string itf_name)
@@ -235,7 +223,7 @@ soc_eu_target::soc_eu_target(soc_eu *top, std::string name, std::string itf_name
   top->new_master_port(itf_name, &this->event_itf);
 }
 
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new soc_eu(config);
 }

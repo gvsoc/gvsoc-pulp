@@ -183,21 +183,20 @@ class NeurekaVectorStore : public NeurekaStreamAccess {
     xt::xarray<T> ex(xt::xarray<T> data, int width, int64_t& cycles, int32_t enable);
 };
 
-class Neureka : public vp::component
+class Neureka : public vp::Component
 {
     friend class Neureka_base;
 
 public:
-    Neureka(js::config *config);
+    Neureka(vp::ComponentConf &config);
 
-    int build();
     void reset(bool active);
 
     // were private before, but did not work with stream.hpp
-    vp::io_req io_req;
-    vp::trace trace;
-    vp::io_master out;
-    vp::io_master wmem_out;
+    vp::IoReq io_req;
+    vp::Trace trace;
+    vp::IoMaster out;
+    vp::IoMaster wmem_out;
     vp::reg_32 state;
     vp::reg_8 activity;
     NeurekaTraceLevel trace_level;
@@ -226,7 +225,7 @@ private:
     int OVERHEAD_MV;
     int QUANT_PER_CYCLE;
 
-    static vp::io_req_status_e hwpe_slave(void *__this, vp::io_req *req);
+    static vp::IoReqStatus hwpe_slave(vp::Block *__this, vp::IoReq *req);
 
     // DEBUG settings
     bool fsm_traces;
@@ -245,9 +244,9 @@ private:
     void debug_psum_block();
 
     // EVENT handlers
-    static void fsm_start_handler(void *__this, vp::clock_event *event);
-    static void fsm_handler(void *__this, vp::clock_event *event);
-    static void fsm_end_handler(void *__this, vp::clock_event *event);
+    static void fsm_start_handler(vp::Block *__this, vp::ClockEvent *event);
+    static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
+    static void fsm_end_handler(vp::Block *__this, vp::ClockEvent *event);
 
     // MAIN FSM and LOOP
     int  fsm();
@@ -501,12 +500,12 @@ private:
     NeurekaVectorStore<uint8_t> vst_y;
     xt::xarray<int32_t> col_enable;
 
-    vp::io_slave in;
-    vp::wire_master<bool> irq;
+    vp::IoSlave in;
+    vp::WireMaster<bool> irq;
 
-    vp::clock_event *fsm_start_event;
-    vp::clock_event *fsm_event;
-    vp::clock_event *fsm_end_event;
+    vp::ClockEvent *fsm_start_event;
+    vp::ClockEvent *fsm_event;
+    vp::ClockEvent *fsm_end_event;
 };
 
 #endif /* __NEUREKA_HPP__ */

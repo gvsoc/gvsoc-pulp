@@ -97,7 +97,7 @@ void Ne16::__BinConvArray(
         std::ostringstream stringStream;
         stringStream << "binconv: weight=" << xt::view(weight, r)*mac_enable << "activ=" << activ << " scale=" << scale_loc << " ==> " << xt::view(weight, r)*mac_enable * activ << " ==> " << std::hex << xt::sum(xt::view(weight, r)*mac_enable*activ, 0)*scale << std::dec << "\n";
         std::string copyOfStr = stringStream.str();
-        this->trace.msg(vp::trace::LEVEL_DEBUG, copyOfStr.c_str());
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, copyOfStr.c_str());
       }
       if (!mode_linear) {
         xt::view(this->psum_block, c, r) = __BinConvBlock(xt::view(weight, r) * mac_enable, activ, scale_loc, mode16);

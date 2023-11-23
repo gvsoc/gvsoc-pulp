@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-import gsystree as st
+import gvsoc.systree as st
 from pulp.chips.siracusa.pulp_open import Pulp_open
 from devices.hyperbus.hyperflash import Hyperflash
 from devices.spiflash.spiflash import Spiflash
@@ -22,15 +22,15 @@ from devices.spiflash.atxp032 import Atxp032
 from devices.hyperbus.hyperram import Hyperram
 from devices.testbench.testbench import Testbench
 from devices.uart.uart_checker import Uart_checker
-import gv.gvsoc_runner
+import gvsoc.runner
 from gapylib.chips.pulp.flash import *
 
 
-class Pulp_open_board(gv.gvsoc_runner.Runner):
+class Pulp_open_board(st.Component):
 
-    def __init__(self, parser, options, parent=None, name='top'):
+    def __init__(self, parent, name, parser, options):
 
-        super(Pulp_open_board, self).__init__(parent, name, parser=parser, options=options)
+        super(Pulp_open_board, self).__init__(parent, name, options=options)
 
         # Pulp
         pulp = Pulp_open(self, 'chip')

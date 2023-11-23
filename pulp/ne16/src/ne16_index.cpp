@@ -23,10 +23,10 @@
 void Ne16::k_in_major_update_idx() {
   this->k_in_major_iter++;
   if(this->trace_level == L3_ALL) {
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "  k_out_major=%d\n", this->k_out_major);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "  i_major=%d\n", this->i_major);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "  j_major=%d\n", this->j_major);
-    this->trace.msg(vp::trace::LEVEL_DEBUG, "  k_in_major_iter=%d\n", k_in_major);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "  k_out_major=%d\n", this->k_out_major);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "  i_major=%d\n", this->i_major);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "  j_major=%d\n", this->j_major);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "  k_in_major_iter=%d\n", k_in_major);
   }
 }
 

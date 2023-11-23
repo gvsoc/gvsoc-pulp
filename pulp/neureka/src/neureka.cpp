@@ -24,8 +24,8 @@
 
 using namespace std::placeholders;
 
-Neureka::Neureka(js::config *config)
-    : vp::component(config)
+Neureka::Neureka(vp::ComponentConf &config)
+    : vp::Component(config)
 {
     // FIXME these parameters might be settable through config, later...
     this->TP_IN           = 32;
@@ -45,6 +45,23 @@ Neureka::Neureka(js::config *config)
     this->OVERHEAD_LD_3X3 = 31;
     this->OVERHEAD_MV     = 17;
     this->QUANT_PER_CYCLE = 4;
+
+    this->traces.new_trace("trace", &this->trace, vp::DEBUG);
+    this->new_reg("fsm_state", &this->state, 32);//public in hpp
+    this->new_reg("neureka_busy", &this->activity, 8);//public in hpp
+    this->activity.set(0);//public in hpp
+    this->state.set(IDLE);//public in hpp
+    this->new_master_port("out", &this->out);//public in hpp
+    this->new_master_port("wmem_out", &this->wmem_out);//public in hpp
+    this->new_master_port("irq", &this->irq);//private in hpp connected to the cluster event unit
+    this->in.set_req_meth(&Neureka::hwpe_slave);//private in hpp
+    this->new_slave_port("input", &this->in); // how to change this name? //private in hpp linked to preipheral ico at the cluster
+    this->fsm_start_event = this->event_new(&Neureka::fsm_start_handler);//private in hpp
+    this->fsm_event = this->event_new(&Neureka::fsm_handler);//private in hpp
+    this->fsm_end_event = this->event_new(&Neureka::fsm_end_handler);//private in hpp
+    this->trace_level = L0_CONFIG;//public in hpp
+    this->trace_format = 0;//public in hpp
+
 }
 
 void Neureka::reset(bool active)
@@ -68,12 +85,12 @@ void Neureka::reset(bool active)
 }
 
 // The `hwpe_slave` member function models an access to the NEUREKA SLAVE interface
-vp::io_req_status_e Neureka::hwpe_slave(void *__this, vp::io_req *req)
+vp::IoReqStatus Neureka::hwpe_slave(vp::Block *__this, vp::IoReq *req)
 {
     Neureka *_this = (Neureka *)__this;
 
     if (_this->trace_level == L1_ACTIV_INOUT || _this->trace_level == L2_DEBUG || _this->trace_level == L3_ALL) {
-      _this->trace.msg(vp::trace::LEVEL_DEBUG, "Received request (addr: 0x%x, size: 0x%x, is_write: %d, data: %p\n", req->get_addr(), req->get_size(), req->get_is_write(), req->get_data());
+      _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received request (addr: 0x%x, size: 0x%x, is_write: %d, data: %p\n", req->get_addr(), req->get_size(), req->get_is_write(), req->get_data());
     }
     uint8_t *data = req->get_data(); // size depends on data get_size
 
@@ -111,7 +128,7 @@ vp::io_req_status_e Neureka::hwpe_slave(void *__this, vp::io_req *req)
         }
         else {
             if (_this->trace_level == L1_ACTIV_INOUT || _this->trace_level == L2_DEBUG || _this->trace_level == L3_ALL) {
-                _this->trace.msg(vp::trace::LEVEL_DEBUG, "offset: %d data: %08x\n", ((req->get_addr() & 0x17f) - 0x20) >> 2, *(uint32_t *) data);
+                _this->trace.msg(vp::Trace::LEVEL_DEBUG, "offset: %d data: %08x\n", ((req->get_addr() & 0x17f) - 0x20) >> 2, *(uint32_t *) data);
             }
             _this->regfile_wr(((req->get_addr() & 0x17f) - 0x20)>> 2, *(uint32_t *) data);
         }
@@ -147,28 +164,7 @@ vp::io_req_status_e Neureka::hwpe_slave(void *__this, vp::io_req *req)
     return vp::IO_REQ_OK;
 }
 
-int Neureka::build()
-{
-    this->traces.new_trace("trace", &this->trace, vp::DEBUG);
-    this->new_reg("fsm_state", &this->state, 32);//public in hpp
-    this->new_reg("neureka_busy", &this->activity, 8);//public in hpp
-    this->activity.set(0);//public in hpp
-    this->state.set(IDLE);//public in hpp
-    this->new_master_port("out", &this->out);//public in hpp
-    this->new_master_port("wmem_out", &this->wmem_out);//public in hpp
-    this->new_master_port("irq", &this->irq);//private in hpp connected to the cluster event unit
-    this->in.set_req_meth(&Neureka::hwpe_slave);//private in hpp
-    this->new_slave_port("input", &this->in); // how to change this name? //private in hpp linked to preipheral ico at the cluster
-    this->fsm_start_event = this->event_new(&Neureka::fsm_start_handler);//private in hpp
-    this->fsm_event = this->event_new(&Neureka::fsm_handler);//private in hpp
-    this->fsm_end_event = this->event_new(&Neureka::fsm_end_handler);//private in hpp
-    this->trace_level = L0_CONFIG;//public in hpp
-    this->trace_format = 0;//public in hpp
-
-    return 0;
-}
-
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
     return new Neureka(config);
 }

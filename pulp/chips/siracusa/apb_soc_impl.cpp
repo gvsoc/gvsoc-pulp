@@ -27,33 +27,30 @@
 
 #include "archi/apb_soc.h"
 
-class apb_soc_ctrl : public vp::component
+class apb_soc_ctrl : public vp::Component
 {
 
 public:
 
-  apb_soc_ctrl(js::config *config);
+  apb_soc_ctrl(vp::ComponentConf &config);
 
-  int build();
-  void start();
-
-  static vp::io_req_status_e req(void *__this, vp::io_req *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
 
   void reset(bool active);
-  static void bootsel_sync(void *__this, int value);
-  static void confreg_ext_sync(void *__this, uint32_t value);
+  static void bootsel_sync(vp::Block *__this, int value);
+  static void confreg_ext_sync(vp::Block *__this, uint32_t value);
 
-  vp::trace     trace;
-  vp::io_slave in;
+  vp::Trace     trace;
+  vp::IoSlave in;
 
-  vp::wire_master<uint32_t> bootaddr_itf;
-  vp::wire_master<int>  event_itf;
-  vp::wire_slave<int>   bootsel_itf;
+  vp::WireMaster<uint32_t> bootaddr_itf;
+  vp::WireMaster<int>  event_itf;
+  vp::WireSlave<int>   bootsel_itf;
 
-  vp::wire_master<uint32_t> confreg_soc_itf;
-  vp::wire_slave<uint32_t> confreg_ext_itf;
+  vp::WireMaster<uint32_t> confreg_soc_itf;
+  vp::WireSlave<uint32_t> confreg_ext_itf;
 
   uint32_t core_status;
   uint32_t bootaddr;
@@ -62,13 +59,35 @@ private:
   vp::reg_32     jtag_reg_ext;
 };
 
-apb_soc_ctrl::apb_soc_ctrl(js::config *config)
-: vp::component(config)
+apb_soc_ctrl::apb_soc_ctrl(vp::ComponentConf &config)
+: vp::Component(config)
 {
+  traces.new_trace("trace", &trace, vp::DEBUG);
+  in.set_req_meth(&apb_soc_ctrl::req);
+  new_slave_port("input", &in);
+
+  bootsel_itf.set_sync_meth(&apb_soc_ctrl::bootsel_sync);
+  new_slave_port("bootsel", &bootsel_itf);
+
+  new_master_port("bootaddr", &this->bootaddr_itf);
+
+  new_master_port("event", &event_itf);
+
+  confreg_ext_itf.set_sync_meth(&apb_soc_ctrl::confreg_ext_sync);
+  this->new_slave_port("confreg_ext", &this->confreg_ext_itf);
+
+  this->new_master_port("confreg_soc", &this->confreg_soc_itf);
+
+  this->new_reg("jtag_reg_ext", &this->jtag_reg_ext, 0, false);
+
+  core_status = 0;
+  this->bootsel = 0;
+  this->jtag_reg_ext.set(0);
+
 
 }
 
-vp::io_req_status_e apb_soc_ctrl::req(void *__this, vp::io_req *req)
+vp::IoReqStatus apb_soc_ctrl::req(vp::Block *__this, vp::IoReq *req)
 {
   apb_soc_ctrl *_this = (apb_soc_ctrl *)__this;
 
@@ -95,7 +114,7 @@ vp::io_req_status_e apb_soc_ctrl::req(void *__this, vp::io_req *req)
       
       if ((_this->core_status >> APB_SOC_STATUS_EOC_BIT) & 1) 
       {
-        _this->clock->stop_engine(_this->core_status & 0x7fffffff);
+        _this->time.get_engine()->quit(_this->core_status & 0x7fffffff);
       }
     }
   }
@@ -138,54 +157,23 @@ vp::io_req_status_e apb_soc_ctrl::req(void *__this, vp::io_req *req)
   return vp::IO_REQ_OK;
 }
 
-void apb_soc_ctrl::bootsel_sync(void *__this, int value)
+void apb_soc_ctrl::bootsel_sync(vp::Block *__this, int value)
 {
   apb_soc_ctrl *_this = (apb_soc_ctrl *)__this;
   _this->bootsel = value;
 }
 
-void apb_soc_ctrl::confreg_ext_sync(void *__this, uint32_t value)
+void apb_soc_ctrl::confreg_ext_sync(vp::Block *__this, uint32_t value)
 {
   apb_soc_ctrl *_this = (apb_soc_ctrl *)__this;
   _this->jtag_reg_ext.set(value);
-}
-
-int apb_soc_ctrl::build()
-{
-  traces.new_trace("trace", &trace, vp::DEBUG);
-  in.set_req_meth(&apb_soc_ctrl::req);
-  new_slave_port("input", &in);
-
-  bootsel_itf.set_sync_meth(&apb_soc_ctrl::bootsel_sync);
-  new_slave_port("bootsel", &bootsel_itf);
-
-  new_master_port("bootaddr", &this->bootaddr_itf);
-
-  new_master_port("event", &event_itf);
-
-  confreg_ext_itf.set_sync_meth(&apb_soc_ctrl::confreg_ext_sync);
-  this->new_slave_port("confreg_ext", &this->confreg_ext_itf);
-
-  this->new_master_port("confreg_soc", &this->confreg_soc_itf);
-
-  this->new_reg("jtag_reg_ext", &this->jtag_reg_ext, 0, false);
-
-  core_status = 0;
-  this->bootsel = 0;
-  this->jtag_reg_ext.set(0);
-
-  return 0;
 }
 
 void apb_soc_ctrl::reset(bool active)
 {
 }
 
-void apb_soc_ctrl::start()
-{
-}
-
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new apb_soc_ctrl(config);
 }

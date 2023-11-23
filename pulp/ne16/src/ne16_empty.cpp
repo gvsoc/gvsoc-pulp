@@ -22,27 +22,32 @@
 #include "vp/vp.hpp"
 #include <vp/itf/io.hpp>
 
-class Ne16 : public vp::component
+class Ne16 : public vp::Component
 {
     friend class Ne16_base;
 
 public:
-    Ne16(js::config *config);
+    Ne16(vp::ComponentConf &config);
 
-    int build();
     void reset(bool active);
 
 
 private:
-    vp::io_master out;
-    vp::io_slave in;
-    vp::wire_master<bool> irq;
+    vp::IoMaster out;
+    vp::IoSlave in;
+    vp::WireMaster<bool> irq;
 
 };
 
-Ne16::Ne16(js::config *config)
-    : vp::component(config)
+Ne16::Ne16(vp::ComponentConf &config)
+    : vp::Component(config)
 {
+    this->new_master_port("out", &this->out);
+
+    this->new_master_port("irq", &this->irq);
+
+    this->new_slave_port("input", &this->in);
+
 }
 
 
@@ -51,18 +56,7 @@ void Ne16::reset(bool active)
 }
 
 
-int Ne16::build()
-{
-    this->new_master_port("out", &this->out);
-
-    this->new_master_port("irq", &this->irq);
-
-    this->new_slave_port("input", &this->in);
-
-    return 0;
-}
-
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
     return new Ne16(config);
 }

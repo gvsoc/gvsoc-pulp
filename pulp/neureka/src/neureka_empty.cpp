@@ -23,27 +23,32 @@
 #include "vp/vp.hpp"
 #include <vp/itf/io.hpp>
 
-class Neureka : public vp::component
+class Neureka : public vp::Component
 {
     friend class Neureka_base;
 
 public:
-    Neureka(js::config *config);
+    Neureka(vp::ComponentConf &config);
 
-    int build();
     void reset(bool active);
 
 
 private:
-    vp::io_master out;
-    vp::io_slave in;
-    vp::wire_master<bool> irq;
+    vp::IoMaster out;
+    vp::IoSlave in;
+    vp::WireMaster<bool> irq;
 
 };
 
-Neureka::Neureka(js::config *config)
-    : vp::component(config)
+Neureka::Neureka(vp::ComponentConf &config)
+    : vp::Component(config)
 {
+    this->new_master_port("out", &this->out);
+
+    this->new_master_port("irq", &this->irq);
+
+    this->new_slave_port("input", &this->in);
+
 }
 
 
@@ -52,18 +57,7 @@ void Neureka::reset(bool active)
 }
 
 
-int Neureka::build()
-{
-    this->new_master_port("out", &this->out);
-
-    this->new_master_port("irq", &this->irq);
-
-    this->new_slave_port("input", &this->in);
-
-    return 0;
-}
-
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
     return new Neureka(config);
 }

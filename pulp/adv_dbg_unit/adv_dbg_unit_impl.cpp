@@ -91,20 +91,17 @@ typedef struct {
   uint32_t ctrl_reg;
 } tap_t;
 
-class adv_dbg_unit : public vp::component
+class adv_dbg_unit : public vp::Component
 {
 
 public:
 
-  adv_dbg_unit(js::config *config);
-
-  int build();
-  void start();
+  adv_dbg_unit(vp::ComponentConf &config);
 
 private:
 
-  static void sync(void *__this, int tck, int tdi, int tms, int trst);
-  static void sync_cycle(void *__this, int tdi, int tms, int trst);
+  static void sync(vp::Block *__this, int tck, int tdi, int tms, int trst);
+  static void sync_cycle(vp::Block *__this, int tdi, int tms, int trst);
   void tck_edge(int tck, int tdi, int tms, int trst);
   void tap_update(int tms, int tclk);
   void tap_init();
@@ -115,17 +112,17 @@ private:
   void burst_cmd(int word_bytes, int is_read, uint64_t command);
   void capture_dr();
   void shift_dr();
-  static void confreg_soc_sync(void *__this, uint32_t value);
+  static void confreg_soc_sync(vp::Block *__this, uint32_t value);
 
-  vp::trace     trace;
-  vp::trace     debug;
-  vp::jtag_slave jtag_in_itf;
-  vp::jtag_master jtag_out_itf;
+  vp::Trace     trace;
+  vp::Trace     debug;
+  vp::JtagSlave jtag_in_itf;
+  vp::JtagMaster jtag_out_itf;
 
-  vp::wire_slave<uint32_t> confreg_soc_itf;
-  vp::wire_master<uint32_t> confreg_ext_itf;
+  vp::WireSlave<uint32_t> confreg_soc_itf;
+  vp::WireMaster<uint32_t> confreg_ext_itf;
 
-  vp::io_req req;
+  vp::IoReq req;
 
   tap_t tap;
   device_t dev;
@@ -137,12 +134,42 @@ private:
   int confreg_length;
   int confreg_instr;
 
-  vp::io_master io_itf;
+  vp::IoMaster io_itf;
 };
 
-adv_dbg_unit::adv_dbg_unit(js::config *config)
-: vp::component(config)
+adv_dbg_unit::adv_dbg_unit(vp::ComponentConf &config)
+: vp::Component(config)
 {
+  traces.new_trace("trace", &trace, vp::TRACE);
+  traces.new_trace("debug", &debug, vp::DEBUG);
+
+  this->confreg_length = 4;
+  if (get_js_config()->get("confreg_length") != NULL)
+  {
+    this->confreg_length = get_js_config()->get_child_int("confreg_length");
+  }
+
+  this->new_master_port("confreg_ext", &this->confreg_ext_itf);
+
+  confreg_soc_itf.set_sync_meth(&adv_dbg_unit::confreg_soc_sync);
+  this->new_slave_port("confreg_soc", &this->confreg_soc_itf);
+
+  jtag_in_itf.set_sync_meth(&adv_dbg_unit::sync);
+  jtag_in_itf.set_sync_cycle_meth(&adv_dbg_unit::sync_cycle);
+  new_slave_port("jtag_in", &jtag_in_itf);
+
+  new_master_port("jtag_out", &jtag_out_itf);
+
+  new_master_port("io", &io_itf);
+
+  if (get_js_config()->get("confreg_instr") == NULL)
+    this->confreg_instr = 7;
+  else
+    this->confreg_instr = get_js_config()->get_int("confreg_instr");
+
+  this->tap.capture_instr = 0;
+
+  tap_init();
 
 }
 
@@ -285,7 +312,7 @@ void adv_dbg_unit::update_dr()
     }
     else
     {
-      this->warning.force_warning("Writing to JTAG reg while it is not connected\n");
+      this->trace.force_warning("Writing to JTAG reg while it is not connected\n");
     }
   }
   else if (tap.instr == USER_INSTR)
@@ -576,66 +603,27 @@ void adv_dbg_unit::tck_edge(int tck, int tdi, int tms, int trst)
   this->jtag_out_itf.sync(tck, this->tdo, tms, trst);
 }
 
-void adv_dbg_unit::sync(void *__this, int tck, int tdi, int tms, int trst)
+void adv_dbg_unit::sync(vp::Block *__this, int tck, int tdi, int tms, int trst)
 {
   adv_dbg_unit *_this = (adv_dbg_unit *)__this;
   _this->tck_edge(tck, tdi, tms, trst);
 }
 
 
-void adv_dbg_unit::sync_cycle(void *__this, int tdi, int tms, int trst)
+void adv_dbg_unit::sync_cycle(vp::Block *__this, int tdi, int tms, int trst)
 {
   adv_dbg_unit *_this = (adv_dbg_unit *)__this;
   _this->tck_edge(1, tdi, tms, trst);
   _this->tck_edge(0, tdi, tms, trst);
 }
 
-void adv_dbg_unit::confreg_soc_sync(void *__this, uint32_t value)
+void adv_dbg_unit::confreg_soc_sync(vp::Block *__this, uint32_t value)
 {
   adv_dbg_unit *_this = (adv_dbg_unit *)__this;
   _this->tap.confreg_soc = value;
 }
 
-int adv_dbg_unit::build()
-{
-  traces.new_trace("trace", &trace, vp::TRACE);
-  traces.new_trace("debug", &debug, vp::DEBUG);
-
-  this->confreg_length = 4;
-  if (get_js_config()->get("confreg_length") != NULL)
-  {
-    this->confreg_length = get_js_config()->get_child_int("confreg_length");
-  }
-
-  this->new_master_port("confreg_ext", &this->confreg_ext_itf);
-
-  confreg_soc_itf.set_sync_meth(&adv_dbg_unit::confreg_soc_sync);
-  this->new_slave_port("confreg_soc", &this->confreg_soc_itf);
-
-  jtag_in_itf.set_sync_meth(&adv_dbg_unit::sync);
-  jtag_in_itf.set_sync_cycle_meth(&adv_dbg_unit::sync_cycle);
-  new_slave_port("jtag_in", &jtag_in_itf);
-
-  new_master_port("jtag_out", &jtag_out_itf);
-
-  new_master_port("io", &io_itf);
-
-  if (get_js_config()->get("confreg_instr") == NULL)
-    this->confreg_instr = 7;
-  else
-    this->confreg_instr = get_js_config()->get_int("confreg_instr");
-
-  this->tap.capture_instr = 0;
-
-  tap_init();
-  return 0;
-}
-
-void adv_dbg_unit::start()
-{
-}
-
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new adv_dbg_unit(config);
 }

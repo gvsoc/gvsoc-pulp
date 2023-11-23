@@ -27,36 +27,41 @@
 
 #include "archi/chips/bigpulp/apb_soc.h"
 
-class apb_soc_ctrl : public vp::component
+class apb_soc_ctrl : public vp::Component
 {
 
 public:
 
-  apb_soc_ctrl(js::config *config);
+  apb_soc_ctrl(vp::ComponentConf &config);
 
-  int build();
-  void start();
-
-  static vp::io_req_status_e req(void *__this, vp::io_req *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
   uint32_t core_status;
   uint32_t bootaddr;
 
 private:
 
-  vp::trace     trace;
-  vp::io_slave in;
+  vp::Trace     trace;
+  vp::IoSlave in;
 
-  vp::wire_master<uint32_t> bootaddr_itf;
+  vp::WireMaster<uint32_t> bootaddr_itf;
 };
 
-apb_soc_ctrl::apb_soc_ctrl(js::config *config)
-: vp::component(config)
+apb_soc_ctrl::apb_soc_ctrl(vp::ComponentConf &config)
+: vp::Component(config)
 {
+  traces.new_trace("trace", &trace, vp::DEBUG);
+  in.set_req_meth(&apb_soc_ctrl::req);
+  new_slave_port("input", &in);
+
+  new_master_port("bootaddr", &this->bootaddr_itf);
+
+  core_status = 0;
+
 
 }
 
-vp::io_req_status_e apb_soc_ctrl::req(void *__this, vp::io_req *req)
+vp::IoReqStatus apb_soc_ctrl::req(vp::Block *__this, vp::IoReq *req)
 {
   apb_soc_ctrl *_this = (apb_soc_ctrl *)__this;
 
@@ -108,24 +113,7 @@ vp::io_req_status_e apb_soc_ctrl::req(void *__this, vp::io_req *req)
   return vp::IO_REQ_OK;
 }
 
-int apb_soc_ctrl::build()
-{
-  traces.new_trace("trace", &trace, vp::DEBUG);
-  in.set_req_meth(&apb_soc_ctrl::req);
-  new_slave_port("input", &in);
-
-  new_master_port("bootaddr", &this->bootaddr_itf);
-
-  core_status = 0;
-
-  return 0;
-}
-
-void apb_soc_ctrl::start()
-{
-}
-
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new apb_soc_ctrl(config);
 }

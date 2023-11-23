@@ -35,7 +35,7 @@ Uart_periph_v1::Uart_periph_v1(udma *top, int id, int itf_id) : Udma_periph(top,
   channel0 = new Uart_rx_channel(top, this, UDMA_EVENT_ID(id), itf_name + "_rx");
   channel1 = new Uart_tx_channel(top, this, UDMA_EVENT_ID(id) + 1, itf_name + "_tx");
 
-  top->new_master_port(this, itf_name, &uart_itf);
+  top->new_master_port(itf_name, &uart_itf, (vp::Block *)this);
 
   uart_itf.set_sync_meth(&Uart_periph_v1::rx_sync);
 }
@@ -59,7 +59,7 @@ void Uart_periph_v1::reset(bool active)
 }
 
 
-vp::io_req_status_e Uart_periph_v1::status_req(vp::io_req *req)
+vp::IoReqStatus Uart_periph_v1::status_req(vp::IoReq *req)
 {
   if (req->get_is_write())
   {
@@ -94,7 +94,7 @@ void Uart_periph_v1::set_setup_reg(uint32_t value)
   this->clkdiv = ARCHI_REG_FIELD_GET(this->setup_reg_value, UART_CLKDIV_OFFSET, UART_CLKDIV_WIDTH);
 }
 
-vp::io_req_status_e Uart_periph_v1::setup_req(vp::io_req *req)
+vp::IoReqStatus Uart_periph_v1::setup_req(vp::IoReq *req)
 {
   if (req->get_is_write())
   {
@@ -114,7 +114,7 @@ vp::io_req_status_e Uart_periph_v1::setup_req(vp::io_req *req)
 
 
 
-vp::io_req_status_e Uart_periph_v1::custom_req(vp::io_req *req, uint64_t offset)
+vp::IoReqStatus Uart_periph_v1::custom_req(vp::IoReq *req, uint64_t offset)
 {
   if (req->get_size() != 4)
     return vp::IO_REQ_INVALID;
@@ -132,7 +132,7 @@ vp::io_req_status_e Uart_periph_v1::custom_req(vp::io_req *req, uint64_t offset)
 }
 
 
-void Uart_periph_v1::rx_sync(void *__this, int data)
+void Uart_periph_v1::rx_sync(vp::Block *__this, int data)
 {
   Uart_periph_v1 *_this = (Uart_periph_v1 *)__this;
   (static_cast<Uart_rx_channel *>(_this->channel0))->handle_rx_bit(data);
@@ -144,13 +144,13 @@ void Uart_periph_v1::rx_sync(void *__this, int data)
 Uart_tx_channel::Uart_tx_channel(udma *top, Uart_periph_v1 *periph, int id, string name)
 : Udma_tx_channel(top, id, name), periph(periph)
 {
-  pending_word_event = top->event_new(this, Uart_tx_channel::handle_pending_word);
+  pending_word_event = top->event_new((vp::Block *)this, Uart_tx_channel::handle_pending_word);
 }
 
 
 
 
-void Uart_tx_channel::handle_pending_word(void *__this, vp::clock_event *event)
+void Uart_tx_channel::handle_pending_word(vp::Block *__this, vp::ClockEvent *event)
 {
   Uart_tx_channel *_this = (Uart_tx_channel *)__this;
 
@@ -214,7 +214,7 @@ void Uart_tx_channel::handle_pending_word(void *__this, vp::clock_event *event)
     {
       if (_this->periph->tx)
       {
-        _this->next_bit_cycle = _this->periph->top->get_periph_clock()->get_cycles() + _this->periph->clkdiv + 2;
+        _this->next_bit_cycle = _this->periph->top->get_periph_clock()->clock.get_cycles() + _this->periph->clkdiv + 2;
         _this->top->get_trace()->msg("Sending bit (value: %d)\n", bit);
         _this->periph->uart_itf.sync(bit);
       }
@@ -237,7 +237,7 @@ void Uart_tx_channel::check_state()
   if ((this->pending_bits != 0 || this->stop_bits) && !pending_word_event->is_enqueued())
   {
     int latency = 1;
-    int64_t cycles = this->top->get_periph_clock()->get_cycles();
+    int64_t cycles = this->top->get_periph_clock()->clock.get_cycles();
     if (next_bit_cycle > cycles)
       latency = next_bit_cycle - cycles;
 
@@ -251,7 +251,7 @@ void Uart_tx_channel::handle_ready_reqs()
 {
   if (this->pending_bits == 0 && !ready_reqs->is_empty())
   {
-    vp::io_req *req = this->ready_reqs->pop();
+    vp::IoReq *req = this->ready_reqs->pop();
     this->pending_req = req;
     this->pending_word = *(uint32_t *)req->get_data();
     this->pending_bits = req->get_actual_size() * 8;

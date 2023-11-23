@@ -118,7 +118,7 @@ class Mchan_channel
 
 public:
   Mchan_channel(int id, mchan *top);
-  vp::io_req_status_e req(vp::io_req *req);
+  vp::IoReqStatus req(vp::IoReq *req);
   void reset();
 
 protected:
@@ -130,45 +130,42 @@ protected:
 
 private:
 
-  vp::io_req_status_e handle_queue_req(vp::io_req *req, bool is_write, uint32_t *value);
-  vp::io_req_status_e handle_status_req(vp::io_req *req, bool is_write, uint32_t *value);
-  vp::io_req_status_e handle_queue_write(vp::io_req *req, uint32_t *value);
+  vp::IoReqStatus handle_queue_req(vp::IoReq *req, bool is_write, uint32_t *value);
+  vp::IoReqStatus handle_status_req(vp::IoReq *req, bool is_write, uint32_t *value);
+  vp::IoReqStatus handle_queue_write(vp::IoReq *req, uint32_t *value);
   bool check_command(Mchan_cmd *cmd);
   int unpack_command(Mchan_cmd *cmd);
-  void handle_req(vp::io_req *req, uint32_t *value);
+  void handle_req(vp::IoReq *req, uint32_t *value);
 
   int id;
   mchan *top;
-  vp::io_slave in;
-  vp::io_req *pending_req;
+  vp::IoSlave in;
+  vp::IoReq *pending_req;
   int pending_cmd;
   Mchan_cmd *current_cmd;
   Mchan_queue<Mchan_cmd> *pending_cmds;
 
-  vp::wire_master<bool> event_itf;
-  vp::wire_master<bool> irq_itf;
-  vp::wire_master<bool> ext_irq_itf;
+  vp::WireMaster<bool> event_itf;
+  vp::WireMaster<bool> irq_itf;
 
 };
 
-class mchan : public vp::component
+class mchan : public vp::Component
 {
 
   friend class Mchan_channel;
 
 public:
 
-  mchan(js::config *config);
+  mchan(vp::ComponentConf &config);
 
-  int build();
-  void start();
   void reset(bool active);
 
 protected:
-  static vp::io_req_status_e req(void *__this, vp::io_req *req, int id);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req, int id);
   uint32_t get_status();
   void free_counters(uint32_t counter_mask);
-  int alloc_counter(vp::io_req *req, Mchan_channel *channel);
+  int alloc_counter(vp::IoReq *req, Mchan_channel *channel);
   int do_alloc_counter(Mchan_channel *channel);
   Mchan_cmd *get_command();
   void free_command(Mchan_cmd *cmd);
@@ -180,24 +177,24 @@ protected:
 
 private:
 
-  static void check_queue_handler(void *_this, vp::clock_event *event);
-  static void check_ext_read_handler(void *_this, vp::clock_event *event);
-  static void check_ext_write_handler(void *_this, vp::clock_event *event);
-  static void check_loc_transfer_handler(void *_this, vp::clock_event *event);
+  static void check_queue_handler(vp::Block *_this, vp::ClockEvent *event);
+  static void check_ext_read_handler(vp::Block *_this, vp::ClockEvent *event);
+  static void check_ext_write_handler(vp::Block *_this, vp::ClockEvent *event);
+  static void check_loc_transfer_handler(vp::Block *_this, vp::ClockEvent *event);
   void move_to_global_queue(bool read_queue);
-  void push_req_to_loc(vp::io_req *req);
+  void push_req_to_loc(vp::IoReq *req);
   void send_req();
   void send_loc_read_req();
-  static void ext_grant(void *_this, vp::io_req *req);
-  static void ext_response(void *_this, vp::io_req *req);
-  static void loc_grant(void *_this, vp::io_req *req);
-  static void loc_response(void *_this, vp::io_req *req);
+  static void ext_grant(vp::Block *__this, vp::IoReq *req);
+  static void ext_response(vp::Block *__this, vp::IoReq *req);
+  static void loc_grant(vp::Block *__this, vp::IoReq *req);
+  static void loc_response(vp::Block *__this, vp::IoReq *req);
   void handle_cmd_termination(Mchan_cmd *cmd);
   void account_transfered_bytes(Mchan_cmd *cmd, int bytes);
-  void send_req_to_ext(Mchan_cmd *cmd, vp::io_req *req);
-  void handle_ext_write_req_end(Mchan_cmd *cmd, vp::io_req *req);
+  void send_req_to_ext(Mchan_cmd *cmd, vp::IoReq *req);
+  void handle_ext_write_req_end(Mchan_cmd *cmd, vp::IoReq *req);
 
-  vp::trace     trace;
+  vp::Trace     trace;
 
   int nb_channels;
   int core_queue_depth;
@@ -213,34 +210,35 @@ private:
   int nb_pending_ext_write_req;
   uint32_t free_counter_mask;
   vector<Mchan_channel *> channels;
-  vp::io_req *first_alloc_pending_req;
-  vp::io_req *last_alloc_pending_req;
-  vp::clock_event *check_queue_event;
-  vp::clock_event *check_ext_read_event;
-  vp::clock_event *check_ext_write_event;
-  vp::clock_event *check_loc_transfer_event;
+  vp::IoReq *first_alloc_pending_req;
+  vp::IoReq *last_alloc_pending_req;
+  vp::ClockEvent *check_queue_event;
+  vp::ClockEvent *check_ext_read_event;
+  vp::ClockEvent *check_ext_write_event;
+  vp::ClockEvent *check_loc_transfer_event;
   int sched_core_queue;
   Mchan_queue<Mchan_cmd> *pending_read_cmds;
   Mchan_queue<Mchan_cmd> *pending_write_cmds;
-  Mchan_queue<vp::io_req> *pending_write_reqs;
+  Mchan_queue<vp::IoReq> *pending_write_reqs;
   Mchan_cmd *current_ext_read_cmd;
   Mchan_cmd *current_ext_write_cmd;
   Mchan_cmd *current_loc_cmd;
-  vp::io_req *first_ext_read_req = NULL;
-  vp::io_req *first_ext_write_req = NULL;
-  vp::io_req *loc_req;
-  vp::io_req *pending_loc_read_req;
+  vp::IoReq *first_ext_read_req = NULL;
+  vp::IoReq *first_ext_write_req = NULL;
+  vp::IoReq *loc_req;
+  vp::IoReq *pending_loc_read_req;
 
   Mchan_cmd *first_command = NULL;
 
-  vp::io_master ext_itf;
-  vp::io_master *loc_itf;
+  vp::IoMaster ext_itf;
+  vp::IoMaster *loc_itf;
 
   int64_t *loc_port_ready_cycle;
 
   bool ext_is_stalled;
 
-  vp::trace     cmd_events[MCHAN_NB_COUNTERS];
+  vp::Trace     cmd_events[MCHAN_NB_COUNTERS];
+  vp::WireMaster<bool> ext_irq_itf;
 };
 
 void Mchan_channel::reset()
@@ -374,7 +372,7 @@ Mchan_cmd *Mchan_channel::pop_cmd(bool read_queue)
 
   if (pending_req)
   {
-    vp::io_req *req = pending_req;
+    vp::IoReq *req = pending_req;
     pending_req = NULL;
     handle_req(req, (uint32_t *)req->get_data());
     req->get_resp_port()->resp(req);
@@ -410,7 +408,7 @@ bool Mchan_channel::check_command(Mchan_cmd *cmd)
   return true;
 }
 
-void Mchan_channel::handle_req(vp::io_req *req, uint32_t *value)
+void Mchan_channel::handle_req(vp::IoReq *req, uint32_t *value)
 {
 
   if (current_cmd == NULL) {
@@ -428,7 +426,7 @@ void Mchan_channel::handle_req(vp::io_req *req, uint32_t *value)
 }
 
 
-vp::io_req_status_e Mchan_channel::handle_queue_write(vp::io_req *req, uint32_t *value)
+vp::IoReqStatus Mchan_channel::handle_queue_write(vp::IoReq *req, uint32_t *value)
 {
   top->trace.msg("Pushing word to queue (queue: %d, value: 0x%x, pending_cmd: %d)\n", this->id, *value, pending_cmd);
 
@@ -445,7 +443,7 @@ vp::io_req_status_e Mchan_channel::handle_queue_write(vp::io_req *req, uint32_t 
   return vp::IO_REQ_OK;
 }
 
-vp::io_req_status_e Mchan_channel::handle_queue_req(vp::io_req *req, bool is_write, uint32_t *value)
+vp::IoReqStatus Mchan_channel::handle_queue_req(vp::IoReq *req, bool is_write, uint32_t *value)
 {
   if (is_write)
   {
@@ -461,7 +459,7 @@ vp::io_req_status_e Mchan_channel::handle_queue_req(vp::io_req *req, bool is_wri
   }
 }
 
-vp::io_req_status_e Mchan_channel::handle_status_req(vp::io_req *req, bool is_write, uint32_t *value)
+vp::IoReqStatus Mchan_channel::handle_status_req(vp::IoReq *req, bool is_write, uint32_t *value)
 {
   if (is_write)
   {
@@ -485,10 +483,9 @@ Mchan_channel::Mchan_channel(int id, mchan *top)
 
   top->new_master_port("event_itf_" + std::to_string(id), &event_itf);
   top->new_master_port("irq_itf_" + std::to_string(id), &irq_itf);
-  top->new_master_port("ext_irq_itf", &ext_irq_itf);
 }
 
-vp::io_req_status_e Mchan_channel::req(vp::io_req *req)
+vp::IoReqStatus Mchan_channel::req(vp::IoReq *req)
 {
   uint64_t offset = req->get_addr();
   uint8_t *data = req->get_data();
@@ -510,7 +507,7 @@ void Mchan_channel::trigger_event(Mchan_cmd *cmd)
   if (id == top->nb_channels - 1)
   {
     top->trace.msg("Raising external irq line (channel: %d)\n", id);
-    ext_irq_itf.sync(true);
+    top->ext_irq_itf.sync(true);
   }
   else
   {
@@ -527,7 +524,7 @@ void Mchan_channel::trigger_event(Mchan_cmd *cmd)
 }
 
 
-void mchan::ext_grant(void *__this, vp::io_req *req)
+void mchan::ext_grant(vp::Block *__this, vp::IoReq *req)
 {
   mchan *_this = (mchan *)__this;
   _this->trace.msg("Received grant (req: %p\n", req);
@@ -535,7 +532,7 @@ void mchan::ext_grant(void *__this, vp::io_req *req)
   _this->check_queue();
 }
 
-void mchan::ext_response(void *__this, vp::io_req *req)
+void mchan::ext_response(vp::Block *__this, vp::IoReq *req)
 {
   mchan *_this = (mchan *)__this;
   _this->trace.msg("Received response (req: %p\n", req);
@@ -551,27 +548,27 @@ void mchan::ext_response(void *__this, vp::io_req *req)
   _this->check_queue();
 }
 
-void mchan::loc_grant(void *_this, vp::io_req *req)
+void mchan::loc_grant(vp::Block *__this, vp::IoReq *req)
 {
 }
 
-void mchan::loc_response(void *_this, vp::io_req *req)
+void mchan::loc_response(vp::Block *__this, vp::IoReq *req)
 {
 }
 
 
-mchan::mchan(js::config *config)
-: vp::component(config)
+mchan::mchan(vp::ComponentConf &config)
+: vp::Component(config)
 {
-  nb_channels = get_config_int("nb_channels");
-  core_queue_depth = get_config_int("core_queue_depth");
-  global_queue_depth = get_config_int("global_queue_depth");
-  is_64 = get_config_bool("is_64");
-  max_nb_ext_read_req = get_config_int("max_nb_ext_read_req");
-  max_nb_ext_write_req = get_config_int("max_nb_ext_write_req");
-  max_burst_length = get_config_int("max_burst_length");
-  nb_loc_ports = get_config_int("nb_loc_ports");
-  tcdm_addr_width = get_config_int("tcdm_addr_width");
+  nb_channels = get_js_config()->get_child_int("nb_channels");
+  core_queue_depth = get_js_config()->get_child_int("core_queue_depth");
+  global_queue_depth = get_js_config()->get_child_int("global_queue_depth");
+  is_64 = get_js_config()->get_child_bool("is_64");
+  max_nb_ext_read_req = get_js_config()->get_child_int("max_nb_ext_read_req");
+  max_nb_ext_write_req = get_js_config()->get_child_int("max_nb_ext_write_req");
+  max_burst_length = get_js_config()->get_child_int("max_burst_length");
+  nb_loc_ports = get_js_config()->get_child_int("nb_loc_ports");
+  tcdm_addr_width = get_js_config()->get_child_int("tcdm_addr_width");
 
   check_queue_event = event_new(mchan::check_queue_handler);
   check_ext_read_event = event_new(mchan::check_ext_read_handler);
@@ -580,15 +577,15 @@ mchan::mchan(js::config *config)
 
   pending_read_cmds = new Mchan_queue<Mchan_cmd>(global_queue_depth);
   pending_write_cmds = new Mchan_queue<Mchan_cmd>(global_queue_depth);
-  pending_write_reqs = new Mchan_queue<vp::io_req>(global_queue_depth);
+  pending_write_reqs = new Mchan_queue<vp::IoReq>(global_queue_depth);
 
-  loc_req = new vp::io_req[nb_loc_ports];
-  loc_itf = new vp::io_master[nb_loc_ports];
+  loc_req = new vp::IoReq[nb_loc_ports];
+  loc_itf = new vp::IoMaster[nb_loc_ports];
   loc_port_ready_cycle = new int64_t[nb_loc_ports];
 
   for (int i=0; i<max_nb_ext_read_req; i++)
   {
-    vp::io_req *req = new vp::io_req();
+    vp::IoReq *req = new vp::IoReq();
     // Allocate 3 arguments to store local port address, command and size done
     req->arg_alloc();
     req->arg_alloc();
@@ -601,7 +598,7 @@ mchan::mchan(js::config *config)
 
   for (int i=0; i<max_nb_ext_write_req; i++)
   {
-    vp::io_req *req = new vp::io_req();
+    vp::IoReq *req = new vp::IoReq();
     // Allocate 3 arguments to store local port address, command and size done
     req->arg_alloc();
     req->arg_alloc();
@@ -623,9 +620,22 @@ mchan::mchan(js::config *config)
     new_master_port("loc_itf_" + std::to_string(i), &loc_itf[i]);
   }
 
+  traces.new_trace("trace", &this->trace, vp::DEBUG);
+
+  for (int i=0; i<nb_channels; i++)
+  {
+    channels.push_back(new Mchan_channel(i, this));
+  }
+
+  for (int i=0; i<MCHAN_NB_COUNTERS; i++)
+  {
+    traces.new_trace_event("channel_" + std::to_string(i), &this->cmd_events[i], 8);
+  }
+
+  this->new_master_port("ext_irq_itf", &ext_irq_itf);
 }
 
-vp::io_req_status_e mchan::req(void *__this, vp::io_req *req, int id)
+vp::IoReqStatus mchan::req(vp::Block *__this, vp::IoReq *req, int id)
 {
   mchan *_this = (mchan *)__this;
   return _this->channels[id]->req(req);
@@ -649,7 +659,7 @@ void mchan::free_counters(uint32_t counter_mask)
   if (first_alloc_pending_req)
   {
     // In this case, remove the first from the queue
-    vp::io_req *req = first_alloc_pending_req;
+    vp::IoReq *req = first_alloc_pending_req;
     first_alloc_pending_req = req->get_next();
 
     // Get the counter and unstall the core
@@ -672,7 +682,7 @@ int mchan::do_alloc_counter(Mchan_channel *channel)
   return -1;
 }
 
-int mchan::alloc_counter(vp::io_req *req, Mchan_channel *channel)
+int mchan::alloc_counter(vp::IoReq *req, Mchan_channel *channel)
 {
   if (free_counter_mask) {
     return do_alloc_counter(channel);
@@ -745,12 +755,12 @@ void mchan::move_to_global_queue(bool read_queue)
 
 }
 
-void mchan::push_req_to_loc(vp::io_req *req)
+void mchan::push_req_to_loc(vp::IoReq *req)
 {
   pending_write_reqs->push(req);
 }
 
-void mchan::handle_ext_write_req_end(Mchan_cmd *cmd, vp::io_req *req)
+void mchan::handle_ext_write_req_end(Mchan_cmd *cmd, vp::IoReq *req)
 {
   int64_t size = req->get_size();
 
@@ -769,9 +779,9 @@ void mchan::handle_ext_write_req_end(Mchan_cmd *cmd, vp::io_req *req)
   }
 }
 
-void mchan::send_req_to_ext(Mchan_cmd *cmd, vp::io_req *req)
+void mchan::send_req_to_ext(Mchan_cmd *cmd, vp::IoReq *req)
 {
-  vp::io_req_status_e err = ext_itf.req(req);
+  vp::IoReqStatus err = ext_itf.req(req);
   if (err == vp::IO_REQ_OK)
   {
     handle_ext_write_req_end(cmd, req);
@@ -788,7 +798,7 @@ void mchan::send_loc_read_req()
 
   nb_pending_ext_write_req++;
 
-  vp::io_req *req = first_ext_write_req;
+  vp::IoReq *req = first_ext_write_req;
   first_ext_write_req = req->get_next();
 
   trace.msg("Preparing write request to external interface (req: %p, addr: 0x%x, size: 0x%x)\n",
@@ -834,7 +844,7 @@ void mchan::send_req()
 
   nb_pending_ext_read_req++;
 
-  vp::io_req *req = first_ext_read_req;
+  vp::IoReq *req = first_ext_read_req;
   first_ext_read_req = req->get_next();
 
   trace.msg("Sending read request to external interface (req: %p, addr: 0x%lx, size: 0x%x)\n",
@@ -866,7 +876,7 @@ void mchan::send_req()
     current_ext_read_cmd = NULL;
   }
 
-  vp::io_req_status_e err = ext_itf.req(req);
+  vp::IoReqStatus err = ext_itf.req(req);
   if (err == vp::IO_REQ_OK)
   {
     cmd->received_size += size;
@@ -878,7 +888,7 @@ void mchan::send_req()
   }
 }
 
-void mchan::check_ext_read_handler(void *__this, vp::clock_event *event)
+void mchan::check_ext_read_handler(vp::Block *__this, vp::ClockEvent *event)
 {
   mchan *_this = (mchan *)__this;
 
@@ -898,7 +908,7 @@ void mchan::check_ext_read_handler(void *__this, vp::clock_event *event)
   _this->check_queue();
 }
 
-void mchan::check_ext_write_handler(void *__this, vp::clock_event *event)
+void mchan::check_ext_write_handler(vp::Block *__this, vp::ClockEvent *event)
 {
   mchan *_this = (mchan *)__this;
 
@@ -931,7 +941,7 @@ void mchan::account_transfered_bytes(Mchan_cmd *cmd, int bytes)
   trace.msg("Decreasing counter (id: %d, bytes: %d, remaining bytes: %d)\n", cmd->counter_id, bytes, pending_bytes[cmd->counter_id]);
 
   if (pending_bytes[cmd->counter_id] < 0)
-    this->warning.force_warning("Counter became negative (id: %d, count: %d)\n", cmd->counter_id, pending_bytes[cmd->counter_id]);
+    this->trace.force_warning("Counter became negative (id: %d, count: %d)\n", cmd->counter_id, pending_bytes[cmd->counter_id]);
 
   if (pending_bytes[cmd->counter_id] == 0)
   {
@@ -949,14 +959,14 @@ void mchan::account_transfered_bytes(Mchan_cmd *cmd, int bytes)
   }
 }
 
-void mchan::check_loc_transfer_handler(void *__this, vp::clock_event *event)
+void mchan::check_loc_transfer_handler(vp::Block *__this, vp::ClockEvent *event)
 {
   mchan *_this = (mchan *)__this;
 
   // Go through the local ports to see if we can send a request from
   // pending commands
   int64_t min_ready_cycle = -1;
-  int64_t cycles = _this->get_cycles();
+  int64_t cycles = _this->clock.get_cycles();
 
   for (int i=0; i<_this->nb_loc_ports; i++)
   {
@@ -970,7 +980,7 @@ void mchan::check_loc_transfer_handler(void *__this, vp::clock_event *event)
 
     // Get the current write request coming from external port
     // and stop is nothing is there
-    vp::io_req *ext_req;
+    vp::IoReq *ext_req;
     bool is_write;
 
     if (i < (_this->nb_loc_ports/2))
@@ -999,7 +1009,7 @@ void mchan::check_loc_transfer_handler(void *__this, vp::clock_event *event)
     if (size > ext_size) size = ext_size;
 
     // Create request to local port
-    vp::io_req *req = &_this->loc_req[i];
+    vp::IoReq *req = &_this->loc_req[i];
     _this->trace.msg("Sending %s request to local port (req: %p, port: %d, addr: 0x%x, size: 0x%x)\n",
       is_write ? "write" : "read", req, i, addr, size);
     req->init();
@@ -1010,7 +1020,7 @@ void mchan::check_loc_transfer_handler(void *__this, vp::clock_event *event)
 
     // Send the request to the local port
     // TODO for now we assume this is synchronous
-    vp::io_req_status_e err = _this->loc_itf[i].req(req);
+    vp::IoReqStatus err = _this->loc_itf[i].req(req);
 
     if (err)
     {
@@ -1071,7 +1081,7 @@ void mchan::check_loc_transfer_handler(void *__this, vp::clock_event *event)
 }
 
 
-void mchan::check_queue_handler(void *__this, vp::clock_event *event)
+void mchan::check_queue_handler(vp::Block *__this, vp::ClockEvent *event)
 {
   mchan *_this = (mchan *)__this;
 
@@ -1124,7 +1134,7 @@ void mchan::check_queue()
     {
       // Go through the port availabilities to see when we can enqueue the event
       int64_t min_ready_cycle = -1;
-      int64_t cycles = get_cycles();
+      int64_t cycles = clock.get_cycles();
 
       for (int i=0; i<nb_loc_ports; i++)
       {
@@ -1142,27 +1152,6 @@ void mchan::check_queue()
       }
     }
   }
-}
-
-int mchan::build()
-{
-  traces.new_trace("trace", &this->trace, vp::DEBUG);
-
-  for (int i=0; i<nb_channels; i++)
-  {
-    channels.push_back(new Mchan_channel(i, this));
-  }
-
-  for (int i=0; i<MCHAN_NB_COUNTERS; i++)
-  {
-    traces.new_trace_event("channel_" + std::to_string(i), &this->cmd_events[i], 8);
-  }
-
-  return 0;
-}
-
-void mchan::start()
-{
 }
 
 void mchan::reset(bool active)
@@ -1216,7 +1205,7 @@ void Mchan_cmd::init()
   step = 0;
 }
 
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new mchan(config);
 }

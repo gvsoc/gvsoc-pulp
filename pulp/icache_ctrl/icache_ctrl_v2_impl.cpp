@@ -24,36 +24,42 @@
 #include <stdio.h>
 #include <string.h>
 
-class icache_ctrl : public vp::component
+class icache_ctrl : public vp::Component
 {
 
 public:
 
-  icache_ctrl(js::config *config);
+  icache_ctrl(vp::ComponentConf &config);
 
-  int build();
-  void start();
-
-  static vp::io_req_status_e req(void *__this, vp::io_req *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
 
-  vp::trace     trace;
-  vp::io_slave in;
+  vp::Trace     trace;
+  vp::IoSlave in;
 
-  vp::wire_master<bool>     enable_itf;
-  vp::wire_master<bool>     flush_itf;
-  vp::wire_master<bool>     flush_line_itf;
-  vp::wire_master<uint32_t> flush_line_addr_itf;
+  vp::WireMaster<bool>     enable_itf;
+  vp::WireMaster<bool>     flush_itf;
+  vp::WireMaster<bool>     flush_line_itf;
+  vp::WireMaster<uint32_t> flush_line_addr_itf;
 };
 
-icache_ctrl::icache_ctrl(js::config *config)
-: vp::component(config)
+icache_ctrl::icache_ctrl(vp::ComponentConf &config)
+: vp::Component(config)
 {
+  traces.new_trace("trace", &trace, vp::DEBUG);
+  in.set_req_meth(&icache_ctrl::req);
+  new_slave_port("input", &in);
+
+  this->new_master_port("enable", &this->enable_itf);
+  this->new_master_port("flush", &this->flush_itf);
+  this->new_master_port("flush_line", &this->flush_line_itf);
+  this->new_master_port("flush_line_addr", &this->flush_line_addr_itf);
+
 
 }
 
-vp::io_req_status_e icache_ctrl::req(void *__this, vp::io_req *req)
+vp::IoReqStatus icache_ctrl::req(vp::Block *__this, vp::IoReq *req)
 {
   icache_ctrl *_this = (icache_ctrl *)__this;
 
@@ -78,25 +84,7 @@ vp::io_req_status_e icache_ctrl::req(void *__this, vp::io_req *req)
   return vp::IO_REQ_OK;
 }
 
-int icache_ctrl::build()
-{
-  traces.new_trace("trace", &trace, vp::DEBUG);
-  in.set_req_meth(&icache_ctrl::req);
-  new_slave_port("input", &in);
-
-  this->new_master_port("enable", &this->enable_itf);
-  this->new_master_port("flush", &this->flush_itf);
-  this->new_master_port("flush_line", &this->flush_line_itf);
-  this->new_master_port("flush_line_addr", &this->flush_line_addr_itf);
-
-  return 0;
-}
-
-void icache_ctrl::start()
-{
-}
-
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new icache_ctrl(config);
 }

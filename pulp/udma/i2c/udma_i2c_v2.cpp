@@ -35,7 +35,7 @@ I2c_periph_v2::I2c_periph_v2(udma *top, int id, int itf_id) : Udma_periph(top, i
   channel0 = new I2c_rx_channel(top, this, UDMA_EVENT_ID(id), itf_name + "_rx");
   channel1 = new I2c_tx_channel(top, this, UDMA_EVENT_ID(id) + 1, itf_name + "_tx");
 
-  top->new_master_port(this, itf_name, &i2c_itf);
+  top->new_master_port(itf_name, &i2c_itf, (vp::Block *)this);
 
   i2c_itf.set_sync_meth(&I2c_periph_v2::rx_sync);
 }
@@ -59,13 +59,13 @@ void I2c_periph_v2::reset(bool active)
 
 
 
-vp::io_req_status_e I2c_periph_v2::custom_req(vp::io_req *req, uint64_t offset)
+vp::IoReqStatus I2c_periph_v2::custom_req(vp::IoReq *req, uint64_t offset)
 {
   return vp::IO_REQ_INVALID;
 }
 
 
-void I2c_periph_v2::rx_sync(void *__this, int scl, int data)
+void I2c_periph_v2::rx_sync(vp::Block *__this, int scl, int data)
 {
   I2c_periph_v2 *_this = (I2c_periph_v2 *)__this;
   (static_cast<I2c_rx_channel *>(_this->channel0))->handle_rx_bit(data);
@@ -101,7 +101,7 @@ std::string get_command_name(unsigned int command)
 }
 
 
-void I2c_tx_channel::handle_pending_word(void *__this, vp::clock_event *event)
+void I2c_tx_channel::handle_pending_word(vp::Block *__this, vp::ClockEvent *event)
 {
   I2c_tx_channel *_this = (I2c_tx_channel *)__this;
 
@@ -112,7 +112,7 @@ void I2c_tx_channel::handle_pending_word(void *__this, vp::clock_event *event)
 
     if (_this->periph->prev_scl)
     {
-      _this->next_bit_cycle = _this->top->get_clock()->get_cycles() + _this->periph->clkdiv;
+      _this->next_bit_cycle = _this->top->clock.get_engine()->get_cycles() + _this->periph->clkdiv;
 
       if (_this->periph->gen_ack)
       {
@@ -308,7 +308,7 @@ void I2c_tx_channel::handle_pending_word(void *__this, vp::clock_event *event)
       }
       else
       {
-        _this->next_bit_cycle = _this->top->get_clock()->get_cycles() + _this->periph->clkdiv;
+        _this->next_bit_cycle = _this->top->clock.get_engine()->get_cycles() + _this->periph->clkdiv;
         _this->periph->trace.msg("Sending bit (scl: %d, sda: %d)\n", scl, bit);
         _this->periph->i2c_itf.sync(scl, bit);
         _this->periph->prev_scl = scl;
@@ -347,7 +347,7 @@ void I2c_tx_channel::check_state()
   if (enqueue)
   {
     int latency = 1;
-    int64_t cycles = this->top->get_clock()->get_cycles();
+    int64_t cycles = this->top->clock.get_engine()->get_cycles();
     if (next_bit_cycle > cycles)
       latency = next_bit_cycle - cycles;
 
@@ -361,7 +361,7 @@ void I2c_tx_channel::handle_ready_reqs()
 {
   if (this->pending_bits == 0 && !ready_reqs->is_empty())
   {
-    vp::io_req *req = this->ready_reqs->pop();
+    vp::IoReq *req = this->ready_reqs->pop();
     this->pending_req = req;
     this->pending_word = *(uint32_t *)req->get_data();
     this->pending_bits = req->get_actual_size() * 8;

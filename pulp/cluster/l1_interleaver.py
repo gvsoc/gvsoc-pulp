@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-import gsystree as st
+import gvsoc.systree as st
 
 class L1_interleaver(st.Component):
 

@@ -25,32 +25,33 @@
 #include <string.h>
 
 
-class fll_ctrl : public vp::component
+class fll_ctrl : public vp::Component
 {
 
 public:
 
-  fll_ctrl(js::config *config);
+  fll_ctrl(vp::ComponentConf &config);
 
-  int build();
-  void start();
-
-  static vp::io_req_status_e req(void *__this, vp::io_req *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
 
-  vp::trace     trace;
-  vp::io_slave in;
+  vp::Trace     trace;
+  vp::IoSlave in;
 
 };
 
-fll_ctrl::fll_ctrl(js::config *config)
-: vp::component(config)
+fll_ctrl::fll_ctrl(vp::ComponentConf &config)
+: vp::Component(config)
 {
+  traces.new_trace("trace", &trace, vp::DEBUG);
+  in.set_req_meth(&fll_ctrl::req);
+  new_slave_port("in", &in);
+
 
 }
 
-vp::io_req_status_e fll_ctrl::req(void *__this, vp::io_req *req)
+vp::IoReqStatus fll_ctrl::req(vp::Block *__this, vp::IoReq *req)
 {
   fll_ctrl *_this = (fll_ctrl *)__this;
 
@@ -63,20 +64,7 @@ vp::io_req_status_e fll_ctrl::req(void *__this, vp::io_req *req)
   return vp::IO_REQ_OK;
 }
 
-int fll_ctrl::build()
-{
-  traces.new_trace("trace", &trace, vp::DEBUG);
-  in.set_req_meth(&fll_ctrl::req);
-  new_slave_port("in", &in);
-
-  return 0;
-}
-
-void fll_ctrl::start()
-{
-}
-
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new fll_ctrl(config);
 }

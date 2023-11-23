@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-import gsystree as st
+import gvsoc.systree as st
 import pulp.cpu.iss.pulp_cores as iss
 from cache.hierarchical_cache import Hierarchical_cache
 from pulp.chips.pulp_open.l1_subsystem import L1_subsystem

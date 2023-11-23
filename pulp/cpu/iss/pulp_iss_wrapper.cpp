@@ -24,7 +24,7 @@
 #include "pulp_iss_wrapper.hpp"
 #include <cpu/iss/include/iss_core.hpp>
 
-pulp_iss_wrapper::pulp_iss_wrapper(js::config *config)
+pulp_iss_wrapper::pulp_iss_wrapper(vp::ComponentConf &config)
 : IssWrapper(config)
 {
 }
@@ -85,7 +85,7 @@ void pulp_iss_wrapper::target_open()
 }
 
 
-extern "C" vp::component *vp_constructor(js::config *config)
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new pulp_iss_wrapper(config);
 }

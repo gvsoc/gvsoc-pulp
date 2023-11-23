@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-import gsystree as st
+import gvsoc.systree as st
 
 class Apb_soc_ctrl(st.Component):
 

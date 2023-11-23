@@ -31,21 +31,23 @@ Spim_periph_v3::Spim_periph_v3(udma *top, int id, int itf_id) : Udma_periph(top,
 {
   std::string itf_name = "spim" + std::to_string(itf_id);
 
+  top->traces.new_trace(itf_name, &trace, vp::DEBUG);
+
   channel0 = new Spim_v3_rx_channel(top, this, UDMA_CHANNEL_ID(id), itf_name + "_rx");
   channel1 = new Spim_v3_tx_channel(top, this, UDMA_CHANNEL_ID(id) + 1, itf_name + "_tx");
   channel2 = new Spim_v3_cmd_channel(top, this, UDMA_CHANNEL_ID(id) + 2, itf_name + "_cmd");
 
   qspim_itf.set_sync_meth(&Spim_periph_v3::slave_sync);
-  top->new_master_port(this, itf_name, &qspim_itf);
+  top->new_master_port(itf_name, &qspim_itf, (vp::Block *)this);
 
-  js::config *config = this->top->get_js_config()->get("spim/eot_events");
+  js::Config *config = this->top->get_js_config()->get("spim/eot_events");
   if (config)
     this->eot_event = config->get_elem(itf_id)->get_int();
   else
     this->eot_event = -1;
 
 
-  pending_spi_word_event = top->event_new(this, Spim_periph_v3::handle_spi_pending_word);
+  pending_spi_word_event = top->event_new((vp::Block *)this, Spim_periph_v3::handle_spi_pending_word);
 }
 
 void Spim_periph_v3::reset(bool active)
@@ -71,7 +73,7 @@ void Spim_periph_v3::reset(bool active)
 }
 
   
-void Spim_periph_v3::slave_sync(void *__this, int sck, int data_0, int data_1, int data_2, int data_3, int mask)
+void Spim_periph_v3::slave_sync(vp::Block *__this, int sck, int data_0, int data_1, int data_2, int data_3, int mask)
 {
   Spim_periph_v3 *_this = (Spim_periph_v3 *)__this;
   (static_cast<Spim_v3_rx_channel *>(_this->channel0))->handle_rx_bits(data_0, data_1, data_2, data_3, mask);
@@ -83,7 +85,7 @@ void Spim_periph_v3::check_state()
   if ((this->spi_tx_pending_bits > 0 || (!this->is_full_duplex && this->spi_rx_pending_bits > 0)) && !this->pending_spi_word_event->is_enqueued())
   {
     int latency = 1;
-    int64_t cycles = this->top->get_clock()->get_cycles();
+    int64_t cycles = this->top->clock.get_engine()->get_cycles();
     if (this->next_bit_cycle > cycles)
       latency = this->next_bit_cycle - cycles;
 
@@ -107,12 +109,12 @@ void Spim_v3_rx_channel::handle_rx_bits(int data_0, int data_1, int data_2, int 
 Spim_v3_tx_channel::Spim_v3_tx_channel(udma *top, Spim_periph_v3 *periph, int id, string name)
 : Udma_tx_channel(top, id, name), periph(periph)
 {
-  pending_word_event = top->event_new(this, Spim_v3_tx_channel::handle_pending_word);
+  pending_word_event = top->event_new((vp::Block *)this, Spim_v3_tx_channel::handle_pending_word);
 }
 
 
 
-void Spim_v3_tx_channel::handle_pending_word(void *__this, vp::clock_event *event)
+void Spim_v3_tx_channel::handle_pending_word(vp::Block *__this, vp::ClockEvent *event)
 {
   Spim_v3_tx_channel *_this = (Spim_v3_tx_channel *)__this;
 
@@ -125,7 +127,7 @@ void Spim_v3_tx_channel::handle_ready_reqs()
 {
   if (!this->has_tx_pending_word && !ready_reqs->is_empty())
   {
-    vp::io_req *req = this->ready_reqs->pop();
+    vp::IoReq *req = this->ready_reqs->pop();
     this->pending_req = req;
     this->tx_pending_word = *(uint32_t *)req->get_data();
     this->has_tx_pending_word = true;
@@ -186,7 +188,7 @@ void Spim_v3_tx_channel::check_state()
 Spim_v3_cmd_channel::Spim_v3_cmd_channel(udma *top, Spim_periph_v3 *periph, int id, string name)
 : Udma_tx_channel(top, id, name), periph(periph)
 {
-  pending_word_event = top->event_new(this, Spim_v3_cmd_channel::handle_pending_word);
+  pending_word_event = top->event_new((vp::Block *)this, Spim_v3_cmd_channel::handle_pending_word);
 }
 
 
@@ -194,7 +196,7 @@ void Spim_v3_cmd_channel::handle_ready_reqs()
 {
   if (!this->has_tx_pending_word && !ready_reqs->is_empty())
   {
-    vp::io_req *req = this->ready_reqs->pop();
+    vp::IoReq *req = this->ready_reqs->pop();
     this->pending_req = req;
     this->tx_pending_word = *(uint32_t *)req->get_data();
     this->has_tx_pending_word = true;
@@ -210,7 +212,7 @@ void Spim_v3_cmd_channel::check_state()
   }
 }
 
-void Spim_periph_v3::handle_spi_pending_word(void *__this, vp::clock_event *event)
+void Spim_periph_v3::handle_spi_pending_word(vp::Block *__this, vp::ClockEvent *event)
 {
   Spim_periph_v3 *_this = (Spim_periph_v3 *)__this;
   bool raised_edge = false;
@@ -219,7 +221,7 @@ void Spim_periph_v3::handle_spi_pending_word(void *__this, vp::clock_event *even
   {
     int nb_bits = _this->qpi ? 4 : 1;
     unsigned int received_bits =  _this->qpi ? _this->rx_received_bits & ((1<<nb_bits)-1) : (_this->rx_received_bits >> 1) & 1;
-    _this->next_bit_cycle = _this->top->get_clock()->get_cycles() + _this->clkdiv;
+    _this->next_bit_cycle = _this->top->clock.get_engine()->get_cycles() + _this->clkdiv;
 
     _this->nb_received_bits += nb_bits;
     _this->spi_rx_pending_bits -= nb_bits;
@@ -259,7 +261,7 @@ void Spim_periph_v3::handle_spi_pending_word(void *__this, vp::clock_event *even
 
     if (!_this->qspim_itf.is_bound())
     {
-      _this->top->warning.force_warning("Trying to receive from SPIM interface while it is not connected\n");
+      _this->trace.force_warning("Trying to receive from SPIM interface while it is not connected\n");
     }
     else
     {
@@ -298,7 +300,7 @@ void Spim_periph_v3::handle_spi_pending_word(void *__this, vp::clock_event *even
 
   if (_this->spi_tx_pending_bits > 0)
   {
-    _this->next_bit_cycle = _this->top->get_clock()->get_cycles() + _this->clkdiv;
+    _this->next_bit_cycle = _this->top->clock.get_engine()->get_cycles() + _this->clkdiv;
 
 
     int bit_index;
@@ -328,7 +330,7 @@ void Spim_periph_v3::handle_spi_pending_word(void *__this, vp::clock_event *even
 
     if (!_this->qspim_itf.is_bound())
     {
-      _this->top->warning.force_warning("Trying to send to SPIM interface while it is not connected\n");
+      _this->trace.force_warning("Trying to send to SPIM interface while it is not connected\n");
     }
     else
     {
@@ -362,7 +364,7 @@ void Spim_periph_v3::handle_spi_pending_word(void *__this, vp::clock_event *even
   _this->check_state();
 }
 
-void Spim_v3_cmd_channel::handle_pending_word(void *__this, vp::clock_event *event)
+void Spim_v3_cmd_channel::handle_pending_word(vp::Block *__this, vp::ClockEvent *event)
 {
   Spim_v3_cmd_channel *_this = (Spim_v3_cmd_channel *)__this;
 
@@ -375,7 +377,7 @@ void Spim_v3_cmd_channel::handle_eot(bool cs_keep)
   if (!cs_keep)
   {
     if (!periph->qspim_itf.is_bound())
-      periph->top->warning.force_warning("Trying to set chip select to unbound QSPIM interface\n");
+      periph->trace.force_warning("Trying to set chip select to unbound QSPIM interface\n");
     else
     {
       trace.msg("Deactivating chip select\n");
@@ -463,7 +465,7 @@ void Spim_v3_cmd_channel::handle_data(uint32_t data)
       this->cs = (data >> SPI_CMD_SOT_CS_OFFSET) & ((1<<SPI_CMD_SOT_CS_WIDTH)-1);
       trace.msg("Handling command SOT (cs: %d)\n", this->cs);
       if (!periph->qspim_itf.is_bound())
-        periph->top->warning.force_warning("Trying to set chip select to unbound QSPIM interface\n");
+        periph->trace.force_warning("Trying to set chip select to unbound QSPIM interface\n");
       else
         periph->qspim_itf.cs_sync(this->cs, 1);
       break;
@@ -660,7 +662,7 @@ void Spim_v3_cmd_channel::handle_data(uint32_t data)
     }
 
     default:
-      periph->top->warning.force_warning("Received unknown SPI command: %x\n", command);
+      periph->trace.force_warning("Received unknown SPI command: %x\n", command);
   }
 
   #if 0
@@ -689,7 +691,7 @@ void Spim_v3_cmd_channel::handle_data(uint32_t data)
   this->periph->check_state();
 }
 
-vp::io_req_status_e Spim_periph_v3::custom_req(vp::io_req *req, uint64_t offset)
+vp::IoReqStatus Spim_periph_v3::custom_req(vp::IoReq *req, uint64_t offset)
 {
   return this->channel2->req(req, offset);
 }

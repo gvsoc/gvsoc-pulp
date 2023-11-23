@@ -69,14 +69,14 @@ private:
   void reset(bool active);
   Spim_periph_v3 *periph;
 
-  static void handle_pending_word(void *__this, vp::clock_event *event);
+  static void handle_pending_word(vp::Block *__this, vp::ClockEvent *event);
   void handle_data(uint32_t data);
 
-  vp::clock_event *pending_word_event;
+  vp::ClockEvent *pending_word_event;
 
   uint32_t tx_pending_word;       // Word received by last L2 req
   bool     has_tx_pending_word;   // Tell if a TX pending word is present
-  vp::io_req *pending_req;
+  vp::IoReq *pending_req;
   
 };
 
@@ -91,19 +91,19 @@ public:
 
 private:
   void reset(bool active);
-  static void handle_pending_word(void *__this, vp::clock_event *event);
+  static void handle_pending_word(vp::Block *__this, vp::ClockEvent *event);
   void handle_eot(bool cs_keep);
   void handle_data(uint32_t data);
   bool push_tx_to_spi(uint32_t value, int nb_bits);
   bool push_rx_to_spi(int nb_bits);
 
-  vp::clock_event *pending_word_event;
+  vp::ClockEvent *pending_word_event;
 
   Spim_periph_v3 *periph;
 
   bool     has_tx_pending_word;   // Tell if a TX pending word is present
   uint32_t tx_pending_word;       // Word received by last L2 req
-  vp::io_req *pending_req;
+  vp::IoReq *pending_req;
   uint32_t command;
   int cs;
   bool gen_eot_with_evt;
@@ -125,18 +125,19 @@ class Spim_periph_v3 : public Udma_periph
 
 public:
   Spim_periph_v3(udma *top, int id, int itf_id);
-  static void slave_sync(void *_this, int sck, int data_0, int data_1, int data_2, int data_3, int mask);
+  static void slave_sync(vp::Block *_this, int sck, int data_0, int data_1, int data_2, int data_3, int mask);
   void reset(bool active);
-  vp::io_req_status_e custom_req(vp::io_req *req, uint64_t offset);
-  static void handle_spi_pending_word(void *__this, vp::clock_event *event);
+  vp::IoReqStatus custom_req(vp::IoReq *req, uint64_t offset);
+  static void handle_spi_pending_word(vp::Block *__this, vp::ClockEvent *event);
   void check_state();
   bool push_tx_to_spi(uint32_t value, int nb_bits, int qpi, int lsb_first, int bitsword, int wordtrans);
   bool push_rx_to_spi(int nb_bits, int qpi, int lsb_first, int bitsword, int wordtrans);
 
 protected:
-  vp::clock_event *pending_spi_word_event;
+  vp::Trace trace;
+  vp::ClockEvent *pending_spi_word_event;
 
-  vp::qspim_master qspim_itf;
+  vp::QspimMaster qspim_itf;
   int clkdiv;
   bool waiting_rx;
   bool waiting_tx;
