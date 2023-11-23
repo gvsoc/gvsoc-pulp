@@ -15,7 +15,7 @@
 #
 
 import os
-import gsystree as st
+import gvsoc.systree as st
 import cpu.iss.iss as iss
 import memory.memory as memory
 import interco.router as router

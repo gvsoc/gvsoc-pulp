@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-import gsystree as st
+import gvsoc.systree as st
 from pulp.chips.siracusa.soc import Soc
 from pulp.chips.siracusa.cluster import Cluster, get_cluster_name
 from vp.clock_domain import Clock_domain

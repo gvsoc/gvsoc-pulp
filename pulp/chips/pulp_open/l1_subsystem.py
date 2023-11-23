@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-import gsystree as st
+import gvsoc.systree as st
 from memory.memory import Memory
 from interco.router import Router
 from interco.converter import Converter

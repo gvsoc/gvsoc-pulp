@@ -14,17 +14,17 @@
 # limitations under the License.
 #
 
-import gv.gvsoc_runner
+import gvsoc.runner
 import cpu.iss.riscv as iss
 import memory.memory as memory
 from vp.clock_domain import Clock_domain
 import interco.router as router
 import utils.loader.loader
-import gsystree as st
+import gvsoc.systree as st
 from interco.bus_watchpoint import Bus_watchpoint
 from pulp.spatz.cluster_registers import Cluster_registers
 from elftools.elf.elffile import *
-import gv.gvsoc_runner as gvsoc
+import gvsoc.runner as gvsoc
 
 
 GAPY_TARGET = True

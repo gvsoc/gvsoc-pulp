@@ -15,7 +15,7 @@
 #
 
 from pulp.chips.pulp_open.pulp_open_board import Pulp_open_board
-import gv.gvsoc_runner as gvsoc
+import gvsoc.runner as gvsoc
 
 GAPY_TARGET = True
 
