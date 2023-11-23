@@ -114,7 +114,7 @@ vp::IoReqStatus apb_soc_ctrl::req(vp::Block *__this, vp::IoReq *req)
       
       if ((_this->core_status >> APB_SOC_STATUS_EOC_BIT) & 1) 
       {
-        _this->clock->stop_engine(_this->core_status & 0x7fffffff);
+        _this->time.get_engine()->quit(_this->core_status & 0x7fffffff);
       }
     }
   }
