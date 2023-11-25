@@ -14,17 +14,17 @@
 # limitations under the License.
 #
 
-import gvsoc.runner
+import gv.gvsoc_runner
 import cpu.iss.riscv as iss
 import memory.memory as memory
 from vp.clock_domain import Clock_domain
 import interco.router as router
 import utils.loader.loader
-import gvsoc.systree as st
+import gsystree as st
 from interco.bus_watchpoint import Bus_watchpoint
 from pulp.spatz.cluster_registers import Cluster_registers
 from elftools.elf.elffile import *
-import gvsoc.runner as gvsoc
+import gv.gvsoc_runner as gvsoc
 
 
 GAPY_TARGET = True
@@ -56,7 +56,7 @@ class Soc(st.Component):
         ico = router.Router(self, 'ico')
 
         for core_id in range(0, nb_cores):
-            cores.append(iss.Snitch(self, f'pe{core_id}', isa=args.isa))
+            cores.append(iss.Snitch(self, f'pe{core_id}', isa=args.isa, core_id=core_id))
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x1000)
 
