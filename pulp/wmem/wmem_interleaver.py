@@ -18,7 +18,7 @@ import gvsoc.systree as st
 
 class Wmem_interleaver(st.Component):
 
-    def __init__(self, parent, name, nb_slaves: int, nb_masters: int, stage_bits: int=0):
+    def __init__(self, parent, name, nb_slaves: int, nb_masters: int, stage_bits: int=0, remove_offset: int=0):
 
         super(Wmem_interleaver, self).__init__(parent, name)
 
@@ -27,5 +27,6 @@ class Wmem_interleaver(st.Component):
         self.add_properties({
             'nb_slaves': nb_slaves,
             'nb_masters': nb_masters,
-            'stage_bits': stage_bits
+            'stage_bits': stage_bits,
+            'remove_offset': remove_offset
         })

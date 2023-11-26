@@ -44,6 +44,7 @@ private:
   int nb_slaves;
   int nb_masters;
   uint64_t bank_mask;
+  uint64_t remove_offset;
   int stage_bits;
 };
 
@@ -58,13 +59,15 @@ wmem::wmem(vp::ComponentConf &config)
   nb_slaves = get_js_config()->get_child_int("nb_slaves");
   nb_masters = get_js_config()->get_child_int("nb_masters");
   stage_bits = get_js_config()->get_child_int("stage_bits");
+  remove_offset = get_js_config()->get_child_int("remove_offset");
+
 
   if (stage_bits == 0)
   {
     stage_bits = log2(nb_slaves);
   }
 
-  bank_mask = (1<<stage_bits) - 1;
+  bank_mask = ((1<<stage_bits) - 1) & (0xFFFFFFFF);
 
   out = new vp::IoMaster *[nb_slaves];
   for (int i=0; i<nb_slaves; i++)
@@ -88,16 +91,20 @@ wmem::wmem(vp::ComponentConf &config)
 vp::IoReqStatus wmem::req(vp::Block *__this, vp::IoReq *req)
 {
   wmem *_this = (wmem *)__this;
-  uint64_t offset = req->get_addr();
   bool is_write = req->get_is_write();
+  uint64_t MASK = 0x0FFFFFFFF;
+  uint64_t remove_offset_mask = _this->remove_offset & MASK;
   uint64_t size = req->get_size();
   uint8_t *data = req->get_data();
+  uint64_t addr = req->get_addr()-remove_offset_mask;
 
 
-  _this->trace.msg("Received IO req (offset: 0x%llx, size: 0x%llx, is_write: %d)\n", offset, size, is_write);
+  // _this->trace.msg("Received IO req (offset: 0x%llx, size: 0x%llx, is_write: %d)\n", offset, size, is_write);
+  _this->trace.msg("Received IO req (addr: 0x%llx, size: 0x%llx, is_write: %d, bank_mask: %d, stage_bits: %d, remove_offste:0x%llx)\n", addr, size, is_write, _this->bank_mask, _this->stage_bits, _this->remove_offset);
+
  
-  int bank_id = (offset >> 2) & _this->bank_mask;
-  uint64_t bank_offset = ((offset >> (_this->stage_bits + 2)) << 2) + (offset & 0x3);
+  int bank_id = (addr >> 2) & _this->bank_mask;
+  uint64_t bank_offset = ((addr >> (_this->stage_bits + 2)) << 2) + (addr & 0x3);
 
   req->set_addr(bank_offset);
   return _this->out[bank_id]->req_forward(req);

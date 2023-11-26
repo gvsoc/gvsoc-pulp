@@ -3,12 +3,12 @@
     "alias": "0x00000000",
     "mapping": {
         "base": "0x10000000",
-        "size": "0x00400000"
+        "size": "0x01000000"
     },
 
     "version": 5,
     "json_file": "cluster_v6",
-    "nb_pe": 9,
+    "nb_pe": 8,
     "has_cc": true,
 
     "pe": {
@@ -27,22 +27,22 @@
     "l1": {
         "mapping": {
             "base": "0x10000000",
-            "size": "0x00010000",
+            "size": "0x00040000",
             "remove_offset": "0x10000000"
         },
         "ts_mapping": {
-            "base": "0x10100000",
+            "base": "0x10040000",
             "size": "0x00010000",
-            "remove_offset": "0x10100000"
+            "remove_offset": "0x10040000"
         },
         "banking_factor": 2,
         "power_models": "pulp/chips/pulp_open/power_models/l1/l1.json"
     },
-
+    
     "icache": {
         "config": {
             "has_cc": true,
-            "nb_cores": 9,
+            "nb_cores": 8,
             "nb_l1_banks":2,
 
             "l0": {
@@ -71,40 +71,40 @@
     "peripherals": {
 
         "mapping": {
-            "base": "0x10200000",
+            "base": "0x10300000",
             "size": "0x00200000"
         },
 
         "alias": {
-            "base": "0x00200000",
+            "base": "0x00300000",
             "size": "0x00200000"
         },
 
         "cluster_ctrl": {
             "mapping": {
-                "base": "0x10200000",
+                "base": "0x10300000",
                 "size": "0x00000400",
-                "remove_offset": "0x10200000"
+                "remove_offset": "0x10300000"
             }
         },
 
         "timer": {
             "mapping": {
-                "base": "0x10200400",
+                "base": "0x10300400",
                 "size": "0x00000400",
-                "remove_offset": "0x10200400"
+                "remove_offset": "0x10300400"
             }
         },
 
         "event_unit": {
             "version": "4",
             "mapping": {
-                "base": "0x10200800",
+                "base": "0x10300800",
                 "size": "0x00000800",
-                "remove_offset": "0x10200800"
+                "remove_offset": "0x10300800"
             },
             "config": {
-                "nb_core": 9,
+                "nb_core": 8,
                 "properties": {
                     "dispatch": {
                         "size": 8
@@ -113,7 +113,7 @@
                         "nb_mutexes": 8
                     },
                     "barriers": {
-                        "nb_barriers": 9
+                        "nb_barriers": 8
                     },
                     "semaphores": {
                         "nb_semaphores": 16,
@@ -136,33 +136,31 @@
             }
         },
 
-        "ne16": {
-            "mapping": {
-                "base": "0x10201000",
-                "size": "0x00000400",
-                "remove_offset": "0x10201000"
-            }
-        },
-
         "icache_ctrl": {
             "mapping": {
-                "base": "0x10201400",
+                "base": "0x10301400",
                 "size": "0x00000400",
-                "remove_offset": "0x10201400"
+                "remove_offset": "0x10301400"
             }
         },
 
         "dma": {
             "version": 7,
             "mapping": {
-                "base": "0x10201800",
+                "base": "0x10301800",
                 "size": "0x00000400",
                 "remove_offset": "0x10201800"
             }
         },
 
+        
+
+
+
+        
+
         "dbg_unit": {
-            "base": "0x10300000",
+            "base": "0x10400000",
             "size"  : "0x00008000"
         },
 
@@ -171,21 +169,28 @@
 
     "demux_peripherals":
     {
-        "base": "0x10204000",
+        "base": "0x10304000",
 
         "event_unit": {
             "mapping": {
-                "base": "0x10204000",
+                "base": "0x10304000",
                 "size": "0x00000400",
-                "remove_offset": "0x10204000"
+                "remove_offset": "0x10304000"
             }
         },
         "dma": {
             "mapping": {
-                "base": "0x10204400",
+                "base": "0x10304400",
                 "size": "0x00000400",
-                "remove_offset": "0x10204400"
+                "remove_offset": "0x10304400"
             }
+        }
+    },
+
+    "wmem": {
+        "mapping": {
+            "base": "0x10500000",
+            "size": "0x00400000"
         }
     }
 }
