@@ -51,7 +51,7 @@ class L1_subsystem(st.Component):
         l1_bank_size = int(cluster.get_property('l1/mapping/size', int) / nb_l1_banks)
         
         # Task 2.1: Increase number of Masters by 1 to accommodate Neureka
-        l1_interleaver_nb_masters = nb_pe + 4 + 1 # 1 port per PE + 4 for DMA 
+        l1_interleaver_nb_masters = nb_pe + 4 # 1 port per PE + 4 for DMA 
         
         first_external_pcer = 12
         power_models = cluster.get_property('l1/power_models')
@@ -132,7 +132,7 @@ class L1_subsystem(st.Component):
 
         self.bind(self, 'neureka_in', interleaver, 'in_%d' % (nb_pe + 4))
 
-        #Task 2.2: Bind Neureka port to interleaver and name it "neureka_in" [self : neureka_in -> interleaver : 'in_%d' % (nb_pe + i)]
+        #Task 2.2: Bind Neureka port to interleaver and name it "neureka_in" [self : neureka_in -> interleaver : 'in_%d' % (nb_pe + 4)]
 
         for i in range(0, 4):
             self.bind(self, 'dma_in_%d' % i, interleaver, 'in_%d' % (nb_pe + i))
