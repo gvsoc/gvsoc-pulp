@@ -130,8 +130,6 @@ class L1_subsystem(st.Component):
         for i in range(0, nb_l1_banks):
             self.bind(interleaver, 'out_%d' % i, l1_banks[i], 'input')
 
-        self.bind(self, 'neureka_in', interleaver, 'in_%d' % (nb_pe + 4))
-
         #Task 2.2: Bind Neureka port to interleaver and name it "neureka_in" [self : neureka_in -> interleaver : 'in_%d' % (nb_pe + 4)]
 
         for i in range(0, 4):
