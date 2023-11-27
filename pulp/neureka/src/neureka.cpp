@@ -97,8 +97,9 @@ void Neureka::reset(bool active)
   // Task 5 - Enable trace for fsm
   this->trace_config.fsm = false;
 
-  // Task 6 - Enable trace for fsm
+  // Task 6 - Enable trace for infeat load streamer
   this->trace_config.streamer.infeat_load = false;
+
   this->trace_config.streamer.streamin = false; 
   this->trace_config.streamer.outfeat_store = false;
   this->trace_config.streamer.weight_load = false;
@@ -138,7 +139,7 @@ vp::IoReqStatus Neureka::hwpe_slave(vp::Block *__this, vp::IoReq *req)
     Neureka *_this = (Neureka *)__this;
 
     if(_this->trace_config.regconfig)
-        _this->trace.msg("Received request (addr: 0x%x, size: 0x%x, is_write: %d, data: %p\n", req->get_addr(), req->get_size(), req->get_is_write(), *(uint32_t *)(req->get_data()));
+        _this->trace.msg("Received request (addr: 0x%x, size: 0x%x, is_write: %d, data: %d\n", req->get_addr(), req->get_size(), req->get_is_write(), *(uint32_t *)(req->get_data()));
 
     uint8_t *data = req->get_data(); 
     uint32_t addr = req->get_addr();
