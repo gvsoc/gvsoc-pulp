@@ -20,7 +20,6 @@
  */
 #ifndef JOB_HANDLE_H
 #define JOB_HANDLE_H
-#include "debug.hpp"
 #include "datatype.hpp"
 #include "params.hpp"
 template <typename HwpeType>
@@ -282,7 +281,7 @@ void RegfileCtxt() {
         else if(reg_config_.config0.filter_size == 1 && reg_config_.config0.depthwise_mode==false)
           reg_config_.config0.filter_mode = Pointwise;
         else 
-          hwpe_instance_->trace.fatal("task_manager >> unsupported filter mode");
+          hwpe_instance_->trace.fatal("regconfig_manager >> unsupported filter mode");
         // [4] streamout / quantization (1=quantization+streamout, 0=streamout only)
         reg_config_.config0.outfeat_quant = ((value >> 4) & 0x1) ? true : false;
         // [2:0] weight bits minus 1.
@@ -323,67 +322,67 @@ void PrintReg()
 {
   std::ostringstream string_stream;
   string_stream<<"\n*************************  Configuration Values *****************************************\n";
-  string_stream<<"task_manager >> weight ptr : 0x"<<std::hex<<reg_config_.weight_ptr<<"\n";
-  string_stream<<"task_manager >> infeat ptr : 0x"<<std::hex<<reg_config_.infeat_ptr<<"\n";
-  string_stream<<"task_manager >> outfeat ptr : 0x"<<std::hex<<reg_config_.outfeat_ptr<<"\n";
-  string_stream<<"task_manager >> scale ptr : 0x"<<std::hex<<reg_config_.scale_ptr<<"\n";
-  string_stream<<"task_manager >> scale shift ptr : 0x"<<std::hex<<reg_config_.scale_shift_ptr<<"\n";
-  string_stream<<"task_manager >> scale bias ptr : 0x"<<std::hex<<reg_config_.scale_bias_ptr<<"\n";
-  string_stream<<"task_manager >> streamin ptr : 0x"<<std::hex<<reg_config_.streamin_ptr<<"\n";
-  string_stream<<"task_manager >> infeat d0 stride : 0x"<<std::hex<<reg_config_.infeat_stride.d0<<"\n";
-  string_stream<<"task_manager >> infeat d1 stride : 0x"<<std::hex<<reg_config_.infeat_stride.d1<<"\n";
-  string_stream<<"task_manager >> infeat d2 stride : 0x"<<std::hex<<reg_config_.infeat_stride.d2<<"\n";
-  string_stream<<"task_manager >> outfeat d0 stride : 0x"<<std::hex<<reg_config_.outfeat_stride.d0<<"\n";
-  string_stream<<"task_manager >> outfeat d1 stride : 0x"<<std::hex<<reg_config_.outfeat_stride.d1<<"\n";
-  string_stream<<"task_manager >> outfeat d2 stride : 0x"<<std::hex<<reg_config_.outfeat_stride.d2<<"\n";
-  string_stream<<"task_manager >> weight d0 stride : 0x"<<std::hex<<reg_config_.weight_stride.d0<<"\n";
-  string_stream<<"task_manager >> weight d1 stride : 0x"<<std::hex<<reg_config_.weight_stride.d1<<"\n";
-  string_stream<<"task_manager >> weight d2 stride : 0x"<<std::hex<<reg_config_.weight_stride.d2<<"\n";
-  string_stream<<"task_manager >> Wmin value : 0x"<<std::dec<<reg_config_.Wmin<<"\n";
+  string_stream<<"regconfig_manager >> weight ptr : 0x"<<std::hex<<reg_config_.weight_ptr<<"\n";
+  string_stream<<"regconfig_manager >> infeat ptr : 0x"<<std::hex<<reg_config_.infeat_ptr<<"\n";
+  string_stream<<"regconfig_manager >> outfeat ptr : 0x"<<std::hex<<reg_config_.outfeat_ptr<<"\n";
+  string_stream<<"regconfig_manager >> scale ptr : 0x"<<std::hex<<reg_config_.scale_ptr<<"\n";
+  string_stream<<"regconfig_manager >> scale shift ptr : 0x"<<std::hex<<reg_config_.scale_shift_ptr<<"\n";
+  string_stream<<"regconfig_manager >> scale bias ptr : 0x"<<std::hex<<reg_config_.scale_bias_ptr<<"\n";
+  string_stream<<"regconfig_manager >> streamin ptr : 0x"<<std::hex<<reg_config_.streamin_ptr<<"\n";
+  string_stream<<"regconfig_manager >> infeat d0 stride : 0x"<<std::hex<<reg_config_.infeat_stride.d0<<"\n";
+  string_stream<<"regconfig_manager >> infeat d1 stride : 0x"<<std::hex<<reg_config_.infeat_stride.d1<<"\n";
+  string_stream<<"regconfig_manager >> infeat d2 stride : 0x"<<std::hex<<reg_config_.infeat_stride.d2<<"\n";
+  string_stream<<"regconfig_manager >> outfeat d0 stride : 0x"<<std::hex<<reg_config_.outfeat_stride.d0<<"\n";
+  string_stream<<"regconfig_manager >> outfeat d1 stride : 0x"<<std::hex<<reg_config_.outfeat_stride.d1<<"\n";
+  string_stream<<"regconfig_manager >> outfeat d2 stride : 0x"<<std::hex<<reg_config_.outfeat_stride.d2<<"\n";
+  string_stream<<"regconfig_manager >> weight d0 stride : 0x"<<std::hex<<reg_config_.weight_stride.d0<<"\n";
+  string_stream<<"regconfig_manager >> weight d1 stride : 0x"<<std::hex<<reg_config_.weight_stride.d1<<"\n";
+  string_stream<<"regconfig_manager >> weight d2 stride : 0x"<<std::hex<<reg_config_.weight_stride.d2<<"\n";
+  string_stream<<"regconfig_manager >> Wmin value : 0x"<<std::dec<<reg_config_.Wmin<<"\n";
   
-  string_stream<<"task_manager >> kin_tile_rem : "<<std::dec<<reg_config_.kin_tile_rem<<"\n";
-  string_stream<<"task_manager >> kout_tile_rem : "<<std::dec<<reg_config_.kout_tile_rem<<"\n";
-  string_stream<<"task_manager >> hin_tile_rem : "<<std::dec<<reg_config_.hin_tile_rem<<"\n";
-  string_stream<<"task_manager >> hout_tile_rem : "<<std::dec<<reg_config_.hout_tile_rem<<"\n";
-  string_stream<<"task_manager >> win_tile_rem : "<<std::dec<<reg_config_.win_tile_rem<<"\n";
-  string_stream<<"task_manager >> wout_tile_rem : "<<std::dec<<reg_config_.wout_tile_rem<<"\n";
+  string_stream<<"regconfig_manager >> kin_tile_rem : "<<std::dec<<reg_config_.kin_tile_rem<<"\n";
+  string_stream<<"regconfig_manager >> kout_tile_rem : "<<std::dec<<reg_config_.kout_tile_rem<<"\n";
+  string_stream<<"regconfig_manager >> hin_tile_rem : "<<std::dec<<reg_config_.hin_tile_rem<<"\n";
+  string_stream<<"regconfig_manager >> hout_tile_rem : "<<std::dec<<reg_config_.hout_tile_rem<<"\n";
+  string_stream<<"regconfig_manager >> win_tile_rem : "<<std::dec<<reg_config_.win_tile_rem<<"\n";
+  string_stream<<"regconfig_manager >> wout_tile_rem : "<<std::dec<<reg_config_.wout_tile_rem<<"\n";
   
 
-  string_stream<<"task_manager >> kin_tile_count : "<<std::dec<<reg_config_.kin_tile_count<<"\n";
-  string_stream<<"task_manager >> kout_tile_count : "<<std::dec<<reg_config_.kout_tile_count<<"\n";
-  string_stream<<"task_manager >> hout_tile_count : "<<std::dec<<reg_config_.hout_tile_count<<"\n";
-  string_stream<<"task_manager >> wout_tile_count : "<<std::dec<<reg_config_.wout_tile_count<<"\n";
-  string_stream<<"task_manager >> padding_top : "<<std::dec<<reg_config_.padding.top<<"\n";
-  string_stream<<"task_manager >> padding_bottom : "<<std::dec<<reg_config_.padding.bottom<<"\n";
-  string_stream<<"task_manager >> padding_left : "<<std::dec<<reg_config_.padding.left<<"\n";
-  string_stream<<"task_manager >> padding_right : "<<std::dec<<reg_config_.padding.right<<"\n";
+  string_stream<<"regconfig_manager >> kin_tile_count : "<<std::dec<<reg_config_.kin_tile_count<<"\n";
+  string_stream<<"regconfig_manager >> kout_tile_count : "<<std::dec<<reg_config_.kout_tile_count<<"\n";
+  string_stream<<"regconfig_manager >> hout_tile_count : "<<std::dec<<reg_config_.hout_tile_count<<"\n";
+  string_stream<<"regconfig_manager >> wout_tile_count : "<<std::dec<<reg_config_.wout_tile_count<<"\n";
+  string_stream<<"regconfig_manager >> padding_top : "<<std::dec<<reg_config_.padding.top<<"\n";
+  string_stream<<"regconfig_manager >> padding_bottom : "<<std::dec<<reg_config_.padding.bottom<<"\n";
+  string_stream<<"regconfig_manager >> padding_left : "<<std::dec<<reg_config_.padding.left<<"\n";
+  string_stream<<"regconfig_manager >> padding_right : "<<std::dec<<reg_config_.padding.right<<"\n";
 
-  string_stream<<"task_manager >> filter_mask : [";
+  string_stream<<"regconfig_manager >> filter_mask : [";
   for(int i=0; i<9; i++)
     string_stream<<" "<<std::boolalpha<<reg_config_.filter_mask_bit[i];
   string_stream<<" ]\n";
 
-  string_stream<<"task_manager >> is_broadcast : "<<std::boolalpha<<reg_config_.config0.broadcast<<"\n";
-  string_stream<<"task_manager >> is_residual : "<<std::boolalpha<<reg_config_.config0.residual<<"\n";
-  string_stream<<"task_manager >> signed_outfeat : "<<std::boolalpha<<reg_config_.config0.signed_outfeat<<"\n";
-  string_stream<<"task_manager >> signed_streamin : "<<std::boolalpha<<reg_config_.config0.signed_streamin<<"\n";
-  string_stream<<"task_manager >> signed_activation : "<<std::boolalpha<<reg_config_.config0.signed_activation<<"\n";
-  string_stream<<"task_manager >> norm_option_bias : "<<std::boolalpha<<reg_config_.config0.norm_option_bias<<"\n";
-  string_stream<<"task_manager >> norm_option_shift : "<<std::boolalpha<<reg_config_.config0.norm_option_shift<<"\n";
-  string_stream<<"task_manager >> use_relu : "<<std::boolalpha<<reg_config_.config0.use_relu<<"\n";
-  string_stream<<"task_manager >> quantization_bit_count : "<<std::dec<<reg_config_.config0.quantization_bit_count<<"\n";
-  string_stream<<"task_manager >> quantization_right_shift : "<<std::boolalpha<<reg_config_.config0.quantization_right_shift<<"\n";
-  string_stream<<"task_manager >> streamin_bit_count : "<<std::dec<<reg_config_.config0.streamin_bit_count<<"\n";
-  string_stream<<"task_manager >> streamin : "<<std::boolalpha<<reg_config_.config0.streamin<<"\n";
-  string_stream<<"task_manager >> normalization_bit_count : "<<std::dec<<reg_config_.config0.normalization_bit_count<<"\n";
-  string_stream<<"task_manager >> infeat_prefetch : "<<std::boolalpha<<reg_config_.config0.infeat_prefetch<<"\n";
-  string_stream<<"task_manager >> weight_from_wmem : "<<std::boolalpha<<reg_config_.config0.weight_from_wmem<<"\n";
-  string_stream<<"task_manager >> strided2x2 : "<<std::boolalpha<<reg_config_.config0.strided2x2<<"\n";
-  string_stream<<"task_manager >> filter_size : "<<std::dec<<reg_config_.config0.filter_size<<"\n";
-  string_stream<<"task_manager >> depthwise_mode : "<<std::boolalpha<<reg_config_.config0.depthwise_mode<<"\n";
-  string_stream<<"task_manager >> filter_mode : "<<std::dec<<reg_config_.config0.filter_mode<<"\n";
-  string_stream<<"task_manager >> outfeat_quant : "<<std::boolalpha<<reg_config_.config0.outfeat_quant<<"\n";
-  string_stream<<"task_manager >> weight_bit_count : "<<std::dec<<reg_config_.config0.weight_bit_count<<"\n";
+  string_stream<<"regconfig_manager >> is_broadcast : "<<std::boolalpha<<reg_config_.config0.broadcast<<"\n";
+  string_stream<<"regconfig_manager >> is_residual : "<<std::boolalpha<<reg_config_.config0.residual<<"\n";
+  string_stream<<"regconfig_manager >> signed_outfeat : "<<std::boolalpha<<reg_config_.config0.signed_outfeat<<"\n";
+  string_stream<<"regconfig_manager >> signed_streamin : "<<std::boolalpha<<reg_config_.config0.signed_streamin<<"\n";
+  string_stream<<"regconfig_manager >> signed_activation : "<<std::boolalpha<<reg_config_.config0.signed_activation<<"\n";
+  string_stream<<"regconfig_manager >> norm_option_bias : "<<std::boolalpha<<reg_config_.config0.norm_option_bias<<"\n";
+  string_stream<<"regconfig_manager >> norm_option_shift : "<<std::boolalpha<<reg_config_.config0.norm_option_shift<<"\n";
+  string_stream<<"regconfig_manager >> use_relu : "<<std::boolalpha<<reg_config_.config0.use_relu<<"\n";
+  string_stream<<"regconfig_manager >> quantization_bit_count : "<<std::dec<<reg_config_.config0.quantization_bit_count<<"\n";
+  string_stream<<"regconfig_manager >> quantization_right_shift : "<<std::boolalpha<<reg_config_.config0.quantization_right_shift<<"\n";
+  string_stream<<"regconfig_manager >> streamin_bit_count : "<<std::dec<<reg_config_.config0.streamin_bit_count<<"\n";
+  string_stream<<"regconfig_manager >> streamin : "<<std::boolalpha<<reg_config_.config0.streamin<<"\n";
+  string_stream<<"regconfig_manager >> normalization_bit_count : "<<std::dec<<reg_config_.config0.normalization_bit_count<<"\n";
+  string_stream<<"regconfig_manager >> infeat_prefetch : "<<std::boolalpha<<reg_config_.config0.infeat_prefetch<<"\n";
+  string_stream<<"regconfig_manager >> weight_from_wmem : "<<std::boolalpha<<reg_config_.config0.weight_from_wmem<<"\n";
+  string_stream<<"regconfig_manager >> strided2x2 : "<<std::boolalpha<<reg_config_.config0.strided2x2<<"\n";
+  string_stream<<"regconfig_manager >> filter_size : "<<std::dec<<reg_config_.config0.filter_size<<"\n";
+  string_stream<<"regconfig_manager >> depthwise_mode : "<<std::boolalpha<<reg_config_.config0.depthwise_mode<<"\n";
+  string_stream<<"regconfig_manager >> filter_mode : "<<std::dec<<reg_config_.config0.filter_mode<<"\n";
+  string_stream<<"regconfig_manager >> outfeat_quant : "<<std::boolalpha<<reg_config_.config0.outfeat_quant<<"\n";
+  string_stream<<"regconfig_manager >> weight_bit_count : "<<std::dec<<reg_config_.config0.weight_bit_count<<"\n";
   string s = string_stream.str();
   hwpe_instance_->trace.msg(s.c_str());
 }

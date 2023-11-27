@@ -42,7 +42,6 @@
 #include "control.hpp"
 #include "infeat_handler.hpp"
 #include "processing_engine.hpp"
-#include "debug.hpp"
 #include "regconfig_manager.hpp"
 class Neureka : public vp::Component
 {

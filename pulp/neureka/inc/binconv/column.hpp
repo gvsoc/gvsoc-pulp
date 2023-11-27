@@ -19,7 +19,6 @@
  */
 #ifndef COLUMN_H
 #define COLUMN_H
-#include "debug.hpp"
 #include "datatype.hpp"
 template <typename HwpeType, typename T1, typename ST1, typename T2, int ParamBinConvPerColumnCount>
 /**

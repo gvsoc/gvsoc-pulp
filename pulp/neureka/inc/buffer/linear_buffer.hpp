@@ -20,7 +20,6 @@
  */
 #ifndef LINEAR_BUFFER_H
 #define LINEAR_BUFFER_H
-#include "debug.hpp"
 #include "datatype.hpp"
 template <typename T, int ParamInFeatScalarBufferCount>
 /**

@@ -20,13 +20,12 @@
  */
 #ifndef STREAMER_H
 #define STREAMER_H
-#include "debug.hpp"
 #include "datatype.hpp"
 #ifndef GVSoC 
 #define GVSoC 
 #endif
 
-// Task 7 - Disable This
+// Task 7 - Disable INEFFICIENT_MEMORY_ACCESS
 #define INEFFICIENT_MEMORY_ACCESS
 
 template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>

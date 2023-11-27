@@ -19,7 +19,6 @@
  */
 #ifndef MATRIX_BUFFER_H
 #define MATRIX_BUFFER_H
-#include "debug.hpp"
 #include "datatype.hpp"
 template <typename T, int ParamInFeatLinearBufferCount, int ParamInFeatScalarBufferCount>
 /**

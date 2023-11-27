@@ -20,7 +20,6 @@
  */
 #ifndef PROCESSING_ENGINE_H
 #define PROCESSING_ENGINE_H
-#include "debug.hpp"
 #include "datatype.hpp"
 #include "params.hpp"
 /**

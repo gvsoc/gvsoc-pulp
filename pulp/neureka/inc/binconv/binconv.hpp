@@ -24,7 +24,6 @@
 #include <cstdint>
 #include <vector>
 #include <array>
-#include "debug.hpp"
 #include "datatype.hpp"
 template <typename HwpeType, typename T1, typename ST1, typename T2>
 /**

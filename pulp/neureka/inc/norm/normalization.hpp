@@ -20,7 +20,6 @@
  */
 #ifndef NORMALIZATION_H
 #define NORMALIZATION_H
-#include "debug.hpp"
 #include "datatype.hpp"
 #include "params.hpp"
 

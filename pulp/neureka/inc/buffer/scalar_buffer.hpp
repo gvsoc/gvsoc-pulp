@@ -20,7 +20,6 @@
  */
 #ifndef SCALAR_BUFFER_H
 #define SCALAR_BUFFER_H
-#include "debug.hpp"
 #include "datatype.hpp"
 template <typename T>
 
