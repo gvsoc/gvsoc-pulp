@@ -25,8 +25,6 @@ class pulp_iss_wrapper : public IssWrapper
 {
 public:
     pulp_iss_wrapper(vp::ComponentConf &config);
-
-    void target_open();
 };
 
 
