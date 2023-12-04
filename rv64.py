@@ -73,7 +73,8 @@ class Soc(st.Component):
         self.bind(ico, 'plic', plic, 'input')
         self.bind(uart, 'irq', plic, 'irq1')
 
-        host = iss.Riscv(self, 'host', isa=args.isa, boot_addr=0x1000, timed=False)
+        host = iss.Riscv(self, 'host', isa=args.isa, boot_addr=0x1000, timed=False,
+            memory_start=0x80000000, memory_size=0x80000000, untimed_loop=False)
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 
@@ -95,6 +96,7 @@ class Soc(st.Component):
         self.bind(host, 'data', tohost, 'input')
         self.bind(tohost, 'output', ico, 'input')
 
+        self.bind(host, 'meminfo', mem, 'meminfo')
         self.bind(host, 'fetch', ico, 'input')
         self.bind(host, 'time', clint, 'time')
         self.bind(loader, 'out', ico, 'input')
@@ -113,7 +115,7 @@ class Rv64(st.Component):
 
         super(Rv64, self).__init__(parent, name, options=options)
 
-        clock = Clock_domain(self, 'clock', frequency=100000000)
+        clock = Clock_domain(self, 'clock', frequency=10000000)
 
         soc = Soc(self, 'soc', parser)
 
