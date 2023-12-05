@@ -26,6 +26,7 @@ from pulp.cluster.cluster_control_v2 import Cluster_control
 from pulp.ne16.ne16 import Ne16
 from pulp.icache_ctrl.icache_ctrl_v2 import Icache_ctrl
 
+from pulp.redmule.redmule import RedMule
 
 def get_cluster_name(cid: int):
     """
@@ -75,6 +76,9 @@ class Cluster(st.Component):
         self.cluster_base   = self.get_property('mapping/base', int)
         self.cluster_alias  = self.get_property('alias', int)
         ne16_irq            = self.get_property('pe/irq').index('acc_0')
+        #is acc_0 correct?
+        redmule_irq         = self.get_property('pe/irq').index('acc_0')
+        #
         dma_irq_0           = self.get_property('pe/irq').index('dma_0')
         dma_irq_1           = self.get_property('pe/irq').index('dma_1')
         dma_irq_ext         = self.get_property('pe/irq').index('dma_ext')
@@ -83,9 +87,12 @@ class Cluster(st.Component):
         first_external_pcer = self.get_property('iss_config/first_external_pcer')
         has_ne16 = False
 
+        #ask if needed
+        has_redmule = True
+
 
         #
-        # Components
+        # Compenents
         #
 
         # L1 subsystem
@@ -123,6 +130,10 @@ class Cluster(st.Component):
         if has_ne16:
             # NE16
             ne16 = Ne16(self, 'ne16')
+
+        if has_redmule:
+            # REDMULE
+            redmule = RedMule(self, 'redmule')
 
         # Icache controller
         icache_ctrl = Icache_ctrl(self, 'icache_ctrl')
@@ -205,6 +216,11 @@ class Cluster(st.Component):
             periph_ico.add_mapping('ne16', **self._reloc_mapping(self.get_property('peripherals/ne16/mapping')))
             self.bind(periph_ico, 'ne16', ne16, 'input')
 
+        if has_redmule:
+            periph_ico.add_mapping('redmule', **self._reloc_mapping(self.get_property('peripherals/redmule/mapping')))
+            self.bind(periph_ico, 'redmule', redmule, 'input')
+
+
         # MCHAN
         self.bind(mchan, 'ext_irq_itf', self, 'dma_irq')
         self.bind(mchan, 'ext_itf', cluster_ico, 'input')
@@ -236,6 +252,14 @@ class Cluster(st.Component):
                 self.bind(ne16, 'irq', event_unit, 'in_event_%d_pe_%d' % (ne16_irq, i))
 
             self.bind(ne16, 'out', l1, 'ne16_in')
+ 
+        if has_redmule:
+            # REDMULE
+            for i in range(0, nb_pe):
+                self.bind(redmule, 'irq', event_unit, 'in_event_%d_pe_%d' % (redmule_irq, i))
+
+            self.bind(redmule, 'out', l1, 'redmule_in')
+
 
         # Icache controller
         self.bind(icache_ctrl, 'enable', icache, 'enable')
