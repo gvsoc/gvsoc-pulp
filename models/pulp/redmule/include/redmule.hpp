@@ -6,8 +6,6 @@
 #include "archi_redmule.h"
 #include "config.h"
 
-//Enums here
-
 enum redmule_state {
 	IDLE,
 	STARTING,
@@ -39,6 +37,7 @@ class RedMule_Engine {
 class RedMule_Buffers {
 	public:
 		RedMule_Buffers();
+		RedMule_Buffers(RedMule* redmule);
 
 		void alloc_buffers(uint32_t n, uint8_t x_rows_lftovr, uint8_t x_cols_lftovr, uint8_t w_rows_lftovr, uint8_t w_cols_lftovr);
 		void free_buffers();
@@ -51,6 +50,8 @@ class RedMule_Buffers {
 		void compute_z();
 
 	private:
+		RedMule* redmule;
+
 		uint32_t w_pointer;
 		uint32_t x_pointer;
 		uint32_t y_pointer;
@@ -77,8 +78,8 @@ class RedMule_Buffers {
 		dst_fmt_t** w;
 		dst_fmt_t** x;
 
-		dst_fmt_t y [ARRAY_WIDTH * 2] [(PIPE_REGS + 1) * ARRAY_HEIGHT]; //[ARRAY_WIDTH * 2] [(PIPE_REGS + 1) * ARRAY_HEIGHT];
-		dst_fmt_t z [ARRAY_WIDTH] [(PIPE_REGS + 1) * ARRAY_HEIGHT]; //[ARRAY_WIDTH] [(PIPE_REGS + 1) * ARRAY_HEIGHT];
+		dst_fmt_t y [ARRAY_WIDTH * 2] [(PIPE_REGS + 1) * ARRAY_HEIGHT];
+		dst_fmt_t z [ARRAY_WIDTH] [(PIPE_REGS + 1) * ARRAY_HEIGHT];
 };
 
 class RedMule_Streamer {
@@ -105,7 +106,6 @@ class RedMule_Streamer {
 		RedMule* redmule;
 		vp::io_req* req;
 
-		//dst_fmt_t out_buf [sizeof(dst_fmt_t) * DATA_WIDTH/(8 * sizeof(dst_fmt_t))];
 		uint32_t pos;
 		uint32_t tot_iters;
 		uint32_t d0_iters;
@@ -126,7 +126,6 @@ class RedMule_Streamer {
 		int rw_data(int width, void* buf, strobe_t strb);
 };
 
-//The class itself
 class RedMule : public vp::component {
 
 	friend class RedMule_base;
@@ -145,9 +144,6 @@ class RedMule : public vp::component {
 		vp::reg_32 state;
 
 	private:
-		//HW Parameters
-		
-	
 		static vp::io_req_status_e hwpe_slave(void *__this, vp::io_req *req);
 
     	static void fsm_start_handler(void *__this, vp::clock_event *event);

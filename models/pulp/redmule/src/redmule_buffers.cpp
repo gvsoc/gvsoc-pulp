@@ -4,6 +4,12 @@
 #include <memory.h>
 
 RedMule_Buffers::RedMule_Buffers() {
+    this->redmule = (RedMule *) NULL;
+}
+
+RedMule_Buffers::RedMule_Buffers(RedMule* redmule) {
+    this->redmule = redmule;
+
     this->w_pointer = 0;
 	this->x_pointer = 0;
 	this->y_pointer = 0;
@@ -28,30 +34,18 @@ RedMule_Buffers::RedMule_Buffers() {
 	this->w = NULL;
 	this->x = NULL;
 
-    /*this->y = new dst_fmt_t[ARRAY_WIDTH * 2] [(PIPE_REGS + 1) * ARRAY_HEIGHT];
-    this->z = new dst_fmt_t[ARRAY_WIDTH] [(PIPE_REGS + 1) * ARRAY_HEIGHT];*/
-
 	memset(this->y, 0, sizeof(this->y));
 	memset(this->z, 0, sizeof(this->z));
-
-    /*for (int i = 0; i < ARRAY_WIDTH; i++) {
-        for (int j = 0; j < 16; j++) {
-            printf("Z [%d,%d]: %x\n", i, j, this->z[i][j]);
-        }
-    }*/
 }
 
 void RedMule_Buffers::alloc_buffers(uint32_t n, uint8_t x_rows_lftovr, uint8_t x_cols_lftovr, uint8_t w_rows_lftovr, uint8_t w_cols_lftovr) {
     this->x = new dst_fmt_t*[ARRAY_WIDTH]; 
     
     for (int i = 0; i < ARRAY_WIDTH; i++) {
-        this->x[i] = new dst_fmt_t[n + ((PIPE_REGS + 1) * ARRAY_HEIGHT - x_cols_lftovr ) % ((PIPE_REGS + 1) * ARRAY_HEIGHT) + 2 * ARRAY_HEIGHT * (PIPE_REGS + 1) /* sizeof(dst_fmt_t)*/];
+        this->x[i] = new dst_fmt_t[n + ((PIPE_REGS + 1) * ARRAY_HEIGHT - x_cols_lftovr ) % ((PIPE_REGS + 1) * ARRAY_HEIGHT) + 2 * ARRAY_HEIGHT * (PIPE_REGS + 1)];
     }
-
-    printf("Row of X measures: %d\n", n + ((PIPE_REGS + 1) * ARRAY_HEIGHT - x_cols_lftovr ) % ((PIPE_REGS + 1) * ARRAY_HEIGHT) + 2 * ARRAY_HEIGHT * (PIPE_REGS + 1));
-
-                        //[n + 2 * DATA_WIDTH / 8 / sizeof(dst_fmt_t)];//(dst_fmt_t *) malloc(ARRAY_WIDTH * (n + 2 * DATA_WIDTH / 8 / sizeof(dst_fmt_t)) * sizeof(dst_fmt_t));     //Is DATA_WIDTH ok?
-    this->w = new dst_fmt_t*[n];//(dst_fmt_t *) malloc(n * sizeof(dst_fmt_t) * (PIPE_REGS + 1) * ARRAY_HEIGHT);
+                 
+    this->w = new dst_fmt_t*[n];
 
     for (int i = 0; i < n; i++) {
         this->w[i] = new dst_fmt_t[(PIPE_REGS + 1) * ARRAY_HEIGHT];
@@ -63,20 +57,9 @@ void RedMule_Buffers::alloc_buffers(uint32_t n, uint8_t x_rows_lftovr, uint8_t x
     this->x_rows_lftovr = x_rows_lftovr;
     this->w_cols_lftovr = w_cols_lftovr;
     this->w_rows_lftovr = w_rows_lftovr;
-
-    printf("N is %d\n", n);
-
-    printf("x_cols_lftovr %d x_rows_lftovr %d w_cols_lftovr %d w_rows_lftovr %d",
-        x_cols_lftovr,
-        x_rows_lftovr,
-        w_cols_lftovr,
-        w_rows_lftovr);
 }
 
 void RedMule_Buffers::free_buffers() {
-    /*free(this->x);
-    free(this->w);*/
-
     for (int i = 0; i < ARRAY_WIDTH; i++) {
         delete this->x[i];
     }
@@ -95,57 +78,38 @@ void RedMule_Buffers::free_buffers() {
 }
 
 dst_fmt_t* RedMule_Buffers::get_next_w() {
-    dst_fmt_t* res = this->w_iters < this->n ? this->w[w_iters] : NULL;//(dst_fmt_t *) ((void *) this->w) + this->w_pointer;
-
-    printf("W: %d\n", this->w_iters);
+    dst_fmt_t* res = this->w_iters < this->n ? this->w[w_iters] : NULL;
 
     this->w_iters++;
 
     if (this->w_iters == this->n + ((ARRAY_HEIGHT - this->w_rows_lftovr ) % ARRAY_HEIGHT)) {
         this->w_iters = 0;
-        //this->w_pointer = 0;
-    } /*else {
-        this->w_pointer += sizeof(dst_fmt_t) * (PIPE_REGS + 1) * ARRAY_HEIGHT;
-    }*/
-
-    printf("W: OK %d\n", this->w_iters);
+    }
 
     return res;
 }
 
 dst_fmt_t* RedMule_Buffers::get_next_x() {
-    dst_fmt_t* res = &this->x[x_d0_iters][x_pointer];//(dst_fmt_t *) ((void *) this->x) + this->x_pointer;
-
-    printf("X: (%d,%d)\n", this->x_d0_iters, this->x_pointer);
+    dst_fmt_t* res = &this->x[x_d0_iters][x_pointer];
 
     this->x_d0_iters++;
 
     if (this->x_d0_iters == ARRAY_WIDTH) {
         this->x_d0_iters = 0;
         this->x_d1_iters++;
-        this->x_pointer += ARRAY_HEIGHT * (PIPE_REGS + 1);//DATA_WIDTH / 8 / sizeof(dst_fmt_t);
+        this->x_pointer += ARRAY_HEIGHT * (PIPE_REGS + 1);
 
-
-        /*this->x_pointer -= this->n * sizeof(dst_fmt_t) * (ARRAY_WIDTH - 1);
-        this->x_pointer += DATA_WIDTH/8;
-        this->x_d0_iters = 0;
-        this->x_d1_iters++;*/
-
-        if (this->x_d1_iters == (this->n + ((PIPE_REGS + 1) * ARRAY_HEIGHT - this->x_cols_lftovr ) % ((PIPE_REGS + 1) * ARRAY_HEIGHT)) / (/*DATA_WIDTH / 8 / sizeof(dst_fmt_t)*/ARRAY_HEIGHT * (PIPE_REGS + 1)) + 2) {
+        if (this->x_d1_iters == (this->n + ((PIPE_REGS + 1) * ARRAY_HEIGHT - this->x_cols_lftovr ) % ((PIPE_REGS + 1) * ARRAY_HEIGHT)) / (ARRAY_HEIGHT * (PIPE_REGS + 1)) + 2) {
             this->x_d1_iters = 0;
             this->x_pointer = 0;
         }
-    } /*else {
-        this->x_pointer += this->n * sizeof(dst_fmt_t);
-    }*/
+    }
 
     return res;
 }
 
 dst_fmt_t* RedMule_Buffers::get_next_y() {
-    dst_fmt_t* res = this->y[y_iters];//(dst_fmt_t *) ((void *) this->y) + this->y_pointer;
-
-    printf("Y: %d\n", this->y_iters);
+    dst_fmt_t* res = this->y[y_iters];
 
     this->y_iters++;
 
@@ -156,22 +120,11 @@ dst_fmt_t* RedMule_Buffers::get_next_y() {
         this->y_pointer += sizeof(dst_fmt_t) * (PIPE_REGS + 1) * ARRAY_HEIGHT;
     }
 
-    /*printf("DUMPING Y:\n");
-    for (int i = 0; i < 12; i++) {
-        for (int j = 0; j < 16; j++) {
-            printf("0x%x ", * (uint16_t *) &(this->y[this->y_offs + i][j]));
-        }
-        printf("\n");
-    }
-    printf("\n\n");*/
-
     return res;
 }
 
 dst_fmt_t* RedMule_Buffers::get_next_z() {
-    dst_fmt_t* res = this->z[z_iters];//(dst_fmt_t *) ((void *) this->z) + this->z_pointer;
-
-    printf("Z: %d\n", this->z_iters);
+    dst_fmt_t* res = this->z[z_iters];
 
     this->z_iters++;
 
@@ -188,26 +141,14 @@ dst_fmt_t* RedMule_Buffers::get_next_z() {
 int RedMule_Buffers::x_row_offs(int k) {
     int res = this->x_offs + k;
 
-    if (res >= this->n + ((PIPE_REGS + 1) * ARRAY_HEIGHT - this->x_cols_lftovr ) % ((PIPE_REGS + 1) * ARRAY_HEIGHT) + 2 * ARRAY_HEIGHT * (PIPE_REGS + 1)/*DATA_WIDTH / 8 / sizeof(dst_fmt_t)*/) {
-        res -= this->n + ((PIPE_REGS + 1) * ARRAY_HEIGHT - this->x_cols_lftovr ) % ((PIPE_REGS + 1) * ARRAY_HEIGHT) + 2 * ARRAY_HEIGHT * (PIPE_REGS + 1)/*DATA_WIDTH / 8 / sizeof(dst_fmt_t)*/;
+    if (res >= this->n + ((PIPE_REGS + 1) * ARRAY_HEIGHT - this->x_cols_lftovr ) % ((PIPE_REGS + 1) * ARRAY_HEIGHT) + 2 * ARRAY_HEIGHT * (PIPE_REGS + 1)) {
+        res -= this->n + ((PIPE_REGS + 1) * ARRAY_HEIGHT - this->x_cols_lftovr ) % ((PIPE_REGS + 1) * ARRAY_HEIGHT) + 2 * ARRAY_HEIGHT * (PIPE_REGS + 1);
     }
-
-    //printf("X ROW OFFS: %d\n", res);
 
     return res;
 }
 
 void RedMule_Buffers::compute_z() {
-
-    //Computing stuff...
-
-    /*for (int i = 0; i < ARRAY_WIDTH; i++) {
-        for (int j = 0; j < 16; j++) {
-            printf("Z [%d,%d]: %x\n", i, j, * (uint16_t *) &(this->z[i][j]));
-            printf("Y [%d,%d]: %x\n", i, j, * (uint16_t *) &(this->y[i][j]));
-        }
-    }*/
-
     for (int i = 0; i < ARRAY_WIDTH; i++) {
         for (int j = 0; j < (PIPE_REGS + 1) * ARRAY_HEIGHT; j++) {
         #if DST_FMT!=FP8
@@ -220,12 +161,6 @@ void RedMule_Buffers::compute_z() {
             }
 
             this->z[i][j] = (dst_fmt_t) tmp_z;
-
-            /*this->z[i][j] = this->y[i + this->y_offs][j];
-            for (int k = 0; k < this->n; k++) {
-                this->z[i][j] += this->x[i][this->x_row_offs(k)] * this->w[k][j];//* (dst_fmt_t *) (((void *) this->x) + i * n * sizeof(dst_fmt_t) + j * sizeof(dst_fmt_t)) * * (dst_fmt_t *) (((void *) this->w) + j * (PIPE_REGS + 1) * ARRAY_HEIGHT * sizeof(dst_fmt_t) + i * sizeof(dst_fmt_t));
-                //this->z[i][j] = fma((dst_fmt_t) this->x[i][this->x_row_offs(k)], (dst_fmt_t) this->w[k][j], (dst_fmt_t) this->z[i][j]);
-            }*/
         #else
             uint16_t x_buf, w_buf, z_buf;
             float tmp_z, tmp_x, tmp_w;
@@ -253,49 +188,48 @@ void RedMule_Buffers::compute_z() {
     }
 
 
-    printf("DUMPING Y:\n");
+    /*this->redmule->trace.msg("COMPUTED:\n\n");
+
+    this->redmule->trace.msg("Y:\n");
     for (int i = 0; i < 12; i++) {
         for (int j = 0; j < 16; j++) {
-            printf("0x%x, ", * (uint32_t *) &(this->y[this->y_offs + i][j]));
+            this->redmule->trace.msg("0x%x, ", * (uint32_t *) &(this->y[this->y_offs + i][j]));
         }
-        printf("\n");
+        this->redmule->trace.msg("\n");
     }
-    printf("\n\n");
+    this->redmule->trace.msg("\n\n");
 
-    printf("DUMPING W:\n");
+    this->redmule->trace.msg("X:\n");
+    for (int i = 0; i < ARRAY_WIDTH; i++) {
+        for (int j = 0; j < this->n; j++) {
+            this->redmule->trace.msg("0x%x, ", * (uint32_t *) &(x[i][this->x_row_offs(j)]));
+        }
+        this->redmule->trace.msg("\n");
+    }
+    this->redmule->trace.msg("\n\n");
+
+    this->redmule->trace.msg("W:\n");
     for (int i = 0; i < this->n; i++) {
         for (int j = 0; j < 16; j++) {
-            printf("0x%x, ", * (uint32_t *) &(this->w[i][j]));
+            this->redmule->trace.msg("0x%x, ", * (uint32_t *) &(this->w[i][j]));
         }
-        printf("\n");
+        this->redmule->trace.msg("\n");
     }
-    printf("\n\n");
+    this->redmule->trace.msg("\n\n");
 
-    printf("DUMPING Z:\n");
+    this->redmule->trace.msg("Z:\n");
     for (int i = 0; i < 12; i++) {
         for (int j = 0; j < 16; j++) {
-            printf("0x%x, ", * (uint32_t *) &(this->z[i][j]));
+            this->redmule->trace.msg("0x%x, ", * (uint32_t *) &(this->z[i][j]));
         }
-        printf("\n");
+        this->redmule->trace.msg("\n");
     }
-    printf("\n\n");
+    this->redmule->trace.msg("\n\n");*/
 
-    /*printf("SAMPLEDD Y IS %x\n", * (uint16_t *) &(this->y[this->y_offs][0]));
-    for (int k = 0; k < this->n; k++) {
-        printf("SAMPLED X IS %x (%d)\n", * (uint16_t *) &(this->x[0][this->x_row_offs(k)]), this->x_row_offs(k));
-        printf("SAMPLED W is %x\n", * (uint16_t *) &(this->w[k][0]));
-    }*/
+    this->x_offs += this->n + ((PIPE_REGS + 1) * ARRAY_HEIGHT - this->x_cols_lftovr ) % ((PIPE_REGS + 1) * ARRAY_HEIGHT);
 
-    /*for (int i = 0; i < ARRAY_WIDTH; i++) {
-        for (int j = 0; j < 16; j++) {
-            printf("Z [%d,%d]: %x\n", i, j, * (uint16_t *) &(this->z[i][j]));
-        }
-    }*/
-
-    this->x_offs += this->n + ((PIPE_REGS + 1) * ARRAY_HEIGHT - this->x_cols_lftovr ) % ((PIPE_REGS + 1) * ARRAY_HEIGHT);//2 * DATA_WIDTH / 8;
-
-    if (this->x_offs >= this->n + ((PIPE_REGS + 1) * ARRAY_HEIGHT - this->x_cols_lftovr ) % ((PIPE_REGS + 1) * ARRAY_HEIGHT) + 2 * ARRAY_HEIGHT * (PIPE_REGS + 1)/*DATA_WIDTH / 8 / sizeof(dst_fmt_t)*/) {
-        this->x_offs -= this->n + ((PIPE_REGS + 1) * ARRAY_HEIGHT - this->x_cols_lftovr ) % ((PIPE_REGS + 1) * ARRAY_HEIGHT) + 2 * ARRAY_HEIGHT * (PIPE_REGS + 1)/*DATA_WIDTH / 8 / sizeof(dst_fmt_t)*/;
+    if (this->x_offs >= this->n + ((PIPE_REGS + 1) * ARRAY_HEIGHT - this->x_cols_lftovr ) % ((PIPE_REGS + 1) * ARRAY_HEIGHT) + 2 * ARRAY_HEIGHT * (PIPE_REGS + 1)) {
+        this->x_offs -= this->n + ((PIPE_REGS + 1) * ARRAY_HEIGHT - this->x_cols_lftovr ) % ((PIPE_REGS + 1) * ARRAY_HEIGHT) + 2 * ARRAY_HEIGHT * (PIPE_REGS + 1);
     }
 
     this->y_offs = this->y_offs == 0 ? ARRAY_WIDTH : 0;

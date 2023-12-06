@@ -2,12 +2,12 @@
 
 #include <memory.h>
 
-#define JMP ARRAY_HEIGHT * (PIPE_REGS + 1) * sizeof(src_fmt_t)//2*DATA_WIDTH/ADDR_WIDTH*sizeof(src_fmt_t) //4*DATA_WIDTH/ADDR_WIDTH
+#define JMP ARRAY_HEIGHT * (PIPE_REGS + 1) * sizeof(src_fmt_t)
 
 void RedMule::fsm_start_handler(void *__this, vp::clock_event *event) {
     RedMule* _this = (RedMule *) __this;
 
-    printf("Starting op...\n");
+    _this->trace.msg("Starting op...\n");
 
 	_this->z_stream.configure(
 		_this->register_file [REDMULE_REG_Z_PTR>>2],							//base_addr
@@ -57,20 +57,18 @@ void RedMule::fsm_start_handler(void *__this, vp::clock_event *event) {
 		0																		//d3_stride
 	);
 	
-	printf("PRE ALLOC\n");
+	_this->trace.msg("LEFTS %x\n", _this->register_file [REDMULE_REG_LEFTOVERS_PTR>>2]);
 
-	printf("LEFTS %x\n", _this->register_file [REDMULE_REG_LEFTOVERS_PTR>>2]);
+	_this->trace.msg("W COLS ITERS %d\n", _this->register_file [REDMULE_REG_W_ITER_PTR>>2] & 0x0000ffff);
+	_this->trace.msg("W ROWS ITERS %d\n", _this->register_file [REDMULE_REG_W_ITER_PTR>>2]>>16);
 
-	printf("W COLS ITERS %d\n", _this->register_file [REDMULE_REG_W_ITER_PTR>>2] & 0x0000ffff);
-	printf("W ROWS ITERS %d\n", _this->register_file [REDMULE_REG_W_ITER_PTR>>2]>>16);
+	_this->trace.msg("YZ TOT LEN %d\n", _this->register_file [REDMULE_REG_YZ_TOT_LEN_PTR>>2]);
 
-	printf("YZ TOT LEN %d\n", _this->register_file [REDMULE_REG_YZ_TOT_LEN_PTR>>2]);
+	_this->trace.msg("YZ D0 STRIDE %d\n", _this->register_file [REDMULE_REG_YZ_D0_STRIDE_PTR>>2]);
 
-	printf("YZ D0 STRIDE %d\n", _this->register_file [REDMULE_REG_YZ_D0_STRIDE_PTR>>2]);
+	_this->trace.msg("YZ D2 STRIDE %d\n", _this->register_file [REDMULE_REG_YZ_D2_STRIDE_PTR >> 2]);
 
-	printf("YZ D2 STRIDE %d\n", _this->register_file [REDMULE_REG_YZ_D2_STRIDE_PTR >> 2]);
-
-	printf("W TOT LEN %d\n", _this->register_file [REDMULE_REG_W_TOT_LEN_PTR>>2]);
+	_this->trace.msg("W TOT LEN %d\n", _this->register_file [REDMULE_REG_W_TOT_LEN_PTR>>2]);
 
 	_this->buffers.alloc_buffers(
 		_this->register_file [REDMULE_REG_X_D1_STRIDE_PTR>>2]/sizeof(src_fmt_t),
@@ -79,8 +77,6 @@ void RedMule::fsm_start_handler(void *__this, vp::clock_event *event) {
 		(_this->register_file [REDMULE_REG_LEFTOVERS_PTR>>2] >> 8) & 0x000000ff,
 		_this->register_file [REDMULE_REG_LEFTOVERS_PTR>>2] & 0x000000ff
 	);
-
-	printf("POST ALLOC\n");
 
 	_this->reset_sched();
 
@@ -96,16 +92,11 @@ void RedMule::fsm_handler(void *__this, vp::clock_event *event) {
 
 void RedMule::fsm_end_handler(void *__this, vp::clock_event *event) {
     RedMule* _this = (RedMule *) __this;
-
-    printf("Finishing op...\n");
-
 	_this->buffers.free_buffers();
 
     _this->state.set(IDLE);
 
 	_this->irq.sync(true);
-
-	printf("POST IRQ\n");
 }
 
 void RedMule::fsm_loop() {
@@ -119,7 +110,6 @@ void RedMule::fsm_loop() {
         this->event_enqueue(this->fsm_end_event, latency);
     } else if (!this->fsm_event->is_enqueued()) {
         this->event_enqueue(this->fsm_event, latency);
-		//printf("ENQ EVT %x\n", rand());
     }
 }
 
@@ -128,48 +118,30 @@ int RedMule::fsm() {
 
 	int latency = 0;
     switch (this->state.get()) {
-        case IDLE:  //Unreachable, fsm_start_handler is used instead
-            break;
-
-	    case STARTING:      //We wait for W to be loaded, then we start computing
-            //printf("Now in STARTING STATE!\n");
-			
+	    case STARTING:			
 			if (this->preload_iter(&latency))
 				next_state = COMPUTING;
 
-            //printf("This took: %d\n", latency);
             break;
 
-	    case COMPUTING:     //Once the block is finished, we start buffering
-			//printf("Now in COMPUTING STATE!\n");
-
+	    case COMPUTING:
 			if (this->compute_iter(&latency))
 				next_state = STORING;
 			
-			//printf("This took: %d\n", latency);
             break;
 
-
-		//Remove, we store w/out buffering
-	    case BUFFERING:     //Finally, when the buffer is full we store the result
-            break;
-
-	    case STORING:       //While the buffer is emptying we load Y, then we compute again
-			//printf("Now in STORING STATE!\n");
-
+	    case STORING:
 			if (this->store_iter(&latency)) {
-				if (this->done/*this->w_cols_iters == 10*/) {
+				if (this->done) {
 					next_state = FINISHED;
 				} else {
 					next_state = COMPUTING;
 				}
 			}
 
-			//printf("This took: %d\n", latency);
-
             break;
 
-	    case FINISHED:  //Unreachable, fsm_end_handler is used instead
+	    case FINISHED:
             break;
 
         default:

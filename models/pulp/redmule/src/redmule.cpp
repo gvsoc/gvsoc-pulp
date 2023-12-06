@@ -4,15 +4,10 @@
 #include <memory.h>
 
 RedMule::RedMule(js::config *config) : vp::component(config) {
-	//Set Local Parameters...
 
-	//A print just in case...
-	printf("Construction complete, now with 2x more text!\n");
 }
 
 void RedMule::reset(bool active) {
-	printf("Reset called! (%s)\n", active ? "low" : "high");
-
 	if (active) {
 		this->state.set(IDLE);
 		memset(this->register_file, 0, sizeof register_file);
@@ -26,8 +21,7 @@ vp::io_req_status_e RedMule::hwpe_slave(void *__this, vp::io_req *req) {
     if (req->get_is_write()) {
 		uint32_t data = * ((uint32_t *) (req->get_data()));
 
-    	printf("Write request, promptly served!\n");
-		printf("Addr is %x\n", address);
+		_this->trace.msg("Write request; Address: %x\n", address);
 
 		if (address >= REDMULE_REG_OFFS) {	//Writing registers
 			if (address - REDMULE_REG_OFFS > 0x48) {
@@ -36,20 +30,19 @@ vp::io_req_status_e RedMule::hwpe_slave(void *__this, vp::io_req *req) {
 				return vp::IO_REQ_OK;
 			}
 
-			printf("Writing register #%d\n", (address - REDMULE_REG_OFFS) >> 2);
+			_this->trace.msg("Writing register #%d\n", (address - REDMULE_REG_OFFS) >> 2);
 
 			_this->register_file [(address - REDMULE_REG_OFFS) >> 2] = data;
 
-			printf("Wrote %x\n", _this->register_file [(address - REDMULE_REG_OFFS) >> 2]);
+			_this->trace.msg("Wrote %x\n", _this->register_file [(address - REDMULE_REG_OFFS) >> 2]);
 		} else {	//Writing commands
 			switch (address) {
 				case REDMULE_TRIGGER:
-					printf("JOB TRIGGERED!\n");
+					_this->trace.msg("JOB TRIGGERED\n");
 					_this->event_enqueue(_this->fsm_start_event, 1);
 					break;
 
 				case REDMULE_ACQUIRE:
-
 					break;
 
 				case REDMULE_FINISHED:
@@ -65,13 +58,11 @@ vp::io_req_status_e RedMule::hwpe_slave(void *__this, vp::io_req *req) {
 					break;
 
 				default:
-					printf("Usupported command!\n");          
+					_this->trace.msg("Usupported command!\n");          
 			}
 		}
     } else {
-    	printf("Read request...?\n");
-
-		//TODO
+    	_this->trace.msg("Read request\n");
     }
 
     return vp::IO_REQ_OK;
@@ -92,6 +83,8 @@ int RedMule::build() {
 	this->y_stream = RedMule_Streamer(this, false);
 	this->z_stream = RedMule_Streamer(this, true);
 
+	this->buffers = RedMule_Buffers(this);
+
 	//Event Handlers
     this->fsm_start_event = this->event_new(&RedMule::fsm_start_handler);
     this->fsm_event = this->event_new(&RedMule::fsm_handler);
@@ -99,7 +92,7 @@ int RedMule::build() {
 
 	this->state.set(IDLE);
 
-	printf("Build complete!\n");
+	this->trace.msg("Build complete\n");
 
 	return 0;
 }

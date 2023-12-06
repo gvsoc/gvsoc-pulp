@@ -21,7 +21,6 @@ RedMule_Streamer::RedMule_Streamer(RedMule* redmule, bool is_write) {
 	this->d2_iters	= 0;
 	this->req		= this->redmule->out.req_new(0, 0, 0, is_write);
 	this->is_write	= is_write;
-    //memset(this->out_buf, 0, sizeof this->out_buf);
 }
 
 RedMule_Streamer::RedMule_Streamer() {
@@ -116,27 +115,6 @@ int RedMule_Streamer::rw_data(int width, void* buf, strobe_t strb) {
 					strb = strb >> 1;
 				}
 			}
-
-			printf("TMP WAS TRANS TO %x\n", * (uint16_t *) buf);
-
-			/*for (int i = 0; i < BYTES_PER_BANK - offs % BYTES_PER_BANK; i++) {
-				if (strb & 0x1) {
-					this->req->set_addr(offs + i);
-					this->req->set_data(((uint8_t *) buf) + i);
-					this->req->set_size(1);
-
-					vp::io_req_status_e err = this->redmule->out.req(this->req);
-
-					if (err != vp::IO_REQ_OK) {
-						this->redmule->trace.fatal("There was an error while reading/writing data\n");
-						return 0;
-					}
-
-					latency = req->get_latency();
-				}
-
-				strb = strb >> 1;
-			}*/
 		
 			max_latency = latency > max_latency ? latency : max_latency;
 		}
@@ -233,62 +211,9 @@ int RedMule_Streamer::rw_data(int width, void* buf, strobe_t strb) {
 				}
 			}
 
-			/*if ((strb & 0xF) == 0xF) {
-				//printf("ENTERED WORD ADDR STROBE %x\n", strb);
-
-				this->req->set_addr(offs + i);
-				this->req->set_data(((uint8_t *) buf) + i);
-				this->req->set_size(BYTES_PER_BANK);
-
-				vp::io_req_status_e err = this->redmule->out.req(this->req);
-
-				if (err != vp::IO_REQ_OK) {
-					this->redmule->trace.fatal("There was an error while reading/writing data\n");
-					return 0;
-				}
-
-				latency = req->get_latency();
-
-				strb = strb >> BYTES_PER_BANK;
-			} else {
-				//printf("ENTERED SUB-WORD ADDR STROBE\n");
-
-				for (int j = 0; j < BYTES_PER_BANK; j++) {
-					if (strb & 0x1) {
-						this->req->set_addr(offs + i + j);
-						this->req->set_data(((uint8_t *) buf) + i + j);
-						this->req->set_size(1);
-
-						vp::io_req_status_e err = this->redmule->out.req(this->req);
-
-						if (err != vp::IO_REQ_OK) {
-							this->redmule->trace.fatal("There was an error while reading/writing data\n");
-							return 0;
-						}
-
-						latency = req->get_latency();
-					}
-
-					strb = strb >> 1;
-				}
-			}*/
-
 			max_latency = latency > max_latency ? latency : max_latency;
 		}
 	}
-
-	/*if (req->get_is_write()) {
-		printf("Wrote at pos %d; d0_iters; %d; d1_iters: %d\n", this->pos, this->d0_iters, this->d1_iters);
-		printf("WROTE:\t");
-	} else {
-		printf("Read at pos %d into %x; d0_iters; %d; d1_iters: %d\n", this->pos, buf, this->d0_iters, this->d1_iters);
-		printf("READ:\t");
-	}
-
-	for (int i = 0; i < width; i += sizeof(dst_fmt_t)) {
-		printf("0x%x, ", * (uint16_t *) (buf + i));
-	}
-	printf("\n");*/
 
 	this->pos += this->d0_stride;
 	this->d0_iters++;
@@ -317,16 +242,14 @@ int RedMule_Streamer::rw_data(int width, void* buf, strobe_t strb) {
 	return (int) max_latency + 1;
 }
 
-int RedMule_Streamer::iterate(void* buf, strobe_t strb) {						//This function manages possible casts (e.g., from fp8 to fp16)
+int RedMule_Streamer::iterate(void* buf, strobe_t strb) {
 	int latency = 1;
 
 #if SRC_FMT!=DST_FMT
 
 	if (this->is_write) {
-		//CAST
-
 		if (buf != NULL) {
-			for (int i = 0; i < ARRAY_HEIGHT * (PIPE_REGS + 1)/*DATA_WIDTH / 8 / sizeof(dst_fmt_t)*/; i++) {		//ASSUMPTION: dst_fmt_t is bigger than src_fmt_t
+			for (int i = 0; i < ARRAY_HEIGHT * (PIPE_REGS + 1); i++) {		//ASSUMPTION: dst_fmt_t is bigger than src_fmt_t
 				#if SRC_FMT!=FP8
 					* (src_fmt_t *) (buf + i * sizeof(src_fmt_t)) = (src_fmt_t) * (dst_fmt_t *) (buf + i * sizeof(dst_fmt_t));
 				#else
@@ -341,20 +264,18 @@ int RedMule_Streamer::iterate(void* buf, strobe_t strb) {						//This function m
 	} else {
 		latency = this->rw_data(sizeof(src_fmt_t) * (ARRAY_HEIGHT) * (PIPE_REGS + 1), buf, strb);
 
-		//CAST
 		if (buf != NULL) {
-			for (int i = ARRAY_HEIGHT * (PIPE_REGS + 1)/*DATA_WIDTH / 8 / sizeof(dst_fmt_t) */ - 1; i >= 0; i--) {
+			for (int i = ARRAY_HEIGHT * (PIPE_REGS + 1) - 1; i >= 0; i--) {
 				#if SRC_FMT!=FP8
 					* (dst_fmt_t *) (buf + i * sizeof(dst_fmt_t)) = (dst_fmt_t) * (src_fmt_t *) (buf + i * sizeof(src_fmt_t));
 				#else
-					uint16_t tmp = 0; //= * (uint8_t *) (buf + i * sizeof(src_fmt_t));
+					uint16_t tmp = 0;
 
 					* (uint8_t *) &tmp = * (uint8_t *) (buf + i * sizeof(src_fmt_t));
 
 					tmp = tmp << 8;
-					//printf("CAST 0x%x into", * (uint8_t *) (buf + i * sizeof(src_fmt_t)));
-					* (dst_fmt_t *) (buf + i * sizeof(dst_fmt_t)) = (dst_fmt_t) * (_Float16 *) &tmp;//((uint16_t) * (uint8_t *) (buf + i * sizeof(src_fmt_t))) << 8;
-					//printf(" 0x%x\n", * (uint16_t *) (buf + i * sizeof(dst_fmt_t)));
+
+					* (dst_fmt_t *) (buf + i * sizeof(dst_fmt_t)) = (dst_fmt_t) * (_Float16 *) &tmp;
 				#endif
 			}
 		}
