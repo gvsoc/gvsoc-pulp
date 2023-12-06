@@ -15,7 +15,7 @@
 
 #define NB_ITER 1
 
-#define ERROR_THRES 0x10
+#define ERROR_THRES 0x02
 
 #if SRC_FMT==FP16
     typedef uint16_t src_fmt_t;
@@ -71,8 +71,6 @@ int run_test() {
                      1 + ARRAY_HEIGHT * (PIPE_REGS + 1) + ARRAY_WIDTH;
 
   printf("Predicted cycles: %d\n", predicted_cycles); 
-
-  printf("RATIO: %f\n", (float) predicted_cycles/pi_perf_read(PI_PERF_CYCLES));
 
   printf("DIFF: %d\n", pi_perf_read(PI_PERF_CYCLES) - predicted_cycles);
 
