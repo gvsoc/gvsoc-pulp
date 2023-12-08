@@ -48,10 +48,16 @@ k_size = args.k_size
 f = open(args.file_name, "w")
 
 # Test Matrices
-X = torch.rand (m_size, n_size).half()
-W = torch.rand (n_size, k_size).half()
-Y = torch.rand (m_size, k_size).half()
-Z = torch.zeros(m_size, k_size).half()
+if torch.cuda.is_available():
+  X = torch.rand(m_size, n_size).half().cuda()
+  W = torch.rand(n_size, k_size).half().cuda()
+  Y = torch.rand(m_size, k_size).half().cuda()
+  Z = torch.rand(m_size, k_size).half().cuda()
+else:
+  X = torch.rand(m_size, n_size).half()
+  W = torch.rand(n_size, k_size).half()
+  Y = torch.rand(m_size, k_size).half()
+  Z = torch.rand(m_size, k_size).half()
 
 print("\nInput Data: ")
 print("\nX is: ", X, X.shape, X.dtype)
@@ -76,6 +82,11 @@ f.write('fp16 Z[IN_CH*OUT_CH] = {'+dump.tensor_to_string(Z)+'};\n')
 print("\n\n")
 
 f.close()
+
+X = X.cpu()
+W = W.cpu()
+Y = Y.cpu()
+Z = Z.cpu()
 
 # Matrices conversion to hexadecimal and txt files generation
 txt_path = args.txt_dir
@@ -142,7 +153,7 @@ for f in os.listdir(inc_path):
 
 f_x = open(''+inc_path+'/x_input.h', "w")
 f_x.write(''+header+'')
-f_x.write('uint16_t x_inp ['+x_dim+'] = {\n')
+f_x.write('#define X { \\\n')
 for i in range(m_size):
     for j in range (n_size):
         x_bin = bin(np.float16(X[i][j]).view('H'))[2:].zfill(16)
@@ -151,8 +162,8 @@ for i in range(m_size):
           f_x.write('0x'+x_hex+' ')
         else:
           f_x.write('0x'+x_hex+', ')
-    f_x.write("\n")
-f_x.write("};")
+    f_x.write(" \\\n")
+f_x.write("}")
 f_x.close()
 
 f_x = open(''+inc_path+'/x_2D.h', "w")
@@ -172,7 +183,7 @@ f_x.close()
 
 f_w = open(''+inc_path+'/w_input.h', "w")
 f_w.write(''+header+'')
-f_w.write('uint16_t w_inp ['+w_dim+'] = {\n')
+f_w.write('#define W { \\\n')
 for i in range(n_size):
     for j in range (k_size):
         w_bin = bin(np.float16(W[i][j]).view('H'))[2:].zfill(16)
@@ -181,8 +192,8 @@ for i in range(n_size):
           f_w.write('0x'+w_hex+' ')
         else:
           f_w.write('0x'+w_hex+', ')
-    f_w.write("\n")
-f_w.write("};")
+    f_w.write(" \\\n")
+f_w.write("}")
 f_w.close()
 
 f_w = open(''+inc_path+'/w_2D.h', "w")
@@ -202,7 +213,7 @@ f_w.close()
 
 f_y = open(''+inc_path+'/y_input.h', "w")
 f_y.write(''+header+'')
-f_y.write('uint16_t y_inp ['+y_dim+'] = {\n')
+f_y.write('#define Y { \\\n')
 for i in range(m_size):
     for j in range (k_size):
         y_bin = bin(np.float16(Y[i][j]).view('H'))[2:].zfill(16)
@@ -211,8 +222,8 @@ for i in range(m_size):
           f_y.write('0x'+y_hex+' ')
         else:
           f_y.write('0x'+y_hex+', ')
-    f_y.write("\n")
-f_y.write("};")
+    f_y.write(" \\\n")
+f_y.write("}")
 f_y.close()
 
 f_y = open(''+inc_path+'/y_2D.h', "w")
@@ -232,7 +243,7 @@ f_y.close()
 
 f_z = open(''+inc_path+'/z_output.h', "w")
 f_z.write(''+header+'')
-f_z.write('uint16_t z_oup ['+z_dim+'] = {\n')
+f_z.write('#define Z { \\\n')
 for i in range(m_size):
     for j in range (k_size):
         z_bin = bin(np.float16(Z[i][j]).view('H'))[2:].zfill(16)
@@ -241,8 +252,8 @@ for i in range(m_size):
           f_z.write('0x'+z_hex+' ')
         else:
           f_z.write('0x'+z_hex+', ')
-    f_z.write("\n")
-f_z.write("};")
+    f_z.write(" \\\n")
+f_z.write("}")
 f_z.close()
 
 f_z = open(''+inc_path+'/z_2D.h', "w")

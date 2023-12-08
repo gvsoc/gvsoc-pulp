@@ -47,20 +47,19 @@ k_size = args.k_size
 
 f = open(args.file_name, "w")
 
-if torch.cuda.is_available(): 
-  dev = "cuda:0" 
-else: 
-  dev = "cpu" 
-device = torch.device(dev) 
-
-print("DEVICE IS {}".format(dev))
-
 # We want to perform a GEMM, of the kind Z = Y + X*W
 # Test Matrices
-X = torch.rand(m_size, n_size).float()#.cuda()
-W = torch.rand(n_size, k_size).float()#.cuda()
-Y = torch.rand(m_size, k_size).float()#.cuda()
-Z = torch.rand(m_size, k_size).float()#.cuda()
+
+if torch.cuda.is_available():
+  X = torch.rand(m_size, n_size).float().cuda()
+  W = torch.rand(n_size, k_size).float().cuda()
+  Y = torch.rand(m_size, k_size).float().cuda()
+  Z = torch.rand(m_size, k_size).float().cuda()
+else:
+  X = torch.rand(m_size, n_size).float()
+  W = torch.rand(n_size, k_size).float()
+  Y = torch.rand(m_size, k_size).float()
+  Z = torch.rand(m_size, k_size).float()
 
 print("\nInput Data: ")
 print("\nX is: ", X, X.shape, X.dtype)
@@ -82,10 +81,10 @@ print("\n\n")
 
 f.close()
 
-#X = X.cpu()
-#W = W.cpu()
-#Y = Y.cpu()
-#Z = Z.cpu()
+X = X.cpu()
+W = W.cpu()
+Y = Y.cpu()
+Z = Z.cpu()
 
 # Matrices conversion to hexadecimal and txt files generation
 txt_path = args.txt_dir

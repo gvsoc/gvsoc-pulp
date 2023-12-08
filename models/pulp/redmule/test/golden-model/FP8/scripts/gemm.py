@@ -49,10 +49,17 @@ f = open(args.file_name, "w")
 
 # We want to perform a GEMM, of the kind Z = Y + X*W
 # Test Matrices
-X = torch.rand(m_size, n_size).half().cuda()
-W = torch.rand(n_size, k_size).half().cuda()
-Y = torch.rand(m_size, k_size).half().cuda()
-Z = torch.rand(m_size, k_size).half().cuda()
+
+if torch.cuda.is_available():
+  X = torch.rand(m_size, n_size).half().cuda()
+  W = torch.rand(n_size, k_size).half().cuda()
+  Y = torch.rand(m_size, k_size).half().cuda()
+  Z = torch.rand(m_size, k_size).half().cuda()
+else:
+  X = torch.rand(m_size, n_size).half()
+  W = torch.rand(n_size, k_size).half()
+  Y = torch.rand(m_size, k_size).half()
+  Z = torch.rand(m_size, k_size).half()
 
 print("\nInput Data: ")
 print("\nX is: ", X, X.shape, X.dtype)
