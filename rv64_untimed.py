@@ -74,7 +74,7 @@ class Soc(st.Component):
         self.bind(uart, 'irq', plic, 'irq1')
 
         host = iss.Riscv(self, 'host', isa=args.isa, boot_addr=0x1000, timed=False,
-            memory_start=0x80000000, memory_size=0x80000000, untimed_loop=False)
+            memory_start=0x80000000, memory_size=0x80000000)
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 
