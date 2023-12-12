@@ -18,15 +18,13 @@
 
 import cpu.iss.riscv
 from cpu.iss.isa_gen.isa_riscv_gen import *
-from cpu.iss.isa_gen.isa_smallfloats import *
-from cpu.iss.isa_gen.isa_pulpv2 import *
 
 
 def __build_isa(name):
-    isa = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa(name, 'rv32imfc')
+    isa = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa(name, 'rv32imfcXpulpv2Xf8Xf16XfvecXfauxXf16altXgap9')
 
-    isa.add_isa([Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux()])
-    isa.add_isa([PulpV2()])
+    isa.add_tree(IsaDecodeTree('sfloat', [Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux()]))
+    isa.add_tree(IsaDecodeTree('pulpv2', [PulpV2()]))
 
     for insn in isa.get_insns():
 
@@ -59,14 +57,7 @@ def __build_cluster_isa():
     isa.add_resource('fpu_sqrt', instances=1)
 
     # And attach resources to instructions
-    float_insn = isa.get_isa('rvf').get_insns() + \
-        isa.get_isa('f16').get_insns() + \
-        isa.get_isa('f16alt').get_insns() + \
-        isa.get_isa('f8').get_insns() + \
-        isa.get_isa('fvec').get_insns() + \
-        isa.get_isa('faux').get_insns()
-
-    for insn in float_insn:
+    for insn in isa.get_tree('f').get_insns() + isa.get_tree('sfloat').get_insns():
 
         # All float operations are handled by the same unit
         __attach_resource(insn, 'fpu_base', latency=1, bandwidth=1, tags=[
