@@ -35,7 +35,9 @@ class Soc(st.Component):
         super().__init__(parent, name)
 
         nb_cores = 8
-        cores = []
+        # Snitch core complex
+        int_cores = []
+        fp_cores = []
 
         parser.add_argument("--isa", dest="isa", type=str, default="rv32imfdvc",
             help="RISCV-V ISA string (default: %(default)s)")
@@ -56,7 +58,8 @@ class Soc(st.Component):
         ico = router.Router(self, 'ico')
 
         for core_id in range(0, nb_cores):
-            cores.append(iss.Snitch(self, f'pe{core_id}', isa=args.isa, core_id=core_id))
+            int_cores.append(iss.Snitch(self, f'pe{core_id}', isa=args.isa, core_id=core_id))
+            fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa=args.isa, core_id=core_id))
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x1000)
 
@@ -96,14 +99,24 @@ class Soc(st.Component):
         self.bind(tohost, 'output', ico, 'input')
 
         for core_id in range(0, nb_cores):
-            self.bind(cores[core_id], 'barrier_req', cluster_registers, f'barrier_req_{core_id}')
-            self.bind(cluster_registers, f'barrier_ack', cores[core_id], 'barrier_ack')
+            # Sync all core complex by integer cores.
+            self.bind(int_cores[core_id], 'barrier_req', cluster_registers, f'barrier_req_{core_id}')
+            self.bind(cluster_registers, f'barrier_ack', int_cores[core_id], 'barrier_ack')
 
         for core_id in range(0, nb_cores):
-            self.bind(cores[core_id], 'data', tohost, 'input')
-            self.bind(cores[core_id], 'fetch', ico, 'input')
-            self.bind(loader, 'start', cores[core_id], 'fetchen')
-            self.bind(loader, 'entry', cores[core_id], 'bootaddr')
+            # Snitch integer cores
+            self.bind(int_cores[core_id], 'data', tohost, 'input')
+            self.bind(int_cores[core_id], 'fetch', ico, 'input')
+            self.bind(loader, 'start', int_cores[core_id], 'fetchen')
+            self.bind(loader, 'entry', int_cores[core_id], 'bootaddr')
+            
+            # Snitch fp subsystems
+            # Pay attention to interactions and bandwidth between subsystem and tohost.
+            self.bind(fp_cores[core_id], 'data', tohost, 'input')
+            # FP subsystem doesn't fetch instructions from core->ico->memory, but from integer cores acc_req.
+            self.bind(loader, 'start', fp_cores[core_id], 'fetchen')
+            self.bind(loader, 'entry', fp_cores[core_id], 'bootaddr')
+            self.bind(int_cores[core_id], 'acc_req', fp_cores[core_id], 'acc_rsp')
 
         self.bind(loader, 'out', ico, 'input')
 
