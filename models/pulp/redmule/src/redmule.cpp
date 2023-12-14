@@ -58,7 +58,7 @@ vp::io_req_status_e RedMule::hwpe_slave(void *__this, vp::io_req *req) {
 					break;
 
 				default:
-					_this->trace.msg("Usupported command!\n");          
+					_this->trace.msg("Usupported command (%x)\n", address);          
 			}
 		}
     } else {

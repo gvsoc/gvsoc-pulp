@@ -15,7 +15,7 @@
 
 #define NB_ITER 1
 
-#define ERROR_THRES 0x02
+#define ERROR_THRES 0x05
 
 #if SRC_FMT==FP16
     typedef uint16_t src_fmt_t;

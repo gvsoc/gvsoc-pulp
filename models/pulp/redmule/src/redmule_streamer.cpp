@@ -49,14 +49,15 @@ void RedMule_Streamer::configure(
 	this->d3_stride	= d3_stride	;
     this->pos       = 0			;
 
-	printf("CONFIGURED:\nbase addr %x\ntot len %d\nd0 len %x\nd0 stride %x\nd1 len %x\nd1 stride %x\nd2 stride %x\n",
+	this->redmule->trace.msg("base addr %x\ntot len %d\nd0 len %x\nd0 stride %x\nd1 len %x\nd1 stride %x\nd2 stride %x\nd3 stride%x\n",
 		this->base_addr	,
 		this->tot_len  	,
 		this->d0_len   	,
 		this->d0_stride	,
 		this->d1_len   	,
 		this->d1_stride	,
-		this->d2_stride
+		this->d2_stride ,
+		this->d3_stride
 	);
 }
 
@@ -249,7 +250,7 @@ int RedMule_Streamer::iterate(void* buf, strobe_t strb) {
 
 	if (this->is_write) {
 		if (buf != NULL) {
-			for (int i = 0; i < ARRAY_HEIGHT * (PIPE_REGS + 1); i++) {		//ASSUMPTION: dst_fmt_t is bigger than src_fmt_t
+			for (int i = 0; i < ARRAY_HEIGHT * (PIPE_REGS + 1); i++) {		//ASSUMPTION: dst_fmt_t is greater than src_fmt_t
 				#if SRC_FMT!=FP8
 					* (src_fmt_t *) (buf + i * sizeof(src_fmt_t)) = (src_fmt_t) * (dst_fmt_t *) (buf + i * sizeof(dst_fmt_t));
 				#else

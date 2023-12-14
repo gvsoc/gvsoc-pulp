@@ -3,6 +3,14 @@
 #include <cmath>
 #include <memory.h>
 
+#if DST_FMT==FP32
+    typedef uint32_t print_t;
+#elif DST_FMT==FP16
+    typedef uint16_t print_t;
+#else
+    typedef uint8_t print_t;
+#endif
+
 RedMule_Buffers::RedMule_Buffers() {
     this->redmule = (RedMule *) NULL;
 }
@@ -188,12 +196,12 @@ void RedMule_Buffers::compute_z() {
     }
 
 
-    /*this->redmule->trace.msg("COMPUTED:\n\n");
+    this->redmule->trace.msg("COMPUTED:\n\n");
 
     this->redmule->trace.msg("Y:\n");
     for (int i = 0; i < 12; i++) {
         for (int j = 0; j < 16; j++) {
-            this->redmule->trace.msg("0x%x, ", * (uint32_t *) &(this->y[this->y_offs + i][j]));
+            this->redmule->trace.msg("0x%x, ", * (print_t *) &(this->y[this->y_offs + i][j]));
         }
         this->redmule->trace.msg("\n");
     }
@@ -202,7 +210,7 @@ void RedMule_Buffers::compute_z() {
     this->redmule->trace.msg("X:\n");
     for (int i = 0; i < ARRAY_WIDTH; i++) {
         for (int j = 0; j < this->n; j++) {
-            this->redmule->trace.msg("0x%x, ", * (uint32_t *) &(x[i][this->x_row_offs(j)]));
+            this->redmule->trace.msg("0x%x, ", * (print_t *) &(x[i][this->x_row_offs(j)]));
         }
         this->redmule->trace.msg("\n");
     }
@@ -211,7 +219,7 @@ void RedMule_Buffers::compute_z() {
     this->redmule->trace.msg("W:\n");
     for (int i = 0; i < this->n; i++) {
         for (int j = 0; j < 16; j++) {
-            this->redmule->trace.msg("0x%x, ", * (uint32_t *) &(this->w[i][j]));
+            this->redmule->trace.msg("0x%x, ", * (print_t *) &(this->w[i][j]));
         }
         this->redmule->trace.msg("\n");
     }
@@ -220,11 +228,11 @@ void RedMule_Buffers::compute_z() {
     this->redmule->trace.msg("Z:\n");
     for (int i = 0; i < 12; i++) {
         for (int j = 0; j < 16; j++) {
-            this->redmule->trace.msg("0x%x, ", * (uint32_t *) &(this->z[i][j]));
+            this->redmule->trace.msg("0x%x, ", * (print_t *) &(this->z[i][j]));
         }
         this->redmule->trace.msg("\n");
     }
-    this->redmule->trace.msg("\n\n");*/
+    this->redmule->trace.msg("\n\n");
 
     this->x_offs += this->n + ((PIPE_REGS + 1) * ARRAY_HEIGHT - this->x_cols_lftovr ) % ((PIPE_REGS + 1) * ARRAY_HEIGHT);
 

@@ -9,6 +9,23 @@ void RedMule::fsm_start_handler(void *__this, vp::clock_event *event) {
 
     _this->trace.msg("Starting op...\n");
 
+	_this->trace.msg("Parameters:\n");
+	_this->trace.msg("\tX ROWS LEFTOVER:\t%x\n", (_this->register_file [REDMULE_REG_LEFTOVERS_PTR>>2] >> 24) & 0x000000ff);
+	_this->trace.msg("\tX COLS LEFTOVER:\t%x\n", (_this->register_file [REDMULE_REG_LEFTOVERS_PTR>>2] >> 16) & 0x000000ff);
+	_this->trace.msg("\tW ROWS LEFTOVER:\t%x\n", (_this->register_file [REDMULE_REG_LEFTOVERS_PTR>>2] >> 8) & 0x000000ff);
+	_this->trace.msg("\tW COLS LEFTOVER:\t%x\n", _this->register_file [REDMULE_REG_LEFTOVERS_PTR>>2] & 0x000000ff);
+	_this->trace.msg("\tW COLS ITERS:\t%d\n", _this->register_file [REDMULE_REG_W_ITER_PTR>>2] & 0x0000ffff);
+	_this->trace.msg("\tW ROWS ITERS:\t%d\n", _this->register_file [REDMULE_REG_W_ITER_PTR>>2]>>16);
+	_this->trace.msg("\tX COLS ITERS:\t%d\n", _this->register_file [REDMULE_REG_X_ITER_PTR>>2] & 0x0000ffff);
+	_this->trace.msg("\tX ROWS ITERS:\t%d\n", _this->register_file [REDMULE_REG_X_ITER_PTR>>2]>>16);
+	_this->trace.msg("\tYZ TOT LEN:\t%d\n", _this->register_file [REDMULE_REG_YZ_TOT_LEN_PTR>>2]);
+	_this->trace.msg("\tYZ D0 STRIDE:\t%d\n", _this->register_file [REDMULE_REG_YZ_D0_STRIDE_PTR>>2]);
+	_this->trace.msg("\tYZ D2 STRIDE:\t%d\n", _this->register_file [REDMULE_REG_YZ_D2_STRIDE_PTR >> 2]);
+	_this->trace.msg("\tW TOT LEN:\t%d\n", _this->register_file [REDMULE_REG_W_TOT_LEN_PTR>>2]);
+	_this->trace.msg("\tX TOT LEN:\t%d\n", _this->register_file [REDMULE_REG_X_TOT_LEN_PTR>>2]);
+
+	_this->trace.msg("Configuring z_stream:\n");
+
 	_this->z_stream.configure(
 		_this->register_file [REDMULE_REG_Z_PTR>>2],							//base_addr
 		_this->register_file [REDMULE_REG_YZ_TOT_LEN_PTR>>2],					//tot_len
@@ -20,6 +37,8 @@ void RedMule::fsm_start_handler(void *__this, vp::clock_event *event) {
 		_this->register_file [REDMULE_REG_YZ_D2_STRIDE_PTR >> 2],				//d2_stride
 		0																		//d3_stride
 	);
+
+	_this->trace.msg("Configuring x_stream:\n");
 
 	_this->x_stream.configure(
 		_this->register_file [REDMULE_REG_X_PTR>>2],							//base_addr	
@@ -33,6 +52,8 @@ void RedMule::fsm_start_handler(void *__this, vp::clock_event *event) {
 		_this->register_file [REDMULE_REG_X_D1_STRIDE_PTR>>2] * ARRAY_WIDTH		//d3_stride
 	);
 
+	_this->trace.msg("Configuring y_stream:\n");
+
 	_this->y_stream.configure(
 		_this->register_file [REDMULE_REG_Y_PTR>>2],							//base_addr
 		_this->register_file [REDMULE_REG_YZ_TOT_LEN_PTR>>2],					//tot_len
@@ -45,6 +66,8 @@ void RedMule::fsm_start_handler(void *__this, vp::clock_event *event) {
 		0																		//d3_stride
 	);
 
+	_this->trace.msg("Configuring w_stream:\n");
+
 	_this->w_stream.configure(
 		_this->register_file [REDMULE_REG_W_PTR>>2],							//base_addr
 		_this->register_file [REDMULE_REG_W_TOT_LEN_PTR>>2],					//tot_len
@@ -56,19 +79,6 @@ void RedMule::fsm_start_handler(void *__this, vp::clock_event *event) {
 		0,																		//d2_stride
 		0																		//d3_stride
 	);
-	
-	_this->trace.msg("LEFTS %x\n", _this->register_file [REDMULE_REG_LEFTOVERS_PTR>>2]);
-
-	_this->trace.msg("W COLS ITERS %d\n", _this->register_file [REDMULE_REG_W_ITER_PTR>>2] & 0x0000ffff);
-	_this->trace.msg("W ROWS ITERS %d\n", _this->register_file [REDMULE_REG_W_ITER_PTR>>2]>>16);
-
-	_this->trace.msg("YZ TOT LEN %d\n", _this->register_file [REDMULE_REG_YZ_TOT_LEN_PTR>>2]);
-
-	_this->trace.msg("YZ D0 STRIDE %d\n", _this->register_file [REDMULE_REG_YZ_D0_STRIDE_PTR>>2]);
-
-	_this->trace.msg("YZ D2 STRIDE %d\n", _this->register_file [REDMULE_REG_YZ_D2_STRIDE_PTR >> 2]);
-
-	_this->trace.msg("W TOT LEN %d\n", _this->register_file [REDMULE_REG_W_TOT_LEN_PTR>>2]);
 
 	_this->buffers.alloc_buffers(
 		_this->register_file [REDMULE_REG_X_D1_STRIDE_PTR>>2]/sizeof(src_fmt_t),

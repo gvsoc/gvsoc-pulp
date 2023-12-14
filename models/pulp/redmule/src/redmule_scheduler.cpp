@@ -68,7 +68,7 @@ int RedMule::buf_disamb(int label, strobe_t strb) {
             break;
 
         default:
-            this->trace.fatal("buf_disamb: UNKNOWN LABEL %d\n", label);
+            this->trace.fatal("buf_disamb: UNKNOWN LABEL (%d)\n", label);
             latency = 1;
             
     }
