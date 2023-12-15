@@ -116,8 +116,6 @@ class Soc(st.Component):
             # FP subsystem doesn't fetch instructions from core->ico->memory, but from integer cores acc_req.
             self.bind(loader, 'start', fp_cores[core_id], 'fetchen')
             self.bind(loader, 'entry', fp_cores[core_id], 'bootaddr')
-            # Use IO Request
-            # self.bind(int_cores[core_id], 'acc_req', fp_cores[core_id], 'acc_rsp')
             # Use WireMaster & WireSlave
             self.bind(int_cores[core_id], 'acc_req', fp_cores[core_id], 'acc_req')
             self.bind(fp_cores[core_id], 'acc_rsp', int_cores[core_id], 'acc_rsp')
