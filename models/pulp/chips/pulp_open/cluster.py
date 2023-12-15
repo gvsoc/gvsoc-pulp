@@ -76,9 +76,7 @@ class Cluster(st.Component):
         self.cluster_base   = self.get_property('mapping/base', int)
         self.cluster_alias  = self.get_property('alias', int)
         ne16_irq            = self.get_property('pe/irq').index('acc_0')
-        #is acc_0 correct?
         redmule_irq         = self.get_property('pe/irq').index('acc_0')
-        #
         dma_irq_0           = self.get_property('pe/irq').index('dma_0')
         dma_irq_1           = self.get_property('pe/irq').index('dma_1')
         dma_irq_ext         = self.get_property('pe/irq').index('dma_ext')
