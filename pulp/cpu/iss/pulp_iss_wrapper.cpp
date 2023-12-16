@@ -27,7 +27,6 @@
 pulp_iss_wrapper::pulp_iss_wrapper(vp::ComponentConf &config)
 : IssWrapper(config)
 {
-    iss_decoder_item_t *isa = iss_isa_get(&this->iss, "f");
     int core_id = this->iss.csr.mhartid;
 
     for (int i=0; i<iss_get_isa_set()->nb_resources; i++)

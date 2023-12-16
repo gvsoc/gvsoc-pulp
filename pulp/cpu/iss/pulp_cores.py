@@ -23,19 +23,10 @@ from cpu.iss.isa_gen.isa_pulpv2 import *
 
 
 def __build_isa(name):
-    isa = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa(name, 'rv32imfc')
 
-    isa.add_isa([Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux()])
-    isa.add_isa([PulpV2()])
+    extensions = [ PulpV2(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ]
 
-    for insn in isa.get_insns():
-
-        if "load" in insn.tags:
-            insn.get_out_reg(0).set_latency(2)
-        elif "mul" in insn.tags:
-            insn.get_out_reg(0).set_latency(2)
-        elif "mulh" in insn.tags:
-            insn.set_latency(5)
+    isa = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa(name, 'rv32imfc', extensions=extensions)
 
     return isa
 
