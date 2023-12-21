@@ -114,7 +114,7 @@ class PulpCore(cpu.iss.riscv.RiscvCommon):
             cluster_id=cluster_id, core_id=core_id, wrapper="pulp/cpu/iss/pulp_iss_wrapper.cpp")
 
         self.add_c_flags([
-            "-DPIPELINE_STAGES=2",
+            "-DPIPELINE_STALL_THRESHOLD=1",
             "-DCONFIG_ISS_CORE=ri5cy",
             '-DISS_SINGLE_REGFILE',
         ])
