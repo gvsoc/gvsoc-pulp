@@ -18,22 +18,15 @@
 
 import cpu.iss.riscv
 from cpu.iss.isa_gen.isa_riscv_gen import *
+from cpu.iss.isa_gen.isa_smallfloats import *
+from cpu.iss.isa_gen.isa_pulpv2 import *
 
 
 def __build_isa(name):
-    isa = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa(name, 'rv32imfcXpulpv2Xf8Xf16XfvecXfauxXf16altXgap9')
 
-    isa.add_tree(IsaDecodeTree('sfloat', [Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux()]))
-    isa.add_tree(IsaDecodeTree('pulpv2', [PulpV2()]))
+    extensions = [ PulpV2(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ]
 
-    for insn in isa.get_insns():
-
-        if "load" in insn.tags:
-            insn.get_out_reg(0).set_latency(2)
-        elif "mul" in insn.tags:
-            insn.get_out_reg(0).set_latency(2)
-        elif "mulh" in insn.tags:
-            insn.set_latency(5)
+    isa = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa(name, 'rv32imfc', extensions=extensions)
 
     return isa
 
@@ -57,7 +50,14 @@ def __build_cluster_isa():
     isa.add_resource('fpu_sqrt', instances=1)
 
     # And attach resources to instructions
-    for insn in isa.get_tree('f').get_insns() + isa.get_tree('sfloat').get_insns():
+    float_insn = isa.get_isa('rvf').get_insns() + \
+        isa.get_isa('f16').get_insns() + \
+        isa.get_isa('f16alt').get_insns() + \
+        isa.get_isa('f8').get_insns() + \
+        isa.get_isa('fvec').get_insns() + \
+        isa.get_isa('faux').get_insns()
+
+    for insn in float_insn:
 
         # All float operations are handled by the same unit
         __attach_resource(insn, 'fpu_base', latency=1, bandwidth=1, tags=[
@@ -114,7 +114,7 @@ class PulpCore(cpu.iss.riscv.RiscvCommon):
             cluster_id=cluster_id, core_id=core_id, wrapper="pulp/cpu/iss/pulp_iss_wrapper.cpp")
 
         self.add_c_flags([
-            "-DPIPELINE_STAGES=2",
+            "-DPIPELINE_STALL_THRESHOLD=1",
             "-DCONFIG_ISS_CORE=ri5cy",
             '-DISS_SINGLE_REGFILE',
         ])

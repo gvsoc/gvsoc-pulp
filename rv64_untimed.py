@@ -73,27 +73,12 @@ class Soc(st.Component):
         self.bind(ico, 'plic', plic, 'input')
         self.bind(uart, 'irq', plic, 'irq1')
 
-        host = iss.Riscv(self, 'host', isa=args.isa, boot_addr=0x1000, timed=True)
+        host = iss.Riscv(self, 'host', isa=args.isa, boot_addr=0x1000, timed=False,
+            memory_start=0x80000000, memory_size=0x80000000)
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 
-        # RISCV bus watchpoint
-        tohost_addr = 0
-        fromhost_addr = 0
-        if binary is not None:
-            with open(binary, 'rb') as file:
-                elffile = ELFFile(file)
-                for section in elffile.iter_sections():
-                    if isinstance(section, SymbolTableSection):
-                        for symbol in section.iter_symbols():
-                            if symbol.name == 'tohost':
-                                tohost_addr = symbol.entry['st_value']
-                            if symbol.name == 'fromhost':
-                                fromhost_addr = symbol.entry['st_value']
-
-        tohost = Bus_watchpoint(self, 'tohost', tohost_addr, fromhost_addr, word_size=64, args=args.args)
-        self.bind(host, 'data', tohost, 'input')
-        self.bind(tohost, 'output', ico, 'input')
+        self.bind(host, 'data', ico, 'input')
 
         self.bind(host, 'meminfo', mem, 'meminfo')
         self.bind(host, 'fetch', ico, 'input')
@@ -126,3 +111,4 @@ class Target(gvsoc.Target):
     def __init__(self, parser, options):
         super(Target, self).__init__(parser, options,
             model=Rv64, description="RV64 virtual board")
+
