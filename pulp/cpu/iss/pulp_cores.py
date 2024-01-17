@@ -33,71 +33,11 @@ def __build_isa(name):
 
 
 
-def __build_cluster_isa():
 
-    def __attach_resource(insn, resource, latency, bandwidth, tags=[]):
-        if len(tags) == 0:
-            insn.attach_resource(resource, latency, bandwidth)
-        else:
-            for tag in tags:
-                if tag in insn.tags:
-                    insn.attach_resource(resource, latency, bandwidth)
+_cluster_isa = __build_isa('pulp_cluster')
 
-    isa = __build_isa('pulp_cluster')
+_fc_isa = __build_isa('pulp_fc')
 
-    # Declare the 3 kind of shared resources with appropriate latency and bandwidth
-    isa.add_resource('fpu_base', instances=4)
-    isa.add_resource('fpu_sqrt', instances=1)
-
-    # And attach resources to instructions
-    float_insn = isa.get_isa('rvf').get_insns() + \
-        isa.get_isa('f16').get_insns() + \
-        isa.get_isa('f16alt').get_insns() + \
-        isa.get_isa('f8').get_insns() + \
-        isa.get_isa('fvec').get_insns() + \
-        isa.get_isa('faux').get_insns()
-
-    for insn in float_insn:
-
-        # All float operations are handled by the same unit
-        __attach_resource(insn, 'fpu_base', latency=1, bandwidth=1, tags=[
-            'fmadd', 'fadd', 'fmul', 'fconv', 'fother',
-            'sfmadd', 'sfadd', 'sfmul', 'sfconv', 'sfother',
-        ])
-
-        # Except div, rem and sqrt which goes to the sqrt unit
-        __attach_resource(insn, 'fpu_sqrt', latency=14, bandwidth=14, tags=[
-            'fdiv'
-        ])
-
-        # Except div, rem and sqrt which goes to the sqrt unit
-        __attach_resource(insn, 'fpu_sqrt', latency=10, bandwidth=10, tags=[
-            'sfdiv'
-        ])
-
-
-    return isa
-
-
-
-
-def __build_fc_isa():
-    isa = __build_isa('pulp_fc')
-
-    for insn in isa.get_insns():
-
-        if "fdiv" in insn.tags:
-            insn.get_out_reg(0).set_latency(15)
-        elif "sfdiv" in insn.tags:
-            insn.get_out_reg(0).set_latency(15)
-
-    return isa
-
-
-
-_cluster_isa = __build_cluster_isa()
-
-_fc_isa = __build_fc_isa()
 
 
 
@@ -106,12 +46,13 @@ _fc_isa = __build_fc_isa()
 class PulpCore(cpu.iss.riscv.RiscvCommon):
 
     def __init__(self, parent, name, isa, cluster_id: int, core_id: int, fetch_enable: bool=False,
-            boot_addr: int=0):
+            boot_addr: int=0, external_pccr: bool=False):
 
         super().__init__(parent, name, isa=isa,
             riscv_dbg_unit=True, fetch_enable=fetch_enable, boot_addr=boot_addr,
             first_external_pcer=12, debug_handler=0x1a190800, misa=0x40000000, core="ri5ky",
-            cluster_id=cluster_id, core_id=core_id, wrapper="pulp/cpu/iss/pulp_iss_wrapper.cpp")
+            cluster_id=cluster_id, core_id=core_id, wrapper="pulp/cpu/iss/pulp_iss_wrapper.cpp",
+            scoreboard=True, timed=True, handle_misaligned=True, external_pccr=external_pccr)
 
         self.add_c_flags([
             "-DPIPELINE_STALL_THRESHOLD=1",
@@ -126,7 +67,7 @@ class ClusterCore(PulpCore):
 
     def __init__(self, parent, name, cluster_id: int=None, core_id: int=None):
 
-        super().__init__(parent, name, isa=_cluster_isa, cluster_id=cluster_id, core_id=core_id)
+        super().__init__(parent, name, isa=_cluster_isa, cluster_id=cluster_id, core_id=core_id, external_pccr=True)
 
 
 
