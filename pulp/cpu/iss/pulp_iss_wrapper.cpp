@@ -27,8 +27,6 @@
 pulp_iss_wrapper::pulp_iss_wrapper(vp::ComponentConf &config)
 : IssWrapper(config)
 {
-    int core_id = this->iss.csr.mhartid;
-
     this->iss.csr.declare_pcer(CSR_PCER_CYCLES, "cycles", "Count the number of cycles the core was running");
     this->iss.csr.declare_pcer(CSR_PCER_INSTR, "instr", "Count the number of instructions executed");
     this->iss.csr.declare_pcer(CSR_PCER_LD_STALL, "ld_stall", "Number of load use hazards");
@@ -89,13 +87,11 @@ pulp_iss_wrapper::pulp_iss_wrapper(vp::ComponentConf &config)
         {
             iss_resource_declare(&this->iss, fpu_base, 1);
             iss_resource_declare(&this->iss, fpu_div, 1);
-            iss_resource_declare(&this->iss, int64, 1);
         }
         else
         {
             iss_resource_declare(&this->iss, fpu_base, 4);
             iss_resource_declare(&this->iss, fpu_div, 1);
-            iss_resource_declare(&this->iss, int64, 4);
         }
 
         iss_resource_attach_from_tag(&this->iss, "fadd", fpu_base, 1, 1);
@@ -110,7 +106,6 @@ pulp_iss_wrapper::pulp_iss_wrapper(vp::ComponentConf &config)
         iss_resource_attach_from_tag(&this->iss, "sfother", fpu_base, 1, 1);
         iss_resource_attach_from_tag(&this->iss, "fdiv", fpu_div, 14, 14);
         iss_resource_attach_from_tag(&this->iss, "sfdiv", fpu_div, 10, 10);
-        iss_resource_attach_from_tag(&this->iss, "int64", int64, 1, 1);
 
         for (iss_decoder_item_t *insn: *this->iss.decode.get_insns_from_tag("mul"))
         {
@@ -130,13 +125,11 @@ pulp_iss_wrapper::pulp_iss_wrapper(vp::ComponentConf &config)
     {
         iss_resource_assign_instance(&this->iss, fpu_base, 0);
         iss_resource_assign_instance(&this->iss, fpu_div, 0);
-        iss_resource_assign_instance(&this->iss, int64, 0);
     }
     else
     {
         iss_resource_assign_instance(&this->iss, fpu_base, core_id % 4);
         iss_resource_assign_instance(&this->iss, fpu_div, 0);
-        iss_resource_assign_instance(&this->iss, int64, core_id % 4);
     }
 }
 
