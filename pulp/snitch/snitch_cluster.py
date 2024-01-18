@@ -22,6 +22,7 @@ import interco.router as router
 import utils.loader.loader
 import gvsoc.systree as st
 from interco.bus_watchpoint import Bus_watchpoint
+from interco.sequencer import Sequencer
 from pulp.spatz.cluster_registers import Cluster_registers
 from elftools.elf.elffile import *
 import gvsoc.runner as gvsoc
@@ -35,9 +36,13 @@ class Soc(st.Component):
         super().__init__(parent, name)
 
         nb_cores = 8
+        Xfrep = 1
+        
         # Snitch core complex
         int_cores = []
         fp_cores = []
+        if Xfrep:
+            fpu_sequencers = []
 
         parser.add_argument("--isa", dest="isa", type=str, default="rv32imfdvc",
             help="RISCV-V ISA string (default: %(default)s)")
@@ -61,6 +66,8 @@ class Soc(st.Component):
         for core_id in range(0, nb_cores):
             int_cores.append(iss.Snitch(self, f'pe{core_id}', isa=args.isa, core_id=core_id))
             fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa=args.isa, core_id=core_id))
+            if Xfrep:
+                fpu_sequencers.append(Sequencer(self, f'fpu_sequencer{core_id}', latency=0))
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x1000)
 
@@ -117,8 +124,19 @@ class Soc(st.Component):
             # FP subsystem doesn't fetch instructions from core->ico->memory, but from integer cores acc_req.
             self.bind(loader, 'start', fp_cores[core_id], 'fetchen')
             self.bind(loader, 'entry', fp_cores[core_id], 'bootaddr')
+            
             # Use WireMaster & WireSlave
-            self.bind(int_cores[core_id], 'acc_req', fp_cores[core_id], 'acc_req')
+            # Add fpu sequence buffer in between int core and fp core to issue instructions
+            if Xfrep:
+                self.bind(int_cores[core_id], 'acc_req', fpu_sequencers[core_id], 'input')
+                self.bind(fpu_sequencers[core_id], 'output', fp_cores[core_id], 'acc_req')
+                self.bind(int_cores[core_id], 'acc_req_ready', fpu_sequencers[core_id], 'acc_req_ready')
+                self.bind(fpu_sequencers[core_id], 'acc_req_ready_o', fp_cores[core_id], 'acc_req_ready')
+            else:
+                # Comment out if we want to add sequencer
+                self.bind(int_cores[core_id], 'acc_req', fp_cores[core_id], 'acc_req')
+                self.bind(int_cores[core_id], 'acc_req_ready', fp_cores[core_id], 'acc_req_ready')
+            
             self.bind(fp_cores[core_id], 'acc_rsp', int_cores[core_id], 'acc_rsp')
 
         self.bind(loader, 'out', ico, 'input')
