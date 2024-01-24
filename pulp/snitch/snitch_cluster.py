@@ -44,7 +44,7 @@ class Soc(st.Component):
         if Xfrep:
             fpu_sequencers = []
 
-        parser.add_argument("--isa", dest="isa", type=str, default="rv32imfdvc",
+        parser.add_argument("--isa", dest="isa", type=str, default="rv32imafdvc",
             help="RISCV-V ISA string (default: %(default)s)")
 
         [args, __] = parser.parse_known_args()
@@ -56,9 +56,9 @@ class Soc(st.Component):
 
         rom = memory.Memory(self, 'rom', size=0x10000, stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
 
-        mem = memory.Memory(self, 'mem', size=0x1000000, width_log2=3)
+        mem = memory.Memory(self, 'mem', size=0x1000000, width_log2=3, atomics=True, core="snitch")
 
-        tcdm = memory.Memory(self, 'tcdm', size=0x40000, width_log2=3)
+        tcdm = memory.Memory(self, 'tcdm', size=0x40000, width_log2=3, atomics=True, core="snitch")
 
         # Global bandwidth of interconnection 8 bytes per cycle, applied to all incoming request.
         ico = router.Router(self, 'ico', bandwidth=8)
