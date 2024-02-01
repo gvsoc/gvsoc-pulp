@@ -42,11 +42,6 @@ class Soc(st.Component):
 
         [args, otherArgs] = parser.parse_known_args()
         binary = args.binary
-        binaries = []
-        if args.extra_binary is not None:
-            binaries += args.extra_binary
-
-        binaries.append(args.binary)
 
         mem = memory.Memory(self, 'mem', size=0x80000000, atomics=True)
         uart = ns16550.Ns16550(self, 'uart')
@@ -85,7 +80,7 @@ class Soc(st.Component):
 
         host = iss.Riscv(self, 'host', isa="rv64imafdc", boot_addr=0x1000, timed=False)
 
-        loader = utils.loader.loader.ElfLoader(self, 'loader', binaries=binaries)
+        loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 
         quad_cfg_0.o_QUADRANT_RESET(cluster.i_RESET())
 
