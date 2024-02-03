@@ -42,9 +42,12 @@ class Soc(st.Component):
 
         [args, otherArgs] = parser.parse_known_args()
         binary = args.binary
+        binaries = []
+        if binary is not None:
+            binaries.append(binary)
 
         mem = memory.Memory(self, 'mem', size=0x80000000, atomics=True)
-        uart = ns16550.Ns16550(self, 'uart')
+        # uart = ns16550.Ns16550(self, 'uart')
         clint = cpu.clint.Clint(self, 'clint')
         plic = cpu.plic.Plic(self, 'plic', ndev=1)
         idma = IDma(self, 'sys_dma')
@@ -59,15 +62,15 @@ class Soc(st.Component):
         ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x80000000)
         self.bind(ico, 'mem', mem, 'input')
 
-        ico.add_mapping('uart', base=0x10000000, remove_offset=0x10000000, size=0x100)
-        self.bind(ico, 'uart', uart, 'input')
+        # ico.add_mapping('uart', base=0x10000000, remove_offset=0x10000000, size=0x100)
+        # self.bind(ico, 'uart', uart, 'input')
 
         ico.add_mapping('clint', base=0x4000000, remove_offset=0x4000000, size=0x100000)
         self.bind(ico, 'clint', clint, 'input')
 
         ico.add_mapping('plic', base=0xC000000, remove_offset=0xC000000, size=0x1000000)
         self.bind(ico, 'plic', plic, 'input')
-        self.bind(uart, 'irq', plic, 'irq1')
+        # self.bind(uart, 'irq', plic, 'irq1')
 
         ico.add_mapping('rom', base=0x01000000, remove_offset=0x01000000, size=0x10000)
         self.bind(ico, 'rom', rom, 'input')
@@ -78,29 +81,14 @@ class Soc(st.Component):
         ico.o_MAP(soc_reg.i_INPUT(), name='soc_reg', base=0x02000000, size=0x1000, rm_base=True)
         cluster.o_SOC(ico.i_INPUT())
 
-        host = iss.Riscv(self, 'host', isa="rv64imafdc", boot_addr=0x1000, timed=False)
+        host = iss.Riscv(self, 'host', isa="rv64imafdc", boot_addr=0x1000, timed=False,
+            binaries=binaries, htif=True)
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 
         quad_cfg_0.o_QUADRANT_RESET(cluster.i_RESET())
 
-        # RISCV bus watchpoint
-        tohost_addr = 0
-        fromhost_addr = 0
-        if binary is not None:
-            with open(binary, 'rb') as file:
-                elffile = ELFFile(file)
-                for section in elffile.iter_sections():
-                    if isinstance(section, SymbolTableSection):
-                        for symbol in section.iter_symbols():
-                            if symbol.name == 'tohost':
-                                tohost_addr = symbol.entry['st_value']
-                            if symbol.name == 'fromhost':
-                                fromhost_addr = symbol.entry['st_value']
-
-        tohost = Bus_watchpoint(self, 'tohost', tohost_addr, fromhost_addr, word_size=64)
-        self.bind(host, 'data', tohost, 'input')
-        self.bind(tohost, 'output', ico, 'input')
+        self.bind(host, 'data', ico, 'input')
 
         self.bind(host, 'meminfo', mem, 'meminfo')
         self.bind(host, 'fetch', ico, 'input')
