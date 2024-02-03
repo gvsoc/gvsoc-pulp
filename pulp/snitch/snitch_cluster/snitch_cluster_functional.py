@@ -20,7 +20,9 @@ import memory.memory as memory
 import interco.router as router
 import gvsoc.systree
 from pulp.snitch.snitch_cluster.cluster_registers import ClusterRegisters
+from pulp.snitch.zero_mem import ZeroMem
 from elftools.elf.elffile import *
+from pulp.idma.idma import IDma
 import gvsoc.runner
 
 
@@ -39,11 +41,22 @@ class SnitchCluster(gvsoc.systree.Component):
         ico = router.Router(self, 'ico')
 
         for core_id in range(0, nb_cores):
-            cores.append(iss.Snitch(self, f'pe{core_id}', isa='rv32imfdvc', fetch_enable=True,
+            cores.append(iss.Snitch(self, f'pe{core_id}', isa='rv32imfdvca', fetch_enable=True,
                                     boot_addr=0x01000000, core_id=core_id+1))
 
         cluster_registers = ClusterRegisters(self, 'cluster_registers', boot_addr=0x0,
             nb_cores=nb_cores)
+
+        idma = IDma(self, 'idma')
+
+        zero_mem = ZeroMem(self, 'zero_mem', size=0x10000)
+
+        cores[nb_cores-1].o_OFFLOAD(idma.i_OFFLOAD())
+
+        idma.o_ICO(ico.i_INPUT())
+
+        ico.o_MAP(zero_mem.i_INPUT(), name='zero_mem', base=0x10030000, size=0x10000, rm_base=True)
+
         ico.add_mapping('cluster_registers', base=0x10020000, remove_offset=0x10020000, size=0x1000)
         self.bind(ico, 'cluster_registers', cluster_registers, 'input')
 

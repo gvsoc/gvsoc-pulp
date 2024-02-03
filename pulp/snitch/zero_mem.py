@@ -15,23 +15,22 @@
 #
 
 import gvsoc.systree
+import regmap.regmap
+import regmap.regmap_hjson
+import regmap.regmap_c_header
 
-class IDma(gvsoc.systree.Component):
 
-    def __init__(self, parent: gvsoc.systree.Component, name: str):
+class ZeroMem(gvsoc.systree.Component):
+
+    def __init__(self, parent: gvsoc.systree.Component, name: str, size: int):
 
         super().__init__(parent, name)
 
-        self.add_sources(['pulp/idma/idma_functional.cpp'])
+        self.add_sources(['pulp/snitch/zero_mem.cpp'])
 
         self.add_properties({
+            'size': size
         })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')
-
-    def i_OFFLOAD(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'offload', signature='wire<IssOffloadInsn<uint32_t>*>')
-
-    def o_ICO(self, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind('ico', itf, signature='io')

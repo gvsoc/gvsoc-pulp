@@ -62,8 +62,8 @@ class Soc(st.Component):
         ico.add_mapping('uart', base=0x10000000, remove_offset=0x10000000, size=0x100)
         self.bind(ico, 'uart', uart, 'input')
 
-        # ico.add_mapping('clint', base=0x2000000, remove_offset=0x2000000, size=0x10000)
-        # self.bind(ico, 'clint', clint, 'input')
+        ico.add_mapping('clint', base=0x4000000, remove_offset=0x4000000, size=0x100000)
+        self.bind(ico, 'clint', clint, 'input')
 
         ico.add_mapping('plic', base=0xC000000, remove_offset=0xC000000, size=0x1000000)
         self.bind(ico, 'plic', plic, 'input')
