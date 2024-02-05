@@ -15,7 +15,7 @@
 #
 
 import gvsoc.runner
-import cpu.iss.riscv as iss
+import pulp.snitch.snitch_core as iss
 import memory.memory as memory
 import interco.router as router
 import gvsoc.systree

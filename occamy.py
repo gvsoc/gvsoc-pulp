@@ -47,7 +47,7 @@ class Soc(st.Component):
             binaries.append(binary)
 
         mem = memory.Memory(self, 'mem', size=0x80000000, atomics=True)
-        # uart = ns16550.Ns16550(self, 'uart')
+        uart = ns16550.Ns16550(self, 'uart')
         clint = cpu.clint.Clint(self, 'clint')
         plic = cpu.plic.Plic(self, 'plic', ndev=1)
         idma = IDma(self, 'sys_dma')
@@ -62,15 +62,15 @@ class Soc(st.Component):
         ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x80000000)
         self.bind(ico, 'mem', mem, 'input')
 
-        # ico.add_mapping('uart', base=0x10000000, remove_offset=0x10000000, size=0x100)
-        # self.bind(ico, 'uart', uart, 'input')
+        ico.add_mapping('uart', base=0x10000000, remove_offset=0x10000000, size=0x100)
+        self.bind(ico, 'uart', uart, 'input')
 
         ico.add_mapping('clint', base=0x4000000, remove_offset=0x4000000, size=0x100000)
         self.bind(ico, 'clint', clint, 'input')
 
         ico.add_mapping('plic', base=0xC000000, remove_offset=0xC000000, size=0x1000000)
         self.bind(ico, 'plic', plic, 'input')
-        # self.bind(uart, 'irq', plic, 'irq1')
+        self.bind(uart, 'irq', plic, 'irq1')
 
         ico.add_mapping('rom', base=0x01000000, remove_offset=0x01000000, size=0x10000)
         self.bind(ico, 'rom', rom, 'input')
