@@ -16,6 +16,7 @@
 
 import cpu.iss.riscv
 from pulp.snitch.snitch_isa import *
+from cpu.iss.isa_gen.isa_rvv import *
 
 class Snitch(cpu.iss.riscv.RiscvCommon):
 
@@ -73,7 +74,7 @@ class Spatz(cpu.iss.riscv.RiscvCommon):
 
         isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("spatz_" + isa, isa, extensions=extensions)
 
-        super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch")
+        super().__init__(parent, name, isa=isa_instance, misa=misa, core="spatz")
 
         self.add_c_flags([
             "-DCONFIG_ISS_CORE=snitch",
