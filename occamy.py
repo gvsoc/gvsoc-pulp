@@ -24,111 +24,166 @@ import cpu.clint
 import cpu.plic
 import utils.loader.loader
 from pulp.idma.idma import IDma
-import gvsoc.systree as st
 from interco.bus_watchpoint import Bus_watchpoint
 from elftools.elf.elffile import *
-import gvsoc.runner as gvsoc
+import gvsoc.runner
+import gvsoc.systree
 from pulp.chips.occamy.quad_cfg import QuadCfg
 from pulp.chips.occamy.soc_reg import SocReg
 from pulp.chips.occamy.quadrant import Quadrant
-
+import pulp.chips.occamy.occamy_arch
 
 GAPY_TARGET = True
 
-class Soc(st.Component):
 
-    def __init__(self, parent, name, parser):
+
+
+
+
+class Soc(gvsoc.systree.Component):
+
+    def __init__(self, parent, name, arch, binary, debug_binaries):
         super().__init__(parent, name)
 
-        [args, otherArgs] = parser.parse_known_args()
-        binary = args.binary
-        binaries = []
-        if binary is not None:
-            binaries.append(binary)
+        #
+        # Components
+        #
 
-        mem = memory.Memory(self, 'mem', size=0x80000000, atomics=True)
+        # CVA6
+        # TODO binary loader is bypassing this boot addr
+        host = iss.Riscv(self, 'host', isa="rv64imafdc", boot_addr=0x0100_0000, timed=False,
+            binaries=debug_binaries, htif=True)
 
-        # uart = ns16550.Ns16550(self, 'uart')
-
-        clint = cpu.clint.Clint(self, 'clint')
-
-        plic = cpu.plic.Plic(self, 'plic', ndev=1)
-
+        # System DMA
         idma = IDma(self, 'sys_dma')
 
-        soc_reg = SocReg(self, 'soc_reg')
-
+        # Main interconnect
         ico = router.Router(self, 'ico')
 
-        rom = memory.Memory(self, 'rom', size=0x10000, stim_file=self.get_file_path('pulp/chips/occamy/bootrom.bin'))
+        # Qaudrants
+        quadrants = []
+        for id in range(0, arch.nb_quadrant):
+            quadrants.append(Quadrant(self, f'quadrant_{id}', arch.get_quadrant(id)))
 
-        host = iss.Riscv(self, 'host', isa="rv64imafdc", boot_addr=0x1000, timed=False,
-            binaries=binaries, htif=True)
-
+        # Extra component for binary loading
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 
+        # Uart, to be added back for linux
+        # uart = ns16550.Ns16550(self, 'uart')
 
-        nb_quadrant = 5
-        for id in range(0, nb_quadrant):
-            quad_cfg = QuadCfg(self, f'quadrant_cfg_{id}')
-            cluster = Quadrant(self, f'quadrant_{id}')
+        # Clint
+        clint = cpu.clint.Clint(self, 'clint')
 
-            qaudrant_cfg_size = 0x10000
-            quadrant_cfg_base = 0x0b000000 + id * qaudrant_cfg_size
+        # Plic
+        plic = cpu.plic.Plic(self, 'plic', ndev=1)
 
-            ico.o_MAP ( quad_cfg.i_INPUT (), base=quadrant_cfg_base, size=qaudrant_cfg_size, rm_base=True  )
-            quad_cfg.o_QUADRANT_RESET(cluster.i_RESET())
+        # Soc control
+        soc_reg = SocReg(self, 'soc_reg')
 
-            qaudrant_size = 0x100000
-            quadrant_base = 0x10000000 + id * qaudrant_size
+        # Bootrom
+        rom = memory.Memory(self, 'rom', size=arch.bootrom.size,
+            stim_file=self.get_file_path('pulp/chips/occamy/bootrom.bin'))
 
-            cluster.o_SOC(ico.i_INPUT())
-            ico.o_MAP ( cluster.i_INPUT    (), base=quadrant_base, size=qaudrant_size, rm_base=False )
+        # Quadrant configs
+        quad_cfgs = []
+        for id in range(0, arch.nb_quadrant):
+            quad_cfgs.append(QuadCfg(self, f'quadrant_cfg_{id}'))
 
+        #
+        # Bindings
+        #
 
-
-        ico.o_MAP ( mem.i_INPUT        (), base=0x80000000, size=0x80000000, rm_base=True  )
-        # ico.o_MAP ( uart.i_INPUT       (), base=0x10000000, size=0x00000100, rm_base=True  )
-        ico.o_MAP ( clint.i_INPUT      (), base=0x04000000, size=0x00100000, rm_base=True  )
-        ico.o_MAP ( plic.i_INPUT       (), base=0x0C000000, size=0x01000000, rm_base=True  )
-        ico.o_MAP ( rom.i_INPUT        (), base=0x01000000, size=0x00010000, rm_base=True  )
-        ico.o_MAP ( idma.i_INPUT       (), base=0x11000000, size=0x00010000, rm_base=True  )
-        ico.o_MAP ( soc_reg.i_INPUT    (), base=0x02000000, size=0x00001000, rm_base=True  )
-
-        # uart.o_IRQ ( plic.i_IRQ (device=0))
-
+        # CVA6
         host.o_DATA(ico.i_INPUT())
-        host.o_MEMINFO(mem.i_INPUT())
+        host.o_MEMINFO(self.i_HBM())
         host.o_FETCH(ico.i_INPUT())
         host.o_TIME(clint.i_TIME())
 
+        # Quadrant configs
+        for id in range(0, arch.nb_quadrant):
+            quad_cfgs[id].o_QUADRANT_RESET(quadrants[id].i_RESET())
+
+        # Main interconnect
+        for id in range(0, arch.nb_quadrant):
+            quadrants[id].o_SOC(ico.i_INPUT())
+            ico.o_MAP ( quadrants[id].i_INPUT    (), base=arch.quadrant_base(id), size=arch.quadrant.size, rm_base=False )
+
+        for id in range(0, arch.nb_quadrant):
+            ico.o_MAP ( quad_cfgs[id].i_INPUT (), base=arch.quad_cfg_base(id), size=arch.quad_cfg.size, rm_base=True  )
+
+        ico.o_MAP ( self.i_HBM      (), base=arch.hbm_0_alias.base, size=arch.hbm_0_alias.size, rm_base=True  )
+        # ico.o_MAP ( uart.i_INPUT    (), base=arch.uart.base, size=arch.uart.size, rm_base=True  )
+        ico.o_MAP ( clint.i_INPUT   (), base=arch.clint.base, size=arch.clint.size, rm_base=True  )
+        ico.o_MAP ( plic.i_INPUT    (), base=arch.plic.base, size=arch.plic.size, rm_base=True  )
+        ico.o_MAP ( rom.i_INPUT     (), base=arch.bootrom.base, size=arch.bootrom.size, rm_base=True  )
+        ico.o_MAP ( idma.i_INPUT    (), base=arch.sys_idma_cfg.base, size=arch.sys_idma_cfg.size, rm_base=True  )
+        ico.o_MAP ( soc_reg.i_INPUT (), base=arch.soc_ctrl.base, size=arch.soc_ctrl.size, rm_base=True  )
+
+        # Clint
+        clint.o_SW_IRQ(core=0, itf=host.i_IRQ(3))
+        clint.o_TIMER_IRQ(core=0, itf=host.i_IRQ(7))
+
+        # Plic
+        plic.o_S_IRQ(core=0, itf=host.i_IRQ(9))
+        plic.o_M_IRQ(core=0, itf=host.i_IRQ(11))
+
+        # Uart
+        # uart.o_IRQ ( plic.i_IRQ (device=0))
+
+        # Binary loader
         loader.o_OUT(ico.i_INPUT())
         loader.o_START(host.i_FETCHEN())
         loader.o_ENTRY(host.i_ENTRY())
 
-        clint.o_SW_IRQ(core=0, itf=host.i_IRQ(3))
-        clint.o_TIMER_IRQ(core=0, itf=host.i_IRQ(7))
+    def i_HBM(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'hbm', signature='io')
 
-        plic.o_S_IRQ(core=0, itf=host.i_IRQ(9))
-        plic.o_M_IRQ(core=0, itf=host.i_IRQ(11))
+    def o_HBM(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('hbm', itf, signature='io')
 
 
-class Occamy(st.Component):
+
+class Occamy(gvsoc.systree.Component):
+
+    def __init__(self, parent, name, arch, binary, debug_binaries):
+        super(Occamy, self).__init__(parent, name)
+
+        soc = Soc(self, 'soc', arch.soc, binary, debug_binaries)
+
+        soc.o_HBM(self.i_HBM())
+
+    def i_HBM(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'hbm', signature='io')
+
+
+
+class OccamyBoard(gvsoc.systree.Component):
 
     def __init__(self, parent, name, parser, options):
+        super(OccamyBoard, self).__init__(parent, name, options=options)
 
-        super(Occamy, self).__init__(parent, name, options=options)
+        [args, otherArgs] = parser.parse_known_args()
+        debug_binaries = []
+        if args.binary is not None:
+            debug_binaries.append(args.binary)
 
         clock = Clock_domain(self, 'clock', frequency=10000000)
 
-        soc = Soc(self, 'soc', parser)
+        arch = pulp.chips.occamy.occamy_arch.OccamyArch(self)
 
-        self.bind(clock, 'out', soc, 'clock')
+        chip = Occamy(self, 'chip', arch.chip, args.binary, debug_binaries)
+
+        mem = memory.Memory(self, 'mem', size=arch.hbm.size, atomics=True)
+
+        self.bind(clock, 'out', chip, 'clock')
+        self.bind(clock, 'out', mem, 'clock')
+        self.bind(chip, 'hbm', mem, 'input')
 
 
-class Target(gvsoc.Target):
+
+class Target(gvsoc.runner.Target):
 
     def __init__(self, parser, options):
         super(Target, self).__init__(parser, options,
-            model=Occamy, description="Occamy virtual board")
+            model=OccamyBoard, description="Occamy virtual board")
 

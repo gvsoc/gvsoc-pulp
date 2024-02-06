@@ -20,24 +20,36 @@ import interco.router as router
 
 class Quadrant(gvsoc.systree.Component):
 
-    def __init__(self, parent, name):
+    def __init__(self, parent, name, arch):
         super().__init__(parent, name)
 
-        nb_clusters_per_quadrant = 4
-        quadrant_base = 0x10000000
+        #
+        # Components
+        #
 
+        # Main router
         ico = router.Router(self, 'ico')
 
-        for cid in range(0, nb_clusters_per_quadrant):
-            cluster_size = 0x40000
-            cluster_base = quadrant_base + cluster_size * cid
-            cluster = SnitchCluster(self, f'cluster_{cid}')
-            ico.o_MAP(cluster.i_INPUT(), base=cluster_base, size=cluster_size, rm_base=False)
-            cluster.o_SOC(ico.i_INPUT())
+        # Clusters
+        clusters = []
+        for cid in range(0, arch.nb_cluster):
+            clusters.append(SnitchCluster(self, f'cluster_{cid}', arch.get_cluster(cid)))
 
-        self.bind(self, 'input', ico, 'input')
+        #
+        # Bindings
+        #
 
+        # Main router
+        self.o_INPUT(ico.i_INPUT())
         ico.o_MAP(self.i_SOC())
+        for cid in range(0, arch.nb_cluster):
+            ico.o_MAP(clusters[cid].i_INPUT(), base=arch.get_cluster_base(cid),
+                size=arch.cluster.size, rm_base=False)
+
+        # Clusters
+        for cid in range(0, arch.nb_cluster):
+            clusters[cid].o_SOC(ico.i_INPUT())
+
 
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
@@ -50,4 +62,4 @@ class Quadrant(gvsoc.systree.Component):
         self.itf_bind('soc', itf, signature='io')
 
     def o_INPUT(self, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind('input', itf, signature='io')
+        self.itf_bind('input', itf, signature='io', composite_bind=True)

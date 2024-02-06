@@ -17,6 +17,7 @@
 import cpu.iss.riscv
 from pulp.snitch.snitch_isa import *
 from cpu.iss.isa_gen.isa_rvv import *
+import gvsoc.systree
 
 class Snitch(cpu.iss.riscv.RiscvCommon):
 
@@ -53,6 +54,9 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
             self.add_sources([
                 "cpu/iss/src/spatz.cpp",
             ])
+
+    def o_BARRIER_REQ(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('barrier_req', itf, signature='wire<bool>')
 
 
 

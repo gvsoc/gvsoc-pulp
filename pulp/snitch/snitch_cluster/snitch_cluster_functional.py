@@ -30,60 +30,70 @@ GAPY_TARGET = True
 
 class SnitchCluster(gvsoc.systree.Component):
 
-    def __init__(self, parent, name):
+    def __init__(self, parent, name, arch):
         super().__init__(parent, name)
 
-        nb_cores = 9
-        cores = []
+        #
+        # Components
+        #
 
-        tcdm = memory.Memory(self, 'tcdm', size=0x40000)
-
+        # Main router
         ico = router.Router(self, 'ico')
 
-        for core_id in range(0, nb_cores):
+        # L1 Memory
+        tcdm = memory.Memory(self, 'tcdm', size=arch.tcdm.size)
+
+        # Zero memory
+        zero_mem = ZeroMem(self, 'zero_mem', size=arch.zero_mem.size)
+
+        # Cores
+        cores = []
+        for core_id in range(0, arch.nb_core):
             cores.append(iss.Snitch(self, f'pe{core_id}', isa='rv32imfdvca', fetch_enable=True,
-                                    boot_addr=0x01000000, core_id=core_id+1))
+                                    boot_addr=arch.boot_addr, core_id=arch.first_hartid + core_id))
 
-        cluster_registers = ClusterRegisters(self, 'cluster_registers', boot_addr=0x0,
-            nb_cores=nb_cores)
+        # Cluster peripherals
+        cluster_registers = ClusterRegisters(self, 'cluster_registers', nb_cores=arch.nb_core)
 
+        # Cluster DMA
         idma = IDma(self, 'idma')
 
-        zero_mem = ZeroMem(self, 'zero_mem', size=0x10000)
+        #
+        # Bindings
+        #
 
-        cores[nb_cores-1].o_OFFLOAD(idma.i_OFFLOAD())
+        # Main router
+        self.o_INPUT(ico.i_INPUT())
+        ico.o_MAP(tcdm.i_INPUT(), base=arch.tcdm.base, size=arch.tcdm.size, rm_base=True)
+        ico.o_MAP(zero_mem.i_INPUT(), base=arch.zero_mem.base, size=arch.zero_mem.size, rm_base=True)
+        ico.o_MAP(cluster_registers.i_INPUT(), base=arch.peripheral.base, size=arch.peripheral.size, rm_base=True)
+        ico.o_MAP(self.i_SOC())
 
-        idma.o_ICO(ico.i_INPUT())
+        # Cores
+        cores[arch.nb_core-1].o_OFFLOAD(idma.i_OFFLOAD())
+        for core_id in range(0, arch.nb_core):
+            cores[core_id].o_BARRIER_REQ(cluster_registers.i_BARRIER_ACK(core_id))
+        for core_id in range(0, arch.nb_core):
+            cores[core_id].o_DATA(ico.i_INPUT())
+            cores[core_id].o_FETCH(ico.i_INPUT())
 
-        ico.o_MAP(zero_mem.i_INPUT(), name='zero_mem', base=0x10030000, size=0x10000, rm_base=True)
-
-        ico.add_mapping('cluster_registers', base=0x10020000, remove_offset=0x10020000, size=0x1000)
-        self.bind(ico, 'cluster_registers', cluster_registers, 'input')
-
-        ico.add_mapping('tcdm', base=0x10000000, remove_offset=0x10000000, size=0x20000)
-        self.bind(ico, 'tcdm', tcdm, 'input')
-
-        ico.add_mapping('soc', base=0x00000000, remove_offset=0x00000000, size=0x10000000)
-        self.bind(ico, 'soc', self, 'soc')
-
-        ico.add_mapping('soc_high', base=0x11000000, remove_offset=0x00000000, size=0x20000000000 - 0x11000000)
-        self.bind(ico, 'soc_high', self, 'soc')
-
-        for core_id in range(0, nb_cores):
-            self.bind(cores[core_id], 'barrier_req', cluster_registers, f'barrier_req_{core_id}')
+        # Cluster peripherals
+        for core_id in range(0, arch.nb_core):
             self.bind(cluster_registers, f'barrier_ack', cores[core_id], 'barrier_ack')
+        for core_id in range(0, arch.nb_core):
+            cluster_registers.o_EXTERNAL_IRQ(core_id, cores[core_id].i_IRQ(arch.barrier_irq))
 
-        for core_id in range(0, nb_cores):
-            cluster_registers.o_EXTERNAL_IRQ(core_id, cores[core_id].i_IRQ(19))
-
-        for core_id in range(0, nb_cores):
-            self.bind(cores[core_id], 'data', ico, 'input')
-            self.bind(cores[core_id], 'fetch', ico, 'input')
-
-        self.bind(self, 'input', ico, 'input')
+        # Cluster DMA
+        idma.o_ICO(ico.i_INPUT())
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')
+
+    def o_INPUT(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('input', itf, signature='io', composite_bind=True)
+
+    def i_SOC(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'soc', signature='io')
 
     def o_SOC(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('soc', itf, signature='io')

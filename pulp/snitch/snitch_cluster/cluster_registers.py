@@ -41,3 +41,9 @@ class ClusterRegisters(gvsoc.systree.Component):
 
     def o_EXTERNAL_IRQ(self, core: int, itf: gvsoc.systree.SlaveItf):
         self.itf_bind(f'external_irq_{core}', itf, signature='wire<bool>')
+
+    def i_INPUT(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'input', signature='io')
+
+    def i_BARRIER_ACK(self, core: int) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'barrier_req_{core}', signature='wire<bool>')
