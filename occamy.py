@@ -30,7 +30,7 @@ from elftools.elf.elffile import *
 import gvsoc.runner as gvsoc
 from pulp.chips.occamy.quad_cfg import QuadCfg
 from pulp.chips.occamy.soc_reg import SocReg
-from pulp.snitch.snitch_cluster.snitch_cluster_functional import SnitchCluster
+from pulp.chips.occamy.quadrant import Quadrant
 
 
 GAPY_TARGET = True
@@ -47,60 +47,70 @@ class Soc(st.Component):
             binaries.append(binary)
 
         mem = memory.Memory(self, 'mem', size=0x80000000, atomics=True)
-        uart = ns16550.Ns16550(self, 'uart')
+
+        # uart = ns16550.Ns16550(self, 'uart')
+
         clint = cpu.clint.Clint(self, 'clint')
+
         plic = cpu.plic.Plic(self, 'plic', ndev=1)
+
         idma = IDma(self, 'sys_dma')
-        quad_cfg_0 = QuadCfg(self, 'quad_cfg_0')
-        cluster = SnitchCluster(self, 'cluster_0')
+
         soc_reg = SocReg(self, 'soc_reg')
 
         ico = router.Router(self, 'ico')
 
         rom = memory.Memory(self, 'rom', size=0x10000, stim_file=self.get_file_path('pulp/chips/occamy/bootrom.bin'))
 
-        ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x80000000)
-        self.bind(ico, 'mem', mem, 'input')
-
-        ico.add_mapping('uart', base=0x10000000, remove_offset=0x10000000, size=0x100)
-        self.bind(ico, 'uart', uart, 'input')
-
-        ico.add_mapping('clint', base=0x4000000, remove_offset=0x4000000, size=0x100000)
-        self.bind(ico, 'clint', clint, 'input')
-
-        ico.add_mapping('plic', base=0xC000000, remove_offset=0xC000000, size=0x1000000)
-        self.bind(ico, 'plic', plic, 'input')
-        self.bind(uart, 'irq', plic, 'irq1')
-
-        ico.add_mapping('rom', base=0x01000000, remove_offset=0x01000000, size=0x10000)
-        self.bind(ico, 'rom', rom, 'input')
-
-        ico.o_MAP(quad_cfg_0.i_INPUT(), name='quad_cfg_0', base=0x0b000000, size=0x10000, rm_base=True)
-        ico.o_MAP(idma.i_INPUT(), name='sys_dma', base=0x11000000, size=0x10000, rm_base=True)
-        ico.o_MAP(cluster.i_INPUT(), name='cluster_0', base=0x10000000, size=0x40000, rm_base=False)
-        ico.o_MAP(soc_reg.i_INPUT(), name='soc_reg', base=0x02000000, size=0x1000, rm_base=True)
-        cluster.o_SOC(ico.i_INPUT())
-
         host = iss.Riscv(self, 'host', isa="rv64imafdc", boot_addr=0x1000, timed=False,
             binaries=binaries, htif=True)
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 
-        quad_cfg_0.o_QUADRANT_RESET(cluster.i_RESET())
 
-        self.bind(host, 'data', ico, 'input')
+        nb_quadrant = 5
+        for id in range(0, nb_quadrant):
+            quad_cfg = QuadCfg(self, f'quadrant_cfg_{id}')
+            cluster = Quadrant(self, f'quadrant_{id}')
 
-        self.bind(host, 'meminfo', mem, 'meminfo')
-        self.bind(host, 'fetch', ico, 'input')
-        self.bind(host, 'time', clint, 'time')
-        self.bind(loader, 'out', ico, 'input')
-        self.bind(loader, 'start', host, 'fetchen')
-        self.bind(loader, 'entry', host, 'bootaddr')
+            qaudrant_cfg_size = 0x10000
+            quadrant_cfg_base = 0x0b000000 + id * qaudrant_cfg_size
 
-        self.bind(clint, 'sw_irq_0', host, 'msi')
-        self.bind(clint, 'timer_irq_0', host, 'mti')
-        self.bind(plic, 's_irq_0', host, 'sei')
-        self.bind(plic, 'm_irq_0', host, 'mei')
+            ico.o_MAP ( quad_cfg.i_INPUT (), base=quadrant_cfg_base, size=qaudrant_cfg_size, rm_base=True  )
+            quad_cfg.o_QUADRANT_RESET(cluster.i_RESET())
+
+            qaudrant_size = 0x100000
+            quadrant_base = 0x10000000 + id * qaudrant_size
+
+            cluster.o_SOC(ico.i_INPUT())
+            ico.o_MAP ( cluster.i_INPUT    (), base=quadrant_base, size=qaudrant_size, rm_base=False )
+
+
+
+        ico.o_MAP ( mem.i_INPUT        (), base=0x80000000, size=0x80000000, rm_base=True  )
+        # ico.o_MAP ( uart.i_INPUT       (), base=0x10000000, size=0x00000100, rm_base=True  )
+        ico.o_MAP ( clint.i_INPUT      (), base=0x04000000, size=0x00100000, rm_base=True  )
+        ico.o_MAP ( plic.i_INPUT       (), base=0x0C000000, size=0x01000000, rm_base=True  )
+        ico.o_MAP ( rom.i_INPUT        (), base=0x01000000, size=0x00010000, rm_base=True  )
+        ico.o_MAP ( idma.i_INPUT       (), base=0x11000000, size=0x00010000, rm_base=True  )
+        ico.o_MAP ( soc_reg.i_INPUT    (), base=0x02000000, size=0x00001000, rm_base=True  )
+
+        # uart.o_IRQ ( plic.i_IRQ (device=0))
+
+        host.o_DATA(ico.i_INPUT())
+        host.o_MEMINFO(mem.i_INPUT())
+        host.o_FETCH(ico.i_INPUT())
+        host.o_TIME(clint.i_TIME())
+
+        loader.o_OUT(ico.i_INPUT())
+        loader.o_START(host.i_FETCHEN())
+        loader.o_ENTRY(host.i_ENTRY())
+
+        clint.o_SW_IRQ(core=0, itf=host.i_IRQ(3))
+        clint.o_TIMER_IRQ(core=0, itf=host.i_IRQ(7))
+
+        plic.o_S_IRQ(core=0, itf=host.i_IRQ(9))
+        plic.o_M_IRQ(core=0, itf=host.i_IRQ(11))
 
 
 class Occamy(st.Component):
