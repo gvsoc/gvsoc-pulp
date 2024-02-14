@@ -17,7 +17,9 @@
 import gvsoc.runner
 import cpu.iss.riscv as iss
 import memory.memory as memory
+from pulp.snitch.hierarchical_cache import Hierarchical_cache
 from vp.clock_domain import Clock_domain
+import pulp.snitch.l1_subsystem as l1_subsystem
 import interco.router as router
 import utils.loader.loader
 import gvsoc.systree as st
@@ -41,6 +43,7 @@ class Soc(st.Component):
         # Snitch core complex
         int_cores = []
         fp_cores = []
+        bus_watchpoints = []
         if Xfrep:
             fpu_sequencers = []
 
@@ -54,14 +57,22 @@ class Soc(st.Component):
             [args, otherArgs] = parser.parse_known_args()
             binary = args.binary
 
-        rom = memory.Memory(self, 'rom', size=0x10000, stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
+        rom = memory.Memory(self, 'rom', size=0x10000, width_log2=3, stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
 
         mem = memory.Memory(self, 'mem', size=0x1000000, width_log2=3, atomics=True, core="snitch")
 
-        tcdm = memory.Memory(self, 'tcdm', size=0x40000, width_log2=3, atomics=True, core="snitch")
+        # tcdm = memory.Memory(self, 'tcdm', size=0x20000, width_log2=3, atomics=True, core="snitch")
+        
+        l1 = l1_subsystem.L1_subsystem(self, 'l1', self, nb_pe=nb_cores, size=0x20000, l1_banking_factor=4, 
+                                        nb_port=3, bandwidth=8, interleaving_bits=8)
+        
+        # Shared icache
+        icache = Hierarchical_cache(self, 'shared_icache', nb_cores=8, has_cc=0, l1_line_size_bits=7)
 
-        # Global bandwidth of interconnection 8 bytes per cycle, applied to all incoming request.
-        ico = router.Router(self, 'ico', bandwidth=8)
+        # i_cluster_xbar
+        ico = router.Router(self, 'ico', bandwidth=8, latency=8)
+        # i_axi_dma_xbar
+        dma_ico = router.Router(self, 'dma_ico', bandwidth=32, latency=0)
 
         for core_id in range(0, nb_cores):
             int_cores.append(iss.Snitch(self, f'pe{core_id}', isa=args.isa, core_id=core_id))
@@ -74,12 +85,22 @@ class Soc(st.Component):
 
         ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
         self.bind(ico, 'mem', mem, 'input')
+        dma_ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
+        self.bind(dma_ico, 'mem', mem, 'input')
 
-        ico.add_mapping('tcdm', base=0x10000000, remove_offset=0x10000000, size=0x20000)
-        self.bind(ico, 'tcdm', tcdm, 'input')
+        # ico.add_mapping('tcdm', base=0x10000000, remove_offset=0x10000000, size=0x20000)
+        # self.bind(ico, 'tcdm', tcdm, 'input')
 
         ico.add_mapping('rom', base=0x00001000, remove_offset=0x00001000, size=0x10000)
         self.bind(ico, 'rom', rom, 'input')
+        dma_ico.add_mapping('rom', base=0x00001000, remove_offset=0x00001000, size=0x10000)
+        self.bind(dma_ico, 'rom', rom, 'input')
+        
+        self.bind(l1, 'cluster_ico', ico, 'input')
+        ico.add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000)
+        self.bind(ico, 'l1', l1, 'ext2loc')
+        
+        self.bind(icache, 'refill', dma_ico, 'input')
 
 
         # RISCV bus watchpoint
@@ -98,13 +119,12 @@ class Soc(st.Component):
                             if symbol.name == 'fromhost':
                                 fromhost_addr = symbol.entry['st_value']
 
-        cluster_registers = Cluster_registers(self, 'cluster_registers', boot_addr=entry,
-            nb_cores=nb_cores)
+        cluster_registers = Cluster_registers(self, 'cluster_registers', boot_addr=entry, nb_cores=nb_cores)
         ico.add_mapping('cluster_registers', base=0x00120000, remove_offset=0x00120000, size=0x1000)
         self.bind(ico, 'cluster_registers', cluster_registers, 'input')
 
-        tohost = Bus_watchpoint(self, 'tohost', tohost_addr, fromhost_addr, word_size=32)
-        self.bind(tohost, 'output', ico, 'input')
+        for core_id in range(0, nb_cores):
+            bus_watchpoints.append(Bus_watchpoint(self, f'tohost{core_id}', tohost_addr, fromhost_addr, word_size=32))
 
         for core_id in range(0, nb_cores):
             # Sync all core complex by integer cores.
@@ -112,15 +132,22 @@ class Soc(st.Component):
             self.bind(cluster_registers, f'barrier_ack', int_cores[core_id], 'barrier_ack')
 
         for core_id in range(0, nb_cores):
+            # Buswatchpoint
+            self.bind(bus_watchpoints[core_id], 'output', l1, 'data_pe_%d' % core_id)
+            
+            # Icache
+            self.bind(int_cores[core_id], 'flush_cache_req', icache, 'flush')
+            self.bind(icache, 'flush_ack', int_cores[core_id], 'flush_cache_ack')
+            
             # Snitch integer cores
-            self.bind(int_cores[core_id], 'data', tohost, 'input')
-            self.bind(int_cores[core_id], 'fetch', ico, 'input')
+            self.bind(int_cores[core_id], 'data', bus_watchpoints[core_id], 'input')
+            self.bind(int_cores[core_id], 'fetch', icache, 'input_%d' % core_id)
             self.bind(loader, 'start', int_cores[core_id], 'fetchen')
             self.bind(loader, 'entry', int_cores[core_id], 'bootaddr')
             
             # Snitch fp subsystems
             # Pay attention to interactions and bandwidth between subsystem and tohost.
-            self.bind(fp_cores[core_id], 'data', tohost, 'input')
+            self.bind(fp_cores[core_id], 'data', bus_watchpoints[core_id], 'input')
             # FP subsystem doesn't fetch instructions from core->ico->memory, but from integer cores acc_req.
             self.bind(loader, 'start', fp_cores[core_id], 'fetchen')
             self.bind(loader, 'entry', fp_cores[core_id], 'bootaddr')
@@ -139,7 +166,7 @@ class Soc(st.Component):
             
             self.bind(fp_cores[core_id], 'acc_rsp', int_cores[core_id], 'acc_rsp')
 
-        self.bind(loader, 'out', ico, 'input')
+        self.bind(loader, 'out', dma_ico, 'input')
 
 
 
