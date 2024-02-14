@@ -16,7 +16,7 @@
 
 import gvsoc.systree
 from cache.cache import Cache
-from interco.interleaver import Interleaver
+from interco.interleaver_snitch import Interleaver
 import math
 
 class Hierarchical_cache(gvsoc.systree.Component):
