@@ -47,3 +47,6 @@ class ClusterRegisters(gvsoc.systree.Component):
 
     def i_BARRIER_ACK(self, core: int) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'barrier_req_{core}', signature='wire<bool>')
+
+    def gen_gui(self, parent_signal):
+        return gvsoc.gui.Signal(self, parent_signal, name=self.name, is_group=True, groups=["regmap"])

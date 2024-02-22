@@ -42,3 +42,7 @@ class SocReg(gvsoc.systree.Component):
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')
+
+
+    def gen_gui(self, parent_signal):
+        return gvsoc.gui.Signal(self, parent_signal, name=self.name, is_group=True, groups=["regmap"])

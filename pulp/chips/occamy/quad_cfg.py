@@ -45,3 +45,7 @@ class QuadCfg(gvsoc.systree.Component):
 
     def o_QUADRANT_RESET(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('quadrant_reset', itf, signature='wire<bool>')
+
+
+    def gen_gui(self, parent_signal):
+        return gvsoc.gui.Signal(self, parent_signal, name=self.name, is_group=True, groups=["regmap"])
