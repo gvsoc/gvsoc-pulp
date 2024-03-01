@@ -67,7 +67,7 @@ class Spatz(cpu.iss.riscv.RiscvCommon):
             parent,
             name,
             isa: str='rv32imafdc',
-            misa: int=0,
+            misa: int=None,
             binaries: list=[],
             fetch_enable: bool=False,
             boot_addr: int=0,
@@ -77,6 +77,9 @@ class Spatz(cpu.iss.riscv.RiscvCommon):
         extensions = [ Rv32v() ]
 
         isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("spatz_" + isa, isa, extensions=extensions)
+
+        if misa is None:
+            misa = isa_instance.misa
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="spatz")
 

@@ -15,7 +15,7 @@
 #
 
 import gvsoc.runner
-import cpu.iss.iss as iss
+import pulp.snitch.snitch_core as iss
 import memory.memory as memory
 from vp.clock_domain import Clock_domain
 import interco.router as router
@@ -50,7 +50,7 @@ class Soc(st.Component):
         ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
         self.bind(ico, 'mem', mem, 'input')
 
-        host = iss.Iss(self, 'host', vp_component='pulp.cpu.iss.iss_snitch_64', isa=args.isa)
+        host = iss.Spatz(self, 'host', isa=args.isa)
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 
