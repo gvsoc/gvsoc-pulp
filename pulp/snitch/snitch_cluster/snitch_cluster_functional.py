@@ -22,7 +22,7 @@ import gvsoc.systree
 from pulp.snitch.snitch_cluster.cluster_registers import ClusterRegisters
 from pulp.snitch.zero_mem import ZeroMem
 from elftools.elf.elffile import *
-from pulp.idma.idma import IDma
+from pulp.idma.snitch_dma import SnitchDma
 import gvsoc.runner
 
 
@@ -40,8 +40,11 @@ class SnitchCluster(gvsoc.systree.Component):
         # Main router
         ico = router.Router(self, 'ico')
 
+        # Dedicated router for dma to TCDM
+        tcdm_dma_ico = router.Router(self, 'tcdm_dma_ico', bandwidth=64)
+
         # L1 Memory
-        tcdm = memory.Memory(self, 'tcdm', size=arch.tcdm.size)
+        tcdm = memory.Memory(self, 'tcdm', size=arch.tcdm.size, atomics=True, width_log2=7)
 
         # Zero memory
         zero_mem = ZeroMem(self, 'zero_mem', size=arch.zero_mem.size)
@@ -56,7 +59,8 @@ class SnitchCluster(gvsoc.systree.Component):
         cluster_registers = ClusterRegisters(self, 'cluster_registers', nb_cores=arch.nb_core)
 
         # Cluster DMA
-        idma = IDma(self, 'idma')
+        idma = SnitchDma(self, 'idma', loc_base=arch.tcdm.base, loc_size=arch.tcdm.size,
+            tcdm_width=64)
 
         #
         # Bindings
@@ -69,8 +73,13 @@ class SnitchCluster(gvsoc.systree.Component):
         ico.o_MAP(cluster_registers.i_INPUT(), base=arch.peripheral.base, size=arch.peripheral.size, rm_base=True)
         ico.o_MAP(self.i_SOC())
 
+        # Dedicated router for dma to TCDM
+        tcdm_dma_ico.o_MAP(tcdm.i_INPUT(), base=arch.tcdm.base, size=arch.tcdm.size, rm_base=True)
+
         # Cores
         cores[arch.nb_core-1].o_OFFLOAD(idma.i_OFFLOAD())
+        idma.o_OFFLOAD_GRANT(cores[arch.nb_core-1].i_OFFLOAD_GRANT())
+
         for core_id in range(0, arch.nb_core):
             cores[core_id].o_BARRIER_REQ(cluster_registers.i_BARRIER_ACK(core_id))
         for core_id in range(0, arch.nb_core):
@@ -84,7 +93,8 @@ class SnitchCluster(gvsoc.systree.Component):
             cluster_registers.o_EXTERNAL_IRQ(core_id, cores[core_id].i_IRQ(arch.barrier_irq))
 
         # Cluster DMA
-        idma.o_ICO(ico.i_INPUT())
+        idma.o_AXI(ico.i_INPUT())
+        idma.o_TCDM(tcdm_dma_ico.i_INPUT())
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')

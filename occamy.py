@@ -51,14 +51,14 @@ class Soc(gvsoc.systree.Component):
 
         # CVA6
         # TODO binary loader is bypassing this boot addr
-        host = iss.Riscv(self, 'host', isa="rv64imafdc", boot_addr=0x0100_0000, timed=False,
+        host = iss.Riscv(self, 'host', isa="rv32imafdc", boot_addr=0x0100_0000, timed=False,
             binaries=debug_binaries, htif=True)
 
         # System DMA
         idma = IDma(self, 'sys_dma')
 
         # Main interconnect
-        ico = router.Router(self, 'ico')
+        ico = router.Router(self, 'ico', bandwidth=64)
 
         # Qaudrants
         quadrants = []
@@ -83,6 +83,9 @@ class Soc(gvsoc.systree.Component):
         # Bootrom
         rom = memory.Memory(self, 'rom', size=arch.bootrom.size,
             stim_file=self.get_file_path('pulp/chips/occamy/bootrom.bin'))
+
+        # Narrow SPM
+        spm_narrow = memory.Memory(self, 'narrow_spm', size=arch.spm_narrow.size)
 
         # Quadrant configs
         quad_cfgs = []
@@ -111,13 +114,14 @@ class Soc(gvsoc.systree.Component):
         for id in range(0, arch.nb_quadrant):
             ico.o_MAP ( quad_cfgs[id].i_INPUT (), base=arch.quad_cfg_base(id), size=arch.quad_cfg.size, rm_base=True  )
 
-        ico.o_MAP ( self.i_HBM      (), base=arch.hbm_0_alias.base, size=arch.hbm_0_alias.size, rm_base=True  )
+        ico.o_MAP ( self.i_HBM      (), base=arch.hbm_0_alias.base, size=arch.hbm_0_alias.size, rm_base=True, latency=100 )
         # ico.o_MAP ( uart.i_INPUT    (), base=arch.uart.base, size=arch.uart.size, rm_base=True  )
         ico.o_MAP ( clint.i_INPUT   (), base=arch.clint.base, size=arch.clint.size, rm_base=True  )
         ico.o_MAP ( plic.i_INPUT    (), base=arch.plic.base, size=arch.plic.size, rm_base=True  )
         ico.o_MAP ( rom.i_INPUT     (), base=arch.bootrom.base, size=arch.bootrom.size, rm_base=True  )
         ico.o_MAP ( idma.i_INPUT    (), base=arch.sys_idma_cfg.base, size=arch.sys_idma_cfg.size, rm_base=True  )
         ico.o_MAP ( soc_reg.i_INPUT (), base=arch.soc_ctrl.base, size=arch.soc_ctrl.size, rm_base=True  )
+        ico.o_MAP ( spm_narrow.i_INPUT (), base=arch.spm_narrow.base, size=arch.spm_narrow.size, rm_base=True  )
 
         # Clint
         clint.o_SW_IRQ(core=0, itf=host.i_IRQ(3))
