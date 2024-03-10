@@ -15,7 +15,7 @@
 #
 
 import gvsoc.systree
-from pulp.snitch.snitch_cluster.snitch_cluster_functional import SnitchCluster
+from pulp.snitch.snitch_cluster.snitch_cluster import SnitchCluster
 import interco.router as router
 
 class Quadrant(gvsoc.systree.Component):

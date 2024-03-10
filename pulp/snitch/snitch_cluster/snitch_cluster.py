@@ -20,13 +20,81 @@ import memory.memory as memory
 import interco.router as router
 import gvsoc.systree
 from pulp.snitch.snitch_cluster.cluster_registers import ClusterRegisters
+from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 from pulp.snitch.zero_mem import ZeroMem
 from elftools.elf.elffile import *
 from pulp.idma.snitch_dma import SnitchDma
+from pulp.cluster.l1_interleaver import L1_interleaver
 import gvsoc.runner
+import math
 
 
 GAPY_TARGET = True
+
+
+
+class Area:
+
+    def __init__(self, base, size):
+        self.base = base
+        self.size = size
+
+
+
+class ClusterArch:
+    def __init__(self, properties, base, first_hartid):
+        self.nb_core = properties.nb_core_per_cluster
+        self.base = base
+        self.first_hartid = first_hartid
+
+        self.boot_addr = 0x0100_0000
+        self.barrier_irq = 19
+        self.tcdm          = ClusterArch.Tcdm(base, self.nb_core)
+        self.peripheral    = Area( base + 0x0002_0000, 0x0001_0000)
+        self.zero_mem      = Area( base + 0x0003_0000, 0x0001_0000)
+
+    class Tcdm:
+        def __init__(self, base, nb_masters):
+            self.area = Area( base + 0x0000_0000, 0x0002_0000)
+            self.nb_banks_per_superbank = 8
+            self.bank_width = 8
+            self.nb_superbanks = 4
+            self.bank_size = self.area.size / self.nb_superbanks / self.nb_banks_per_superbank
+            self.nb_masters = nb_masters
+
+
+class SnitchClusterTcdm(gvsoc.systree.Component):
+
+    def __init__(self, parent, name, arch):
+        super().__init__(parent, name)
+
+        banks = []
+        nb_banks = arch.nb_superbanks * arch.nb_banks_per_superbank
+        for i in range(0, nb_banks):
+            banks.append(memory.Memory(self, f'bank_{i}', size=arch.bank_size, atomics=True,
+                width_log2=int(math.log2(arch.bank_width))))
+
+        interleaver = L1_interleaver(self, 'interleaver', nb_slaves=nb_banks,
+            nb_masters=arch.nb_masters, interleaving_bits=int(math.log2(arch.bank_width)))
+
+        dma_interleaver = DmaInterleaver(self, 'dma_interleaver', arch.nb_masters,
+            nb_banks, arch.bank_width)
+
+        for i in range(0, nb_banks):
+            self.bind(interleaver, 'out_%d' % i, banks[i], 'input')
+            self.bind(dma_interleaver, 'out_%d' % i, banks[i], 'input')
+
+        for i in range(0, arch.nb_masters):
+            self.bind(self, f'in_{i}', interleaver, f'in_{i}')
+            self.bind(self, f'dma_input', dma_interleaver, f'input')
+
+    def i_INPUT(self, port: int) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'in_{port}', signature='io')
+
+    def i_DMA_INPUT(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'dma_input', signature='io')
+
+
 
 class SnitchCluster(gvsoc.systree.Component):
 
@@ -44,22 +112,25 @@ class SnitchCluster(gvsoc.systree.Component):
         tcdm_dma_ico = router.Router(self, 'tcdm_dma_ico', bandwidth=64)
 
         # L1 Memory
-        tcdm = memory.Memory(self, 'tcdm', size=arch.tcdm.size, atomics=True, width_log2=7)
+        tcdm = SnitchClusterTcdm(self, 'tcdm', arch.tcdm)
 
         # Zero memory
         zero_mem = ZeroMem(self, 'zero_mem', size=arch.zero_mem.size)
 
         # Cores
         cores = []
+        cores_ico = []
         for core_id in range(0, arch.nb_core):
             cores.append(iss.Snitch(self, f'pe{core_id}', isa='rv32imfdvca', fetch_enable=True,
                                     boot_addr=arch.boot_addr, core_id=arch.first_hartid + core_id))
+
+            cores_ico.append(router.Router(self, f'pe{core_id}_ico', bandwidth=arch.tcdm.bank_width))
 
         # Cluster peripherals
         cluster_registers = ClusterRegisters(self, 'cluster_registers', nb_cores=arch.nb_core)
 
         # Cluster DMA
-        idma = SnitchDma(self, 'idma', loc_base=arch.tcdm.base, loc_size=arch.tcdm.size,
+        idma = SnitchDma(self, 'idma', loc_base=arch.tcdm.area.base, loc_size=arch.tcdm.area.size,
             tcdm_width=64)
 
         #
@@ -68,22 +139,24 @@ class SnitchCluster(gvsoc.systree.Component):
 
         # Main router
         self.o_INPUT(ico.i_INPUT())
-        ico.o_MAP(tcdm.i_INPUT(), base=arch.tcdm.base, size=arch.tcdm.size, rm_base=True)
+        # TODO check on real HW where this should go
+        ico.o_MAP(cores_ico[0].i_INPUT(), base=arch.tcdm.area.base, size=arch.tcdm.area.size, rm_base=False)
         ico.o_MAP(zero_mem.i_INPUT(), base=arch.zero_mem.base, size=arch.zero_mem.size, rm_base=True)
         ico.o_MAP(cluster_registers.i_INPUT(), base=arch.peripheral.base, size=arch.peripheral.size, rm_base=True)
         ico.o_MAP(self.i_SOC())
-
-        # Dedicated router for dma to TCDM
-        tcdm_dma_ico.o_MAP(tcdm.i_INPUT(), base=arch.tcdm.base, size=arch.tcdm.size, rm_base=True)
 
         # Cores
         cores[arch.nb_core-1].o_OFFLOAD(idma.i_OFFLOAD())
         idma.o_OFFLOAD_GRANT(cores[arch.nb_core-1].i_OFFLOAD_GRANT())
 
+        # Cores
         for core_id in range(0, arch.nb_core):
             cores[core_id].o_BARRIER_REQ(cluster_registers.i_BARRIER_ACK(core_id))
         for core_id in range(0, arch.nb_core):
-            cores[core_id].o_DATA(ico.i_INPUT())
+            cores[core_id].o_DATA(cores_ico[core_id].i_INPUT())
+            cores_ico[core_id].o_MAP(tcdm.i_INPUT(core_id), base=arch.tcdm.area.base,
+                size=arch.tcdm.area.size, rm_base=True)
+            cores_ico[core_id].o_MAP(ico.i_INPUT())
             cores[core_id].o_FETCH(ico.i_INPUT())
 
         # Cluster peripherals
@@ -94,7 +167,7 @@ class SnitchCluster(gvsoc.systree.Component):
 
         # Cluster DMA
         idma.o_AXI(ico.i_INPUT())
-        idma.o_TCDM(tcdm_dma_ico.i_INPUT())
+        idma.o_TCDM(tcdm.i_DMA_INPUT())
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')

@@ -51,7 +51,7 @@ class Soc(gvsoc.systree.Component):
 
         # CVA6
         # TODO binary loader is bypassing this boot addr
-        host = iss.Riscv(self, 'host', isa="rv32imafdc", boot_addr=0x0100_0000, timed=False,
+        host = iss.Riscv(self, 'host', isa="rv64imafdc", boot_addr=0x0100_0000, timed=False,
             binaries=debug_binaries, htif=True)
 
         # System DMA

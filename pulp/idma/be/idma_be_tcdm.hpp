@@ -86,6 +86,8 @@ private:
     int width;
     // Top property giving the size of the queue of pending bursts
     int burst_queue_maxsize;
+    // Top parameter giving base address of local memory
+    uint64_t loc_base;
 
     // Request used for TCDM accesses, only one at the same time is possible
     vp::IoReq req;
