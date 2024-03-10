@@ -135,6 +135,7 @@ void IDmaBeAxi::enqueue_burst(uint64_t base, uint64_t size, bool is_write)
         is_write ? "write" : "read", req, base, size);
 
     // Enqueue the burst to the pending queue
+    req->prepare();
     req->set_is_write(is_write);
     req->set_addr(base);
     req->set_size(size);
@@ -266,6 +267,7 @@ void IDmaBeAxi::write_data(uint8_t *data, uint64_t size)
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Write data (base: 0x%lx, size: 0x%lx)\n",
         base, size);
 
+    req->prepare();
     req->set_is_write(true);
     req->set_addr(base);
     req->set_size(size);
@@ -304,7 +306,10 @@ void IDmaBeAxi::write_handle_req_end(vp::IoReq *req)
     if (burst->get_size() == 0)
     {
         this->pending_bursts.pop();
-        this->current_burst_base = this->pending_bursts.front()->get_addr();
+        if (this->pending_bursts.size() > 0)
+        {
+            this->current_burst_base = this->pending_bursts.front()->get_addr();
+        }
         this->free_bursts.push(burst);
         // Notify the backend since it may schedule another burst
         this->be->update();

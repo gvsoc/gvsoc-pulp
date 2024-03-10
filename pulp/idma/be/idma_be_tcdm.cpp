@@ -43,6 +43,9 @@ IDmaBeTcdm::IDmaBeTcdm(vp::Component *idma, std::string itf_name, IdmaBeProducer
 
     // Max number of pending bursts
     this->burst_queue_maxsize = idma->get_js_config()->get_int("burst_queue_size");
+
+    // Local memory base
+    this->loc_base = idma->get_js_config()->get_int("loc_base");
 }
 
 
@@ -64,7 +67,7 @@ void IDmaBeTcdm::enqueue_burst(uint64_t base, uint64_t size, bool is_write)
     // Just enqueue the burst and trigger the FSM, the FSM will take care of sending the requests
     this->burst_queue_base.push(base);
     this->burst_queue_size.push(size);
-    this->burst_queue_is_write.push(false);
+    this->burst_queue_is_write.push(is_write);
 
     // We may need to activate the first burst
     this->activate_burst();
@@ -86,7 +89,7 @@ void IDmaBeTcdm::read_burst(uint64_t base, uint64_t size)
 // Called by the backend to enqueue a write burst
 void IDmaBeTcdm::write_burst(uint64_t base, uint64_t size)
 {
-    this->enqueue_burst(base, size, false);
+    this->enqueue_burst(base, size, true);
 }
 
 
@@ -166,7 +169,7 @@ void IDmaBeTcdm::write_line()
 
         req->prepare();
         req->set_is_write(true);
-        req->set_addr(base);
+        req->set_addr(base - this->loc_base);
         req->set_size(size);
         req->set_data(this->write_current_chunk_data);
 
@@ -282,7 +285,7 @@ void IDmaBeTcdm::read_line()
     // Prepare the IO request to TCDM
     req->prepare();
     req->set_is_write(false);
-    req->set_addr(base);
+    req->set_addr(base - this->loc_base);
     req->set_size(size);
     // Since the destination backend may keep the data until the write is done, we need
     // to dynamically allocate the data since we may read several times before data is acknowledged

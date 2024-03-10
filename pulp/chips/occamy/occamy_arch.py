@@ -14,6 +14,9 @@
 # limitations under the License.
 #
 
+from pulp.snitch.snitch_cluster.snitch_cluster import ClusterArch, Area
+
+
 class OccamyArchProperties:
 
     def __init__(self):
@@ -41,13 +44,6 @@ class OccamyArchProperties:
             name='soc/quadrant/cluster/nb_core', value=self.nb_core_per_cluster, cast=int, description='Number of cores per cluster'
         )
 
-
-
-class Area:
-
-    def __init__(self, base, size):
-        self.base = base
-        self.size = size
 
 
 
@@ -153,7 +149,7 @@ class OccamyArch:
                 current_hardid = first_hartid
                 for id in range(0, self.nb_cluster):
                     self.clusters.append(
-                        OccamyArch.Chip.Cluster(properties, self.get_cluster_base(id), current_hardid)
+                        ClusterArch(properties, self.get_cluster_base(id), current_hardid)
                     )
                     current_hardid += self.clusters[id].nb_core
 
@@ -164,17 +160,3 @@ class OccamyArch:
 
             def get_cluster(self, id: int):
                 return self.clusters[id]
-
-
-
-        class Cluster:
-            def __init__(self, properties, base, first_hartid):
-                self.nb_core = properties.nb_core_per_cluster
-                self.base = base
-                self.first_hartid = first_hartid
-
-                self.boot_addr = 0x0100_0000
-                self.barrier_irq = 19
-                self.tcdm          = Area( base + 0x0000_0000, 0x0002_0000)
-                self.peripheral    = Area( base + 0x0002_0000, 0x0001_0000)
-                self.zero_mem      = Area( base + 0x0003_0000, 0x0001_0000)
