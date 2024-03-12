@@ -59,7 +59,7 @@ class Soc(st.Component):
 
         rom = memory.Memory(self, 'rom', size=0x10000, width_log2=3, stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
 
-        mem = memory.Memory(self, 'mem', size=0x1000000, width_log2=3, atomics=True, core="snitch")
+        mem = memory.Memory(self, 'mem', size=0x1000000, width_log2=3, atomics=True, core="snitch", mem='mem')
 
         # tcdm = memory.Memory(self, 'tcdm', size=0x20000, width_log2=3, atomics=True, core="snitch")
         
@@ -151,6 +151,11 @@ class Soc(st.Component):
             # FP subsystem doesn't fetch instructions from core->ico->memory, but from integer cores acc_req.
             self.bind(loader, 'start', fp_cores[core_id], 'fetchen')
             self.bind(loader, 'entry', fp_cores[core_id], 'bootaddr')
+            
+            # SSR in fp subsystem datem mover <-> memory port
+            self.bind(fp_cores[core_id], 'ssr_dm0', l1, 'data_pe_%d' % core_id)
+            self.bind(fp_cores[core_id], 'ssr_dm1', l1, 'ssr_1_pe_%d' % core_id)
+            self.bind(fp_cores[core_id], 'ssr_dm2', l1, 'ssr_2_pe_%d' % core_id)
             
             # Use WireMaster & WireSlave
             # Add fpu sequence buffer in between int core and fp core to issue instructions
