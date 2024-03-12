@@ -81,14 +81,16 @@ class L1_subsystem(gvsoc.systree.Component):
         l1_banks = []
         for i in range(0, nb_l1_banks):
             tcdm = Memory(self, 'tcdm_bank%d' % i, size=l1_bank_size, width_log2=int(math.log(bandwidth, 2.0)), 
-                            atomics=True, core='snitch',mem='tcdm')
+                            atomics=True, core='snitch', mem='tcdm')
             l1_banks.append(tcdm)
 
         # Per-PE interconnects
         # PE side has 3 ports (NumSsrs) per core
         pe_icos = []
         for i in range(0, nb_pe):
-            pe_icos.append(Router(self, 'pe%d_ico' % i, bandwidth=8, latency=0))
+            pe_icos.append(Router(self, 'pe%d_ico_0' % i, bandwidth=8, latency=0))
+            pe_icos.append(Router(self, 'pe%d_ico_1' % i, bandwidth=8, latency=0))
+            pe_icos.append(Router(self, 'pe%d_ico_2' % i, bandwidth=8, latency=0))
 
         # L1 interleaver
         # TCDM interconnection, one port per bank, 8 ports per superbank
@@ -106,19 +108,38 @@ class L1_subsystem(gvsoc.systree.Component):
 
         # Per-PE interconnects
         for i in range(0, nb_pe):
-            # pe (iss) "data" -> pe interconnect (router) "input"
-            self.bind(self, 'data_pe_%d' % i, pe_icos[i], 'input')
-
-            # pe interconnect (router) "output" -> tcdm interleaver (interleaver) "in_%d"
-            pe_icos[i].add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000, id=0)
             # for j in range(0, nb_port):
                 # port_id = int(i * nb_port + j)
                 # self.bind(pe_icos[i], 'l1', interleaver, 'in_%d' % port_id)
             port_id = int(i * nb_port)
-            self.bind(pe_icos[i], 'l1', interleaver, 'in_%d' % port_id)
+            
+            
+            # Memory port 0, shared by Integer LSU, FP LSU and data mover 0.
+            # pe (iss) "data" -> pe interconnect (router) "input"
+            self.bind(self, 'data_pe_%d' % i, pe_icos[port_id], 'input')
 
-            pe_icos[i].add_mapping('cluster_ico', id=1)
-            self.bind(pe_icos[i], 'cluster_ico', self, 'cluster_ico')
+            # pe interconnect (router) "output" -> tcdm interleaver (interleaver) "in_%d"
+            pe_icos[port_id].add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000, id=0)
+            self.bind(pe_icos[port_id], 'l1', interleaver, 'in_%d' % port_id)
+
+            # connect to cluster axi crossbar
+            pe_icos[port_id].add_mapping('cluster_ico', id=1)
+            self.bind(pe_icos[port_id], 'cluster_ico', self, 'cluster_ico')
+            
+        
+            # Memory port 1, private for data mover 1
+            port_id += 1
+            self.bind(self, 'ssr_1_pe_%d' % i, pe_icos[port_id], 'input')
+            pe_icos[port_id].add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000, id=0)
+            self.bind(pe_icos[port_id], 'l1', interleaver, 'in_%d' % port_id)
+            
+            
+            # Memory port 2, private for data mover 2
+            port_id += 1
+            self.bind(self, 'ssr_2_pe_%d' % i, pe_icos[port_id], 'input')
+            pe_icos[port_id].add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000, id=0)
+            self.bind(pe_icos[port_id], 'l1', interleaver, 'in_%d' % port_id)
+
 
         # L1 interleaver
         # tcdm interleaver "out_%d" -> l1_banks (memory) "input"
