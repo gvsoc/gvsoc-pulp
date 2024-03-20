@@ -110,13 +110,17 @@ class Soc(st.Component):
         dma_ico.add_mapping('rom', base=0x00001000, remove_offset=0x00001000, size=0x10000)
         self.bind(dma_ico, 'rom', rom, 'input')
         
-        ico.add_mapping('zero_mem', base=0x00030000, remove_offset=0x00030000, size=0x0010000)
+        ico.add_mapping('zero_mem', base=0x10030000, remove_offset=0x10030000, size=0x0010000)
         self.bind(ico, 'zero_mem', zero_mem, 'input')
-        dma_ico.add_mapping('zero_mem', base=0x00030000, remove_offset=0x00030000, size=0x0010000)
+        dma_ico.add_mapping('zero_mem', base=0x10030000, remove_offset=0x10030000, size=0x0010000)
         self.bind(dma_ico, 'zero_mem', zero_mem, 'input')
         
         self.bind(l1, 'cluster_ico', ico, 'input')
+        self.bind(ico, 'l1', l1, 'input')
         ico.add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000)
+        # self.bind(l1, 'cluster_ico', dma_ico, 'input')
+        # self.bind(dma_ico, 'l1', l1, 'input')
+        # dma_ico.add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000)
         
         self.bind(icache, 'refill', dma_ico, 'input')
 
@@ -139,9 +143,10 @@ class Soc(st.Component):
 
 
         # Cluster peripherals
-        # cluster_registers = ClusterRegisters(self, 'cluster_registers', nb_cores=nb_cores)
         cluster_registers = Cluster_registers(self, 'cluster_registers', boot_addr=entry, nb_cores=nb_cores)
         ico.add_mapping('cluster_registers', base=0x00120000, remove_offset=0x00120000, size=0x1000)
+        # cluster_registers = ClusterRegisters(self, 'cluster_registers', nb_cores=nb_cores)
+        # ico.add_mapping('cluster_registers', base=0x10020000, remove_offset=0x10020000, size=0x10000)
         self.bind(ico, 'cluster_registers', cluster_registers, 'input')
         
         
@@ -150,6 +155,7 @@ class Soc(st.Component):
         
         # TCDM and DMA bindings
         idma.o_AXI(dma_ico.i_INPUT())
+        # idma.o_AXI(ico.i_INPUT())
         idma.o_TCDM(l1.i_DMA_INPUT())
         
         # DMA Core and DMA bindings
@@ -206,7 +212,7 @@ class Soc(st.Component):
             
             self.bind(fp_cores[core_id], 'acc_rsp', int_cores[core_id], 'acc_rsp')
 
-        # DMA Core interconnections
+        # DMA and Wider AXI interconnections
         self.bind(loader, 'out', dma_ico, 'input')
 
 
