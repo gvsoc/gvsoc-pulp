@@ -19,6 +19,7 @@ from memory.memory import Memory
 from interco.router import Router
 from interco.converter import Converter
 from interco.interleaver_snitch import Interleaver
+from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 import math
 
 
@@ -38,13 +39,8 @@ class L1_subsystem(gvsoc.systree.Component):
         The number of processing elements sharing the subsystem.
     size: int
         The size of the memory in bytes.
-    l1_banking_factor : int
-        Number of memory banks per processing element. 
     nb_port: int
         Number of TCDM ports per PE.   
-    interleaving_bits : int
-        Number of interleaving bits, i.e. the size in bits of the accesseses dispatched
-        to banks.    
     bandwidth: int
         Global bandwidth, in bytes per cycle, applied to all incoming request. This impacts the
         end time of the burst.
@@ -52,7 +48,7 @@ class L1_subsystem(gvsoc.systree.Component):
     """
         
     def __init__(self, parent: gvsoc.systree.Component, name: str, cluster, nb_pe: int=0, size: int=0, 
-                 l1_banking_factor: int=0, nb_port: int=0, bandwidth: int=0, interleaving_bits: int=0):
+                 nb_port: int=0, bandwidth: int=0):
         super(L1_subsystem, self).__init__(parent, name)
 
         #
@@ -61,14 +57,15 @@ class L1_subsystem(gvsoc.systree.Component):
         
         self.add_property('nb_pe', nb_pe)
         self.add_property('size', size)
-        self.add_property('l1_banking_factor', l1_banking_factor)
         self.add_property('nb_port', nb_port)
-        self.add_property('interleaving_bits', interleaving_bits)
         self.add_property('bandwidth', bandwidth)
         
-        nb_l1_banks = 1<<int(math.log(nb_pe * l1_banking_factor, 2.0))
-        l1_bank_size = int(size / nb_l1_banks)
-        l1_interleaver_nb_masters = nb_pe * nb_port + 1 # one for ext2loc 
+        nb_banks_per_superbank = 8
+        nb_superbanks = 4
+        l1_bank_size = size / nb_superbanks / nb_banks_per_superbank
+        nb_masters = nb_pe
+        nb_l1_banks = nb_banks_per_superbank * nb_superbanks
+        l1_interleaver_nb_masters = nb_pe * nb_port 
 
 
         #
@@ -95,22 +92,24 @@ class L1_subsystem(gvsoc.systree.Component):
         # L1 interleaver
         # TCDM interconnection, one port per bank, 8 ports per superbank
         interleaver = Interleaver(self, 'interleaver', nb_slaves=nb_l1_banks, nb_masters=l1_interleaver_nb_masters, 
-                                    interleaving_bits=interleaving_bits)
-
-        # EXT2LOC
-        # The connetction between L1 subsystem and cluster crossbar 
-        ext2loc = Converter(self, 'ext2loc', output_width=4, output_align=4)
+                                    interleaving_bits=int(math.log2(bandwidth)))
+        
+        # DMA interleaver
+        dma_interleaver = DmaInterleaver(self, 'dma_interleaver', nb_master_ports=nb_masters, 
+                                         nb_banks=nb_l1_banks, bank_width=bandwidth)
 
 
         #
         # Bindings
         #
+        
+        # DMA interconnections
+        # cluster_ico "l1" -> pe_icos[0] "input"
+        self.bind(self, 'input', pe_icos[0], 'input')
 
         # Per-PE interconnects
         for i in range(0, nb_pe):
-            # for j in range(0, nb_port):
-                # port_id = int(i * nb_port + j)
-                # self.bind(pe_icos[i], 'l1', interleaver, 'in_%d' % port_id)
+            # Index of interleaver ports for each core complex.
             port_id = int(i * nb_port)
             
             
@@ -139,16 +138,23 @@ class L1_subsystem(gvsoc.systree.Component):
             self.bind(self, 'ssr_2_pe_%d' % i, pe_icos[port_id], 'input')
             pe_icos[port_id].add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000, id=0)
             self.bind(pe_icos[port_id], 'l1', interleaver, 'in_%d' % port_id)
+            
+        
+        # DMA interconnections
+        for i in range(0, nb_masters):
+            self.bind(self, f'dma_input', dma_interleaver, f'input')
 
 
-        # L1 interleaver
+        # L1 interleaver 
         # tcdm interleaver "out_%d" -> l1_banks (memory) "input"
+        # dma interleaver "out_%d" -> l1_banks (memory) "input"
         for i in range(0, nb_l1_banks):
             self.bind(interleaver, 'out_%d' % i, l1_banks[i], 'input')
-
-        # EXT2LOC
-        self.bind(self, 'ext2loc', ext2loc, 'input')
-        self.bind(ext2loc, 'out', interleaver, 'in_%d' % int(nb_pe * nb_port))
+            self.bind(dma_interleaver, 'out_%d' % i, l1_banks[i], 'input')
+            
+    
+    def i_DMA_INPUT(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'dma_input', signature='io')
     
     
     def add_mapping(self, name: str, base: int=None, size: int=None, remove_offset: int=None,

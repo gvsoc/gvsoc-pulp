@@ -15,7 +15,7 @@
 #
 
 import gvsoc.runner
-import cpu.iss.riscv as iss
+import pulp.snitch.snitch_core as iss
 import memory.memory as memory
 from pulp.snitch.hierarchical_cache import Hierarchical_cache
 from vp.clock_domain import Clock_domain
@@ -23,12 +23,17 @@ import pulp.snitch.l1_subsystem as l1_subsystem
 import interco.router as router
 import utils.loader.loader
 import gvsoc.systree as st
+from pulp.snitch.snitch_cluster.cluster_registers import ClusterRegisters
+from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
+from pulp.idma.snitch_dma import SnitchDma
+from pulp.snitch.zero_mem import ZeroMem
 from interco.bus_watchpoint import Bus_watchpoint
 from interco.sequencer import Sequencer
 from pulp.spatz.cluster_registers import Cluster_registers
 from elftools.elf.elffile import *
 import gvsoc.runner as gvsoc
 
+import math
 
 GAPY_TARGET = True
 
@@ -37,7 +42,8 @@ class Soc(st.Component):
     def __init__(self, parent, name, parser):
         super().__init__(parent, name)
 
-        nb_cores = 8
+        # The cluster has 8 computation cores and one DMA core.
+        nb_cores = 8 + 1     
         Xfrep = 1
         
         # Snitch core complex
@@ -47,7 +53,7 @@ class Soc(st.Component):
         if Xfrep:
             fpu_sequencers = []
 
-        parser.add_argument("--isa", dest="isa", type=str, default="rv32imafdvc",
+        parser.add_argument("--isa", dest="isa", type=str, default="rv32imfdvca",
             help="RISCV-V ISA string (default: %(default)s)")
 
         [args, __] = parser.parse_known_args()
@@ -57,48 +63,63 @@ class Soc(st.Component):
             [args, otherArgs] = parser.parse_known_args()
             binary = args.binary
 
+        # Memory Components
         rom = memory.Memory(self, 'rom', size=0x10000, width_log2=3, stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
+        # rom = memory.Memory(self, 'rom', size=0x10000, width_log2=3, stim_file=self.get_file_path('pulp/snitch/bootrom.bin'))
 
         mem = memory.Memory(self, 'mem', size=0x1000000, width_log2=3, atomics=True, core="snitch", mem='mem')
-
-        # tcdm = memory.Memory(self, 'tcdm', size=0x20000, width_log2=3, atomics=True, core="snitch")
         
-        l1 = l1_subsystem.L1_subsystem(self, 'l1', self, nb_pe=nb_cores, size=0x20000, l1_banking_factor=4, 
-                                        nb_port=3, bandwidth=8, interleaving_bits=8)
+        # Zero memory
+        zero_mem = ZeroMem(self, 'zero_mem', size=0x10000)
+        
+        # Snitch TCDM (L1 subsystem)
+        l1 = l1_subsystem.L1_subsystem(self, 'l1', self, nb_pe=nb_cores, size=0x20000, nb_port=3, bandwidth=8)
         
         # Shared icache
-        icache = Hierarchical_cache(self, 'shared_icache', nb_cores=8, has_cc=0, l1_line_size_bits=7)
+        icache = Hierarchical_cache(self, 'shared_icache', nb_cores=nb_cores, has_cc=0, l1_line_size_bits=7)
 
-        # i_cluster_xbar
+
+        # Main Router, i_cluster_xbar
         ico = router.Router(self, 'ico', bandwidth=8, latency=8)
-        # i_axi_dma_xbar
-        dma_ico = router.Router(self, 'dma_ico', bandwidth=32, latency=0)
+        # Dedicated router for dma to TCDM, i_axi_dma_xbar
+        dma_ico = router.Router(self, 'dma_ico', bandwidth=64, latency=0)
 
+
+        # Core Complex
         for core_id in range(0, nb_cores):
-            int_cores.append(iss.Snitch(self, f'pe{core_id}', isa=args.isa, core_id=core_id))
-            fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa=args.isa, core_id=core_id))
+            int_cores.append(iss.Snitch(self, f'pe{core_id}', isa='rv32imfdvca', fetch_enable=True,
+                                        boot_addr=0x0100_0000, core_id=core_id))
+            fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa='rv32imfdvca', fetch_enable=True,
+                                        boot_addr=0x0100_0000, core_id=core_id))
             if Xfrep:
                 fpu_sequencers.append(Sequencer(self, f'fpu_sequencer{core_id}', latency=0))
 
+        # Binary Loader
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x1000)
 
 
+        # Interconnction Bindings
         ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
         self.bind(ico, 'mem', mem, 'input')
         dma_ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
         self.bind(dma_ico, 'mem', mem, 'input')
-
-        # ico.add_mapping('tcdm', base=0x10000000, remove_offset=0x10000000, size=0x20000)
-        # self.bind(ico, 'tcdm', tcdm, 'input')
 
         ico.add_mapping('rom', base=0x00001000, remove_offset=0x00001000, size=0x10000)
         self.bind(ico, 'rom', rom, 'input')
         dma_ico.add_mapping('rom', base=0x00001000, remove_offset=0x00001000, size=0x10000)
         self.bind(dma_ico, 'rom', rom, 'input')
         
+        ico.add_mapping('zero_mem', base=0x10030000, remove_offset=0x10030000, size=0x0010000)
+        self.bind(ico, 'zero_mem', zero_mem, 'input')
+        dma_ico.add_mapping('zero_mem', base=0x10030000, remove_offset=0x10030000, size=0x0010000)
+        self.bind(dma_ico, 'zero_mem', zero_mem, 'input')
+        
         self.bind(l1, 'cluster_ico', ico, 'input')
+        self.bind(ico, 'l1', l1, 'input')
         ico.add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000)
-        self.bind(ico, 'l1', l1, 'ext2loc')
+        # self.bind(l1, 'cluster_ico', dma_ico, 'input')
+        # self.bind(dma_ico, 'l1', l1, 'input')
+        # dma_ico.add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000)
         
         self.bind(icache, 'refill', dma_ico, 'input')
 
@@ -119,10 +140,29 @@ class Soc(st.Component):
                             if symbol.name == 'fromhost':
                                 fromhost_addr = symbol.entry['st_value']
 
+
+        # Cluster peripherals
         cluster_registers = Cluster_registers(self, 'cluster_registers', boot_addr=entry, nb_cores=nb_cores)
         ico.add_mapping('cluster_registers', base=0x00120000, remove_offset=0x00120000, size=0x1000)
+        # cluster_registers = ClusterRegisters(self, 'cluster_registers', nb_cores=nb_cores)
+        # ico.add_mapping('cluster_registers', base=0x10020000, remove_offset=0x10020000, size=0x10000)
         self.bind(ico, 'cluster_registers', cluster_registers, 'input')
+        
+        
+        # Cluster DMA
+        idma = SnitchDma(self, 'idma', loc_base=0x10000000, loc_size=0x20000, tcdm_width=64)
+        
+        # TCDM and DMA bindings
+        idma.o_AXI(dma_ico.i_INPUT())
+        # idma.o_AXI(ico.i_INPUT())
+        idma.o_TCDM(l1.i_DMA_INPUT())
+        
+        # DMA Core and DMA bindings
+        int_cores[nb_cores-1].o_OFFLOAD(idma.i_OFFLOAD())
+        idma.o_OFFLOAD_GRANT(int_cores[nb_cores-1].i_OFFLOAD_GRANT())
 
+
+        # Core Interconnections
         for core_id in range(0, nb_cores):
             bus_watchpoints.append(Bus_watchpoint(self, f'tohost{core_id}', tohost_addr, fromhost_addr, word_size=32))
 
@@ -130,6 +170,7 @@ class Soc(st.Component):
             # Sync all core complex by integer cores.
             self.bind(int_cores[core_id], 'barrier_req', cluster_registers, f'barrier_req_{core_id}')
             self.bind(cluster_registers, f'barrier_ack', int_cores[core_id], 'barrier_ack')
+            # cluster_registers.o_EXTERNAL_IRQ(core_id, int_cores[core_id].i_IRQ(19))
 
         for core_id in range(0, nb_cores):
             # Buswatchpoint
@@ -171,6 +212,7 @@ class Soc(st.Component):
             
             self.bind(fp_cores[core_id], 'acc_rsp', int_cores[core_id], 'acc_rsp')
 
+        # DMA and Wider AXI interconnections
         self.bind(loader, 'out', dma_ico, 'input')
 
 
@@ -193,4 +235,3 @@ class Target(gvsoc.Target):
     def __init__(self, parser, options):
         super(Target, self).__init__(parser, options,
             model=SnitchSystem, description="Snitch virtual board")
-
