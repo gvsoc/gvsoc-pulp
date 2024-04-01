@@ -16,7 +16,7 @@
 
 import gvsoc.runner
 import cpu.iss.riscv as iss
-import memory.memory as memory
+import memory.memory
 from vp.clock_domain import Clock_domain
 import interco.router as router
 import devices.uart.ns16550 as ns16550
@@ -33,6 +33,7 @@ from pulp.chips.occamy.soc_reg import SocReg
 from pulp.chips.occamy.quadrant import Quadrant
 import pulp.chips.occamy.occamy_arch
 from pulp.snitch.zero_mem import ZeroMem
+import memory.dramsys
 
 GAPY_TARGET = True
 
@@ -85,14 +86,14 @@ class Soc(gvsoc.systree.Component):
         soc_reg = SocReg(self, 'soc_reg')
 
         # Bootrom
-        rom = memory.Memory(self, 'rom', size=arch.bootrom.size,
+        rom = memory.memory.Memory(self, 'rom', size=arch.bootrom.size,
             stim_file=self.get_file_path('pulp/chips/occamy/bootrom.bin'))
 
         # Narrow SPM
-        spm_narrow = memory.Memory(self, 'narrow_spm', size=arch.spm_narrow.size)
+        spm_narrow = memory.memory.Memory(self, 'narrow_spm', size=arch.spm_narrow.size)
 
         # Wide SPM
-        spm_wide = memory.Memory(self, 'wide_spm', size=arch.spm_wide.size)
+        spm_wide = memory.memory.Memory(self, 'wide_spm', size=arch.spm_wide.size)
 
         # Quadrant configs
         quad_cfgs = []
@@ -108,7 +109,6 @@ class Soc(gvsoc.systree.Component):
 
         # CVA6
         host.o_DATA(narrow_axi.i_INPUT())
-        host.o_MEMINFO(self.i_HBM())
         host.o_FETCH(wide_axi.i_INPUT())
         host.o_TIME(clint.i_TIME())
 
@@ -211,7 +211,10 @@ class OccamyBoard(gvsoc.systree.Component):
 
         chip = Occamy(self, 'chip', arch.chip, args.binary, debug_binaries)
 
-        mem = memory.Memory(self, 'mem', size=arch.hbm.size, atomics=True)
+        if arch.hbm.type == 'dramsys':
+            mem = memory.dramsys.Dramsys(self, 'ddr')
+        else:
+            mem = memory.memory.Memory(self, 'mem', size=arch.hbm.size, atomics=True)
 
         self.bind(clock, 'out', chip, 'clock')
         self.bind(clock, 'out', mem, 'clock')
