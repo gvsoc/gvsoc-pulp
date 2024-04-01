@@ -32,6 +32,7 @@ from pulp.chips.occamy.quad_cfg import QuadCfg
 from pulp.chips.occamy.soc_reg import SocReg
 from pulp.chips.occamy.quadrant import Quadrant
 import pulp.chips.occamy.occamy_arch
+from pulp.snitch.zero_mem import ZeroMem
 
 GAPY_TARGET = True
 
@@ -57,8 +58,11 @@ class Soc(gvsoc.systree.Component):
         # System DMA
         idma = IDma(self, 'sys_dma')
 
-        # Main interconnect
-        ico = router.Router(self, 'ico', bandwidth=64)
+        # Narrow 64bits router
+        narrow_axi = router.Router(self, 'narrow_axi', bandwidth=8)
+
+        # Wide 512 bits router
+        wide_axi = router.Router(self, 'wide_axi', bandwidth=64)
 
         # Qaudrants
         quadrants = []
@@ -87,55 +91,85 @@ class Soc(gvsoc.systree.Component):
         # Narrow SPM
         spm_narrow = memory.Memory(self, 'narrow_spm', size=arch.spm_narrow.size)
 
+        # Wide SPM
+        spm_wide = memory.Memory(self, 'wide_spm', size=arch.spm_wide.size)
+
         # Quadrant configs
         quad_cfgs = []
         for id in range(0, arch.nb_quadrant):
             quad_cfgs.append(QuadCfg(self, f'quadrant_cfg_{id}'))
+
+        # Wide zero memory
+        zero_mem = ZeroMem(self, 'zero_mem', size=arch.wide_zero_mem.size)
 
         #
         # Bindings
         #
 
         # CVA6
-        host.o_DATA(ico.i_INPUT())
+        host.o_DATA(narrow_axi.i_INPUT())
         host.o_MEMINFO(self.i_HBM())
-        host.o_FETCH(ico.i_INPUT())
+        host.o_FETCH(wide_axi.i_INPUT())
         host.o_TIME(clint.i_TIME())
 
         # Quadrant configs
         for id in range(0, arch.nb_quadrant):
             quad_cfgs[id].o_QUADRANT_RESET(quadrants[id].i_RESET())
-
-        # Main interconnect
         for id in range(0, arch.nb_quadrant):
-            quadrants[id].o_SOC(ico.i_INPUT())
-            ico.o_MAP ( quadrants[id].i_INPUT    (), base=arch.quadrant_base(id), size=arch.quadrant.size, rm_base=False )
+            narrow_axi.o_MAP ( quad_cfgs[id].i_INPUT (), base=arch.quad_cfg_base(id), size=arch.quad_cfg.size, rm_base=True  )
 
+
+        # Narrow 64bits router
         for id in range(0, arch.nb_quadrant):
-            ico.o_MAP ( quad_cfgs[id].i_INPUT (), base=arch.quad_cfg_base(id), size=arch.quad_cfg.size, rm_base=True  )
+            quadrants[id].o_NARROW_SOC(narrow_axi.i_INPUT())
+            narrow_axi.o_MAP ( quadrants[id].i_NARROW_INPUT(), base=arch.quadrant_base(id), size=arch.quadrant.size, rm_base=False )
 
-        ico.o_MAP ( self.i_HBM      (), base=arch.hbm_0_alias.base, size=arch.hbm_0_alias.size, rm_base=True, latency=100 )
-        # ico.o_MAP ( uart.i_INPUT    (), base=arch.uart.base, size=arch.uart.size, rm_base=True  )
-        ico.o_MAP ( clint.i_INPUT   (), base=arch.clint.base, size=arch.clint.size, rm_base=True  )
-        ico.o_MAP ( plic.i_INPUT    (), base=arch.plic.base, size=arch.plic.size, rm_base=True  )
-        ico.o_MAP ( rom.i_INPUT     (), base=arch.bootrom.base, size=arch.bootrom.size, rm_base=True  )
-        ico.o_MAP ( idma.i_INPUT    (), base=arch.sys_idma_cfg.base, size=arch.sys_idma_cfg.size, rm_base=True  )
-        ico.o_MAP ( soc_reg.i_INPUT (), base=arch.soc_ctrl.base, size=arch.soc_ctrl.size, rm_base=True  )
-        ico.o_MAP ( spm_narrow.i_INPUT (), base=arch.spm_narrow.base, size=arch.spm_narrow.size, rm_base=True  )
+        # Wide 512 bits router
+        for id in range(0, arch.nb_quadrant):
+            quadrants[id].o_WIDE_SOC(wide_axi.i_INPUT())
+            wide_axi.o_MAP ( quadrants[id].i_WIDE_INPUT(), base=arch.quadrant_base(id), size=arch.quadrant.size, rm_base=False )
+
+        # HBM
+        wide_axi.o_MAP ( self.i_HBM(), base=arch.hbm_0_alias.base, size=arch.hbm_0_alias.size, rm_base=True, latency=100 )
+        narrow_axi.o_MAP ( wide_axi.i_INPUT(), base=arch.hbm_0_alias.base, size=arch.hbm_0_alias.size, rm_base=False )
+
+        # ROM
+        narrow_axi.o_MAP ( rom.i_INPUT     (), base=arch.bootrom.base, size=arch.bootrom.size, rm_base=True  )
+
+        # Soc control
+        narrow_axi.o_MAP ( soc_reg.i_INPUT (), base=arch.soc_ctrl.base, size=arch.soc_ctrl.size, rm_base=True  )
+
+        # Narrow SPM
+        narrow_axi.o_MAP ( spm_narrow.i_INPUT (), base=arch.spm_narrow.base, size=arch.spm_narrow.size, rm_base=True  )
+        narrow_axi.o_MAP ( wide_axi.i_INPUT (), name='spm_wide', base=arch.spm_wide.base, size=arch.spm_wide.size, rm_base=False  )
+
+        # Wide SPM
+        wide_axi.o_MAP ( spm_wide.i_INPUT (), base=arch.spm_wide.base, size=arch.spm_wide.size, rm_base=True  )
+        wide_axi.o_MAP ( narrow_axi.i_INPUT (), name='spm_narrow', base=arch.spm_narrow.base, size=arch.spm_narrow.size, rm_base=False  )
+
+        # Wide zero memory
+        wide_axi.o_MAP ( spm_wide.i_INPUT (), base=arch.wide_zero_mem.base, size=arch.wide_zero_mem.size, rm_base=True  )
+        wide_axi.o_MAP ( narrow_axi.i_INPUT (), name='zero_mem', base=arch.wide_zero_mem.base, size=arch.wide_zero_mem.size, rm_base=False  )
 
         # Clint
         clint.o_SW_IRQ(core=0, itf=host.i_IRQ(3))
         clint.o_TIMER_IRQ(core=0, itf=host.i_IRQ(7))
+        narrow_axi.o_MAP ( clint.i_INPUT   (), base=arch.clint.base, size=arch.clint.size, rm_base=True  )
 
         # Plic
         plic.o_S_IRQ(core=0, itf=host.i_IRQ(9))
         plic.o_M_IRQ(core=0, itf=host.i_IRQ(11))
+        narrow_axi.o_MAP ( plic.i_INPUT    (), base=arch.plic.base, size=arch.plic.size, rm_base=True  )
 
         # Uart
         # uart.o_IRQ ( plic.i_IRQ (device=0))
+        # narrow_axi.o_MAP ( uart.i_INPUT    (), base=arch.uart.base, size=arch.uart.size, rm_base=True  )
+
+        # System DMA
+        narrow_axi.o_MAP ( idma.i_INPUT    (), base=arch.sys_idma_cfg.base, size=arch.sys_idma_cfg.size, rm_base=True  )
 
         # Binary loader
-        loader.o_OUT(ico.i_INPUT())
+        loader.o_OUT(narrow_axi.i_INPUT())
         loader.o_START(host.i_FETCHEN())
         loader.o_ENTRY(host.i_ENTRY())
 

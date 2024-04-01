@@ -106,7 +106,8 @@ class SnitchCluster(gvsoc.systree.Component):
         #
 
         # Main router
-        ico = router.Router(self, 'ico')
+        wide_axi = router.Router(self, 'wide_axi', bandwidth=64)
+        narrow_axi = router.Router(self, 'narrow_axi', bandwidth=8)
 
         # Dedicated router for dma to TCDM
         tcdm_dma_ico = router.Router(self, 'tcdm_dma_ico', bandwidth=64)
@@ -137,13 +138,16 @@ class SnitchCluster(gvsoc.systree.Component):
         # Bindings
         #
 
-        # Main router
-        self.o_INPUT(ico.i_INPUT())
-        # TODO check on real HW where this should go
-        ico.o_MAP(cores_ico[0].i_INPUT(), base=arch.tcdm.area.base, size=arch.tcdm.area.size, rm_base=False)
-        ico.o_MAP(zero_mem.i_INPUT(), base=arch.zero_mem.base, size=arch.zero_mem.size, rm_base=True)
-        ico.o_MAP(cluster_registers.i_INPUT(), base=arch.peripheral.base, size=arch.peripheral.size, rm_base=True)
-        ico.o_MAP(self.i_SOC())
+        # Narrow router for cores data accesses
+        self.o_NARROW_INPUT(narrow_axi.i_INPUT())
+        narrow_axi.o_MAP(self.i_NARROW_SOC())
+        # TODO check on real HW where this should go. This probably go through wide axi to
+        # have good bandwidth when transferring from one cluster to another
+        narrow_axi.o_MAP(cores_ico[0].i_INPUT(), base=arch.tcdm.area.base, size=arch.tcdm.area.size, rm_base=False)
+
+        # Wire router for DMA and instruction caches
+        self.o_WIDE_INPUT(wide_axi.i_INPUT())
+        wide_axi.o_MAP(self.i_WIDE_SOC())
 
         # Cores
         cores[arch.nb_core-1].o_OFFLOAD(idma.i_OFFLOAD())
@@ -156,27 +160,45 @@ class SnitchCluster(gvsoc.systree.Component):
             cores[core_id].o_DATA(cores_ico[core_id].i_INPUT())
             cores_ico[core_id].o_MAP(tcdm.i_INPUT(core_id), base=arch.tcdm.area.base,
                 size=arch.tcdm.area.size, rm_base=True)
-            cores_ico[core_id].o_MAP(ico.i_INPUT())
-            cores[core_id].o_FETCH(ico.i_INPUT())
+            cores_ico[core_id].o_MAP(narrow_axi.i_INPUT())
+            cores[core_id].o_FETCH(narrow_axi.i_INPUT())
 
         # Cluster peripherals
+        narrow_axi.o_MAP(cluster_registers.i_INPUT(), base=arch.peripheral.base,
+            size=arch.peripheral.size, rm_base=True)
         for core_id in range(0, arch.nb_core):
             self.bind(cluster_registers, f'barrier_ack', cores[core_id], 'barrier_ack')
         for core_id in range(0, arch.nb_core):
             cluster_registers.o_EXTERNAL_IRQ(core_id, cores[core_id].i_IRQ(arch.barrier_irq))
 
         # Cluster DMA
-        idma.o_AXI(ico.i_INPUT())
+        idma.o_AXI(wide_axi.i_INPUT())
         idma.o_TCDM(tcdm.i_DMA_INPUT())
 
-    def i_INPUT(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'input', signature='io')
+        # Zero mem
+        wide_axi.o_MAP(zero_mem.i_INPUT(), base=arch.zero_mem.base, size=arch.zero_mem.size, rm_base=True)
+        narrow_axi.o_MAP(wide_axi.i_INPUT(), name='zero_mem', base=arch.zero_mem.base, size=arch.zero_mem.size, rm_base=False)
 
-    def o_INPUT(self, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind('input', itf, signature='io', composite_bind=True)
+    def i_WIDE_INPUT(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'wide_input', signature='io')
 
-    def i_SOC(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'soc', signature='io')
+    def o_WIDE_INPUT(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('wide_input', itf, signature='io', composite_bind=True)
 
-    def o_SOC(self, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind('soc', itf, signature='io')
+    def i_WIDE_SOC(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'wide_soc', signature='io')
+
+    def o_WIDE_SOC(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('wide_soc', itf, signature='io')
+
+    def i_NARROW_INPUT(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'narrow_input', signature='io')
+
+    def o_NARROW_INPUT(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('narrow_input', itf, signature='io', composite_bind=True)
+
+    def i_NARROW_SOC(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'narrow_soc', signature='io')
+
+    def o_NARROW_SOC(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('narrow_soc', itf, signature='io')
