@@ -36,7 +36,8 @@ IDmaBeAxi::IDmaBeAxi(vp::Component *idma, std::string itf_name, IdmaBeProducer *
     this->be = be;
 
     // Declare master port to AXI interface
-    idma->new_master_port(itf_name, &this->ico_itf);
+    this->ico_itf.set_resp_meth(&IDmaBeAxi::axi_response);
+    idma->new_master_port(itf_name, &this->ico_itf, this);
 
     // Declare our own trace so that we can individually activate traces
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
