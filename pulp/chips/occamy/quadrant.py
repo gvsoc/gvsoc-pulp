@@ -27,8 +27,11 @@ class Quadrant(gvsoc.systree.Component):
         # Components
         #
 
-        # Main router
-        ico = router.Router(self, 'ico')
+        # Narrow 64bits router
+        narrow_axi = router.Router(self, 'narrow_axi', bandwidth=8)
+
+        # Wide 512 bits router
+        wide_axi = router.Router(self, 'wide_axi', bandwidth=64)
 
         # Clusters
         clusters = []
@@ -39,27 +42,47 @@ class Quadrant(gvsoc.systree.Component):
         # Bindings
         #
 
-        # Main router
-        self.o_INPUT(ico.i_INPUT())
-        ico.o_MAP(self.i_SOC())
+        # Narrow 64bits router
+        self.o_NARROW_INPUT(narrow_axi.i_INPUT())
+        narrow_axi.o_MAP(self.i_NARROW_SOC())
         for cid in range(0, arch.nb_cluster):
-            ico.o_MAP(clusters[cid].i_INPUT(), base=arch.get_cluster_base(cid),
+            narrow_axi.o_MAP(clusters[cid].i_NARROW_INPUT(), base=arch.get_cluster_base(cid),
+                size=arch.cluster.size, rm_base=False)
+
+        # Wide 512 bits router
+        self.o_WIDE_INPUT(wide_axi.i_INPUT())
+        wide_axi.o_MAP(self.i_WIDE_SOC())
+        for cid in range(0, arch.nb_cluster):
+            wide_axi.o_MAP(clusters[cid].i_WIDE_INPUT(), base=arch.get_cluster_base(cid),
                 size=arch.cluster.size, rm_base=False)
 
         # Clusters
         for cid in range(0, arch.nb_cluster):
-            clusters[cid].o_SOC(ico.i_INPUT())
+            clusters[cid].o_NARROW_SOC(narrow_axi.i_INPUT())
+            clusters[cid].o_WIDE_SOC(wide_axi.i_INPUT())
 
 
 
-    def i_INPUT(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'input', signature='io')
+    def i_NARROW_SOC(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'narrow_soc', signature='io')
 
-    def i_SOC(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'soc', signature='io')
+    def o_NARROW_SOC(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('narrow_soc', itf, signature='io')
 
-    def o_SOC(self, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind('soc', itf, signature='io')
+    def i_NARROW_INPUT(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'narrow_input', signature='io')
 
-    def o_INPUT(self, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind('input', itf, signature='io', composite_bind=True)
+    def o_NARROW_INPUT(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('narrow_input', itf, signature='io', composite_bind=True)
+
+    def i_WIDE_SOC(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'wide_soc', signature='io')
+
+    def o_WIDE_SOC(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('wide_soc', itf, signature='io')
+
+    def i_WIDE_INPUT(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'wide_input', signature='io')
+
+    def o_WIDE_INPUT(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('wide_input', itf, signature='io', composite_bind=True)

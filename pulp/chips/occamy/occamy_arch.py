@@ -24,12 +24,18 @@ class OccamyArchProperties:
         self.nb_cluster_per_quadrant = 4
         self.nb_core_per_cluster     = 9
         self.hbm_size                = 0x80000000
+        self.hbm_type                = 'simple'
 
 
     def declare_target_properties(self, target):
 
         self.hbm_size = target.declare_user_property(
             name='hbm_size', value=self.hbm_size, cast=int, description='Size of the HBM external memory'
+        )
+
+        self.hbm_type = target.declare_user_property(
+            name='hbm_type', value=self.hbm_type, allowed_values=['simple', 'dramsys'],
+            description='Type of the HBM external memory'
         )
 
         self.nb_quadrant = target.declare_user_property(
@@ -63,6 +69,7 @@ class OccamyArch:
 
         def __init__(self, properties):
             self.size = properties.hbm_size
+            self.type = properties.hbm_type
 
     class Chip:
 
