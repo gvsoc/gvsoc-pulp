@@ -88,9 +88,9 @@ class Soc(st.Component):
         # Core Complex
         for core_id in range(0, nb_cores):
             int_cores.append(iss.Snitch(self, f'pe{core_id}', isa='rv32imfdvca', fetch_enable=True,
-                                        boot_addr=0x0100_0000, core_id=core_id))
+                                        boot_addr=0x0000_1000, core_id=core_id))
             fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa='rv32imfdvca', fetch_enable=True,
-                                        boot_addr=0x0100_0000, core_id=core_id))
+                                        boot_addr=0x0000_1000, core_id=core_id))
             if Xfrep:
                 fpu_sequencers.append(Sequencer(self, f'fpu_sequencer{core_id}', latency=0))
 
@@ -154,7 +154,6 @@ class Soc(st.Component):
         
         # TCDM and DMA bindings
         idma.o_AXI(dma_ico.i_INPUT())
-        # idma.o_AXI(ico.i_INPUT())
         idma.o_TCDM(l1.i_DMA_INPUT())
         
         # DMA Core and DMA bindings
