@@ -64,8 +64,8 @@ class Soc(st.Component):
             binary = args.binary
 
         # Memory Components
-        rom = memory.Memory(self, 'rom', size=0x10000, width_log2=3, stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
-        # rom = memory.Memory(self, 'rom', size=0x10000, width_log2=3, stim_file=self.get_file_path('pulp/snitch/bootrom.bin'))
+        # rom = memory.Memory(self, 'rom', size=0x10000, width_log2=3, stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
+        rom = memory.Memory(self, 'rom', size=0x10000, width_log2=3, stim_file=self.get_file_path('pulp/snitch/bootrom.bin'))
 
         mem = memory.Memory(self, 'mem', size=0x1000000, width_log2=6, atomics=True, core="snitch", mem='mem')
         
@@ -87,15 +87,15 @@ class Soc(st.Component):
 
         # Core Complex
         for core_id in range(0, nb_cores):
-            int_cores.append(iss.Snitch(self, f'pe{core_id}', isa='rv32imfdvca', fetch_enable=True,
+            int_cores.append(iss.Snitch(self, f'pe{core_id}', isa='rv32imfdvca', fetch_enable=False,
                                         boot_addr=0x0000_1000, core_id=core_id))
-            fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa='rv32imfdvca', fetch_enable=True,
+            fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa='rv32imfdvca', fetch_enable=False,
                                         boot_addr=0x0000_1000, core_id=core_id))
             if Xfrep:
                 fpu_sequencers.append(Sequencer(self, f'fpu_sequencer{core_id}', latency=0))
 
         # Binary Loader
-        loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x1000)
+        loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x1000, entry_addr=0x1020)
 
 
         # Interconnction Bindings
@@ -142,10 +142,10 @@ class Soc(st.Component):
 
 
         # Cluster peripherals
-        cluster_registers = Cluster_registers(self, 'cluster_registers', boot_addr=entry, nb_cores=nb_cores)
-        ico.add_mapping('cluster_registers', base=0x00120000, remove_offset=0x00120000, size=0x1000)
-        # cluster_registers = ClusterRegisters(self, 'cluster_registers', nb_cores=nb_cores)
-        # ico.add_mapping('cluster_registers', base=0x10020000, remove_offset=0x10020000, size=0x10000)
+        # cluster_registers = Cluster_registers(self, 'cluster_registers', boot_addr=entry, nb_cores=nb_cores)
+        # ico.add_mapping('cluster_registers', base=0x00120000, remove_offset=0x00120000, size=0x1000)
+        cluster_registers = ClusterRegisters(self, 'cluster_registers', boot_addr=entry, nb_cores=nb_cores)
+        ico.add_mapping('cluster_registers', base=0x10020000, remove_offset=0x10020000, size=0x10000)
         self.bind(ico, 'cluster_registers', cluster_registers, 'input')
         
         
