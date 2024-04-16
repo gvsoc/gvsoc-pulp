@@ -95,7 +95,7 @@ class L1_subsystem(gvsoc.systree.Component):
                                     interleaving_bits=int(math.log2(bandwidth)))
         
         # DMA interleaver
-        dma_interleaver = DmaInterleaver(self, 'dma_interleaver', nb_master_ports=nb_masters, 
+        dma_interleaver = DmaInterleaver(self, 'dma_interleaver', nb_master_ports=l1_interleaver_nb_masters, 
                                          nb_banks=nb_l1_banks, bank_width=bandwidth)
 
 
@@ -141,7 +141,7 @@ class L1_subsystem(gvsoc.systree.Component):
             
         
         # DMA interconnections
-        for i in range(0, nb_masters):
+        for i in range(0, l1_interleaver_nb_masters):
             self.bind(self, f'dma_input', dma_interleaver, f'input')
 
 

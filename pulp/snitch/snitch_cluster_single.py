@@ -67,7 +67,7 @@ class Soc(st.Component):
         rom = memory.Memory(self, 'rom', size=0x10000, width_log2=3, stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
         # rom = memory.Memory(self, 'rom', size=0x10000, width_log2=3, stim_file=self.get_file_path('pulp/snitch/bootrom.bin'))
 
-        mem = memory.Memory(self, 'mem', size=0x1000000, width_log2=3, atomics=True, core="snitch", mem='mem')
+        mem = memory.Memory(self, 'mem', size=0x1000000, width_log2=6, atomics=True, core="snitch", mem='mem')
         
         # Zero memory
         zero_mem = ZeroMem(self, 'zero_mem', size=0x10000)

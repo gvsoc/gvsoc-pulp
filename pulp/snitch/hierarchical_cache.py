@@ -51,7 +51,7 @@ class Hierarchical_cache(gvsoc.systree.Component):
         # L1 caches
         l1_caches = []
         for i in range(0, nb_l1_banks):
-            l1_caches.append(Cache(self, 'l1_bank%d' % i, nb_sets_bits=7, nb_ways_bits=1, line_size_bits=5, refill_latency=0, refill_shift=nb_l1_banks_log2, add_offset=i*l1_cache_line_size))
+            l1_caches.append(Cache(self, 'l1_bank%d' % i, nb_sets_bits=7, nb_ways_bits=1, line_size_bits=5, refill_latency=2, refill_shift=nb_l1_banks_log2, add_offset=i*l1_cache_line_size))
 
         # L1 interleaver
         interleaver = Interleaver(self, 'interleaver', nb_slaves=nb_l1_banks, nb_masters=0, interleaving_bits=l1_line_size_bits)
