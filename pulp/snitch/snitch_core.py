@@ -45,7 +45,6 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
             prefetcher_size=32)
 
         self.add_c_flags([
-            "-DPIPELINE_STALL_THRESHOLD=0",
             "-DPIPELINE_STAGES=1",
             "-DCONFIG_ISS_CORE=snitch",
         ])
@@ -134,7 +133,6 @@ class Spatz(cpu.iss.riscv.RiscvCommon):
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="spatz")
 
         self.add_c_flags([
-            "-DPIPELINE_STALL_THRESHOLD=0",
             "-DPIPELINE_STAGES=1",
             "-DCONFIG_ISS_CORE=snitch",
         ])
