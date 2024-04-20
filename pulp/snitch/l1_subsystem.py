@@ -78,7 +78,7 @@ class L1_subsystem(gvsoc.systree.Component):
         l1_banks = []
         for i in range(0, nb_l1_banks):
             tcdm = Memory(self, 'tcdm_bank%d' % i, size=l1_bank_size, width_log2=int(math.log(bandwidth, 2.0)), 
-                            atomics=True, core='snitch', mem='tcdm')
+                            atomics=True)
             l1_banks.append(tcdm)
 
         # Per-PE interconnects
