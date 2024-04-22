@@ -20,6 +20,9 @@
  *          Kexin Li, ETH Zurich (likexi@ethz.ch)
  */
 
+// Temporary workaround to let this component include ISS headers
+#include <../../../../isa_snitch_rv32imfdvca.hpp>
+
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
@@ -315,7 +318,7 @@ void sequencer::req(vp::Block *__this, OffloadReq *req)
     // 3. An frep instruction indicates the loop configuration.
     // frep instruction won't be written into ring buffer.
     // Update frep_config when there is new frep instruction coming.
-    if (unlikely(insn.is_frep_op))
+    if (unlikely(insn.desc->tags[ISA_TAG_FREP_ID]))
     {
         _this->frep_config.is_outer = insn.is_outer;
         _this->frep_config.max_inst = insn.uim[2];
@@ -334,7 +337,7 @@ void sequencer::req(vp::Block *__this, OffloadReq *req)
 
     // 1. Bypass lane instructions.
     // Offload bypass line instructions only if the ring buffer is empty, where write_id == base_id.
-    if (!insn.is_frep_op & insn.isn_seq_op)
+    if (!insn.desc->tags[ISA_TAG_FREP_ID] && insn.desc->tags[ISA_TAG_NSEQ_ID])
     {
         // Output handshaking also finishes inside rsp_state function, between sequencer and fp subsystem
         // This means the sequencer and subsystem are both ready for a bypass instruction.
@@ -350,7 +353,7 @@ void sequencer::req(vp::Block *__this, OffloadReq *req)
 
     // 2. Instructions are sequenced from the FPU sequence buffer. Write a new entry into the buffer.
     BufferEntry new_entry;
-    if(!insn.is_frep_op & !insn.isn_seq_op)
+    if(!insn.desc->tags[ISA_TAG_FREP_ID] && !insn.desc->tags[ISA_TAG_NSEQ_ID])
     {
         // The buffer must have vacancy after rsp_state() function.
         new_entry = _this->gen_entry(req, &_this->frep_config);
