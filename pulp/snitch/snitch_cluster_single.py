@@ -28,7 +28,7 @@ from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 from pulp.idma.snitch_dma import SnitchDma
 from pulp.snitch.zero_mem import ZeroMem
 from interco.bus_watchpoint import Bus_watchpoint
-from interco.sequencer import Sequencer
+from pulp.snitch.sequencer import Sequencer
 from pulp.spatz.cluster_registers import Cluster_registers
 from elftools.elf.elffile import *
 import gvsoc.runner as gvsoc
