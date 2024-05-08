@@ -51,6 +51,7 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
 
         self.add_sources([
             "cpu/iss/src/snitch/snitch.cpp",
+            "cpu/iss/src/snitch/regfile.cpp",
             "cpu/iss/src/ssr.cpp",
         ])
 

@@ -440,6 +440,8 @@ bool sequencer::check_state()
     {
         return false;
     }
+
+    return false;
 }
 
 
@@ -585,6 +587,8 @@ BufferEntry sequencer::read_entry(int index)
     {
         this->trace.msg("Sequence buffer is empty and no instruction can be read\n");
         // Todo: write a return here to avoid accident happening.
+        // For now return a dummy one to avoid gcc warning
+        return BufferEntry();
     }
     else
     {
