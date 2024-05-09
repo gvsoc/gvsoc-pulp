@@ -20,6 +20,43 @@ from cpu.iss.isa_gen.isa_rvv import *
 from cpu.iss.isa_gen.isa_smallfloats import *
 import gvsoc.systree
 
+
+def add_latencies(isa):
+    # Set snitch instruction latency:
+    # 1. the latency of instruction, the core stalls for n cycles at the current instruction. (insn->latency)
+    # 2. the latency of output register, the output is ready after n cycles to check data dependency. (reg.latency)
+    for insn in isa.get_insns():
+
+        # Pipelined instruction (allow parallelsim)
+        if "fmadd" in insn.tags:
+            insn.set_latency(3)
+            insn.get_out_reg(0).set_latency(3)
+        elif "fadd" in insn.tags:
+            insn.set_latency(3)
+            insn.get_out_reg(0).set_latency(3)
+        elif "fmul" in insn.tags:
+            insn.set_latency(3)
+            insn.get_out_reg(0).set_latency(3)
+        elif "fnoncomp" in insn.tags:
+            insn.set_latency(1)
+            insn.get_out_reg(0).set_latency(1)
+        elif "fconv" in insn.tags:
+            insn.set_latency(2)
+            insn.get_out_reg(0).set_latency(2)
+        elif "fmv" in insn.tags:
+            insn.set_latency(2)
+            insn.get_out_reg(0).set_latency(2)
+        elif "fother" in insn.tags:
+            insn.set_latency(2)
+            insn.get_out_reg(0).set_latency(2)
+        elif "fdiv" in insn.tags:
+            insn.set_latency(11)
+            insn.get_out_reg(0).set_latency(11)
+        elif "load" in insn.tags and not "fload" in insn.tags:
+            insn.set_latency(2)
+            insn.get_out_reg(0).set_latency(2)
+
+
 class Snitch(cpu.iss.riscv.RiscvCommon):
 
     def __init__(self,
@@ -37,12 +74,14 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
         isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
             extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ] )
 
+        add_latencies(isa_instance)
+
         if misa is None:
             misa = isa_instance.misa
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
             fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True, 
-            prefetcher_size=32)
+            prefetcher_size=32, custom_sources=True)
 
         self.add_c_flags([
             "-DPIPELINE_STAGES=1",
@@ -52,7 +91,27 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
         self.add_sources([
             "cpu/iss/src/snitch/snitch.cpp",
             "cpu/iss/src/snitch/regfile.cpp",
-            "cpu/iss/src/ssr.cpp",
+            "cpu/iss/src/snitch/ssr.cpp",
+            "cpu/iss/src/prefetch/prefetch_single_line.cpp",
+            "cpu/iss/src/csr.cpp",
+            "cpu/iss/src/exec/exec_inorder.cpp",
+            "cpu/iss/src/snitch/decode.cpp",
+            "cpu/iss/src/lsu.cpp",
+            "cpu/iss/src/timing.cpp",
+            "cpu/iss/src/insn_cache.cpp",
+            "cpu/iss/src/snitch/iss.cpp",
+            "cpu/iss/src/core.cpp",
+            "cpu/iss/src/exception.cpp",
+            "cpu/iss/src/regfile.cpp",
+            "cpu/iss/src/resource.cpp",
+            "cpu/iss/src/trace.cpp",
+            "cpu/iss/src/syscalls.cpp",
+            "cpu/iss/src/htif.cpp",
+            "cpu/iss/src/mmu.cpp",
+            "cpu/iss/src/pmp.cpp",
+            "cpu/iss/src/gdbserver.cpp",
+            "cpu/iss/src/dbg_unit.cpp",
+            "cpu/iss/flexfloat/flexfloat.c",
         ])
 
         if inc_spatz:
@@ -84,12 +143,14 @@ class Snitch_fp_ss(cpu.iss.riscv.RiscvCommon):
         isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
             extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ] )
 
+        add_latencies(isa_instance)
+
         if misa is None:
             misa = isa_instance.misa
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
             fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True, 
-            prefetcher_size=32, timed=timed)
+            prefetcher_size=32, timed=timed, custom_sources=True)
 
         self.add_c_flags([
             "-DCONFIG_ISS_CORE=snitch_fp_ss",
@@ -97,7 +158,27 @@ class Snitch_fp_ss(cpu.iss.riscv.RiscvCommon):
 
         self.add_sources([
             "cpu/iss/src/snitch/snitch_fp_ss.cpp",
-            "cpu/iss/src/ssr.cpp",
+            "cpu/iss/src/snitch/ssr.cpp",
+            "cpu/iss/src/prefetch/prefetch_single_line.cpp",
+            "cpu/iss/src/csr.cpp",
+            "cpu/iss/src/snitch_fp_ss/exec_inorder.cpp",
+            "cpu/iss/src/snitch/decode.cpp",
+            "cpu/iss/src/lsu.cpp",
+            "cpu/iss/src/timing.cpp",
+            "cpu/iss/src/insn_cache.cpp",
+            "cpu/iss/src/snitch_fp_ss/iss.cpp",
+            "cpu/iss/src/core.cpp",
+            "cpu/iss/src/exception.cpp",
+            "cpu/iss/src/regfile.cpp",
+            "cpu/iss/src/resource.cpp",
+            "cpu/iss/src/trace.cpp",
+            "cpu/iss/src/syscalls.cpp",
+            "cpu/iss/src/htif.cpp",
+            "cpu/iss/src/mmu.cpp",
+            "cpu/iss/src/pmp.cpp",
+            "cpu/iss/src/gdbserver.cpp",
+            "cpu/iss/src/dbg_unit.cpp",
+            "cpu/iss/flexfloat/flexfloat.c",
         ])
 
         if inc_spatz:
