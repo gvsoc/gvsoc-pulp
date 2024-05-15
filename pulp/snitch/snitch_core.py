@@ -216,7 +216,7 @@ class Spatz(cpu.iss.riscv.RiscvCommon):
 
         self.add_c_flags([
             "-DPIPELINE_STAGES=1",
-            "-DCONFIG_ISS_CORE=snitch",
+            "-DCONFIG_ISS_CORE=spatz",
         ])
 
         self.add_sources([
