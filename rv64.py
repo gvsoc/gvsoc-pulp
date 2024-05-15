@@ -126,4 +126,3 @@ class Target(gvsoc.Target):
     def __init__(self, parser, options):
         super(Target, self).__init__(parser, options,
             model=Rv64, description="RV64 virtual board")
-
