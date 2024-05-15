@@ -41,9 +41,6 @@ class Tile(st.Component):
     def __init__(self, parent, name, parser, tile_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4):
         super().__init__(parent, name)
 
-        # parser.add_argument("--isa", dest="isa", type=str, default="rv32imaf",
-        #     help="RISCV-V ISA string (default: %(default)s)")
-
         [args, __] = parser.parse_known_args()
 
         binary = None
@@ -63,8 +60,8 @@ class Tile(st.Component):
         mem_size = nb_cores_per_tile * bank_factor * 1024
         
         # Snitch core complex
-        int_cores = []
-        fp_cores = []
+        self.int_cores = []
+        self.fp_cores = []
         bus_watchpoints = []
         if Xfrep:
             fpu_sequencers = []
@@ -94,13 +91,10 @@ class Tile(st.Component):
 
         # Core Complex
         for core_id in range(0, nb_cores_per_tile):
-            int_cores.append(iss.Snitch(self, f'pe{core_id}', isa="rv32imaf", core_id=core_id))
-            fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa="rv32imaf", core_id=core_id))
+            self.int_cores.append(iss.Snitch(self, f'pe{core_id}', isa="rv32imaf", core_id=core_id))
+            self.fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa="rv32imaf", core_id=core_id))
             if Xfrep:
                 fpu_sequencers.append(Sequencer(self, f'fpu_sequencer{core_id}', latency=0))
-
-        # Binary Loader
-        loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x1000)
 
         ################################################################
         ##########               Design Bindings              ##########
@@ -108,14 +102,14 @@ class Tile(st.Component):
 
         # Stack Memory (non-interleaved)
         for i in range(0, nb_cores_per_tile):
-            ico_list[i].add_mapping('stack_mem', base=0x10000000 + global_tile_id * mem_size, remove_offset=0x10000000 + global_tile_id * mem_size, size=stack_size_per_tile)
+            ico_list[i].add_mapping('stack_mem', base=0x00000000 + global_tile_id * mem_size, remove_offset=0x00000000 + global_tile_id * mem_size, size=stack_size_per_tile)
             self.bind(ico_list[i], 'stack_mem', stack_ico, 'input')
-        stack_ico.add_mapping('stack_mem', base=0x10000000 + global_tile_id * mem_size, remove_offset=0x10000000 + global_tile_id * mem_size, size=stack_size_per_tile)
+        stack_ico.add_mapping('stack_mem', base=0x00000000 + global_tile_id * mem_size, remove_offset=0x00000000 + global_tile_id * mem_size, size=stack_size_per_tile)
         self.bind(stack_ico, 'stack_mem', stack_mem, 'input')
 
         # L1 TCDM
         for i in range(0, nb_cores_per_tile):
-            ico_list[i].add_mapping('l1', base=0x10000000 + stack_size_per_tile * nb_tiles_per_group * nb_groups, remove_offset=0x10000000 + stack_size_per_tile * nb_tiles_per_group * nb_groups, size=total_cores * bank_factor * 1024)
+            ico_list[i].add_mapping('l1', base=0x00000000 + stack_size_per_tile * nb_tiles_per_group * nb_groups, remove_offset=0x00000000 + stack_size_per_tile * nb_tiles_per_group * nb_groups, size=total_cores * bank_factor * 1024)
             self.bind(ico_list[i], 'l1', l1, f'pe_in{i}')
 
         # L2 Memory
@@ -139,16 +133,21 @@ class Tile(st.Component):
         # Icache -> AXI
         self.bind(icache, 'refill', axi_ico, 'input')
         
-        # Loader -> AXI
-        self.bind(loader, 'out', axi_ico, 'input')
-        
         # AXI <-> ROM ports
-        axi_ico.add_mapping('rom', base=0xA0000000, remove_offset=0xA0000000, size=0x1000)
+        axi_ico.add_mapping('rom', base=0xa0000000, remove_offset=0xa0000000, size=0x1000)
         self.bind(axi_ico, 'rom', self, 'rom')
 
         # AXI <-> L2 Memory ports
         axi_ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
         self.bind(axi_ico, 'mem', self, 'L2_data')
+
+        # AXI -> CSR ports
+        axi_ico.add_mapping('csr', base=0x40000000, remove_offset=0x40000000, size=0x10000)
+        self.bind(axi_ico, 'csr', self, 'csr')
+
+        # AXI -> Dummy Memory ports
+        axi_ico.add_mapping('dummy')
+        self.bind(axi_ico, 'dummy', self, 'dummy_mem')
 
         # RISCV bus watchpoint
         tohost_addr = 0
@@ -170,10 +169,10 @@ class Tile(st.Component):
         for core_id in range(0, nb_cores_per_tile):
             bus_watchpoints.append(Bus_watchpoint(self, f'tohost{core_id}', tohost_addr, fromhost_addr, word_size=32))
 
+        # Sync barrier
         for core_id in range(0, nb_cores_per_tile):
-            # Sync all core complex by integer cores.
-            self.bind(int_cores[core_id], 'barrier_req', self, f'barrier_req_{core_id}')
-            self.bind(self, f'barrier_ack', int_cores[core_id], 'barrier_ack')
+            self.bind(self.int_cores[core_id], 'barrier_req', self, f'barrier_req_{core_id}')
+            self.bind(self, f'barrier_ack_{core_id}', self.int_cores[core_id], 'barrier_ack')
 
         for core_id in range(0, nb_cores_per_tile):
             #                                          |--> stack_ico --> stack_mem
@@ -182,33 +181,33 @@ class Tile(st.Component):
             self.bind(bus_watchpoints[core_id], 'output', ico_list[core_id], 'input')
 
             # Icache
-            self.bind(int_cores[core_id], 'flush_cache_req', icache, 'flush')
-            self.bind(icache, 'flush_ack', int_cores[core_id], 'flush_cache_ack')
+            self.bind(self.int_cores[core_id], 'flush_cache_req', icache, 'flush')
+            self.bind(icache, 'flush_ack', self.int_cores[core_id], 'flush_cache_ack')
             
             # Snitch integer cores
-            self.bind(int_cores[core_id], 'data', bus_watchpoints[core_id], 'input')
-            self.bind(int_cores[core_id], 'data', axi_ico, 'input')
-            self.bind(int_cores[core_id], 'fetch', icache, 'input_%d' % core_id)
-            self.bind(loader, 'start', int_cores[core_id], 'fetchen')
-            self.bind(loader, 'entry', int_cores[core_id], 'bootaddr')
+            self.bind(self.int_cores[core_id], 'data', bus_watchpoints[core_id], 'input')
+            self.bind(self.int_cores[core_id], 'data', axi_ico, 'input')
+            self.bind(self.int_cores[core_id], 'fetch', icache, 'input_%d' % core_id)
+            self.bind(self, 'loader_start', self.int_cores[core_id], 'fetchen')
+            self.bind(self, 'loader_entry', self.int_cores[core_id], 'bootaddr')
             
             # Snitch fp subsystems
             # Pay attention to interactions and bandwidth between subsystem and tohost.
-            self.bind(fp_cores[core_id], 'data', bus_watchpoints[core_id], 'input')
+            self.bind(self.fp_cores[core_id], 'data', bus_watchpoints[core_id], 'input')
             # FP subsystem doesn't fetch instructions from core->ico->memory, but from integer cores acc_req.
-            self.bind(loader, 'start', fp_cores[core_id], 'fetchen')
-            self.bind(loader, 'entry', fp_cores[core_id], 'bootaddr')
+            self.bind(self, 'loader_start', self.fp_cores[core_id], 'fetchen')
+            self.bind(self, 'loader_entry', self.fp_cores[core_id], 'bootaddr')
             
             # Use WireMaster & WireSlave
             # Add fpu sequence buffer in between int core and fp core to issue instructions
             if Xfrep:
-                self.bind(int_cores[core_id], 'acc_req', fpu_sequencers[core_id], 'input')
-                self.bind(fpu_sequencers[core_id], 'output', fp_cores[core_id], 'acc_req')
-                self.bind(int_cores[core_id], 'acc_req_ready', fpu_sequencers[core_id], 'acc_req_ready')
-                self.bind(fpu_sequencers[core_id], 'acc_req_ready_o', fp_cores[core_id], 'acc_req_ready')
+                self.bind(self.int_cores[core_id], 'acc_req', fpu_sequencers[core_id], 'input')
+                self.bind(fpu_sequencers[core_id], 'output', self.fp_cores[core_id], 'acc_req')
+                self.bind(self.int_cores[core_id], 'acc_req_ready', fpu_sequencers[core_id], 'acc_req_ready')
+                self.bind(fpu_sequencers[core_id], 'acc_req_ready_o', self.fp_cores[core_id], 'acc_req_ready')
             else:
                 # Comment out if we want to add sequencer
-                self.bind(int_cores[core_id], 'acc_req', fp_cores[core_id], 'acc_req')
-                self.bind(int_cores[core_id], 'acc_req_ready', fp_cores[core_id], 'acc_req_ready')
+                self.bind(self.int_cores[core_id], 'acc_req', self.fp_cores[core_id], 'acc_req')
+                self.bind(self.int_cores[core_id], 'acc_req_ready', self.fp_cores[core_id], 'acc_req_ready')
             
-            self.bind(fp_cores[core_id], 'acc_rsp', int_cores[core_id], 'acc_rsp')
+            self.bind(self.fp_cores[core_id], 'acc_rsp', self.int_cores[core_id], 'acc_rsp')

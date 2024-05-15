@@ -54,9 +54,9 @@ class Cluster(st.Component):
         ##########              Design Components             ##########
         ################################################################
         # TIles
-        group_list = []
+        self.group_list = []
         for i in range(0, nb_groups):
-            group_list.append(Group(self,f'group_{i}',parser=parser,group_id=i, nb_cores_per_tile=nb_cores_per_tile, 
+            self.group_list.append(Group(self,f'group_{i}',parser=parser,group_id=i, nb_cores_per_tile=nb_cores_per_tile, 
                 nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor))
         
         ################################################################
@@ -68,8 +68,19 @@ class Cluster(st.Component):
             for tgt in range(0, nb_groups):
                 if (ini != tgt):
                     for tile in range(0, nb_tiles_per_group):
-                        self.bind(group_list[ini], f'grp_remt{ini^tgt}_tile{tile}_master_out', group_list[tgt], f'grp_remt{ini^tgt}_tile{tile}_slave_in')
+                        self.bind(self.group_list[ini], f'grp_remt{ini^tgt}_tile{tile}_master_out', self.group_list[tgt], f'grp_remt{ini^tgt}_tile{tile}_slave_in')
+
+        # Propagate barrier signals from group to cluster boundary
+        for i in range(0, nb_groups):
+            for j in range(0, nb_tiles_per_group):
+                for k in range(0, nb_cores_per_tile):
+                    self.bind(self.group_list[i], f'barrier_req_{i*nb_cores_per_tile+j}', self, f'barrier_req_{i*nb_cores_per_tile*nb_cores_per_tile+j*nb_cores_per_tile+k}')
+                    self.bind(self, f'barrier_ack_{i*nb_cores_per_tile*nb_cores_per_tile+j*nb_cores_per_tile+k}', self.group_list[i], f'barrier_ack_{i*nb_cores_per_tile+j}')
 
         for i in range(0, nb_groups):
-            self.bind(group_list[i], 'rom', self, 'rom_%d' % i)
-            self.bind(group_list[i], 'L2_data', self, 'L2_data_%d' % i)
+            self.bind(self.group_list[i], 'rom', self, 'rom_%d' % i)
+            self.bind(self.group_list[i], 'L2_data', self, 'L2_data_%d' % i)
+            self.bind(self.group_list[i], 'csr', self, 'csr_%d' % i)
+            self.bind(self.group_list[i], 'dummy_mem', self, 'dummy_mem_%d' % i)
+            self.bind(self, 'loader_start', self.group_list[i], 'loader_start')
+            self.bind(self, 'loader_entry', self.group_list[i], 'loader_entry')

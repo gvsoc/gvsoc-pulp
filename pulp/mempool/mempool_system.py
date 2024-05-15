@@ -47,6 +47,13 @@ class System(st.Component):
         ##########               Design Variables             ##########
         ################################################################
 
+        [args, __] = parser.parse_known_args()
+
+        binary = None
+        if parser is not None:
+            [args, otherArgs] = parser.parse_known_args()
+            binary = args.binary
+
         ################################################################
         ##########              Design Components             ##########
         ################################################################ 
@@ -57,20 +64,40 @@ class System(st.Component):
         # Boot Rom
         rom = memory.Memory(self, 'rom', size=0x1000, width_log2=6, stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
 
-         # L2 Memory
+        # L2 Memory
         l2_mem = memory.Memory(self, 'l2_mem', size=0x1000000, width_log2=6, atomics=True, core="snitch", mem='mem')
 
-        # Cluster peripherals
-        # cluster_registers = Cluster_registers(self, 'cluster_registers', boot_addr=entry, nb_cores=nb_cores)
-        # ico.add_mapping('cluster_registers', base=0x00120000, remove_offset=0x00120000, size=0x1000)
+        # CSR
+        csr = memory.Memory(self, 'csr', size=0x1000)
 
-        #rom router
+        # Binary Loader
+        loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x80000000)
+
+        #Dummy Memory
+        dummy_mem = memory.Memory(self, 'dummy_mem', size=0x30000)
+
+        # Cluster Registers for synchronization barrier
+        cluster_registers = Cluster_registers(self, 'cluster_registers', boot_addr=0, nb_cores=total_cores)
+
+        # Rom Router
         rom_router = router.Router(self, 'rom_router', bandwidth=64, latency=1)
         rom_router.add_mapping('output')
 
-        #l2 router
+        # L2 Memory Router
         l2_router = router.Router(self, 'l2_router', bandwidth=64, latency=1)
         l2_router.add_mapping('output')
+
+        # CSR Router
+        csr_router = router.Router(self, 'csr_router', bandwidth=32, latency=1)
+        csr_router.add_mapping('output')
+
+        # Dummy Memory Router
+        dummy_mem_router = router.Router(self, 'dummy_mem_router', bandwidth=32, latency=1)
+        dummy_mem_router.add_mapping('output')
+
+        # Binary Loader Router
+        loader_router = router.Router(self, 'loader_router', bandwidth=32, latency=1)
+        loader_router.add_mapping('output')
 
         ################################################################
         ##########               Design Bindings              ##########
@@ -86,7 +113,33 @@ class System(st.Component):
             self.bind(mempool_cluster, 'L2_data_%d' % i, l2_router, 'input')
         self.bind(l2_router,'output',l2_mem, 'input')
 
-        # self.bind(mempool_cluster, 'cluster_registers', cluster_registers, 'input')
+        #csr router
+        for i in range(0, nb_groups):
+            self.bind(mempool_cluster, 'csr_%d' % i, csr_router, 'input')
+        self.bind(csr_router,'output',csr, 'input')
+
+        #dummy_mem router
+        for i in range(0, nb_groups):
+            self.bind(mempool_cluster, 'dummy_mem_%d' % i, dummy_mem_router, 'input')
+        self.bind(dummy_mem_router,'output',dummy_mem, 'input')
+
+        #loader router
+        self.bind(loader, 'start', mempool_cluster, 'loader_start')
+        self.bind(loader, 'entry', mempool_cluster, 'loader_entry')
+        self.bind(loader, 'out', loader_router, 'input')
+        loader_router.add_mapping('dummy', base=0x00000000, remove_offset=0x00000000, size=0x30000)
+        loader_router.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
+        loader_router.add_mapping('rom', base=0xa0000000, remove_offset=0xa0000000, size=0x1000)
+        loader_router.add_mapping('csr', base=0x40000000, remove_offset=0x40000000, size=0x10000)
+        self.bind(loader_router, 'mem', l2_mem, 'input')
+        self.bind(loader_router, 'rom', rom, 'input')
+        self.bind(loader_router, 'csr', csr, 'input')
+        self.bind(loader_router, 'dummy', dummy_mem, 'input')
+
+        #Cluster Registers for synchronization barrier
+        for i in range(0, total_cores):
+            self.bind(mempool_cluster, f'barrier_req_{i}', cluster_registers, f'barrier_req_{i}')
+            self.bind(cluster_registers, f'barrier_ack', mempool_cluster, f'barrier_ack_{i}')
 
 class MempoolSystem(st.Component):
 
@@ -99,5 +152,3 @@ class MempoolSystem(st.Component):
         soc = System(self, 'mempool_soc', parser)
 
         self.bind(clock, 'out', soc, 'clock')
-
-
