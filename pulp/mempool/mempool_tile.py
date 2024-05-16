@@ -91,8 +91,8 @@ class Tile(st.Component):
 
         # Core Complex
         for core_id in range(0, nb_cores_per_tile):
-            self.int_cores.append(iss.Snitch(self, f'pe{core_id}', isa="rv32imaf", core_id=core_id))
-            self.fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa="rv32imaf", core_id=core_id))
+            self.int_cores.append(iss.Snitch(self, f'pe{core_id}', isa="rv32imaf", core_id=group_id*nb_tiles_per_group*nb_cores_per_tile+tile_id*nb_cores_per_tile+core_id))
+            self.fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa="rv32imaf", core_id=group_id*nb_tiles_per_group*nb_cores_per_tile+tile_id*nb_cores_per_tile+core_id))
             if Xfrep:
                 fpu_sequencers.append(Sequencer(self, f'fpu_sequencer{core_id}', latency=0))
 
