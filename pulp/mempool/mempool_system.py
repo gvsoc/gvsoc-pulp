@@ -35,6 +35,7 @@ from elftools.elf.elffile import *
 import gvsoc.runner as gvsoc
 import math
 from pulp.mempool.mempool_cluster import Cluster
+from pulp.mempool.ctrl_registers import CtrlRegisters
 
 GAPY_TARGET = True
 
@@ -68,7 +69,7 @@ class System(st.Component):
         l2_mem = memory.Memory(self, 'l2_mem', size=0x1000000, width_log2=6, atomics=True, core="snitch", mem='mem')
 
         # CSR
-        csr = memory.Memory(self, 'csr', size=0x1000)
+        csr = CtrlRegisters(self, 'ctrl_registers')
 
         # Binary Loader
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x80000000)
