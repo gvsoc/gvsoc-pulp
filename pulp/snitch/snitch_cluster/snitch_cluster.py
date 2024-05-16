@@ -122,7 +122,7 @@ class SnitchCluster(gvsoc.systree.Component):
         cores = []
         cores_ico = []
         for core_id in range(0, arch.nb_core):
-            cores.append(iss.Snitch(self, f'pe{core_id}', isa='rv32imfdvca', fetch_enable=True,
+            cores.append(iss.SnitchBare(self, f'pe{core_id}', isa='rv32imfdvca', fetch_enable=True,
                                     boot_addr=arch.boot_addr, core_id=arch.first_hartid + core_id))
 
             cores_ico.append(router.Router(self, f'pe{core_id}_ico', bandwidth=arch.tcdm.bank_width))

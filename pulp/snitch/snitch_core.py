@@ -121,10 +121,49 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
 
     def o_BARRIER_REQ(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('barrier_req', itf, signature='wire<bool>')
-        
-        
-        
-        
+
+
+class SnitchBare(cpu.iss.riscv.RiscvCommon):
+
+    def __init__(self,
+            parent,
+            name,
+            isa: str='rv32imafdc',
+            misa: int=None,
+            binaries: list=[],
+            fetch_enable: bool=False,
+            boot_addr: int=0,
+            inc_spatz: bool=False,
+            core_id: int=0):
+
+
+        isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
+            extensions=[ Xdma() ] )
+
+        if misa is None:
+            misa = isa_instance.misa
+
+        super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
+            fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True)
+
+        self.add_c_flags([
+            "-DCONFIG_ISS_CORE=snitch_bare",
+        ])
+
+        self.add_sources([
+            "cpu/iss/src/snitch_bare/snitch.cpp",
+        ])
+
+        if inc_spatz:
+            self.add_sources([
+                "cpu/iss/src/spatz.cpp",
+            ])
+
+    def o_BARRIER_REQ(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('barrier_req', itf, signature='wire<bool>')
+
+
+
 class Snitch_fp_ss(cpu.iss.riscv.RiscvCommon):
 
     def __init__(self,
