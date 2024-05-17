@@ -24,14 +24,17 @@
 
 
 IDmaBe::IDmaBe(vp::Component *idma, IdmaTransferProducer *me,
-    IdmaBeConsumer *loc_be, IdmaBeConsumer *ext_be)
+    IdmaBeConsumer *loc_be_read, IdmaBeConsumer *loc_be_write,
+    IdmaBeConsumer *ext_be_read, IdmaBeConsumer *ext_be_write)
 :   Block(idma, "be"),
     fsm_event(this, &IDmaBe::fsm_handler)
 {
     // Middle-end and backend protocols will be used later for interaction
     this->me = me;
-    this->loc_be = loc_be;
-    this->ext_be = ext_be;
+    this->loc_be_read = loc_be_read;
+    this->loc_be_write = loc_be_write;
+    this->ext_be_read = ext_be_read;
+    this->ext_be_write = ext_be_write;
 
     // Declare our own trace so that we can individually activate traces
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
@@ -43,11 +46,12 @@ IDmaBe::IDmaBe(vp::Component *idma, IdmaTransferProducer *me,
 
 
 
-IdmaBeConsumer *IDmaBe::get_be_consumer(uint64_t base, uint64_t size)
+IdmaBeConsumer *IDmaBe::get_be_consumer(uint64_t base, uint64_t size, bool is_read)
 {
     // Returns local backend if it falls within local area, or external backend otherwise
     bool is_loc = base >= this->loc_base && base + size <= this->loc_base + this->loc_size;
-    return is_loc ? this->loc_be : this->ext_be;
+    return is_loc ? (is_read ? this->loc_be_read :  this->loc_be_write) :
+        (is_read ? this->ext_be_read : this->ext_be_write);
 }
 
 
@@ -66,8 +70,8 @@ void IDmaBe::enqueue_transfer(IdmaTransfer *transfer)
     this->current_transfer_size = transfer->size;
     this->current_transfer_src = transfer->src;
     this->current_transfer_dst = transfer->dst;
-    this->current_transfer_src_be = this->get_be_consumer(transfer->src, transfer->size);
-    this->current_transfer_dst_be = this->get_be_consumer(transfer->dst, transfer->size);
+    this->current_transfer_src_be = this->get_be_consumer(transfer->src, transfer->size, true);
+    this->current_transfer_dst_be = this->get_be_consumer(transfer->dst, transfer->size, false);
 
     this->fsm_event.enqueue();
 }
@@ -136,7 +140,7 @@ bool IDmaBe::is_ready_to_accept_data()
 {
     // Check if the destination backend of the first transfer is ready to accept them
     IdmaTransfer *transfer = this->transfer_queue.front();
-    IdmaBeConsumer *dst_be = this->get_be_consumer(transfer->dst, transfer->size);
+    IdmaBeConsumer *dst_be = this->get_be_consumer(transfer->dst, transfer->size, false);
     return dst_be->can_accept_data();
 }
 
@@ -147,7 +151,7 @@ void IDmaBe::write_data(uint8_t *data, uint64_t size)
     // Get back the first transfer from the queue to know where to send the data
     IdmaTransfer *transfer = this->transfer_queue.front();
     // Get destination backend
-    IdmaBeConsumer *dst_be = this->get_be_consumer(transfer->dst, transfer->size);
+    IdmaBeConsumer *dst_be = this->get_be_consumer(transfer->dst, transfer->size, false);
 
     // Update current transfer
     transfer->dst += size;
@@ -166,7 +170,7 @@ void IDmaBe::ack_data(uint8_t *data)
 {
     // Get the source backend protocol for the first transfer
     IdmaTransfer *transfer = this->transfer_queue.front();
-    IdmaBeConsumer *src_be = this->get_be_consumer(transfer->src, transfer->size);
+    IdmaBeConsumer *src_be = this->get_be_consumer(transfer->src, transfer->size, true);
 
     // And acknowledge the data to it so that the data can be freed
     src_be->write_data_ack(data);

@@ -101,7 +101,8 @@ class SnitchDma(gvsoc.systree.Component):
         slave: gvsoc.systree.SlaveItf
             Slave interface
         """
-        self.itf_bind('axi', itf, signature='io')
+        self.itf_bind('axi_read', itf, signature='io')
+        self.itf_bind('axi_write', itf, signature='io')
 
     def o_TCDM(self, itf: gvsoc.systree.SlaveItf):
         """Binds the TCDM port.
@@ -113,4 +114,5 @@ class SnitchDma(gvsoc.systree.Component):
         slave: gvsoc.systree.SlaveItf
             Slave interface
         """
-        self.itf_bind('tcdm', itf, signature='io')
+        self.itf_bind('tcdm_read', itf, signature='io')
+        self.itf_bind('tcdm_write', itf, signature='io')

@@ -208,8 +208,8 @@ public:
      * @param ext_be The external backend, selected when an address does not fall into the local
      *  range.
      */
-    IDmaBe(vp::Component *idma, IdmaTransferProducer *me, IdmaBeConsumer *loc_be,
-        IdmaBeConsumer *ext_be);
+    IDmaBe(vp::Component *idma, IdmaTransferProducer *me, IdmaBeConsumer *loc_be_read,
+        IdmaBeConsumer *loc_be_write, IdmaBeConsumer *ext_be_read, IdmaBeConsumer *ext_be_write);
 
     void reset(bool active);
 
@@ -224,7 +224,7 @@ private:
     // FSM handler, called to check if any action should be taken after something was updated
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
     // Returne backend protocol corresponding to the specified range
-    IdmaBeConsumer *get_be_consumer(uint64_t base, uint64_t size);
+    IdmaBeConsumer *get_be_consumer(uint64_t base, uint64_t size, bool is_read);
     // Pointer to middle-end, used to interact with it
     IdmaTransferProducer *me;
     // Trace for this block, messages will be displayed with this block's name
@@ -250,9 +250,11 @@ private:
     // since we need transfer information when bursts are back from memory
     std::queue<IdmaTransfer *> transfer_queue;
     // Backend for local area
-    IdmaBeConsumer *loc_be;
+    IdmaBeConsumer *loc_be_read;
+    IdmaBeConsumer *loc_be_write;
     // Backend for external area
-    IdmaBeConsumer *ext_be;
+    IdmaBeConsumer *ext_be_read;
+    IdmaBeConsumer *ext_be_write;
     // Base address of the local area
     uint64_t loc_base;
     // Size of the local area
