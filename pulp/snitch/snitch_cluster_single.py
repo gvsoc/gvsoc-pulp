@@ -169,7 +169,7 @@ class Soc(st.Component):
             # Sync all core complex by integer cores.
             self.bind(int_cores[core_id], 'barrier_req', cluster_registers, f'barrier_req_{core_id}')
             self.bind(cluster_registers, f'barrier_ack', int_cores[core_id], 'barrier_ack')
-            # cluster_registers.o_EXTERNAL_IRQ(core_id, int_cores[core_id].i_IRQ(19))
+            cluster_registers.o_EXTERNAL_IRQ(core_id, int_cores[core_id].i_IRQ(19))
 
         for core_id in range(0, nb_cores):
             # Buswatchpoint
