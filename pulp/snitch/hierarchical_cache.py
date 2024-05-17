@@ -17,6 +17,7 @@
 import gvsoc.systree
 from cache.cache import Cache
 from interco.interleaver import Interleaver
+from utils.common_cells import And
 import math
 
 class Hierarchical_cache(gvsoc.systree.Component):
@@ -56,6 +57,8 @@ class Hierarchical_cache(gvsoc.systree.Component):
         # L1 interleaver
         interleaver = Interleaver(self, 'interleaver', nb_slaves=nb_l1_banks, nb_masters=0, interleaving_bits=l1_line_size_bits)
 
+        # Use an And to gather flush ack from all banks and report a single signal outside
+        flush_ack = And(self, 'flush_ack', nb_input=nb_l1_banks+nb_cores)
 
         #
         # Bindings
@@ -78,3 +81,10 @@ class Hierarchical_cache(gvsoc.systree.Component):
         for i in range(0, nb_l1_banks):
             self.bind(interleaver, 'out_%d' % i, l1_caches[i], 'input')
 
+        # Flush ack
+        for i in range(0, nb_cores):
+            self.bind(l0_caches[i], 'flush_ack', flush_ack, f'input_{i}')
+        for i in range(0, nb_l1_banks):
+            self.bind(l1_caches[i], 'flush_ack', flush_ack, f'input_{i + nb_cores}')
+
+        self.bind(flush_ack, 'output', self, 'flush_ack')
