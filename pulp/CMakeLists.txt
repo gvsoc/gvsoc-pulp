@@ -14,6 +14,9 @@ add_subdirectory(gpio)
 add_subdirectory(udma)
 add_subdirectory(soc_eu)
 add_subdirectory(stdout)
+
+#### TASK INTEGRATE HWPE - Added simple_hwpe subdirectory
+
 add_subdirectory(neureka)
 add_subdirectory(wmem)
 add_subdirectory(spatz)

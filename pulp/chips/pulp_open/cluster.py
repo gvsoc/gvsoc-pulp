@@ -27,8 +27,6 @@ from pulp.mchan.mchan_v7 import Mchan
 from pulp.timer.timer_v2 import Timer
 from pulp.cluster.cluster_control_v2 import Cluster_control
 
-#### TASK INTEGRATE HWPE -- Import the wrapper for hwpe
-
 from pulp.ne16.ne16 import Ne16
 from pulp.icache_ctrl.icache_ctrl_v2 import Icache_ctrl
 
@@ -129,8 +127,6 @@ class Cluster(st.Component):
             # NE16
             ne16 = Ne16(self, 'ne16')
 
-#### TASK INTEGRATE HWPE -- Instantiate hwpe here 
-
         # Icache controller
         icache_ctrl = Icache_ctrl(self, 'icache_ctrl')
     
@@ -208,8 +204,6 @@ class Cluster(st.Component):
         periph_ico.add_mapping('dma', **self._reloc_mapping(self.get_property('peripherals/dma/mapping')))
         self.bind(periph_ico, 'dma', mchan, 'in_%d' % nb_pe)
 
-#### TASK INTEGRATE HWPE -- Connect hwpe to the peripheral interconnect 
-
         if has_ne16:
             periph_ico.add_mapping('ne16', **self._reloc_mapping(self.get_property('peripherals/ne16/mapping')))
             self.bind(periph_ico, 'ne16', ne16, 'input')
@@ -245,8 +239,6 @@ class Cluster(st.Component):
                 self.bind(ne16, 'irq', event_unit, 'in_event_%d_pe_%d' % (ne16_irq, i))
 
             self.bind(ne16, 'out', l1, 'ne16_in')
-
-#### TASK INTEGRATE HWPE -- Connect hwpe's interrupt request to all the cores
             
         # Icache controller
         self.bind(icache_ctrl, 'enable', icache, 'enable')
