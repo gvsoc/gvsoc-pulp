@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2020 ETH Zurich and University of Bologna
+# Copyright (C) 2020 GreenWaves Technologies, SAS, ETH Zurich and University of Bologna
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,15 +14,12 @@
 # limitations under the License.
 #
 
-#### TASK - Change the path from pulp.chips.pulp_open.pulp_open_board to pulp.chips.pulp_open_hwpe.pulp_open_board
+import gvsoc.systree as st
 
-from pulp.chips.pulp_open.pulp_open_board import Pulp_open_board
-import gvsoc.runner as gvsoc
+class Hwpe(st.Component):
 
-class Target(gvsoc.Target):
+    def __init__(self, parent, name):
 
-    gapy_description="Pulp-open virtual board"
+        super(Hwpe, self).__init__(parent, name)
 
-    def __init__(self, parser, options):
-        super(Target, self).__init__(parser, options,
-            model=Pulp_open_board)
+        self.set_component('pulp.simple_hwpe.hwpe')
