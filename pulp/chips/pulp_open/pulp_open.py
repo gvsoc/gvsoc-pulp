@@ -15,7 +15,13 @@
 #
 
 import gvsoc.systree as st
+
+#### TASK - Change the path from pulp.chips.pulp_open.soc to pulp.chips.pulp_open_hwpe.soc
+
 from pulp.chips.pulp_open.soc import Soc
+
+#### TASK - Change the path from pulp.chips.pulp_open.cluster to pulp.chips.pulp_open_hwpe.cluster
+
 from pulp.chips.pulp_open.cluster import Cluster, get_cluster_name
 from vp.clock_domain import Clock_domain
 from utils.clock_generator import Clock_generator
@@ -24,6 +30,10 @@ import interco.router_proxy as router_proxy
 import memory.dramsys
 
 class Pulp_open(st.Component):
+
+#### TASK - Change the path from soc_config_file='pulp/chips/pulp_open/soc.json to soc_config_file='pulp/chips/pulp_open_hwpe/soc.json'
+#### TASK - Change the path from cluster_config_file='pulp/chips/pulp_open/cluster.json' to cluster_config_file='pulp/chips/pulp_open_hwpe/cluster.json'
+#### TASK - Change the path from padframe_config_file='pulp/chips/pulp_open/padframe.json' to padframe_config_file='pulp/chips/pulp_open_hwpe/padframe.json'
 
     def __init__(self, parent, name, parser, soc_config_file='pulp/chips/pulp_open/soc.json',
             cluster_config_file='pulp/chips/pulp_open/cluster.json', padframe_config_file='pulp/chips/pulp_open/padframe.json',
