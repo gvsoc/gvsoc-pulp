@@ -16,7 +16,6 @@
 
 import gvsoc.systree
 
-
 class CtrlRegisters(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name: str):
@@ -30,3 +29,6 @@ class CtrlRegisters(gvsoc.systree.Component):
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')
+    
+    def o_BARRIER_ACK(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'barrier_ack', signature='wire')

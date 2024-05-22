@@ -26,11 +26,7 @@ import interco.router as router
 import utils.loader.loader
 import gvsoc.systree as st
 from pulp.mempool.mempool_tile_submodule.dma_interleaver import DmaInterleaver
-from interco.interleaver_snitch import Interleaver
 from pulp.idma.snitch_dma import SnitchDma
-from interco.bus_watchpoint import Bus_watchpoint
-from interco.sequencer import Sequencer
-from pulp.spatz.cluster_registers import Cluster_registers
 from elftools.elf.elffile import *
 import gvsoc.runner as gvsoc
 import math
@@ -76,9 +72,6 @@ class System(st.Component):
 
         #Dummy Memory
         dummy_mem = memory.Memory(self, 'dummy_mem', size=0x30000)
-
-        # Cluster Registers for synchronization barrier
-        cluster_registers = Cluster_registers(self, 'cluster_registers', boot_addr=0, nb_cores=total_cores)
 
         # Rom Router
         rom_router = router.Router(self, 'rom_router', bandwidth=64, latency=1)
@@ -139,8 +132,7 @@ class System(st.Component):
 
         #Cluster Registers for synchronization barrier
         for i in range(0, total_cores):
-            self.bind(mempool_cluster, f'barrier_req_{i}', cluster_registers, f'barrier_req_{i}')
-            self.bind(cluster_registers, f'barrier_ack', mempool_cluster, f'barrier_ack_{i}')
+            self.bind(csr, f'barrier_ack', mempool_cluster, f'barrier_ack_{i}')
 
 class MempoolSystem(st.Component):
 
