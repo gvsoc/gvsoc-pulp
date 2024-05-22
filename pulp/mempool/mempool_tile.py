@@ -171,7 +171,6 @@ class Tile(st.Component):
 
         # Sync barrier
         for core_id in range(0, nb_cores_per_tile):
-            self.bind(self.int_cores[core_id], 'barrier_req', self, f'barrier_req_{core_id}')
             self.bind(self, f'barrier_ack_{core_id}', self.int_cores[core_id], 'barrier_ack')
 
         for core_id in range(0, nb_cores_per_tile):

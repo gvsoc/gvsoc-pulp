@@ -136,7 +136,6 @@ class Group(st.Component):
         # Propagate the barrier signals from the tiles to the group boundary
         for i in range(0, nb_tiles_per_group):
             for j in range(0, nb_cores_per_tile):
-                self.bind(self.tile_list[i], f'barrier_req_{j}', self, f'barrier_req_{i*nb_cores_per_tile+j}')
                 self.bind(self, f'barrier_ack_{i*nb_cores_per_tile+j}', self.tile_list[i], f'barrier_ack_{j}')
 
         # Other signals propagated to the group interface
