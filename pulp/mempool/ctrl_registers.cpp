@@ -16,6 +16,8 @@
 
 /*
  * Authors: Germain Haugou, ETH Zurich (germain.haugou@iis.ee.ethz.ch)
+            Yichao  Zhang , ETH Zurich (yiczhang@iis.ee.ethz.ch)
+            Chi     Zhang , ETH Zurich (chizhang@iis.ee.ethz.ch)
  */
 
 #include <vp/vp.hpp>
@@ -68,18 +70,19 @@ vp::IoReqStatus CtrlRegisters::req(vp::Block *__this, vp::IoReq *req)
     uint64_t size = req->get_size();
     bool is_write = req->get_is_write();
 
-    _this->trace.msg("Control registers access (offset: 0x%x, size: 0x%x, is_write: %d)\n", offset, size, is_write);
+    _this->trace.msg("Control registers access (offset: 0x%x, size: 0x%x, is_write: %d, data:%x)\n", offset, size, is_write, *(uint32_t *)data);
 
     if (is_write && size == 4)
     {
         uint32_t value = *(uint32_t *)data;
         if (offset == 0 && (value & 1))
         {
+            std::cout << "EOC register return value: 0x" << std::hex << ((value - 1) >> 1) << std::endl;
             _this->time.get_engine()->quit(value >> 1);
         }
         if (offset == 4 && value == 0xFFFFFFFF)
         {
-            _this->event_enqueue(_this->wakeup_event, 800);
+            _this->event_enqueue(_this->wakeup_event, 1000);
         }
     }
 
