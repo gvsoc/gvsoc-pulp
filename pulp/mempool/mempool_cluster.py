@@ -74,7 +74,7 @@ class Cluster(st.Component):
         for i in range(0, nb_groups):
             for j in range(0, nb_tiles_per_group):
                 for k in range(0, nb_cores_per_tile):
-                    self.bind(self, f'barrier_ack_{i*nb_cores_per_tile*nb_cores_per_tile+j*nb_cores_per_tile+k}', self.group_list[i], f'barrier_ack_{i*nb_cores_per_tile+j}')
+                    self.bind(self, f'barrier_ack_{i*nb_cores_per_tile*nb_tiles_per_group+j*nb_cores_per_tile+k}', self.group_list[i], f'barrier_ack_{j*nb_cores_per_tile+k}')
 
         for i in range(0, nb_groups):
             self.bind(self.group_list[i], 'rom', self, 'rom_%d' % i)
