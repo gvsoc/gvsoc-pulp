@@ -71,7 +71,7 @@ class System(st.Component):
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x80000000)
 
         #Dummy Memory
-        dummy_mem = memory.Memory(self, 'dummy_mem', size=0x30000)
+        dummy_mem = memory.Memory(self, 'dummy_mem', atomics=True, size=0x30000)
 
         # Rom Router
         rom_router = router.Router(self, 'rom_router', bandwidth=64, latency=1)
