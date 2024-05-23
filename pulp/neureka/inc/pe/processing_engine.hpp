@@ -60,7 +60,7 @@ public:
   void AccumulateAllAccumBuffer(const std::array<bool ,NeurekaColumnPerPECount>& enable, const std::array<OutFeatType, NeurekaColumnPerPECount>& value) { accum_buffer_.Accumulate(enable, value); };
   void AccumulateAtIndexOnAccumBuffer( const int& index, const bool& enable, const OutFeatType& value) { accum_buffer_.AccumulateAtIndex(index, enable, value);};
   void ComputePartialSum(Mode& mode, const std::array<std::array<bool, NeurekaBinConvPerColumnCount>, NeurekaColumnPerPECount>& enable, const std::array<std::array<InFeatType, NeurekaBinConvPerColumnCount>, NeurekaColumnPerPECount>& infeat, const std::array<std::array<InFeatType, NeurekaBinConvPerColumnCount>, NeurekaColumnPerPECount>& weight, const std::array<InFeatType, NeurekaColumnPerPECount>& shift, std::array<OutFeatType, NeurekaColumnPerPECount>&  sum_array, OutFeatType&  sum, const bool is_signed=false )
-  { compute_unit_.ComputePartialSum(mode, enable, infeat, weight, shift, sum_array, sum, is_signed);}
+  { compute_unit_.ComputePartialSum(enable, infeat, weight, shift, sum_array, sum, is_signed);}
 
   void CalculatePartialSumAndUpdateAccumBuffer(Mode& mode, int index, const std::array<std::array<bool, NeurekaBinConvPerColumnCount>,NeurekaColumnPerPECount>& enable_binconv, const std::array<bool, NeurekaColumnPerPECount>& enable_accum, const std::array<std::array<InFeatType, NeurekaBinConvPerColumnCount>,NeurekaColumnPerPECount>& infeat, const std::array<std::array<InFeatType, NeurekaBinConvPerColumnCount>,NeurekaColumnPerPECount>& weight, const std::array<InFeatType, NeurekaColumnPerPECount>& shift, const bool is_signed=false)
   {
