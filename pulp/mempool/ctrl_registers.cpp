@@ -31,10 +31,12 @@ public:
 
 private:
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
+    static void wakeup_event_handler(vp::Block *__this, vp::ClockEvent *event);
 
     vp::Trace trace;
     vp::IoSlave input_itf;
     vp::WireMaster<bool> barrier_ack_itf;
+    vp::ClockEvent * wakeup_event;
 };
 
 
@@ -47,8 +49,14 @@ CtrlRegisters::CtrlRegisters(vp::ComponentConf &config)
 
     this->new_slave_port("input", &this->input_itf);
     this->new_master_port("barrier_ack", &this->barrier_ack_itf);
+    this->wakeup_event = this->event_new(&CtrlRegisters::wakeup_event_handler);
 }
 
+void CtrlRegisters::wakeup_event_handler(vp::Block *__this, vp::ClockEvent *event) {
+    CtrlRegisters *_this = (CtrlRegisters *)__this;
+    _this->barrier_ack_itf.sync(1);
+    _this->trace.msg("Control registers wake up signal work and write %d to barrier ack output\n", 1);
+}
 
 
 vp::IoReqStatus CtrlRegisters::req(vp::Block *__this, vp::IoReq *req)
@@ -71,8 +79,7 @@ vp::IoReqStatus CtrlRegisters::req(vp::Block *__this, vp::IoReq *req)
         }
         if (offset == 4 && value == 0xFFFFFFFF)
         {
-            _this->barrier_ack_itf.sync(1);
-            _this->trace.msg("Control registers wake up signal work and write %d to barrier ack output\n", 1);
+            _this->event_enqueue(_this->wakeup_event, 800);
         }
     }
 
