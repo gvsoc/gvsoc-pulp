@@ -50,7 +50,7 @@ public:
         accel_instance_ = accel;
     }
 
-    void ComputePartialSum(Mode& mode, const std::array<std::array<bool, ParamBinConvPerColumnCount>, ParamColumnPerPECount>& enable,  const std::array<std::array<T1, ParamBinConvPerColumnCount>, ParamColumnPerPECount>& infeat, const std::array<std::array<T1, ParamBinConvPerColumnCount>, ParamColumnPerPECount>& weight, const std::array<T1, ParamColumnPerPECount>& shift, std::array<T2, ParamColumnPerPECount>&  sum_array, T2&  sum, const bool is_signed=false) {
+    void ComputePartialSum(const std::array<std::array<bool, ParamBinConvPerColumnCount>, ParamColumnPerPECount>& enable,  const std::array<std::array<T1, ParamBinConvPerColumnCount>, ParamColumnPerPECount>& infeat, const std::array<std::array<T1, ParamBinConvPerColumnCount>, ParamColumnPerPECount>& weight, const std::array<T1, ParamColumnPerPECount>& shift, std::array<T2, ParamColumnPerPECount>&  sum_array, T2&  sum, const bool is_signed=false) {
         for (int i = 0; i < ParamColumnPerPECount; i++) {
             sum_array[i] = column_units_[i].ComputePartialSum(enable[i], infeat[i], weight[i], shift[i], is_signed);
             sum += sum_array[i];
