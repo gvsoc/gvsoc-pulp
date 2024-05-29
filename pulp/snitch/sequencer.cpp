@@ -47,6 +47,7 @@ public:
     iss_insn_t insn;
     bool is_write;
     unsigned int frm;
+    unsigned int fmode;
 };
 
 

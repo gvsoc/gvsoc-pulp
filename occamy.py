@@ -51,6 +51,10 @@ class Soc(gvsoc.systree.Component):
         # Components
         #
 
+        # Bootrom
+        rom = memory.memory.Memory(self, 'rom', size=arch.bootrom.size,
+            stim_file=self.get_file_path('pulp/chips/occamy/bootrom.bin'))
+
         # CVA6
         # TODO binary loader is bypassing this boot addr
         host = iss.Riscv(self, 'host', isa="rv64imafdc", boot_addr=0x0100_0000, timed=False,
@@ -84,10 +88,6 @@ class Soc(gvsoc.systree.Component):
 
         # Soc control
         soc_reg = SocReg(self, 'soc_reg')
-
-        # Bootrom
-        rom = memory.memory.Memory(self, 'rom', size=arch.bootrom.size,
-            stim_file=self.get_file_path('pulp/chips/occamy/bootrom.bin'))
 
         # Narrow SPM
         spm_narrow = memory.memory.Memory(self, 'narrow_spm', size=arch.spm_narrow.size)

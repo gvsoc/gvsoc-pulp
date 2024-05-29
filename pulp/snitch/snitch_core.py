@@ -22,6 +22,19 @@ import gvsoc.systree
 
 
 def add_latencies(isa):
+
+    # To model the fact that alt fp16 and fp18 instructions are dynamically enabled through a
+    # CSR, we insert a stub which call the proper handler depending on the CSR value
+    xf16_isa = isa.get_isa('f16')
+    for insn in xf16_isa.get_insns():
+        insn.exec_func = insn.exec_func + '_switch'
+        insn.exec_func_fast = insn.exec_func_fast + '_switch'
+
+    xf8_isa = isa.get_isa('f8')
+    for insn in xf8_isa.get_insns():
+        insn.exec_func = insn.exec_func + '_switch'
+        insn.exec_func_fast = insn.exec_func_fast + '_switch'
+
     # Set snitch instruction latency:
     # 1. the latency of instruction, the core stalls for n cycles at the current instruction. (insn->latency)
     # 2. the latency of output register, the output is ready after n cycles to check data dependency. (reg.latency)
@@ -106,6 +119,7 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
             "cpu/iss/src/resource.cpp",
             "cpu/iss/src/trace.cpp",
             "cpu/iss/src/syscalls.cpp",
+            "cpu/iss/src/memcheck.cpp",
             "cpu/iss/src/htif.cpp",
             "cpu/iss/src/mmu.cpp",
             "cpu/iss/src/pmp.cpp",
@@ -179,7 +193,7 @@ class Snitch_fp_ss(cpu.iss.riscv.RiscvCommon):
             timed: bool=False):
 
 
-        isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
+        isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_fp_ss_" + isa, isa,
             extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ] )
 
         add_latencies(isa_instance)
@@ -212,6 +226,7 @@ class Snitch_fp_ss(cpu.iss.riscv.RiscvCommon):
             "cpu/iss/src/resource.cpp",
             "cpu/iss/src/trace.cpp",
             "cpu/iss/src/syscalls.cpp",
+            "cpu/iss/src/memcheck.cpp",
             "cpu/iss/src/htif.cpp",
             "cpu/iss/src/mmu.cpp",
             "cpu/iss/src/pmp.cpp",
