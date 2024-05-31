@@ -35,6 +35,13 @@ def add_latencies(isa):
         insn.exec_func = insn.exec_func + '_switch'
         insn.exec_func_fast = insn.exec_func_fast + '_switch'
 
+    xfvec_isa = isa.get_isa('fvec')
+    for insn in xfvec_isa.get_insns():
+        if 'f16vec' in insn.isa_tags or 'f16vecd' in insn.isa_tags or 'f8vec' in insn.isa_tags \
+                 or 'f8vecf' in insn.isa_tags or 'f8vecd' in insn.isa_tags:
+            insn.exec_func = insn.exec_func + '_switch'
+            insn.exec_func_fast = insn.exec_func_fast + '_switch'
+
     # Set snitch instruction latency:
     # 1. the latency of instruction, the core stalls for n cycles at the current instruction. (insn->latency)
     # 2. the latency of output register, the output is ready after n cycles to check data dependency. (reg.latency)
