@@ -67,7 +67,7 @@ class Soc(st.Component):
         # rom = memory.Memory(self, 'rom', size=0x10000, width_log2=3, stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
         rom = memory.Memory(self, 'rom', size=0x10000, width_log2=3, stim_file=self.get_file_path('pulp/snitch/bootrom.bin'))
 
-        mem = memory.Memory(self, 'mem', size=0x1000000, width_log2=6, atomics=True)
+        mem = memory.Memory(self, 'mem', size=0x80000000, width_log2=6, atomics=True)
         
         # Zero memory
         zero_mem = ZeroMem(self, 'zero_mem', size=0x10000)
@@ -99,9 +99,9 @@ class Soc(st.Component):
 
 
         # Interconnction Bindings
-        ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
+        ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x80000000)
         self.bind(ico, 'mem', mem, 'input')
-        dma_ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
+        dma_ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x80000000)
         self.bind(dma_ico, 'mem', mem, 'input')
 
         ico.add_mapping('rom', base=0x00001000, remove_offset=0x00001000, size=0x10000)
