@@ -66,6 +66,8 @@ public:
      */
     virtual bool can_accept_data() = 0;
 
+    virtual bool is_empty() = 0;
+
     /**
      * @brief Enqueue a read burst
      *
@@ -242,6 +244,9 @@ private:
     uint64_t current_transfer_dst;
     // Current size of the current transfer. This is decreased everytime a burst is delegated
     uint64_t current_transfer_size;
+    // Gives tha last backend used for the source of a transfer. This is used to check
+    // that the transfer os done before changing source backend.
+    IdmaBeConsumer *prev_transfer_src_be;
     // Source backend protocol of the current transfer
     IdmaBeConsumer *current_transfer_src_be;
     // Destination backend protocol of the current transfer

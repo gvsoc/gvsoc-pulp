@@ -60,6 +60,7 @@ public:
     uint64_t get_burst_size(uint64_t base, uint64_t size) override;
     bool can_accept_burst() override;
     bool can_accept_data() override;
+    bool is_empty() override;
 
 private:
     // FSM handler, called to check if any action should be taken after something was updated

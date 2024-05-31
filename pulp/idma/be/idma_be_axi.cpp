@@ -386,3 +386,9 @@ void IDmaBeAxi::update()
     // Trigger the event to check if any action should be taken
     this->fsm_event.enqueue();
 }
+
+
+bool IDmaBeAxi::is_empty()
+{
+    return this->pending_bursts.empty();
+}

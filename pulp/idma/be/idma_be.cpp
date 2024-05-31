@@ -89,10 +89,18 @@ void IDmaBe::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 {
     IDmaBe *_this = (IDmaBe *)__this;
 
-    // If a transfer is active and the source backend protocol is ready to accept read bursts,
-    // we can send a new one.
-    if (_this->current_transfer_size > 0 && _this->current_transfer_src_be->can_accept_burst()
-         && _this->current_transfer_dst_be->can_accept_burst())
+    // We can send a new transfer if:
+    // - a transfer is active
+    // - the source backend can accept read burst
+    // - the destination backend can accept write burst
+    // - if a transfer was previously sent, the source backend is the same of the previous
+    // trnasfer is done. This condition is to prevent several source backends to fetch
+    // bursts at the same time. Only the same source backend can do it.
+    if ((_this->prev_transfer_src_be == NULL
+        || _this->prev_transfer_src_be == _this->current_transfer_src_be
+        || _this->prev_transfer_src_be->is_empty()) && _this->current_transfer_size > 0
+        && _this->current_transfer_src_be->can_accept_burst()
+        && _this->current_transfer_dst_be->can_accept_burst())
     {
         uint64_t src = _this->current_transfer_src;
         uint64_t dst = _this->current_transfer_dst;
@@ -101,6 +109,8 @@ void IDmaBe::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         // Legalize the burst. We choose a burst that fits both backend protocols
         uint64_t burst_size = _this->current_transfer_src_be->get_burst_size(src, size);
         burst_size = _this->current_transfer_dst_be->get_burst_size(dst, burst_size);
+
+        _this->prev_transfer_src_be = _this->current_transfer_src_be;
 
         // Enqueue the read burst. This will make the source backend start sending read requests
         // to the memory
@@ -191,5 +201,6 @@ void IDmaBe::reset(bool active)
     if (active)
     {
         this->current_transfer_size = 0;
+        this->prev_transfer_src_be = NULL;
     }
 }

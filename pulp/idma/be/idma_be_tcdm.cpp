@@ -399,3 +399,10 @@ void IDmaBeTcdm::update()
     // All the checks are centralized in a new cycle in the FSM
     this->fsm_event.enqueue();
 }
+
+
+
+bool IDmaBeTcdm::is_empty()
+{
+    return this->burst_queue_base.empty();
+}
