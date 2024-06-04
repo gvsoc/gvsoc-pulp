@@ -88,7 +88,8 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
             fetch_enable: bool=False,
             boot_addr: int=0,
             inc_spatz: bool=False,
-            core_id: int=0):
+            core_id: int=0,
+            htif: bool=False):
 
 
         isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
@@ -101,7 +102,7 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
             fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True, 
-            prefetcher_size=32, custom_sources=True)
+            prefetcher_size=32, custom_sources=True, htif=htif)
 
         self.add_c_flags([
             "-DPIPELINE_STAGES=1",
@@ -197,7 +198,8 @@ class Snitch_fp_ss(cpu.iss.riscv.RiscvCommon):
             boot_addr: int=0,
             inc_spatz: bool=False,
             core_id: int=0,
-            timed: bool=False):
+            timed: bool=False,
+            htif: bool=False):
 
 
         isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_fp_ss_" + isa, isa,
@@ -210,7 +212,7 @@ class Snitch_fp_ss(cpu.iss.riscv.RiscvCommon):
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
             fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True, 
-            prefetcher_size=32, timed=timed, custom_sources=True)
+            prefetcher_size=32, timed=timed, custom_sources=True, htif=htif)
 
         self.add_c_flags([
             "-DCONFIG_ISS_CORE=snitch_fp_ss",

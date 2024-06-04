@@ -21,7 +21,7 @@ import regmap.regmap_c_header
 
 class ClusterRegisters(gvsoc.systree.Component):
 
-    def __init__(self, parent, name, boot_addr=0, nb_cores=1):
+    def __init__(self, parent, name, boot_addr=0, nb_cores=1, binary=None):
         super(ClusterRegisters, self).__init__(parent, name)
 
         self.add_sources(['pulp/snitch/snitch_cluster/cluster_registers.cpp'])

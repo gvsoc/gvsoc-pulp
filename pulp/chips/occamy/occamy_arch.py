@@ -155,9 +155,9 @@ class OccamyArch:
                 self.clusters = []
                 current_hardid = first_hartid
                 for id in range(0, self.nb_cluster):
-                    self.clusters.append(
-                        ClusterArch(properties, self.get_cluster_base(id), current_hardid)
-                    )
+                    cluster_arch = ClusterArch(properties, self.get_cluster_base(id),
+                        current_hardid, auto_fetch=True, boot_addr=0x0100_0000)
+                    self.clusters.append(cluster_arch)
                     current_hardid += self.clusters[id].nb_core
 
                 self.nb_core = current_hardid - first_hartid
