@@ -51,6 +51,10 @@ public:
     // Free rom for additional information
     std::vector<uint64_t> data;
 
+
+    // Remaining number of bytes to be acknowledge when writing to memory. Used to know when
+    // transfer can be terminated
+    uint64_t ack_size;
     // Number of bursts of the transfer. This may be used for splitting a transfer into bursts
     int nb_bursts;
     // Tell if all bursts have been sent
