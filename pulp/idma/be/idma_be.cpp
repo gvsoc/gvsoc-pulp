@@ -59,7 +59,8 @@ IdmaBeConsumer *IDmaBe::get_be_consumer(uint64_t base, uint64_t size, bool is_re
 // no active transfer
 void IDmaBe::enqueue_transfer(IdmaTransfer *transfer)
 {
-    this->trace.msg(vp::Trace::LEVEL_TRACE, "Queueing burst (burst: %p)\n", transfer);
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Queueing burst (burst: %p, src: 0x%x, dst: 0x%x, size: 0x%x)\n",
+        transfer, transfer->src, transfer->dst, transfer->size);
 
     // Push the transfer into the queue, we will need it later when the bursts are coming back
     // from memory. We will remove it from the queue when the transfer is fully done
@@ -68,6 +69,7 @@ void IDmaBe::enqueue_transfer(IdmaTransfer *transfer)
     // Extract information abouth the transfer
     this->current_transfer = transfer;
     this->current_transfer_size = transfer->size;
+    transfer->ack_size = transfer->size;
     this->current_transfer_src = transfer->src;
     this->current_transfer_dst = transfer->dst;
     this->current_transfer_src_be = this->get_be_consumer(transfer->src, transfer->size, true);
@@ -79,7 +81,7 @@ void IDmaBe::enqueue_transfer(IdmaTransfer *transfer)
 
 bool IDmaBe::can_accept_transfer()
 {
-    // Only accept a new transfer if no transfer is on-going
+    // Only accept a new transfer if no transfer is on-going.
     return this->current_transfer_size == 0;
 }
 
@@ -176,7 +178,7 @@ void IDmaBe::write_data(uint8_t *data, uint64_t size)
 
 
 // This is called by the destination backend protocol to acknowledged written data
-void IDmaBe::ack_data(uint8_t *data)
+void IDmaBe::ack_data(uint8_t *data, int size)
 {
     // Get the source backend protocol for the first transfer
     IdmaTransfer *transfer = this->transfer_queue.front();
@@ -185,9 +187,17 @@ void IDmaBe::ack_data(uint8_t *data)
     // And acknowledge the data to it so that the data can be freed
     src_be->write_data_ack(data);
 
-    // Also check if the transfer is done
-    if (transfer->size == 0)
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Acknowledging written (size: 0x%x, remaining_size: 0x%x)\n",
+        size, transfer->ack_size);
+
+    // Account the acknowledged data
+    transfer->ack_size -= size;
+
+    // And in case the whole transfer has been acknowledged, terminate it
+    if (transfer->ack_size == 0)
     {
+        this->trace.msg(vp::Trace::LEVEL_TRACE, "Finished burst (transfer: %p)\n", transfer);
+
         // And if so, remove it and notify the middle end
         this->transfer_queue.pop();
         this->me->ack_transfer(transfer);

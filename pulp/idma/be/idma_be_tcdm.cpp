@@ -122,6 +122,7 @@ void IDmaBeTcdm::write_data(uint8_t *data, uint64_t size)
 
     // Since the data may be bigger than a line, first enqueue the whole data and process it
     // line by line
+    this->write_current_chunk_ack_size = size;
     this->write_current_chunk_size = size;
     this->write_current_chunk_base = this->current_burst_base;
     this->write_current_chunk_data = data;
@@ -221,7 +222,7 @@ void IDmaBeTcdm::write_handle_req_ack()
     {
         this->be->update();
         // If the chunk is done, acknowledge it
-        this->be->ack_data(this->write_current_chunk_data_start);
+        this->be->ack_data(this->write_current_chunk_data_start, this->write_current_chunk_ack_size);
     }
     else
     {

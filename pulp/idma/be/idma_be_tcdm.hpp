@@ -109,6 +109,8 @@ private:
     uint64_t write_current_chunk_base;
     // When a chunk is being written line by line, this gives the remaining size
     uint64_t write_current_chunk_size;
+    // Size to be acknowledged when write response is received
+    uint64_t write_current_chunk_ack_size;
     // When a chunk is being written line by line, this gives the data pointer for next line
     uint8_t *write_current_chunk_data;
     // When a chunk is being written line by line, this gives the data pointer to the beginning

@@ -265,8 +265,8 @@ void IDmaBeAxi::write_data(uint8_t *data, uint64_t size)
     uint64_t base = this->current_burst_base;
     this->current_burst_base += size;
 
-    this->trace.msg(vp::Trace::LEVEL_TRACE, "Write data (base: 0x%lx, size: 0x%lx)\n",
-        base, size);
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Write data (req: %p, base: 0x%lx, size: 0x%lx)\n",
+        req, base, size);
 
     req->prepare();
     req->set_is_write(true);
@@ -295,13 +295,18 @@ void IDmaBeAxi::write_data(uint8_t *data, uint64_t size)
 
 void IDmaBeAxi::write_handle_req_end(vp::IoReq *req)
 {
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Handling end of request (req: %p)\n", req);
+
     // Acknowledge now the data since they are gone, to let the other backend protocol sending the
     // rest of the burst immediately
-    this->be->ack_data(req->get_data());
+    this->be->ack_data(req->get_data(), req->get_size());
 
     // Account this chunk on the first pending burst
     vp::IoReq *burst = this->pending_bursts.front();
     burst->set_size(burst->get_size() - req->get_size());
+
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Updating burst remaining size (burst: %p, req_size: %d, burst_size: %d)\n",
+        burst, req->get_size(), burst->get_size());
 
     // And release it in case it is done
     if (burst->get_size() == 0)
