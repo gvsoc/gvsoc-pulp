@@ -26,10 +26,9 @@ import interco.router as router
 import utils.loader.loader
 import gvsoc.systree as st
 from pulp.mempool.mempool_tile_submodule.dma_interleaver import DmaInterleaver
-from interco.interleaver_snitch import Interleaver
+from interco.interleaver import Interleaver
 from pulp.idma.snitch_dma import SnitchDma
 from interco.bus_watchpoint import Bus_watchpoint
-from interco.sequencer import Sequencer
 from pulp.spatz.cluster_registers import Cluster_registers
 from elftools.elf.elffile import *
 import gvsoc.runner as gvsoc

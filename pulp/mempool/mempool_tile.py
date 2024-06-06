@@ -17,7 +17,7 @@
 # Author: Yichao Zhang (ETH Zurich) (yiczhang@iis.ee.ethz.ch)
 
 import gvsoc.runner
-import cpu.iss.riscv as iss
+import pulp.snitch.snitch_core as iss
 from memory.memory import Memory
 from pulp.snitch.hierarchical_cache import Hierarchical_cache
 from vp.clock_domain import Clock_domain
@@ -28,7 +28,7 @@ import gvsoc.systree as st
 from pulp.mempool.mempool_tile_submodule.dma_interleaver import DmaInterleaver
 from pulp.idma.snitch_dma import SnitchDma
 from interco.bus_watchpoint import Bus_watchpoint
-from interco.sequencer import Sequencer
+from pulp.snitch.sequencer import Sequencer
 from pulp.spatz.cluster_registers import Cluster_registers
 from elftools.elf.elffile import *
 import gvsoc.runner as gvsoc
@@ -55,7 +55,7 @@ class Tile(st.Component):
         nb_remote_ports = nb_groups
         nb_tiles_per_group = int((total_cores/nb_groups)/nb_cores_per_tile)
         global_tile_id = tile_id + group_id * nb_tiles_per_group
-        Xfrep = 1
+        Xfrep = 0
         stack_size_per_tile = 0x1000
         mem_size = nb_cores_per_tile * bank_factor * 1024
         
@@ -71,7 +71,7 @@ class Tile(st.Component):
         ################################################################
 
         # Stack Memory
-        stack_mem = Memory(self, 'stack_mem', size=0x1000, width_log2=int(math.log(4, 2.0)), atomics=True, core='snitch', mem='tcdm')
+        stack_mem = Memory(self, 'stack_mem', size=0x1000, width_log2=int(math.log(4, 2.0)), atomics=True)
         
         # Snitch TCDM (L1 subsystem)
         l1 = l1_subsystem.L1_subsystem(self, 'l1', \
@@ -91,8 +91,8 @@ class Tile(st.Component):
 
         # Core Complex
         for core_id in range(0, nb_cores_per_tile):
-            self.int_cores.append(iss.Snitch(self, f'pe{core_id}', isa="rv32imaf", core_id=group_id*nb_tiles_per_group*nb_cores_per_tile+tile_id*nb_cores_per_tile+core_id))
-            self.fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa="rv32imaf", core_id=group_id*nb_tiles_per_group*nb_cores_per_tile+tile_id*nb_cores_per_tile+core_id))
+            self.int_cores.append(iss.Snitch(self, f'pe{core_id}', isa="rv32imaf", htif=False, core_id=group_id*nb_tiles_per_group*nb_cores_per_tile+tile_id*nb_cores_per_tile+core_id))
+            self.fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa="rv32imaf", htif=False, core_id=group_id*nb_tiles_per_group*nb_cores_per_tile+tile_id*nb_cores_per_tile+core_id))
             if Xfrep:
                 fpu_sequencers.append(Sequencer(self, f'fpu_sequencer{core_id}', latency=0))
 
