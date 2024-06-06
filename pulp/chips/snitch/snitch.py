@@ -23,6 +23,8 @@ import memory.memory
 from elftools.elf.elffile import *
 import interco.router as router
 import utils.loader.loader
+import pulp.floonoc.floonoc
+import math
 
 
 
@@ -33,6 +35,7 @@ class SnitchArchProperties:
         self.nb_core_per_cluster     = 9
         self.hbm_size                = 0x80000000
         self.hbm_type                = 'simple'
+        self.noc_type                = 'simple'
 
 
     def declare_target_properties(self, target):
@@ -46,12 +49,16 @@ class SnitchArchProperties:
             description='Type of the HBM external memory'
         )
 
-        self.nb_cluster_ = target.declare_user_property(
+        self.nb_cluster = target.declare_user_property(
             name='soc/nb_cluster', value=self.nb_cluster, cast=int, description='Number of clusters'
         )
 
         self.nb_core_per_cluster = target.declare_user_property(
             name='soc/cluster/nb_core', value=self.nb_core_per_cluster, cast=int, description='Number of cores per cluster'
+        )
+
+        self.noc_type = target.declare_user_property(
+            name='noc_type', value=self.hbm_type, allowed_values=['simple', 'floonoc'], description='Type of the NoC'
         )
 
 
@@ -86,6 +93,7 @@ class SnitchArch:
 
                 self.bootrom      = Area( 0x0000_1000,       0x0001_0000)
                 self.hbm          = Area( 0x8000_0000,       0x8000_0000)
+                self.floonoc      = properties.noc_type == 'floonoc'
 
                 self.nb_cluster = properties.nb_cluster
                 self.cluster  = Area(0x1000_0000, 0x0004_0000)
@@ -97,6 +105,13 @@ class SnitchArch:
                         current_hartid)
                     self.clusters.append(cluster_arch)
                     current_hartid += self.clusters[id].nb_core
+
+                if self.floonoc:
+                    self.nb_x_tiles = int(math.sqrt(self.nb_cluster))
+                    self.nb_y_tiles = int(self.nb_cluster / self.nb_x_tiles)
+                    self.nb_banks = 2*self.nb_x_tiles + 2*self.nb_y_tiles
+                    self.bank_size = self.hbm.size / self.nb_banks
+
 
             def get_cluster_base(self, id:int):
                 return self.cluster.base + id * self.cluster.size
@@ -137,6 +152,11 @@ class Soc(gvsoc.systree.Component):
         for id in range(0, arch.nb_cluster):
             clusters.append(SnitchCluster(self, f'cluster_{id}', arch.get_cluster(id), entry=entry))
 
+        # NoC
+        if arch.floonoc:
+            noc = pulp.floonoc.floonoc.FlooNocClusterTiles(self, 'noc', nb_x_tiles=arch.nb_x_tiles, nb_y_tiles=arch.nb_y_tiles)
+
+
         # Extra component for binary loading
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry_addr=arch.bootrom.base + 0x20)
 
@@ -161,7 +181,105 @@ class Soc(gvsoc.systree.Component):
         # Binary loader
         loader.o_OUT(narrow_axi.i_INPUT())
         for id in range(0, arch.nb_cluster):
-            loader.o_START(clusters[id].i_FETCHEN())
+            if id == 0:
+                loader.o_START(clusters[id].i_FETCHEN())
+
+
+    def i_HBM(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'hbm', signature='io')
+
+    def o_HBM(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('hbm', itf, signature='io')
+
+
+
+class SocFlooNoc(gvsoc.systree.Component):
+
+    def __init__(self, parent, name, arch, binary, debug_binaries):
+        super().__init__(parent, name)
+
+        entry = 0
+        if binary is not None:
+            with open(binary, 'rb') as file:
+                elffile = ELFFile(file)
+                entry = elffile['e_entry']
+
+        #
+        # Components
+        #
+
+        # Bootrom
+        rom = memory.memory.Memory(self, 'rom', size=arch.bootrom.size,
+            stim_file=self.get_file_path('pulp/snitch/bootrom.bin'))
+
+        # Narrow 64bits router
+        narrow_axi = router.Router(self, 'narrow_axi', bandwidth=8)
+
+        # Clusters
+        clusters = []
+        for id in range(0, arch.nb_cluster):
+            clusters.append(SnitchCluster(self, f'cluster_{id}', arch.get_cluster(id), entry=entry))
+
+        # NoC
+        if arch.floonoc:
+            noc = pulp.floonoc.floonoc.FlooNocClusterTiles(self, 'noc', width=512,
+                nb_x_tiles=arch.nb_x_tiles, nb_y_tiles=arch.nb_y_tiles)
+
+
+        # Extra component for binary loading
+        loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry_addr=arch.bootrom.base + 0x20)
+
+        #
+        # Bindings
+        #
+
+        # Memory
+        narrow_axi.o_MAP ( noc.i_INPUT     (1, 1), base=arch.hbm.base, size=arch.hbm.size, rm_base=False )
+
+        for id in range(0, arch.nb_cluster):
+            tile_x = int(id % arch.nb_x_tiles)
+            tile_y = int(id / arch.nb_x_tiles)
+            noc.o_MAP(clusters[id].i_WIDE_INPUT(), base=arch.get_cluster_base(id), size=arch.cluster.size,
+                x=tile_x+1, y=tile_y+1)
+
+            clusters[id].o_WIDE_SOC(noc.i_TILE_INPUT(tile_x, tile_y))
+
+        current_bank_base = arch.hbm.base
+        for i in range(1, arch.nb_x_tiles+1):
+            bank = memory.memory.Memory(self, f'bank_{i}_0', size=arch.bank_size)
+            noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
+                x=i, y=0)
+            current_bank_base += arch.bank_size
+        for i in range(1, arch.nb_x_tiles+1):
+            bank = memory.memory.Memory(self, f'bank_{i}_{arch.nb_y_tiles+1}', size=arch.bank_size)
+            noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
+                x=i, y=arch.nb_x_tiles+1)
+            current_bank_base += arch.bank_size
+        for i in range(1, arch.nb_y_tiles+1):
+            bank = memory.memory.Memory(self, f'bank_0_{i}', size=arch.bank_size)
+            noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
+                x=0, y=i)
+            current_bank_base += arch.bank_size
+        for i in range(1, arch.nb_y_tiles+1):
+            bank = memory.memory.Memory(self, f'bank_{arch.nb_x_tiles+1}_{i}', size=arch.bank_size)
+            noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
+                x=arch.nb_x_tiles+1, y=i)
+            current_bank_base += arch.bank_size
+
+        # ROM
+        narrow_axi.o_MAP ( rom.i_INPUT     (), base=arch.bootrom.base, size=arch.bootrom.size, rm_base=True  )
+
+        # Clusters
+        for id in range(0, arch.nb_cluster):
+            clusters[id].o_NARROW_SOC(narrow_axi.i_INPUT())
+            narrow_axi.o_MAP ( clusters[id].i_NARROW_INPUT (), base=arch.get_cluster_base(id),
+                size=arch.cluster.size, rm_base=True  )
+
+        # Binary loader
+        loader.o_OUT(narrow_axi.i_INPUT())
+        for id in range(0, arch.nb_cluster):
+            if id == 0:
+                loader.o_START(clusters[id].i_FETCHEN())
 
 
     def i_HBM(self) -> gvsoc.systree.SlaveItf:
@@ -176,7 +294,10 @@ class Snitch(gvsoc.systree.Component):
     def __init__(self, parent, name, arch, binary, debug_binaries):
         super(Snitch, self).__init__(parent, name)
 
-        soc = Soc(self, 'soc', arch.soc, binary, debug_binaries)
+        if arch.soc.floonoc:
+            soc = SocFlooNoc(self, 'soc', arch.soc, binary, debug_binaries)
+        else:
+            soc = Soc(self, 'soc', arch.soc, binary, debug_binaries)
 
         soc.o_HBM(self.i_HBM())
 
