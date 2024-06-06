@@ -18,7 +18,7 @@ import gvsoc.systree
 from memory.memory import Memory
 from interco.router import Router
 from interco.converter import Converter
-from interco.interleaver_snitch import Interleaver
+from interco.interleaver import Interleaver
 from pulp.snitch.snitch_cluster_submodule.dma_interleaver import DmaInterleaver
 import math
 
@@ -77,7 +77,7 @@ class L1_subsystem(gvsoc.systree.Component):
         l1_banks = []
         for i in range(0, nb_banks_per_tile):
             tcdm = Memory(self, 'tcdm_bank%d' % i, size=l1_bank_size, width_log2=int(math.log(bandwidth, 2.0)), 
-                            atomics=True, core='snitch', mem='tcdm')
+                            atomics=True)
             l1_banks.append(tcdm)
 
         # L1 interleaver (virtual)

@@ -62,7 +62,7 @@ class System(st.Component):
         rom = memory.Memory(self, 'rom', size=0x1000, width_log2=6, stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
 
         # L2 Memory
-        l2_mem = memory.Memory(self, 'l2_mem', size=0x1000000, width_log2=6, atomics=True, core="snitch", mem='mem')
+        l2_mem = memory.Memory(self, 'l2_mem', size=0x1000000, width_log2=6, atomics=True)
 
         # CSR
         csr = CtrlRegisters(self, 'ctrl_registers')
