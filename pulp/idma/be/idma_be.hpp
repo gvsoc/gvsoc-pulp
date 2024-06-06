@@ -184,7 +184,7 @@ public:
      * as soon as it is written to the destination pointer and the data pointer can be released
      * by the source backend protocol.
      */
-    virtual void ack_data(uint8_t *data) = 0;
+    virtual void ack_data(uint8_t *data, int size) = 0;
 };
 
 
@@ -220,7 +220,7 @@ public:
     void update() override;
     bool is_ready_to_accept_data() override;
     void write_data(uint8_t *data, uint64_t size) override;
-    void ack_data(uint8_t *data) override;
+    void ack_data(uint8_t *data, int size) override;
 
 private:
     // FSM handler, called to check if any action should be taken after something was updated
