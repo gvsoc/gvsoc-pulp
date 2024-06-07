@@ -25,6 +25,8 @@
 
 class FlooNoc;
 
+
+
 class Router : public vp::Block
 {
 public:
@@ -48,7 +50,7 @@ private:
     int x;
     int y;
     int queue_size;
-    std::queue<vp::IoReq *> input_queues[5];
+    vp::Queue *input_queues[5];
     vp::ClockEvent fsm_event;
     int current_queue;
     bool stalled_queues[5];

@@ -27,6 +27,8 @@
 
 
 
+
+
 Router::Router(FlooNoc *noc, int x, int y, int queue_size)
     : vp::Block(noc, "router_" + std::to_string(x) + "_" + std::to_string(y)),
     fsm_event(this, &Router::fsm_handler)
@@ -37,6 +39,12 @@ Router::Router(FlooNoc *noc, int x, int y, int queue_size)
     this->x = x;
     this->y = y;
     this->queue_size = queue_size;
+
+    for (int i=0; i<5; i++)
+    {
+        this->input_queues[i] = new vp::Queue(this, "input_queue_" + std::to_string(i),
+            &this->fsm_event);
+    }
 }
 
 bool Router::handle_request(vp::IoReq *req, int from_x, int from_y)
@@ -47,14 +55,11 @@ bool Router::handle_request(vp::IoReq *req, int from_x, int from_y)
 
     this->trace.msg(vp::Trace::LEVEL_DEBUG, "Pushed request to input queue (req: %p, queue: %d)\n", req, queue_index);
 
-    std::queue<vp::IoReq *> &queue = this->input_queues[queue_index];
+    vp::Queue *queue = this->input_queues[queue_index];
 
-    queue.push(req);
+    queue->push_back(req);
 
-    // Since we pushed a new request, check in next cycle if it needs to be handled
-    this->fsm_event.enqueue(1);
-
-    return queue.size() > this->queue_size;
+    return queue->size() > this->queue_size;
 }
 
 void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
@@ -72,10 +77,10 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
     for (int i=0; i<5; i++)
     {
-        std::queue<vp::IoReq *> &queue = _this->input_queues[queue_index];
-        if (!queue.empty())
+        vp::Queue *queue = _this->input_queues[queue_index];
+        if (!queue->empty())
         {
-            vp::IoReq *req = queue.front();
+            vp::IoReq *req = (vp::IoReq *)queue->head();
 
             int to_x = req->get_int(FlooNoc::REQ_DEST_X);
             int to_y = req->get_int(FlooNoc::REQ_DEST_Y);
@@ -88,8 +93,8 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 continue;
             }
 
-            queue.pop();
-            if (queue.size() == _this->queue_size)
+            queue->pop();
+            if (queue->size() == _this->queue_size)
             {
                 // In case the queue has one more element than possible, it means the output
                 // queue of the sending router is stalled. Unstall it now that we can accept
