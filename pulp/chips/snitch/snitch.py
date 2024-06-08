@@ -154,7 +154,7 @@ class Soc(gvsoc.systree.Component):
 
         # NoC
         if arch.floonoc:
-            noc = pulp.floonoc.floonoc.FlooNocClusterTiles(self, 'noc', nb_x_tiles=arch.nb_x_tiles, nb_y_tiles=arch.nb_y_tiles)
+            noc = pulp.floonoc.floonoc.FlooNocClusterGrid(self, 'noc', nb_x_clusters=arch.nb_x_tiles, nb_y_clusters=arch.nb_y_tiles)
 
 
         # Extra component for binary loading
@@ -222,8 +222,8 @@ class SocFlooNoc(gvsoc.systree.Component):
 
         # NoC
         if arch.floonoc:
-            noc = pulp.floonoc.floonoc.FlooNocClusterTiles(self, 'noc', width=512,
-                nb_x_tiles=arch.nb_x_tiles, nb_y_tiles=arch.nb_y_tiles)
+            noc = pulp.floonoc.floonoc.FlooNocClusterGrid(self, 'noc', width=512/8,
+                nb_x_clusters=arch.nb_x_tiles, nb_y_clusters=arch.nb_y_tiles)
 
 
         # Extra component for binary loading
@@ -242,7 +242,7 @@ class SocFlooNoc(gvsoc.systree.Component):
             noc.o_MAP(clusters[id].i_WIDE_INPUT(), base=arch.get_cluster_base(id), size=arch.cluster.size,
                 x=tile_x+1, y=tile_y+1)
 
-            clusters[id].o_WIDE_SOC(noc.i_TILE_INPUT(tile_x, tile_y))
+            clusters[id].o_WIDE_SOC(noc.i_CLUSTER_INPUT(tile_x, tile_y))
 
         current_bank_base = arch.hbm.base
         for i in range(1, arch.nb_x_tiles+1):

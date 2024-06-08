@@ -29,23 +29,30 @@
 FlooNoc::FlooNoc(vp::ComponentConf &config)
     : vp::Component(config)
 {
-    traces.new_trace("trace", &trace, vp::DEBUG);
+    this->traces.new_trace("trace", &trace, vp::DEBUG);
 
+    // Get properties from generator
     this->width = get_js_config()->get("width")->get_int();
     this->dim_x = get_js_config()->get_int("dim_x");
     this->dim_y = get_js_config()->get_int("dim_y");
     this->router_input_queue_size = get_js_config()->get_int("router_input_queue_size");
 
+    // Reserve the array for the target. We may have one target at each node.
     this->targets.resize(this->dim_x * this->dim_y);
 
+    // Go through the mappings to create one master IO interface for each target
     js::Config *mappings = get_js_config()->get("mappings");
     if (mappings != NULL)
     {
+        // For now entries are stored in a classic array. When a request is received, we will
+        // to compare to each entry which may be slow when having lots of target.
+        // We could optimize it by using a tree.
         this->entries.resize(mappings->get_childs().size());
         int id = 0;
-
         for (auto& mapping: mappings->get_childs())
         {
+            // For each mapping we create the master interface where we'll forward request to the
+            // target
             js::Config *config = mapping.second;
 
             vp::IoMaster *itf = new vp::IoMaster();
@@ -54,11 +61,14 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
             itf->set_grant_meth(&FlooNoc::grant);
             this->new_master_port(mapping.first, itf);
 
+            // And we add an entry so that we can turn an address into a target position
             this->entries[id].base = config->get_uint("base");
             this->entries[id].size = config->get_uint("size");
             this->entries[id].x = config->get_int("x");
             this->entries[id].y = config->get_int("y");
 
+            // Once a request reaches the right position, the target will be retrieved through
+            // this array indexed by the position
             this->targets[this->entries[id].y * this->dim_x + this->entries[id].x] = itf;
 
             this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding target (name: %s, base: 0x%x, size: 0x%x, x: %d, y: %d)\n",
@@ -68,6 +78,7 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
         }
     }
 
+    // Create the array of networks interfaces
     this->network_interfaces.resize(this->dim_x * this->dim_y);
     js::Config *network_interfaces = get_js_config()->get("network_interfaces");
     if (network_interfaces != NULL)
@@ -83,6 +94,7 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
         }
     }
 
+    // Create the array of routers
     this->routers.resize(this->dim_x * this->dim_y);
     js::Config *routers = get_js_config()->get("network_interfaces");
     if (routers != NULL)
@@ -100,6 +112,11 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
 }
 
 
+// This notifies the end of an internal requests, which is part of an external burst
+// This gets called in 2 different ways:
+// - When a router gets a synchronous response
+// - When an interface receives a call to the response callback
+// In both cases, the requests is accounted on the initiator burst, in the network interface
 void FlooNoc::handle_request_end(vp::IoReq *req)
 {
     NetworkInterface *ni = *(NetworkInterface **)req->arg_get(FlooNoc::REQ_DEST_NI);
@@ -113,10 +130,13 @@ Router *FlooNoc::get_router(int x, int y)
     return this->routers[y * this->dim_x + x];
 }
 
+
+
 NetworkInterface *FlooNoc::get_network_interface(int x, int y)
 {
     return this->network_interfaces[y * this->dim_x + x];
 }
+
 
 
 vp::IoMaster *FlooNoc::get_target(int x, int y)
@@ -126,27 +146,50 @@ vp::IoMaster *FlooNoc::get_target(int x, int y)
 
 
 
+// This gets called when a request was pending and the response is received
 void FlooNoc::response(vp::Block *__this, vp::IoReq *req)
 {
     FlooNoc *_this = (FlooNoc *)__this;
+    // Just notify the end of request to account it in the network interface
     _this->handle_request_end(req);
 }
 
 
+
+// This gets called after a request sent to a target was denied, and it is now granted
 void FlooNoc::grant(vp::Block *__this, vp::IoReq *req)
 {
+    // When the request sent by the router to the target was denied, the router was stored in
+    // the request to notify it when the request is granted.
+    // Get back the router and forward the grant
     FlooNoc *_this = (FlooNoc *)__this;
     Router *router = *(Router **)req->arg_get(FlooNoc::REQ_ROUTER);
     router->grant(req);
 }
 
 
+
 void FlooNoc::reset(bool active)
 {
-    if (active)
-    {
-    }
 }
+
+
+
+Entry *FlooNoc::get_entry(uint64_t base, uint64_t size)
+{
+    // For now, we store mapping in a classic array.
+    // Just go through each entry one by one, until one is matching the requested memory location
+    for (int i=0; i<this->entries.size(); i++)
+    {
+        Entry *entry = &this->entries[i];
+        if (base >= entry->base && base + size <= entry->base + entry->size)
+        {
+            return entry;
+        }
+    }
+    return NULL;
+}
+
 
 
 extern "C" vp::Component *gv_new(vp::ComponentConf &config)
