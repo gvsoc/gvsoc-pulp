@@ -25,6 +25,14 @@
 
 class FlooNoc;
 
+/**
+ * @brief FlooNoc network interface
+ *
+ * Network interfaces are entry point to the noc.
+ * Initiators can injects IO bursts there.
+ * The network interface is then in charge of splitting the bursts into request which fit
+ * the noc width and pass them to the closest router, so that they routed to the destination
+ */
 class NetworkInterface : public vp::Block
 {
 public:
@@ -32,24 +40,48 @@ public:
 
     void reset(bool active);
 
+    // This gets called by the top when an asynchronous response is received from a target.
     void handle_response(vp::IoReq *req);
+    // This gets called by a router to unstall the output queue of the network interface after
+    // a request was denied because the input queue of the router was full
     void unstall_queue(int from_x, int from_y);
 
 private:
+    // Input method called when a burst is received from the local initiator
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
+    // FSM event handler called when something happened and queues need to be checked to see
+    // if a request should be handled.
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
-    void check_state();
 
+    // Pointer to top
     FlooNoc *noc;
+    // X position of this network interface in the grid
     int x;
+    // Y position of this network interface in the grid
     int y;
+    // Input IO interface where incoming burst are injected into the network
     vp::IoSlave input_itf;
+    // This block trace
     vp::Trace trace;
+    // Queue of pending incoming bursts. Any received burst is pushed there and they are processed
+    // one by one sequentially by the network interface.
     std::queue<vp::IoReq *> pending_bursts;
+    // Current base address of the burst currently being processed. It is used to update the address
+    // of the internal requests send to the routers to process the burst
     uint64_t pending_burst_base;
+    // Remaining size of the burst currently being processed. Used to track when all requests
+    // for the current burst have been sent.
     uint64_t pending_burst_size;
+    // Current data of the burst currently being processed.
     uint8_t *pending_burst_data;
+    // Clock event used to schedule FSM handler. This is scheduled eveytime something may need to
+    // be done
     vp::ClockEvent fsm_event;
+    // List of available internal requests used to process a burst. The network interface will send
+    // requests out of the burst until there is no more available, and will continue when one
+    // becomes free
     std::queue<vp::IoReq *> free_reqs;
+    // True when the output queue is stalled because a router denied a request. The network
+    // interface can not send any request until it gets unstalled
     bool stalled;
 };
