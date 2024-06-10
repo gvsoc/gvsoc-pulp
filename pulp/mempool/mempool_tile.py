@@ -100,24 +100,25 @@ class Tile(st.Component):
         ##########               Design Bindings              ##########
         ################################################################
 
-        # Stack Memory (non-interleaved)
+        ############################################################################################
+        #                                          |--> stack_ico --> stack_mem                    #
+        # Core --> Buswatchpoint --> ico router -->|                                               #
+        #                                          |--> L1 submodule --> Remote TCDM interfaces    #
+        ############################################################################################
+
+        # ICO --> stack_ico --> stack_mem (non-interleaved)
         for i in range(0, nb_cores_per_tile):
             ico_list[i].add_mapping('stack_mem', base=0x00000000 + global_tile_id * mem_size, remove_offset=0x00000000 + global_tile_id * mem_size, size=stack_size_per_tile)
             self.bind(ico_list[i], 'stack_mem', stack_ico, 'input')
         stack_ico.add_mapping('stack_mem', base=0x00000000 + global_tile_id * mem_size, remove_offset=0x00000000 + global_tile_id * mem_size, size=stack_size_per_tile)
         self.bind(stack_ico, 'stack_mem', stack_mem, 'input')
 
-        # L1 TCDM
+        # ICO --> L1 TCDM
         for i in range(0, nb_cores_per_tile):
             ico_list[i].add_mapping('l1', base=0x00000000 + stack_size_per_tile * nb_tiles_per_group * nb_groups, remove_offset=0x00000000 + stack_size_per_tile * nb_tiles_per_group * nb_groups, size=total_cores * bank_factor * 1024)
             self.bind(ico_list[i], 'l1', l1, f'pe_in{i}')
-
-        # L2 Memory
-        for i in range(0, nb_cores_per_tile):
-            ico_list[i].add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
-            self.bind(ico_list[i], 'mem', axi_ico, 'input')
         
-        # remote TCDM ports
+        # L1 TCDM --> Remote TCDM interfaces
         self.bind(self, 'grp_local_slave_in', l1, 'remote_in0')
         self.bind(l1, 'remote_out0', self, 'grp_local_master_out')
         
@@ -130,9 +131,16 @@ class Tile(st.Component):
         self.bind(self, 'grp_remt2_slave_in', l1, 'remote_in3')
         self.bind(l1, 'remote_out3', self, 'grp_remt2_master_out')
 
+        ###########################################################
+        #                                       |--> ROM          #
+        # Core -->|--icache--> |-->AXI router-->|--> CSR          #
+        #         |--bypass--> |                |--> L2 Memory    #
+        #                                       |--> Dummy Memory #
+        ###########################################################
+
         # Icache -> AXI
         self.bind(icache, 'refill', axi_ico, 'input')
-        
+
         # AXI <-> ROM ports
         axi_ico.add_mapping('rom', base=0xa0000000, remove_offset=0xa0000000, size=0x1000)
         self.bind(axi_ico, 'rom', self, 'rom')
@@ -165,20 +173,17 @@ class Tile(st.Component):
                             if symbol.name == 'fromhost':
                                 fromhost_addr = symbol.entry['st_value']
 
-        # Core Interconnections
+        # Core Bus Watchpoint
         for core_id in range(0, nb_cores_per_tile):
             bus_watchpoints.append(Bus_watchpoint(self, f'tohost{core_id}', tohost_addr, fromhost_addr, word_size=32))
+            self.bind(bus_watchpoints[core_id], 'output', ico_list[core_id], 'input')
 
         # Sync barrier
         for core_id in range(0, nb_cores_per_tile):
             self.bind(self, f'barrier_ack_{core_id}', self.int_cores[core_id], 'barrier_ack')
 
+        # Core Interconnections
         for core_id in range(0, nb_cores_per_tile):
-            #                                          |--> stack_ico --> stack_mem
-            # Core --> Buswatchpoint --> ico router -->|--> L1 submodule
-            #                                          |--> axi_ico --> L2 memory
-            self.bind(bus_watchpoints[core_id], 'output', ico_list[core_id], 'input')
-
             # Icache
             self.bind(self.int_cores[core_id], 'flush_cache_req', icache, 'flush')
             self.bind(icache, 'flush_ack', self.int_cores[core_id], 'flush_cache_ack')
