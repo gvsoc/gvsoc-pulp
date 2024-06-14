@@ -77,6 +77,10 @@ def add_latencies(isa):
             insn.get_out_reg(0).set_latency(2)
 
 
+
+isa_instances = {}
+
+
 class Snitch(cpu.iss.riscv.RiscvCommon):
 
     def __init__(self,
@@ -91,11 +95,13 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
             core_id: int=0,
             htif: bool=False):
 
+        isa_instance = isa_instances.get(isa)
 
-        isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
-            extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ] )
-
-        add_latencies(isa_instance)
+        if isa_instances.get(isa) is None:
+            isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
+                extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ] )
+            add_latencies(isa_instance)
+            isa_instances[isa] = isa_instance
 
         if misa is None:
             misa = isa_instance.misa
