@@ -100,11 +100,11 @@ class Tile(st.Component):
         ##########               Design Bindings              ##########
         ################################################################
 
-        ############################################################################################
-        #                                          |--> stack_ico --> stack_mem                    #
-        # Core --> Buswatchpoint --> ico router -->|                                               #
-        #                                          |--> L1 submodule --> Remote TCDM interfaces    #
-        ############################################################################################
+        ##########################################################################
+        #                        |--> stack_ico --> stack_mem                    #
+        # Core --> ico router -->|--> L1 submodule --> Remote TCDM interfaces    #
+        #                        |--> AXI router --> ROM, CSR, L2 Memory, Dummy  #
+        ##########################################################################
 
         # ICO --> stack_ico --> stack_mem (non-interleaved)
         for i in range(0, nb_cores_per_tile):
@@ -131,10 +131,16 @@ class Tile(st.Component):
         self.bind(self, 'grp_remt2_slave_in', l1, 'remote_in3')
         self.bind(l1, 'remote_out3', self, 'grp_remt2_master_out')
 
+        # ICO -> AXI -> L2 Memory
+        for i in range(0, nb_cores_per_tile):
+            # Add default mapping for the others
+            ico_list[i].add_mapping('axi')
+            self.bind(ico_list[i], 'axi', axi_ico, 'input')
+
         ###########################################################
         #                                       |--> ROM          #
         # Core -->|--icache--> |-->AXI router-->|--> CSR          #
-        #         |--bypass--> |                |--> L2 Memory    #
+        #                                       |--> L2 Memory    #
         #                                       |--> Dummy Memory #
         ###########################################################
 
@@ -157,27 +163,6 @@ class Tile(st.Component):
         axi_ico.add_mapping('dummy')
         self.bind(axi_ico, 'dummy', self, 'dummy_mem')
 
-        # RISCV bus watchpoint
-        tohost_addr = 0
-        fromhost_addr = 0
-        entry = 0
-        if binary is not None:
-            with open(binary, 'rb') as file:
-                elffile = ELFFile(file)
-                entry = elffile['e_entry']
-                for section in elffile.iter_sections():
-                    if isinstance(section, SymbolTableSection):
-                        for symbol in section.iter_symbols():
-                            if symbol.name == 'tohost':
-                                tohost_addr = symbol.entry['st_value']
-                            if symbol.name == 'fromhost':
-                                fromhost_addr = symbol.entry['st_value']
-
-        # Core Bus Watchpoint
-        for core_id in range(0, nb_cores_per_tile):
-            bus_watchpoints.append(Bus_watchpoint(self, f'tohost{core_id}', tohost_addr, fromhost_addr, word_size=32))
-            self.bind(bus_watchpoints[core_id], 'output', ico_list[core_id], 'input')
-
         # Sync barrier
         for core_id in range(0, nb_cores_per_tile):
             self.bind(self, f'barrier_ack_{core_id}', self.int_cores[core_id], 'barrier_ack')
@@ -189,15 +174,14 @@ class Tile(st.Component):
             self.bind(icache, 'flush_ack', self.int_cores[core_id], 'flush_cache_ack')
             
             # Snitch integer cores
-            self.bind(self.int_cores[core_id], 'data', bus_watchpoints[core_id], 'input')
-            self.bind(self.int_cores[core_id], 'data', axi_ico, 'input')
+            self.bind(self.int_cores[core_id], 'data', ico_list[core_id], 'input')
             self.bind(self.int_cores[core_id], 'fetch', icache, 'input_%d' % core_id)
             self.bind(self, 'loader_start', self.int_cores[core_id], 'fetchen')
             self.bind(self, 'loader_entry', self.int_cores[core_id], 'bootaddr')
             
             # Snitch fp subsystems
             # Pay attention to interactions and bandwidth between subsystem and tohost.
-            self.bind(self.fp_cores[core_id], 'data', bus_watchpoints[core_id], 'input')
+            self.bind(self.fp_cores[core_id], 'data', ico_list[core_id], 'input')
             # FP subsystem doesn't fetch instructions from core->ico->memory, but from integer cores acc_req.
             self.bind(self, 'loader_start', self.fp_cores[core_id], 'fetchen')
             self.bind(self, 'loader_entry', self.fp_cores[core_id], 'bootaddr')
