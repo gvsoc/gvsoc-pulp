@@ -118,25 +118,25 @@ class L1_subsystem(gvsoc.systree.Component):
             self.bind(self, 'data_pe_%d' % i, pe_icos[port_id], 'input')
 
             # pe interconnect (router) "output" -> tcdm interleaver (interleaver) "in_%d"
-            pe_icos[port_id].add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000, id=0)
+            pe_icos[port_id].add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000)
             self.bind(pe_icos[port_id], 'l1', interleaver, 'in_%d' % port_id)
 
             # connect to cluster axi crossbar
-            pe_icos[port_id].add_mapping('cluster_ico', id=1)
+            pe_icos[port_id].add_mapping('cluster_ico')
             self.bind(pe_icos[port_id], 'cluster_ico', self, 'cluster_ico')
             
         
             # Memory port 1, private for data mover 1
             port_id += 1
             self.bind(self, 'ssr_1_pe_%d' % i, pe_icos[port_id], 'input')
-            pe_icos[port_id].add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000, id=0)
+            pe_icos[port_id].add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000)
             self.bind(pe_icos[port_id], 'l1', interleaver, 'in_%d' % port_id)
             
             
             # Memory port 2, private for data mover 2
             port_id += 1
             self.bind(self, 'ssr_2_pe_%d' % i, pe_icos[port_id], 'input')
-            pe_icos[port_id].add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000, id=0)
+            pe_icos[port_id].add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000)
             self.bind(pe_icos[port_id], 'l1', interleaver, 'in_%d' % port_id)
             
         
