@@ -21,7 +21,7 @@ class Apb_soc_ctrl(st.Component):
     def __init__(self, parent, name, soc):
         super(Apb_soc_ctrl, self).__init__(parent, name)
 
-        self.set_component('pulp.chips.siracusa.apb_soc_impl')
+        self.set_component('pulp.chips.pulp.apb_soc_impl')
 
         self.add_properties({
             'cluster_power_event': soc.get_property('soc_events/soc_evt_cluster_pok'),

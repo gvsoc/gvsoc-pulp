@@ -15,7 +15,7 @@
 #
 
 import gvsoc.systree as st
-from cpu.iss.iss import Iss
+import pulp.cpu.iss.pulp_cores as iss
 from cache.hierarchical_cache import Hierarchical_cache
 from pulp.chips.siracusa.l1_subsystem import L1_subsystem
 from pulp.chips.siracusa.wmem_subsystem import Wmem_subsystem
@@ -81,7 +81,9 @@ class Cluster(st.Component):
         dma_irq_ext         = self.get_property('pe/irq').index('dma_ext')
         timer_irq_0         = self.get_property('pe/irq').index('timer_0')
         timer_irq_1         = self.get_property('pe/irq').index('timer_1')
-        first_external_pcer = self.get_property('iss_config/first_external_pcer')
+        first_external_pcer = 12
+        has_neureka = True
+        has_wmem = True
 
 
         #
@@ -94,10 +96,14 @@ class Cluster(st.Component):
         # Cores
         pes = []
         for i in range(0, nb_pe):
-            pes.append(Iss(self, 'pe%d' % i, **self.get_property('iss_config'), cluster_id=cid, core_id=i))
+            pes.append(iss.ClusterCore(self, 'pe%d' % i, cluster_id=cid, core_id=i))
 
         # Icache
         icache = Hierarchical_cache(self, 'icache', self.get_property('icache/config'))
+
+        # Wmem
+        if has_wmem:
+            wmem = Wmem_subsystem(self, 'wmem', self)
 
         # Event unit
         event_unit = Event_unit(self, 'event_unit', self.get_property('peripherals/event_unit/config'))
@@ -120,14 +126,12 @@ class Cluster(st.Component):
         # Cluster control
         cluster_control = Cluster_control(self, 'cluster_ctrl', nb_core=nb_pe)
 
-        # NEUREKA
-        neureka = Neureka(self, 'neureka')
+        if has_neureka:
+            # NE16
+            neureka = Neureka(self, 'neureka', nid=100)
 
         # Icache controller
         icache_ctrl = Icache_ctrl(self, 'icache_ctrl')
-
-        # Wmem
-        wmem = Wmem_subsystem(self, 'wmem', self)
     
 
         #
@@ -142,9 +146,6 @@ class Cluster(st.Component):
             self.bind(l1, 'event_unit_alias_%d' % i, event_unit, 'demux_in_%d' % i)
 
         self.bind(l1, 'cluster_ico', cluster_ico, 'input')
-
-        # Wmem
-        self.bind(neureka, 'wmem_out', wmem, 'input')
 
         # Cores
         for i in range(0, nb_pe):
@@ -176,9 +177,6 @@ class Cluster(st.Component):
         cluster_ico.add_mapping('l1', **self._reloc_mapping(self.get_property('l1/mapping')))
         self.bind(cluster_ico, 'l1', l1, 'ext2loc')
 
-        cluster_ico.add_mapping('wmem_soc', base=self.get_property('wmem/base'), size=self.get_property('wmem/size'))
-        self.bind(cluster_ico, 'wmem_soc', wmem, 'input')
-
         cluster_ico.add_mapping('l1_ts', **self._reloc_mapping(self.get_property('l1/ts_mapping')))
         self.bind(cluster_ico, 'l1_ts', l1, 'ext2loc_ts')
 
@@ -187,6 +185,10 @@ class Cluster(st.Component):
 
         cluster_ico.add_mapping('periph_ico_alias', **self.get_property('peripherals/alias'), add_offset=int(self.get_property('peripherals/mapping/base'), 0) - int(self.get_property('peripherals/alias/base'), 0))
         self.bind(cluster_ico, 'periph_ico_alias', periph_ico, 'input')
+
+        if has_wmem:
+            cluster_ico.add_mapping('wmem_soc', base=self.get_property('wmem/base'), size=self.get_property('wmem/size'))
+            self.bind(cluster_ico, 'wmem_soc', wmem, 'input')
 
         # Periph interconnect
         periph_ico.add_mapping('error', **self._reloc_mapping(self.get_property('mapping')))
@@ -209,15 +211,11 @@ class Cluster(st.Component):
         periph_ico.add_mapping('dma', **self._reloc_mapping(self.get_property('peripherals/dma/mapping')))
         self.bind(periph_ico, 'dma', mchan, 'in_%d' % nb_pe)
 
-        periph_ico.add_mapping('neureka', **self._reloc_mapping(self.get_property('peripherals/neureka/mapping')))
-        self.bind(periph_ico, 'neureka', neureka, 'input')
-
-        size = int(self.get_property('peripherals/dbg_unit/size'), 0)
-        base = int(self.get_property('peripherals/dbg_unit/base'), 0)
-        for i in range(0, nb_pe):
-            pe_base = base + cid*cluster_size + size * i
-            periph_ico.add_mapping('dbg_unit_%d' % i, base=pe_base, size=size, remove_offset=pe_base)
-            self.bind(periph_ico, 'dbg_unit_%d' % i, pes[i], 'dbg_unit')
+        if has_neureka:
+            periph_ico.add_mapping('neureka', **self._reloc_mapping(self.get_property('peripherals/neureka/mapping')))
+            self.bind(periph_ico, 'neureka', neureka, 'cfg_port')
+            if has_wmem:
+                self.bind(neureka, 'wmem_port', wmem, 'input')
 
         # MCHAN
         self.bind(mchan, 'ext_irq_itf', self, 'dma_irq')
@@ -244,11 +242,12 @@ class Cluster(st.Component):
             self.bind(cluster_control, 'halt_%d' % i, pes[i], 'halt')
             self.bind(pes[i], 'halt_status', cluster_control, 'core_halt_%d' % i)
 
-        # NEUREKA
-        for i in range(0, nb_pe):
-            self.bind(neureka, 'irq', event_unit, 'in_event_%d_pe_%d' % (neureka_irq, i))
+        if has_neureka:
+            # NEUREKA
+            for i in range(0, nb_pe):
+                self.bind(neureka, 'irq', event_unit, 'in_event_%d_pe_%d' % (neureka_irq, i))
 
-        self.bind(neureka, 'out', l1, 'neureka_in')
+            self.bind(neureka, 'tcdm_port', l1, 'neureka_in')
 
         # Icache controller
         self.bind(icache_ctrl, 'enable', icache, 'enable')

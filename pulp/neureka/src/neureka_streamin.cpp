@@ -1,3 +1,4 @@
+
 /*
  * Copyright (C) 2020-2022  GreenWaves Technologies, ETH Zurich, University of Bologna
  *
@@ -15,124 +16,54 @@
  */
 
 /* 
- * Authors: Francesco Conti, University of Bologna & GreenWaves Technologies (f.conti@unibo.it)
- *          Arpan Suravi Prasad, ETH Zurich (prasadar@iis.ee.ethz.ch)
+ * Authors: Arpan Suravi Prasad, ETH Zurich (prasadar@iis.ee.ethz.ch)
  */
-
-#include <neureka.hpp>
-
-void Neureka::constant_setup() {
-  this->h_size_in  = this->i_major<this->subtile_nb_ho ? (this->fs == 3 ? this->F_BUFFER_SIZE : this->H_SIZE) : this->subtile_rem_hi;
-  this->w_size_in  = this->j_major<this->subtile_nb_wo ? (this->fs == 3 ? this->F_BUFFER_SIZE : this->W_SIZE) : this->subtile_rem_wi;
-  this->h_size_out = this->i_major<this->subtile_nb_ho ? this-> H_SIZE : this->subtile_rem_ho;
-  this->w_size_out = this->j_major<this->subtile_nb_wo ? this-> W_SIZE : this->subtile_rem_wo;
-
-  this->h_size_in_hw = (this->i_major<this->subtile_nb_ho-1 || this->subtile_rem_hi==0) ? (this->fs == 3 ? this->F_BUFFER_SIZE : this->H_SIZE) : this->subtile_rem_hi;
-  this->w_size_in_hw = (this->j_major<this->subtile_nb_wo-1 || this->subtile_rem_wi==0) ? (this->fs == 3 ? this->F_BUFFER_SIZE : this->W_SIZE) : this->subtile_rem_wi;
-  
-  // compute these products also with pure multiplexing
-  this->h_size_in_X_w_size_in = (this->i_major<this->subtile_nb_ho  && this->j_major<this->subtile_nb_wo)  ? (this->fs == 3 ? this->F_BUFFER_SIZE*this->F_BUFFER_SIZE : this->H_SIZE*this->W_SIZE) :
-                                (this->i_major<this->subtile_nb_ho  && this->j_major>=this->subtile_nb_wo) ? (this->fs == 3 ? this->F_BUFFER_SIZE*this->subtile_rem_wi     : this->H_SIZE*this->subtile_rem_wi)   :
-                                (this->i_major>=this->subtile_nb_ho && this->j_major<this->subtile_nb_wo)  ? (this->fs == 3 ? this->subtile_rem_hi*this->F_BUFFER_SIZE     : this->subtile_rem_hi*this->W_SIZE)   :
-                                                                                                (this->fs == 3 ? this->subtile_rem_hi*this->subtile_rem_wi         : this->subtile_rem_hi*this->subtile_rem_wi);
-  this->h_size_out_X_w_size_out = (this->i_major<this->subtile_nb_ho  && this->j_major<this->subtile_nb_wo)  ? this->H_SIZE*this->W_SIZE :
-                                  (this->i_major<this->subtile_nb_ho  && this->j_major>=this->subtile_nb_wo) ? this->H_SIZE*this->subtile_rem_wo  :
-                                  (this->i_major>=this->subtile_nb_ho && this->j_major<this->subtile_nb_wo)  ? this->subtile_rem_ho*this->W_SIZE  :
-                                                                                                               this->subtile_rem_ho*this->subtile_rem_wo;
-
-  this->k_in_major = this->depthwise ? this->k_out_major : this->k_in_major_iter;
+#include "neureka.hpp"
+#include <type_traits>
+void Neureka::StreaminSetup() {
+  this->ctrl_instance.ComputeDimensions();
+  StreamerConfig streamer_config = this->ctrl_instance.GetStreaminStreamerConfig();
+  this->streamin_streamer_instance.UpdateParams(streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2, L1BandwidthInBytes, 4);
+  this->ctrl_instance.ResetStreaminIteration();
+  if(this->trace_config.setup.streamin)
+    this->trace.msg("Stramin Setup is done addr : 0x%x, strides( d0 : 0x%x, d1 : 0x%x, d2 : 0x%x), lengths(d0 : %d, d1 : %d, d2 : %d)\n", streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2);
 }
 
-void Neureka::streamin_setup() {
+bool Neureka::StreaminExecute(int& latency)
+{
 
-  auto tp = this->depthwise ? this->TP_IN_S : this->TP_OUT;
+  int width = this->ctrl_instance.StreaminLoadWidth();
+  int pe_index = this->ctrl_instance.GetStreaminLinearBufferIndex();// which accumulator buffer to be used
+  int word_index = this->ctrl_instance.GetStreaminWordIndex();
 
-  auto outfeat_hom_iter = this->H_SIZE * this->outfeat_d2_stride;
-  auto outfeat_wom_iter = this->W_SIZE * this->outfeat_d1_stride;
- 
-  auto base_addr_streamin = this->outfeat_ptr + this->i_major*outfeat_hom_iter + this->j_major*outfeat_wom_iter + this->k_out_major*tp*this->quantization_bits/8;
+  int64_t cycles = 0;
+  std::array<StreamerDataType, L1BandwidthInBytes> streamin_data;
+  std::fill(streamin_data.begin(), streamin_data.end(), 0);
 
-  auto k_out_lim = this->depthwise ? 1 :
-                   (this->k_out_major == this->subtile_nb_ko-1 && this->subtile_rem_ko != tp && this->subtile_rem_ko != 0) ? this->subtile_rem_ko : this->TP_OUT;
+  StreamerDataType streamin_data_temp[width];
+  this->streamin_streamer_instance.VectorLoad(width, cycles, streamin_data_temp, false, this->trace_config.streamer.streamin);
 
-  auto h_size_out_X_w_size_out_with_strb = (k_out_lim <= 8)  ? 9  :
-                                           (k_out_lim <= 16) ? 18 :
-                                           (k_out_lim <= 24) ? 27 : 36;
+  for(int i=0; i<width; i++)
+    streamin_data[i] = streamin_data_temp[i];
 
-  this->col_enable = xt::zeros<int32_t>({this->H_SIZE,this->W_SIZE});
-  for(auto i=0; i<this->h_size_out; i++) {
-    for(auto j=0; j<this->w_size_out; j++) {
-      xt::view(this->col_enable, i, j) = 1;
+  this->num_mem_access_bytes.streamin += width;
+  latency = latency + (int)cycles ? latency + (int)cycles : 1 ;
+  
+  if(this->regconfig_manager_instance.reg_config_.config0.streamin_bit_count==32){
+    for(int i=0; i<width/4; i++){
+      OutFeatType data_32bit = ((streamin_data[4*i+3]<<24) + (streamin_data[4*i+2]<<16) + (streamin_data[4*i+1]<<8) + streamin_data[4*i]);
+      this->pe_instances[pe_index].AccumulateAtIndexOnAccumBuffer(word_index+i, true, data_32bit);
+    }
+  } else if (this->regconfig_manager_instance.reg_config_.config0.streamin_bit_count==8) {
+    for(int i=0; i<width; i++){
+      int8_t data_signed_8bit = streamin_data[i];
+      uint8_t data_unsigned_8bit = streamin_data[i];
+      OutFeatType data_32bit = reg_config_.config0.signed_streamin ?  (OutFeatType)data_signed_8bit : (OutFeatType)data_unsigned_8bit;
+      this->pe_instances[pe_index].AccumulateAtIndexOnAccumBuffer(word_index+i, true, data_32bit);
     }
   }
-
-  this->vld_streamin = NeurekaVectorLoad<uint8_t>(
-    this,
-    base_addr_streamin, // base_addr
-    h_size_out_X_w_size_out_with_strb*(k_out_lim/8 > 0 ? k_out_lim/8 + (k_out_lim%8 == 0 ? 0 : 1) : 1), // word_length
-    this->outfeat_d0_stride, // word_stride
-    k_out_lim/8 > 0 ? k_out_lim/8 + (k_out_lim%8 == 0 ? 0 : 1) : 1, //w_size_out, // line_length
-    this->outfeat_d1_stride, // line_stride
-    this->H_SIZE, // block_length
-    this->outfeat_d2_stride, // block_stride
-    false
-  );
-
-  this->streamin_k_out_lim = this->TP_OUT/8; ///
-  if(this->k_out_major == this->subtile_nb_ko-1 && this->subtile_rem_ko != tp && this->subtile_rem_ko != 0) { // last k_in tile, only if it requires padding
-    this->streamin_k_out_lim = this->subtile_rem_ko/8 + (this->subtile_rem_ko%8 == 0 ? 0 : 1);
-  }
-  this->streamin_k_out_iter = 0;
-  this->streamin_i_out_iter = 0;
-  this->streamin_j_out_iter = 0;
-
+  else this->trace.fatal("Unsupported Quantization bit count \n");
+  this->ctrl_instance.StreaminIteration();
+ 
+  return this->ctrl_instance.load_store_status.streamin.done;
 }
-
-// iterated h_size_out_X_w_size_out times
-int Neureka::streamin_cycle() {
-  int64_t cycles = 0;
-
-  xt::xarray<uint8_t> xx = xt::zeros<uint8_t>({32});
-  auto k_out_last = (this->streamin_k_out_iter+1)*8;
-  if(this->k_out_major == this->subtile_nb_ko-1 && this->subtile_rem_ko != this->TP_OUT && this->subtile_rem_ko != 0) { // last k_in tile, only if it requires padding
-    k_out_last = k_out_last < this->subtile_rem_ko ? k_out_last : this->subtile_rem_ko;
-  }
-  if(this->col_enable(this->streamin_i_out_iter, this->streamin_j_out_iter)) {
-    xx = this->vld_streamin.ex((k_out_last-this->streamin_k_out_iter*8)*4, false, cycles);
-  }
-  for (auto i=this->streamin_k_out_iter*8; i<k_out_last; i++) {
-    xt::view(this->accum, i, this->streamin_i_out_iter*this->H_SIZE+this->streamin_j_out_iter) = 
-      (xt::cast<int32_t>(xt::view(xx, (i-this->streamin_k_out_iter*8)*4+0)) << 0 ) |
-      (xt::cast<int32_t>(xt::view(xx, (i-this->streamin_k_out_iter*8)*4+1)) << 8 ) |
-      (xt::cast<int32_t>(xt::view(xx, (i-this->streamin_k_out_iter*8)*4+2)) << 16) |
-      (xt::cast<int32_t>(xt::view(xx, (i-this->streamin_k_out_iter*8)*4+3)) << 24);
-  }
-  return (int) cycles;
-}
-
-bool Neureka::streamin_exit_idx() {
-  auto h_size_out = this->h_size_out;
-  auto w_size_out = this->w_size_out;
-  if(this->streamin_i_out_iter == h_size_out-1 && this->streamin_j_out_iter == w_size_out-1 && this->streamin_k_out_iter == this->streamin_k_out_lim-1) {
-    return true;
-  }
-  else {
-    return false;
-  }
-}
-
-void Neureka::streamin_update_idx() {
-  if(this->streamin_k_out_iter < this->streamin_k_out_lim-1) {
-    this->streamin_k_out_iter++;
-  } 
-  else if(this->streamin_j_out_iter < this->H_SIZE-1) {
-    this->streamin_k_out_iter = 0;
-    this->streamin_j_out_iter++;
-  }
-  else {
-    this->streamin_k_out_iter = 0;
-    this->streamin_j_out_iter = 0;
-    this->streamin_i_out_iter++;
-  }
-}
-

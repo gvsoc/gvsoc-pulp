@@ -23,5 +23,4 @@ class Target(gvsoc.Target):
     gapy_description="Siracusa virtual board"
 
     def __init__(self, parser, options):
-        super(Target, self).__init__(parser, options,
-            model=Pulp_open_board)
+        super(Target, self).__init__(parser, options, model=Pulp_open_board)

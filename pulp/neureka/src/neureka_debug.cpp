@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020-2022  GreenWaves Technologies, ETH Zurich, University of Bologna
+ * Copyright (C) 2020-2024  GreenWaves Technologies, ETH Zurich, University of Bologna
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,45 +15,48 @@
  */
 
 /* 
- * Authors: Francesco Conti, University of Bologna & GreenWaves Technologies (f.conti@unibo.it)
- *          Arpan Suravi Prasad, ETH Zurich (prasadar@iis.ee.ethz.ch)
+ * Authors: Arpan Suravi Prasad, ETH Zurich (prasadar@iis.ee.ethz.ch)
  */
-
-#include <neureka.hpp>
-
-void Neureka::debug_x_buffer() {
-    std::ostringstream stringStream;
-    stringStream << "x_buffer[8,8,32] = \n" << (this->trace_format?std::hex:std::dec) << std::setw(2) << xt::view(this->x_buffer,xt::range(0,2),xt::range(0,2),xt::range(0,1)) << std::dec << "\n";
-    // stringStream << "x_buffer[8,8,32] = \n" << (this->trace_format?std::hex:std::dec) << std::setw(2) << xt::view(this->x_buffer,xt::all(),xt::all(),xt::all()) << std::dec << "\n";
-    std::string copyOfStr = stringStream.str();
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, copyOfStr.c_str());
+#include "neureka.hpp"
+std::string Neureka::NeurekaStateToString(const NeurekaState& state) {
+    switch (state) {
+      case IDLE: return "IDLE";
+      case START: return "START";
+      case STREAMIN_SETUP: return "STREAMIN_SETUP";
+      case STREAMIN: return "STREAMIN";
+      case LOAD: return "LOAD";
+      case LOAD_SETUP: return "LOAD_SETUP";
+      case WEIGHTOFFSET: return "WEIGHTOFFSET";
+      case WEIGHT_LOAD_SETUP: return "WEIGHT_LOAD_SETUP";
+      case WEIGHT_LOAD: return "WEIGHT_LOAD";
+      case PREFETCH_WEIGHT_LOAD_SETUP: return "PREFETCH_WEIGHT_LOAD_SETUP";
+      case PREFETCH_WEIGHT_LOAD: return "PREFETCH_WEIGHT_LOAD";
+      case UPDATE_IDX: return "UPDATE_IDX";
+      case NORMQUANT_SHIFT_SETUP: return "NORMQUANT_SHIFT_SETUP";
+      case NORMQUANT_SHIFT: return "NORMQUANT_SHIFT";
+      case NORMQUANT_MULT_SETUP: return "NORMQUANT_MULT_SETUP";
+      case NORMQUANT_MULT: return "NORMQUANT_MULT";
+      case NORMQUANT_BIAS_SETUP: return "NORMQUANT_BIAS_SETUP";
+      case NORMQUANT_BIAS: return "NORMQUANT_BIAS";
+      case STREAMOUT_SETUP: return "STREAMOUT_SETUP";
+      case STREAMOUT: return "STREAMOUT";
+      case BEFORE_END: return "BEFORE_END";
+      case END: return "END";
+      default : 
+        return "UNKNOWN";
+    }
 }
 
-void Neureka::debug_x_array() {
-    std::ostringstream stringStream;
-    stringStream << "x_array[36,9,32] = \n" << xt::print_options::threshold(10000) << (this->trace_format?std::hex:std::dec) << std::setw(2) << xt::view(this->x_array,xt::range(0,2),xt::all(),xt::range(0,1)) << std::dec << "\n";
-    std::string copyOfStr = stringStream.str();
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, copyOfStr.c_str());
-
-    stringStream << "x_array[36,9,32] = \n" << xt::print_options::threshold(10000) << (this->trace_format?std::hex:std::dec) << std::setw(2) << xt::view(this->x_array,xt::range(6,8),xt::all(),xt::range(0,1)) << std::dec << "\n";
-    std::string copyOfStr2 = stringStream.str();
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, copyOfStr2.c_str());
-}
-
-void Neureka::debug_accum(){
-  std::ostringstream stringStream;
-  stringStream << "accum[32,36] = \n" << (this->trace_format?std::hex:std::dec) << std::setw(8) << xt::view(this->accum,xt::range(0,1),xt::range(0,2)) << std::dec << "\n";
-  std::string copyOfStr = stringStream.str();
-  this->trace.msg(vp::Trace::LEVEL_DEBUG, copyOfStr.c_str());
-  stringStream << "accum[32,36] = \n" << (this->trace_format?std::hex:std::dec) << std::setw(8) << xt::view(this->accum,xt::range(0,1),xt::range(6,8)) << std::dec << "\n";
-  std::string copyOfStr2 = stringStream.str();
-  this->trace.msg(vp::Trace::LEVEL_DEBUG, copyOfStr2.c_str());
-}
-
-void Neureka::debug_psum_block(){
-  std::ostringstream stringStream;
-  stringStream << "psum_block[36,9] = \n" << (this->trace_format?std::hex:std::dec) << std::setw(8) << xt::cast<int32_t>(this->psum_block) << std::dec << "\n";
-  std::string copyOfStr = stringStream.str();
-  this->trace.msg(vp::Trace::LEVEL_DEBUG, copyOfStr.c_str());
-}
-
+#define DEBUG_PRINT_NEUREKA
+  void Neureka::printAccumAtIndex(int pe_index, int accum_index, const char* debug_msg){
+    #ifdef DEBUG_PRINT
+    OutFeatType accum = this->pe_instances[pe_index].ReadFromIndexAccumBuffer(accum_index);
+    std::cout<<debug_msg<<" accum["<<pe_index<<"]["<<accum_index<<"]=0x"<<std::hex<<accum<<"\n";
+    #endif
+  }
+  void Neureka::printAccumFullBuffer(int pe_index, const char* debug_msg){
+    #ifdef DEBUG_PRINT
+    xt::xarray<OutFeatType> accum = this->pe_instances[pe_index].ReadAllAccumBuffer();
+    printXtensorXarray(accum, debug_msg);
+    #endif
+  }
