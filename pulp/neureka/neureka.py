@@ -18,8 +18,11 @@ import gvsoc.systree as st
 
 class Neureka(st.Component):
 
-    def __init__(self, parent, name):
+    def __init__(self, parent, name, nid):
 
         super(Neureka, self).__init__(parent, name)
 
         self.set_component('pulp.neureka.neureka')
+        self.add_properties({
+            'nid': nid
+        })

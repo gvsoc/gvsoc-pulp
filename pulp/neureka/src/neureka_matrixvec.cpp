@@ -1,3 +1,4 @@
+
 /*
  * Copyright (C) 2020-2022  GreenWaves Technologies, ETH Zurich, University of Bologna
  *
@@ -15,338 +16,142 @@
  */
 
 /* 
- * Authors: Francesco Conti, University of Bologna & GreenWaves Technologies (f.conti@unibo.it)
- *          Arpan Suravi Prasad, ETH Zurich (prasadar@iis.ee.ethz.ch)
+ * Authors: Arpan Suravi Prasad, ETH Zurich (prasadar@iis.ee.ethz.ch)
  */
+#include "neureka.hpp"
+#include <type_traits>
 
-// as the internal max precision of NE16 is 32 bits, this is emulated by casting x to 32 bits here
-#include <neureka.hpp>
-xt::xarray<uint8_t> __Weight_transform_1x1(xt::xarray<uint8_t> W)
-{
-  xt::xarray<uint8_t> wout_1x1 = xt::zeros<uint8_t>({32});
-  int index_q8, index_r4, index_q4r2, index_l, index_h;
-  for(int i=0; i<32; i++)
-  {
-    index_q8 = i/8;
-    index_r4 = i%4;
-    index_q4r2 = (i/4)%2;
-    index_l = 8*index_r4+index_q8;
-    index_h = 8*index_r4+index_q8+4;
-    if(index_q4r2==0){
-      wout_1x1[i] = (W[index_l] & 0x0F) + ((W[index_h] & 0x0F)<<4);
-    }
-    else{
-      wout_1x1[i] = ((W[index_l] & 0xF0)>>4) + 16*((W[index_h] & 0xF0)>>4);
-    }
+void Neureka::WeightLoadSetup() {
+  this->ctrl_instance.ComputeDimensions();
+  if(this->reg_config_.Wmin==0){
+    if(this->reg_config_.config0.infeat_prefetch==true)
+      this->infeat_dual_buffer_read_index = this->infeat_dual_buffer_read_index == 1 ? 0 : 1;
+    else 
+      this->infeat_dual_buffer_read_index = 1;
   }
-  return wout_1x1;
-}
 
-xt::xarray<uint8_t>  __Weight_transform_28(xt::xarray<uint8_t> W)
-{
-  xt::xarray<uint8_t> wout_3x3 = xt::zeros<uint8_t>({36});
-  int index0=0;
-  int index1=0;
-  for(int i=0; i<32; i++)
-  {
-    index0 = i % 7;
-    index1 = i / 7;
-    if(index0==3)
-    {
-      wout_3x3[index1*8+index0] = (W[i] & 0x0F);
-    }
-    else if(index0>3)
-    {
-      wout_3x3[index1*8+index0] = ((W[i-1] & 0xF0) >> 4) + ((W[i] & 0x0F)*16);
-      if(index0==6)
-        wout_3x3[index1*8+index0+1] = ((W[i] & 0xF0) >> 4);
-    }
-    else{
-      wout_3x3[index1*8+index0] = W[i];
-    }
-  }
-  return wout_3x3;
-}
-
-
-xt::xarray<int64_t> __NormQuant(
-  xt::xarray<int64_t> x,
-  xt::xarray<int32_t> kappa_bn,
-  xt::xarray<int32_t> lambda_bn,
-  int32_t shift_reqnt,
-  int clip_min,
-  int clip_max,
-  bool use_rounding,
-  bool use_clip,
-  bool use_cast
-) {
-  if(use_clip) {
-    if(use_cast)
-      return xt::clip((xt::cast<int32_t>(x) * kappa_bn + lambda_bn + (use_rounding ? 1<<(shift_reqnt-1) : 0)) >> shift_reqnt, clip_min, clip_max);
-    else
-      return xt::clip((x * kappa_bn + lambda_bn + (use_rounding ? 1<<(shift_reqnt-1) : 0)) >> shift_reqnt, clip_min, clip_max);
-  }
-  else
-    return (xt::cast<int32_t>(x) * kappa_bn + lambda_bn + (use_rounding ? 1<<(shift_reqnt-1) : 0)) >> shift_reqnt;
-}
-
-xt::xarray<uint8_t> __WeightUnpack(
-  xt::xarray<uint8_t> w,
-  int                 size,
-  int                 TP_IN
-) {
-
-  w = w.reshape({size,(TP_IN/8),1});
-
-  xt::xarray<uint8_t> wu = xt::zeros<uint8_t>({size,(TP_IN/8),8});
-
-  xt::view(wu, xt::all(), xt::all()) = xt::view(w, xt::all(), xt::all());
-
-  wu = (wu >> xt::linspace(0, 7, 8).reshape({1, 1, 8})) & 0x1;
-
-  auto shape = xt::adapt(wu.shape());
-
-  return wu.reshape({size, (TP_IN/8)*8});
-}
-
-xt::xarray<int64_t> __BinConvBlock(
-  xt::xarray<uint8_t> w,
-  xt::xarray<int8_t> x,
-  xt::xarray<uint8_t> ux,
-  bool signed_activation,
-  int scale=0,
-  int TP_IN=32
-) {
-  if(signed_activation)
-    return xt::sum(w * x, 0) * scale;
-  else 
-    return xt::sum(w * ux, 0) * scale;
-}
-
-void Neureka::__BinConvArray(
-  xt::xarray<uint8_t>& weight,
-  int                  scale,
-  int                  idx,
-  xt::xarray<int32_t>  row_enable,
-  xt::xarray<int32_t>  mac_enable,
-  bool                 weight_shift,
-  bool                 weight_invert,
-  bool                 use_row_as_scale
-) {
-  for(auto c=0; c<this->NR_COLUMN; c++) { // spatial loop - over columns
-    xt::view(this->psum_column, c) = 0;
-    for(auto r=0; r<this->COLUMN_SIZE; r++) { // spatial loop - over blocks in a column
-      if(row_enable(r) == 0) // row disabling to implement filter masks
-        continue;
-      auto scale_loc = use_row_as_scale ? 1 << r : scale;
-      auto activ = xt::view(this->x_array, c, r, xt::all()); // 16x channels of 8-bit
-      if(this->binconv_traces) {
-        std::ostringstream stringStream;
-        stringStream << "binconv: weight=" << xt::view(weight, r)*mac_enable << "activ=" << activ << " scale=" << scale_loc << " ==> " << xt::view(weight, r)*mac_enable * activ << " ==> " << std::hex << xt::sum(xt::view(weight, r)*mac_enable*activ, 0)*scale << std::dec << "\n";
-        std::string copyOfStr = stringStream.str();
-        this->trace.msg(vp::Trace::LEVEL_DEBUG, copyOfStr.c_str());
-      }
-      
-      xt::view(this->psum_block, c, r) = __BinConvBlock(xt::view(weight, r) * mac_enable, activ, activ, this->signed_activation,  scale_loc, this->TP_IN);
-      if(weight_shift && weight_invert) {
-        xt::view(this->psum_block, c, r) = -xt::view(this->psum_block, c, r);
-      }
-      xt::view(this->psum_column, c) += xt::view(this->psum_block, c, r);
-    }
-
-    if(weight_shift) {
-      xt::view(this->accum, xt::all(), c) += xt::view(this->psum_column, c);
-    } 
-    else {
-      xt::view(this->accum, idx, c) += xt::view(this->psum_column, c);
-    }
-  }
-}
-
-void Neureka::__weightoffs(
-  int dw_iter,
-  xt::xarray<int32_t> row_enable,
-  xt::xarray<int32_t> mac_enable
-) {
-  auto start_s = 1;
-  for(auto s=start_s; s<this->SHIFT_CYCLES; s++) { // temporal loop - fake weight for Wmin offsetting // FIXME: how to properly do this in 1x1 mode?
-
-    // fake-load and unpack weight bits
-    auto read_size = this->FILTER_SIZE*this->FILTER_SIZE;
-    xt::xarray<uint8_t> weight_ld = xt::zeros<uint8_t>({read_size, this->TP_IN/8});
-    if(this->fs == 3)
-      xt::view(weight_ld, xt::all()) = 0xff;
-    else
-      xt::view(weight_ld, 0, xt::all()) = 0xff;
-    auto weight = __WeightUnpack(weight_ld, read_size, this->TP_IN); //this->mode16 & this->mode_linear);
-    
-    auto scale = this->Wmin;
-    
-    this->__BinConvArray(weight, scale, this->depthwise ? dw_iter : 0, row_enable, mac_enable, !this->depthwise, false, false); 
-  }
-}
-
-void Neureka::depthwise_setup() {
-  this->k_out_lim_dw = (this->k_in_major == this->subtile_nb_ki-1 && this->subtile_rem_ki != this->TP_IN_S && this->subtile_rem_ki != 0) ? this->subtile_rem_ki : this->TP_IN_S;
-  this->dw_lim = this->depthwise ? this->k_out_lim_dw : 1;
-  this->dw_iter = 0;
-  this->mac_enable = xt::zeros<int32_t>({this->TP_IN});
-}
-
-void Neureka::depthwise_update_idx() {
-  this->dw_iter++;
-}
-
-void Neureka::weightoffs() {
-  if(this->depthwise) {
-    xt::view(this->mac_enable, xt::all()) = 0;
-    xt::view(this->mac_enable, this->dw_iter) = 1;
-  }
-  else {
-    xt::view(this->mac_enable, xt::range(0,this->TP_IN_S)) = 1;
-    xt::view(this->mac_enable, xt::range(this->TP_IN_S, this->TP_IN)) = (this->fs==3) ? 0 : 1;
-  }
-  this->__weightoffs(this->dw_iter, this->row_enable, this->mac_enable);
-}
-
-void Neureka::matrixvec_setup() {
-  auto k_in_major = this->depthwise ? this->k_out_major : this->k_in_major_iter;
-
-  // set up streamer to address weights (32b word-based)
-  // depthwise mode: layout is (subtile_nb_ki*qw, 9, TP_IN/8)
-  this->base_addr_W_dw = this->weights_ptr + (k_in_major*this->qw) * 8 * (this->TP_IN/8);
-  this->vld_W_dw = NeurekaVectorLoad<uint8_t>(
-    this,
-    this->base_addr_W_dw, // base_addr
-    this->subtile_nb_ki*this->qw, // word_length
-    this->weights_d0_stride, // word_stride
-    this->qw, // line_length
-    this->weights_d1_stride, // line_stride
-    -1, // block_length
-    this->weights_d2_stride, // block_stride
-    false
-  );
+  StreamerConfig streamer_config = this->ctrl_instance.GetWeightLoadStreamerConfig();
+  
+  int bandwidth = this->reg_config_.config0.weight_from_wmem ? WmemBandwidthInBytes : L1BandwidthInBytes;
+  
+  this->weight_streamer_instance.UpdateParams(streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2, bandwidth, 4);
+  
+  this->ctrl_instance.ResetWeightLoadIteration();
+  // this->trace.msg("Weight load setup %d \n", this->infeat_dual_buffer_read_index);
 
   
-  // 3x3 mode: layout is (k_out, subtile_nb_ki*qw, 9, TP_IN/8)
-  this->base_addr_W_3x3 = this->weights_ptr + (k_out_major*this->TP_OUT*this->subtile_nb_ki*this->qw + k_in_major*this->qw) * 8 * (this->TP_IN/8);
-  this->vld_W_3x3 = NeurekaVectorLoad<uint8_t>(
-    this,
-    this->base_addr_W_3x3, // base_addr
-    this->TP_OUT*this->subtile_nb_ki*this->qw, // word_length
-    this->weights_d0_stride, // word_stride
-    this->qw, // line_length
-    this->weights_d1_stride, // line_stride
-    -1, // block_length
-    this->weights_d2_stride, // block_stride
-    false
-  );
+  this->infeat_buffer_instance.MapInFeatToEngines(this->infeat_dual_buffer_read_index, this->reg_config_.config0.filter_mode);
+  
+  if(this->trace_config.setup.weight_load)
+    this->trace.msg("WeightLoad Setup is done addr : 0x%x, strides( d0 : 0x%x, d1 : 0x%x, d2 : 0x%x), lengths(d0 : %d, d1 : %d, d2 : %d)\n", streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2);
 
-  // 1x1 mode: layout is (k_out, subtile_nb_ki, qw, TP_IN/8)
-  this->base_addr_W_1x1 = this->weights_ptr + (k_out_major*this->TP_OUT*this->subtile_nb_ki*8 + k_in_major*8) * (this->TP_IN/8);
-  this->vld_W_1x1 = NeurekaVectorLoad<uint8_t>(
-    this,
-    this->base_addr_W_1x1, // base_addr
-    this->TP_OUT*this->subtile_nb_ki, // word_length
-    this->weights_d0_stride, // word_stride
-    1, // line_length
-    this->weights_d1_stride, // line_stride
-    -1, // block_length
-    this->weights_d2_stride, // block_stride
-    false
-  );
-
-  this->mv_qw_lim = (this->fs == 3) ? this->qw : 1;
-  this->mv_k_out_lim = this->depthwise ? 1 :
-                       (this->k_out_major == this->subtile_nb_ko-1 && this->subtile_rem_ko != this->TP_OUT && this->subtile_rem_ko != 0) ? this->subtile_rem_ko : this->TP_OUT;
-  this->mv_k_out_iter = 0;
-  this->mv_qw_iter = 0; // was simply qw
 }
 
-int Neureka::matrixvec_cycle() {
-  auto& vld_W = this->depthwise ? this->vld_W_dw       : (this->fs == 3) ? this->vld_W_3x3       : this->vld_W_1x1;
-
-  auto read_size = 8;//fixed for differnt layout in pointwise mode
-
-  auto k_out = this->depthwise ? this->dw_iter : this->mv_k_out_iter;
-  // load and unpack weight bits
+void Neureka::WeightLoad(int& latency, std::array<StreamerDataType, WmemBandwidthInBytes>& weight) {
+  int width = WmemBandwidthInBytes;
+  // Load data using streamer
   int64_t cycles = 0;
-  bool fetch_weight;
-  xt::xarray<uint8_t> weight_ld;
-  
-  if((this->depthwise && (this->dw_iter==0)) || (!this->depthwise)){
-    weight_ld=vld_W.ex(read_size*(this->TP_IN/8), this->weight_demux, cycles);
-    if(this->depthwise)
-    {
-      if(this->mv_qw_iter==0){
-        this->reset_dw_weight_buffer();
-      }
-      xt::view(this->dw_weight_buffer, this->mv_qw_iter,xt::all()) = xt::view(weight_ld,xt::all());
+  StreamerDataType weight_data_temp[width];
+  if(reg_config_.config0.residual)  {
+
+    for(int i=0; i<width; i++){
+      weight_data_temp[i] = 0xff;
     }
   }
-  else 
-  {
-    weight_ld = xt::view(this->dw_weight_buffer, this->mv_qw_iter, xt::all());
+  else{
+    this->weight_streamer_instance.VectorLoad(width, cycles,  weight_data_temp, this->reg_config_.config0.weight_from_wmem, this->trace_config.streamer.weight_load);
+    this->num_mem_access_bytes.weight_load += width;
+    latency = (latency + (int)cycles) ? (latency + (int)cycles) : 1 ;
   }
 
-  std::ostringstream stringStream;
-  stringStream << "Weight Read =" << xt::view(weight_ld, xt::all())<<"\n";
-  std::string copyOfStr = stringStream.str();
-  this->trace.msg(vp::Trace::LEVEL_DEBUG, copyOfStr.c_str());
-
-  auto shape = xt::adapt(weight_ld.shape());
-
-  xt::xarray<uint8_t> weight_ld_transform = (this->fs == 3) ? __Weight_transform_28(weight_ld) : __Weight_transform_1x1(weight_ld);
-
-  auto weight = __WeightUnpack(weight_ld_transform, (this->fs==3) ? 9 : read_size, this->TP_IN);
-  auto scale = 1 << this->mv_qw_iter;
-
-  xt::xarray<int32_t> space = xt::logspace(0, 7, 8, 2);
-  space = xt::reshape_view(space, {8, 1});
-
-  this->__BinConvArray(weight, scale, k_out, this->row_enable, this->mac_enable, false, false, this->fs==1);
-
-  return (int) cycles;
-}
-
-void Neureka::reset_dw_weight_buffer() {
-  this->dw_weight_buffer = xt::zeros<uint8_t>({8, 32});
-}
-
-bool Neureka::matrixvec_exit_idx() {
-  if(this->mv_k_out_iter == this->mv_k_out_lim-1 && this->mv_qw_iter == this->mv_qw_lim-1) {
-    return true;
-  }
-  else {
-    return false;
+  for(int i=0; i<width; i++){
+    weight[i] = weight_data_temp[i];
   }
 }
 
-void Neureka::matrixvec_update_idx() {
-  if(this->mv_qw_iter == this->mv_qw_lim-1) {
-    this->mv_qw_iter = 0;
-    this->mv_k_out_iter++;
-  }
-  else {
-    this->mv_qw_iter++;
-  }
+void WeightUnpack3x3(std::array<StreamerDataType, WmemBandwidthInBytes>& weight, std::array<std::array<uint8_t, NeurekaComputeRowCount>, NeurekaInFeatScalarBufferCount >& weight_unpacked) {
+    // Reshape w
+    for (size_t i = 0; i < NeurekaComputeRowCount; ++i) {
+        for (size_t j = 0; j < (NeurekaInFeatScalarBufferCount/8); ++j) {
+          for (size_t k = 0; k < 8; ++k) {
+            weight_unpacked[j*8+k][i] = (weight[i*(NeurekaInFeatScalarBufferCount/8)+j] >> k) & 0x1; 
+          }
+        }
+    }
 }
 
-bool Neureka::matrixvec_to_matrixvec_idx() {
-  if((this->dw_iter == this->dw_lim-1)) {
-    return true;
+
+void Neureka::WeightUnpack(Mode filter_mode,  std::array<StreamerDataType, WmemBandwidthInBytes>& weight, std::array<std::array<InFeatType, NeurekaBinConvPerColumnCount>,NeurekaColumnPerPECount>& weight_unpacked, int num_bits=NeurekaColumnPerPECount) {
+  if(filter_mode != Pointwise){
+    WeightUnpack3x3(weight, weight_unpacked);
+    return;
   }
-  else {
-    return false;
-  }
+  
+  for (int row = 0; row < NeurekaComputeRowCount; row++) 
+    for(int byte = 0; byte < (NeurekaColumnPerPECount/8); byte++)
+      for (int bit = 0; bit < 8; bit++){ 
+          int index = byte*8 + bit;
+          weight_unpacked[index][row] = (weight[index] >> row) & 0x1;
+        }
 }
 
-bool Neureka::matrixvec_to_load_idx() {
-  auto k_in_major_lim = this->depthwise ? 1 : this->subtile_nb_ki;
-  if(this->k_in_major_iter == k_in_major_lim-1) {
-    return true;
+void Neureka::Accumulate(const std::array<std::array<InFeatType, NeurekaBinConvPerColumnCount>,NeurekaColumnPerPECount>& weight_array) {
+  
+  
+  std::array<std::array<std::array<bool,NeurekaBinConvPerColumnCount>,NeurekaColumnPerPECount>,NeurekaTotalPECountXY> compute_binconv_enable = this->ctrl_instance.ComputeBinconvEnable(false);
+  std::array<std::array<std::array<InFeatType, NeurekaComputeRowCount>,NeurekaInFeatScalarBufferCount>,NeurekaTotalPECountXY> infeat_mapped_to_pe = this->infeat_buffer_instance.ReadInFeatMappedToPE();
+  std::array<bool, NeurekaTotalPECountXY> compute_pe_enable = this->ctrl_instance.ComputePEEnable();
+  std::array<std::array<bool, NeurekaInFeatScalarBufferCount>, NeurekaTotalPECountXY> compute_col_enable;
+  compute_col_enable = this->ctrl_instance.ComputeColumnEnable(false);
+  bool is_signed = reg_config_.config0.signed_activation;
+  std::array<InFeatType, NeurekaColumnPerPECount> shift_per_pe_array = {};
+  int accum_index = 0;
+  if(this->reg_config_.config0.filter_mode==Pointwise) { 
+    std::array<InFeatType, NeurekaRepeated1x1> shift_values;
+    for (int i = 0; i < NeurekaRepeated1x1; ++i) {
+        shift_values[i] = i;
+    }
+    for(int i=0; i<NeurekaRepeated1x1; i++)
+      for(int j=0; j<NeurekaChannelwise1x1; j++){
+        shift_per_pe_array[i*NeurekaChannelwise1x1+j] = shift_values[i];
+      }
+
+    accum_index = this->ctrl_instance.GetWeightLoadKoutIndex(); // index to write into
   }
-  else {
-    return false;
+  else if(this->reg_config_.config0.filter_mode==Dense3x3 || this->reg_config_.config0.filter_mode==Depthwise){
+    int weight_index = this->ctrl_instance.GetWeightLoadWeightIndex(); // index to write into
+    for(int i=0; i<NeurekaColumnPerPECount; i++){
+      shift_per_pe_array[i] = weight_index;
+    }
+    accum_index = this->ctrl_instance.GetWeightLoadKoutIndex();
   }
+
+  std::array<bool, NeurekaColumnPerPECount> col_enable_array;
+  std::array<bool, NeurekaColumnPerPECount> pe_col_enable_array;
+  for(int i=0; i<NeurekaTotalPECountXY; i++) {
+    for(int j=0; j<NeurekaColumnPerPECount; j++){
+      col_enable_array[j] = compute_col_enable[i][j];
+      pe_col_enable_array[j] = compute_pe_enable[i];
+    }
+    if(this->reg_config_.config0.filter_mode==Depthwise)
+      this->pe_instances[i].CalculatePartialSumAndUpdateAccumBuffer(reg_config_.config0.filter_mode, accum_index, compute_binconv_enable[i], col_enable_array, infeat_mapped_to_pe[i], weight_array, shift_per_pe_array, is_signed);
+    else
+      this->pe_instances[i].CalculatePartialSumAndUpdateAccumBuffer(reg_config_.config0.filter_mode, accum_index, compute_binconv_enable[i], pe_col_enable_array, infeat_mapped_to_pe[i], weight_array, shift_per_pe_array, is_signed);
+  }
+  // this->trace.msg("mvec accum_0 %d\n", this->pe_instances[0].ReadFromIndexAccumBuffer(0));
+
+}
+bool Neureka::WeightLoadExecute(int& latency) {
+    Mode filter_mode = this->reg_config_.config0.filter_mode;
+    std::array<StreamerDataType,WmemBandwidthInBytes> weight_load_data = {};
+    std::array<std::array<StreamerDataType,NeurekaBinConvPerColumnCount>,NeurekaColumnPerPECount> weight_unpacked = {};
+
+    this->WeightLoad(latency, weight_load_data);
+    this->WeightUnpack(filter_mode, weight_load_data, weight_unpacked);
+    this->Accumulate(weight_unpacked);
+    this->ctrl_instance.WeightLoadIteration();
+    
+    latency = latency ? latency : 1;
+  
+  return this->ctrl_instance.load_store_status.weight.done;
 }

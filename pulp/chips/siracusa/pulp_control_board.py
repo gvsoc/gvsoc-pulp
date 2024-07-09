@@ -15,7 +15,7 @@
 #
 
 import gvsoc.systree as st
-from pulp_open.pulp_open_board import Pulp_open_board
+from siracusa.pulp_open_board import Pulp_open_board
 import interco.router_proxy as router_proxy
 
 

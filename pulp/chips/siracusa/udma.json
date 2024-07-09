@@ -1,9 +1,9 @@
 {
   "vp_component": "pulp.udma.udma_v3_pulp_impl",
 
-  "nb_periphs": 9,
+  "nb_periphs": 17,
 
-  "interfaces" : ["spim", "uart", "cpi", "hyper"],
+  "interfaces" : ["spim", "i2s", "uart", "cpi", "hyper"],
 
   "properties": {
     "l2_read_fifo_size": 8
@@ -43,19 +43,43 @@
     "eot_events"   : [ 7 ]
   },
 
+  "i2c": {
+    "version"      : 0,
+    "nb_channels"  : 1,
+    "ids"          : [4],
+    "offsets"      : ["0x200"]
+  },
+
+  "i2s": {
+    "version"      : 2,
+    "nb_channels"  : 1,
+    "ids"          : [5],
+    "offsets"      : ["0x280"],
+    "is_slave"     : true,
+    "is_dual"      : true
+  },
+
   "cpi": {
     "version"      : 1,
     "nb_channels"  : 1,
-    "ids"          : [3],
-    "offsets"      : ["0x180"],
+    "ids"          : [6],
+    "offsets"      : ["0x300"],
     "is_slave"    : true
   },
 
   "hyper": {
     "version"      : 3,
     "nb_channels"  : 1,
-    "ids"          : [4, 5, 6],
-    "offsets"      : ["0x200", "0x280", "0x300"],
+    "ids"          : [8, 9, 10, 11, 12, 13, 14, 15, 16],
+    "offsets"      : ["0x400", "0x480", "0x500", "0x580", "0x600", "0x680", "0x700", "0x780", "0x800"],
     "is_master"    : true
+  },
+
+  "regmap": {
+    "SPIM0": {
+      "type": "group",
+      "template": "SPIM",
+      "offset": "0x100"
+    }
   }
 }

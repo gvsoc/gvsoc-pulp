@@ -51,7 +51,7 @@ class Wmem_subsystem(st.Component):
         # Bindings
         #
 
-        ico.add_mapping('wmem_translated_address', **cluster._reloc_mapping(cluster.get_property('wmem')), id=0)
+        ico.add_mapping('wmem_translated_address', **cluster._reloc_mapping(cluster.get_property('wmem')))
         self.bind(ico, 'wmem_translated_address', interleaver, 'in_0')
 
         for i in range(0, nb_wmem_banks):
