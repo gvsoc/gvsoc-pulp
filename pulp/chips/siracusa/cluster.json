@@ -40,9 +40,14 @@
     },
 
     "wmem": {
-        "base": "0x10400000",
-        "size"  : "0x00800000",
-        "remove_offset": "0x10400000"
+        "mapping":{
+            "base": "0x10400000",
+            "size"  : "0x00800000",
+            "remove_offset": "0x10400000"
+        },
+        "properties":{
+            "nb_banks": 16
+        }
     },
 
     "icache": {

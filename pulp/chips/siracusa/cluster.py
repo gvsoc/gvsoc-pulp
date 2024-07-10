@@ -187,7 +187,7 @@ class Cluster(st.Component):
         self.bind(cluster_ico, 'periph_ico_alias', periph_ico, 'input')
 
         if has_wmem:
-            cluster_ico.add_mapping('wmem_soc', base=self.get_property('wmem/base'), size=self.get_property('wmem/size'))
+            cluster_ico.add_mapping('wmem_soc', base=self.get_property('wmem/mapping/base'), size=self.get_property('wmem/mapping/size'))
             self.bind(cluster_ico, 'wmem_soc', wmem, 'input')
 
         # Periph interconnect
