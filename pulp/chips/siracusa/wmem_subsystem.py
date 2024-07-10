@@ -30,18 +30,15 @@ class Wmem_subsystem(st.Component):
         #
         # Properties
         #
-
-        nb_pe = cluster.get_property('nb_pe', int)
-        l1_banking_factor = cluster.get_property('l1/banking_factor')
-        nb_wmem_banks = 1<<int(math.log(nb_pe * l1_banking_factor, 2.0))
-        wmem_bank_size = int(cluster.get_property('wmem/size', int) / nb_wmem_banks)
+        nb_wmem_banks = cluster.get_property('wmem/properties/nb_banks')
+        wmem_bank_size = int(cluster.get_property('wmem/mapping/size', int) / nb_wmem_banks)
 
         #
         # Components
         #
 
-        ico = Router(self, 'ico', latency=2)
-        interleaver = Wmem_interleaver(self, 'interleaver', nb_masters=1, nb_slaves=nb_wmem_banks, stage_bits=2)
+        ico = Router(self, 'ico', latency=0)
+        interleaver = Wmem_interleaver(self, 'interleaver', nb_masters=1, nb_slaves=nb_wmem_banks, stage_bits=0) # allow to extract the stage_bits from number of slaves
 
         wmem_banks = []
         for i in range(0, nb_wmem_banks):
@@ -51,7 +48,7 @@ class Wmem_subsystem(st.Component):
         # Bindings
         #
 
-        ico.add_mapping('wmem_translated_address', **cluster._reloc_mapping(cluster.get_property('wmem')))
+        ico.add_mapping('wmem_translated_address', **cluster._reloc_mapping(cluster.get_property('wmem/mapping')))
         self.bind(ico, 'wmem_translated_address', interleaver, 'in_0')
 
         for i in range(0, nb_wmem_banks):
