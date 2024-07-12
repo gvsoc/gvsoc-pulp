@@ -27,8 +27,6 @@ from elftools.elf.elffile import *
 import gvsoc.runner as gvsoc
 
 
-GAPY_TARGET = True
-
 class Soc(st.Component):
 
     def __init__(self, parent, name, parser):
@@ -116,7 +114,9 @@ class Spatz(st.Component):
 
 class Target(gvsoc.Target):
 
+    gapy_description="Spatz virtual board"
+
     def __init__(self, parser, options):
         super(Target, self).__init__(parser, options,
-            model=Spatz, description="Spatz virtual board")
+            model=Spatz)
 

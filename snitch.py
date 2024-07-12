@@ -14,14 +14,14 @@
 # limitations under the License.
 #
 
-GAPY_TARGET = True
-
 import gvsoc.runner
 from pulp.chips.snitch.snitch import SnitchBoard
 
 class Target(gvsoc.runner.Target):
 
+    gapy_description="Snitch virtual board"
+
     def __init__(self, parser, options):
         super(Target, self).__init__(parser, options,
-            model=SnitchBoard, description="Snitch virtual board")
+            model=SnitchBoard)
 

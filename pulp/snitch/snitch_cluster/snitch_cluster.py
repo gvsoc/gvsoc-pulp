@@ -30,9 +30,6 @@ import math
 from pulp.snitch.sequencer import Sequencer
 
 
-GAPY_TARGET = True
-
-
 
 class Area:
 

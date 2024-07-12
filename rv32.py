@@ -24,8 +24,6 @@ import gvsoc.systree as st
 from interco.bus_watchpoint import Bus_watchpoint
 import gvsoc.runner as gvsoc
 
-GAPY_TARGET = True
-
 class Soc(st.Component):
 
     def __init__(self, parent, name, parser):
@@ -82,5 +80,5 @@ class Target(gvsoc.Target):
 
     def __init__(self, parser, options):
         super(Target, self).__init__(parser, options,
-            model=Rv32, description="RV32 virtual board")
+            model=Rv32, gapy_description="RV32 virtual board")
 

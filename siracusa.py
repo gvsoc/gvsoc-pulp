@@ -17,10 +17,11 @@
 from pulp.chips.siracusa.pulp_open_board import Pulp_open_board
 import gvsoc.runner as gvsoc
 
-GAPY_TARGET = True
 
 class Target(gvsoc.Target):
 
+    gapy_description="Siracusa virtual board"
+
     def __init__(self, parser, options):
         super(Target, self).__init__(parser, options,
-            model=Pulp_open_board, description="Siracusa virtual board")
+            model=Pulp_open_board)

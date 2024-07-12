@@ -35,7 +35,6 @@ import gvsoc.runner as gvsoc
 
 import math
 
-GAPY_TARGET = True
 
 class Soc(st.Component):
 
@@ -231,6 +230,8 @@ class SnitchSystem(st.Component):
 
 class Target(gvsoc.Target):
 
+    gapy_description="Snitch virtual board"
+
     def __init__(self, parser, options):
         super(Target, self).__init__(parser, options,
-            model=SnitchSystem, description="Snitch virtual board")
+            model=SnitchSystem)

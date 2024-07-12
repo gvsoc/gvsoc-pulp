@@ -35,10 +35,6 @@ import pulp.chips.occamy.occamy_arch
 from pulp.snitch.zero_mem import ZeroMem
 import memory.dramsys
 
-GAPY_TARGET = True
-
-
-
 
 
 
@@ -224,7 +220,9 @@ class OccamyBoard(gvsoc.systree.Component):
 
 class Target(gvsoc.runner.Target):
 
+    gapy_description="Occamy virtual board"
+
     def __init__(self, parser, options):
         super(Target, self).__init__(parser, options,
-            model=OccamyBoard, description="Occamy virtual board")
+            model=OccamyBoard)
 

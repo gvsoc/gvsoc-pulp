@@ -29,8 +29,6 @@ from elftools.elf.elffile import *
 import gvsoc.runner as gvsoc
 
 
-GAPY_TARGET = True
-
 class Soc(st.Component):
 
     def __init__(self, parent, name, parser):
@@ -123,6 +121,8 @@ class Rv64(st.Component):
 
 class Target(gvsoc.Target):
 
+    gapy_description="RV64 virtual board"
+
     def __init__(self, parser, options):
         super(Target, self).__init__(parser, options,
-            model=Rv64, description="RV64 virtual board")
+            model=Rv64)
