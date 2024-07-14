@@ -44,6 +44,8 @@ class L1_subsystem(st.Component):
         l1_banking_factor = cluster.get_property('l1/banking_factor')
         nb_l1_banks = 1<<int(math.log(nb_pe * l1_banking_factor, 2.0))
         l1_bank_size = int(cluster.get_property('l1/mapping/size', int) / nb_l1_banks)
+
+#### TASK INTEGRATE HWPE -- Add one more port for the hwpe
         l1_interleaver_nb_masters = nb_pe + 4 + 1 # 1 port per PE + 4 for DMA + 1 for NE16
         first_external_pcer = 12
         power_models = cluster.get_property('l1/power_models')
@@ -121,6 +123,8 @@ class L1_subsystem(st.Component):
         # L1 interleaver
         for i in range(0, nb_l1_banks):
             self.bind(interleaver, 'out_%d' % i, l1_banks[i], 'input')
+
+#### TASK INTEGRATE HWPE -- Bind it with hwpe port name and attach it with correct index of the L1 subsystem's interleaver. 
 
         self.bind(self, 'ne16_in', interleaver, 'in_%d' % (nb_pe + 4))
 

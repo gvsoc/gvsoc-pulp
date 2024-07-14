@@ -20,44 +20,27 @@
  *          Arpan Suravi Prasad, ETH Zurich (prasadar@iis.ee.ethz.ch)
  */
 
-#include "vp/vp.hpp"
-#include <vp/itf/io.hpp>
+#include "hwpe.hpp"
 
-class Neureka : public vp::Component
-{
-    friend class Neureka_base;
-
-public:
-    Neureka(vp::ComponentConf &config);
-
-    void reset(bool active);
-
-
-private:
-    vp::IoMaster out;
-    vp::IoSlave in;
-    vp::WireMaster<bool> irq;
-
-};
-
-Neureka::Neureka(vp::ComponentConf &config)
+Hwpe::Hwpe(vp::ComponentConf &config)
     : vp::Component(config)
 {
-    this->new_master_port("out", &this->out);
-
-    this->new_master_port("irq", &this->irq);
-
-    this->new_slave_port("input", &this->in);
+  this->traces.new_trace("trace", &this->trace, vp::DEBUG);
+  this->new_slave_port("config", &this->cfg_port_); 
+  this->new_master_port("irq", &this->irq);
+  this->new_master_port("tcdm", &this->tcdm_port );
 
 }
 
-
-void Neureka::reset(bool active)
+// The `hwpe_slave` member function models an access to the HWPE SLAVE interface
+vp::IoReqStatus Hwpe::hwpe_slave(vp::Block *__this, vp::IoReq *req)
 {
+  Hwpe *_this = (Hwpe *)__this;
+  _this->trace.msg("Received request (addr: 0x%x, size: 0x%x, is_write: %d, data: 0x%x\n", req->get_addr(), req->get_size(), req->get_is_write(), *(uint32_t *)(req->get_data()));
+  return vp::IO_REQ_OK;
 }
-
 
 extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
-    return new Neureka(config);
+  return new Hwpe(config);
 }
