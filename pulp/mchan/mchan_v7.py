@@ -22,7 +22,7 @@ class Mchan(st.Component):
             max_nb_ext_write_req=8, max_burst_length=256, nb_loc_ports=4, tcdm_addr_width=20, power_models_file=None):
         super(Mchan, self).__init__(parent, name)
 
-        self.vcd_group(self, skip=True)
+        self.vcd_group(skip=True)
 
         self.set_component('pulp.mchan.mchan_v7_impl')
 

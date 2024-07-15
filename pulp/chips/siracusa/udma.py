@@ -22,7 +22,7 @@ class Udma(st.Component):
 
         super(Udma, self).__init__(parent, name)
 
-        self.vcd_group(self, skip=True)
+        self.vcd_group(skip=True)
 
         self.set_component('pulp.udma.udma_v3_pulp_impl')
 

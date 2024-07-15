@@ -51,6 +51,6 @@ class Ne16(st.Component):
 
     def gen_gtkw_conf(self, tree, traces):
         if tree.get_view() == 'overview':
-            self.vcd_group(self, skip=True)
+            self.vcd_group(skip=True)
         else:
-            self.vcd_group(self, skip=False)
+            self.vcd_group(skip=False)
