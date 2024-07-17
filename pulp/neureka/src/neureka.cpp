@@ -190,12 +190,16 @@ vp::IoReqStatus Neureka::hwpe_slave(vp::Block *__this, vp::IoReq *req)
 
     uint32_t addr = req->get_addr();
     uint32_t addr_without_offset;
+
     if(addr > NEUREKA_REGISTER_CXT1_OFFS)
         addr_without_offset = addr - NEUREKA_REGISTER_CXT1_OFFS;
     else if(addr > NEUREKA_REGISTER_CXT0_OFFS)
         addr_without_offset = addr - NEUREKA_REGISTER_CXT0_OFFS;
-    else 
+    else if(addr > NEUREKA_REGISTER_OFFS)
         addr_without_offset = addr - NEUREKA_REGISTER_OFFS;
+    else
+        return vp::IO_REQ_INVALID; // should not access any other memory maps
+
 
     // Dispatch the register file access to the correct function
     if(req->get_is_write()) {
@@ -232,10 +236,18 @@ vp::IoReqStatus Neureka::hwpe_slave(vp::Block *__this, vp::IoReq *req)
             }
         }
         else {
-            if (_this->trace_level == L1_ACTIV_INOUT || _this->trace_level == L2_DEBUG || _this->trace_level == L3_ALL) {
-                _this->trace.msg(vp::Trace::LEVEL_DEBUG, "offset: %d data: %08x\n", (addr_without_offset - 0x20) >> 2, *(uint32_t *) data);
+            if(addr_without_offset >= 0x20){
+                if (_this->trace_level == L1_ACTIV_INOUT || _this->trace_level == L2_DEBUG || _this->trace_level == L3_ALL) {
+                    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "offset: %d data: %08x\n", (addr_without_offset - 0x20) >> 2, *(uint32_t *) data);
+                }
+                _this->regconfig_manager_instance.RegfileWrite((addr_without_offset - 0x20)>> 2, *(uint32_t *) data);
             }
-            _this->regconfig_manager_instance.RegfileWrite((addr_without_offset - 0x20)>> 2, *(uint32_t *) data);
+            else 
+            {
+                // not implemented or not needed at the moment. Just kept it to make it compatible with the hardware specs
+                _this->trace.msg(vp::Trace::LEVEL_DEBUG, "accessing special registers index: %d data: %08x\n", addr_without_offset >> 2, *(uint32_t *) data);
+
+            }
         }
     }
     else {        
