@@ -191,11 +191,11 @@ vp::IoReqStatus Neureka::hwpe_slave(vp::Block *__this, vp::IoReq *req)
     uint32_t addr = req->get_addr();
     uint32_t addr_without_offset;
 
-    if(addr > NEUREKA_REGISTER_CXT1_OFFS)
+    if(addr >= NEUREKA_REGISTER_CXT1_OFFS)
         addr_without_offset = addr - NEUREKA_REGISTER_CXT1_OFFS;
-    else if(addr > NEUREKA_REGISTER_CXT0_OFFS)
+    else if(addr >= NEUREKA_REGISTER_CXT0_OFFS)
         addr_without_offset = addr - NEUREKA_REGISTER_CXT0_OFFS;
-    else if(addr > NEUREKA_REGISTER_OFFS)
+    else if(addr >= NEUREKA_REGISTER_OFFS)
         addr_without_offset = addr - NEUREKA_REGISTER_OFFS;
     else
         return vp::IO_REQ_INVALID; // should not access any other memory maps
