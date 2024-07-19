@@ -30,8 +30,8 @@ IDmaFeXdma::IDmaFeXdma(vp::Component *idma, IdmaTransferConsumer *me)
     src_stride(*this, "src_stride", 32),
     dst_stride(*this, "dst_stride", 32),
     reps(*this, "reps", 32),
-    next_transfer_id(*this, "next_transfer_id", 32),
-    completed_id(*this, "completed_id", 32),
+    next_transfer_id(*this, "next_transfer_id", 32, true, 2),
+    completed_id(*this, "completed_id", 32, true, 1),
     do_transfer_grant(*this, "do_transfer_grant", 1)
 {
     // Middle-end will be used later for interaction
@@ -117,7 +117,7 @@ uint32_t IDmaFeXdma::get_status(uint32_t status)
     {
         case 0: return this->completed_id.get();
         case 1: return this->next_transfer_id.get() + 1;
-        case 2: return this->completed_id.get() != this->next_transfer_id.get();
+        case 2: return this->next_transfer_id.get() - this->completed_id.get() != 1;
         case 3: return !this->me->can_accept_transfer();
     }
 
@@ -143,6 +143,14 @@ uint32_t IDmaFeXdma::enqueue_copy(uint32_t config, uint32_t size, bool &granted)
     transfer->dst_stride = this->dst_stride.get();
     transfer->reps = this->reps.get();
     transfer->config = config;
+
+    // In case size is 0, directly terminate the transfer. This could be done few cycles
+    // after to better match HW.
+    if (size == 0)
+    {
+        this->ack_transfer(transfer);
+        return transfer_id;
+    }
 
     // Check if middle end can accept a new transfer
     if (this->me->can_accept_transfer())
