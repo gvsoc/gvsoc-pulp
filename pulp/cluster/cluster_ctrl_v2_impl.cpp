@@ -80,7 +80,7 @@ cluster_ctrl::cluster_ctrl(vp::ComponentConf &config)
   in.set_req_meth(&cluster_ctrl::req);
   new_slave_port("input", &in);
 
-  for (int i; i<nb_core; i++)
+  for (int i=0; i<nb_core; i++)
   {
     cores[i].bootaddr = 0x57575757;
 
