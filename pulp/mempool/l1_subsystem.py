@@ -88,7 +88,7 @@ class L1_subsystem(gvsoc.systree.Component):
         remote_interfaces = []
         for i in range(0, nb_remote_masters):
             remote_interfaces.append(Router(self, f'remote{i}', bandwidth=bandwidth, latency=1))
-            remote_interfaces[i].add_mapping('output', base=0x10000000, remove_offset=0x10000000, size=total_banks*l1_bank_size)
+            remote_interfaces[i].add_mapping('output')
 
         #
         # Bindings
@@ -112,13 +112,15 @@ class L1_subsystem(gvsoc.systree.Component):
 
         #virtual interleaver -> bank + remote_interfaces
         for i in range(0, total_banks):
-            index_abs_grp_id = i / (nb_tiles_per_group * nb_banks_per_tile)
+            index_abs_grp_id = int(i / (nb_tiles_per_group * nb_banks_per_tile))
             index_ref_grp_id =  int(index_abs_grp_id - group_id)
             if index_ref_grp_id < 0:
                 index_ref_grp_id = index_ref_grp_id + nb_groups
                 pass
             if (i >= start_bank_id and i < end_bank_id):
-                self.bind(interleaver, 'out_%d' % i, l1_banks[i - start_bank_id], 'input')
+                remove_offset = Interleaver(self, f'remove_offset_{i}', nb_slaves=1, nb_masters=1, interleaving_bits=2, enable_shift=12)
+                self.bind(interleaver, 'out_%d' % i, remove_offset, 'in_0')
+                self.bind(remove_offset, 'out_0', l1_banks[i - start_bank_id], 'input')
             else :
                 self.bind(interleaver, 'out_%d' % i, remote_interfaces[index_ref_grp_id], 'input')
     

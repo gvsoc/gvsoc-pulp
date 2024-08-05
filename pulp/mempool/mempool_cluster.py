@@ -67,7 +67,10 @@ class Cluster(st.Component):
             for tgt in range(0, nb_groups):
                 if (ini != tgt):
                     for tile in range(0, nb_tiles_per_group):
-                        self.bind(self.group_list[ini], f'grp_remt{ini^tgt}_tile{tile}_master_out', self.group_list[tgt], f'grp_remt{ini^tgt}_tile{tile}_slave_in')
+                        debug_router=router.Router(self, 'debug_router_ini%d_tgt%d_tile%d' % (ini, tgt, tile))
+                        debug_router.add_mapping("output")
+                        self.bind(self.group_list[ini], f'grp_remt{ini^tgt}_tile{tile}_master_out', debug_router, 'input')
+                        self.bind(debug_router, 'output', self.group_list[tgt], f'grp_remt{ini^tgt}_tile{tile}_slave_in')
 
         # Propagate barrier signals from group to cluster boundary
         for i in range(0, nb_groups):
