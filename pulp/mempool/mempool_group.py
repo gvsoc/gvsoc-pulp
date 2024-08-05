@@ -129,8 +129,8 @@ class Group(st.Component):
         # Remote TCDM interface between tiles to the group
         for port in range(0, nb_remote_ports):
             for i in range(0, nb_tiles_per_group):
-                self.bind(self, f'grp_remt{port}_tile{i}_slave_in', self.tile_list[i], f'grp_remt{port}_slave_in')
-                self.bind(group_remote_master_interfaces[port], 'out_%d' % i, self, f'grp_remt{port}_tile{i}_master_out')
+                self.bind(self, f'grp_remt{port+1}_tile{i}_slave_in', self.tile_list[i], f'grp_remt{port}_slave_in')
+                self.bind(group_remote_master_interfaces[port], 'out_%d' % i, self, f'grp_remt{port+1}_tile{i}_master_out')
 
         # Propagate the barrier signals from the tiles to the group boundary
         for i in range(0, nb_tiles_per_group):
