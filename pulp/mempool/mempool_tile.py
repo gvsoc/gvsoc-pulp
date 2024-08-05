@@ -56,7 +56,7 @@ class Tile(st.Component):
         nb_tiles_per_group = int((total_cores/nb_groups)/nb_cores_per_tile)
         global_tile_id = tile_id + group_id * nb_tiles_per_group
         Xfrep = 0
-        stack_size_per_tile = 0x1000
+        # stack_size_per_tile = 0x800
         mem_size = nb_cores_per_tile * bank_factor * 1024
         
         # Snitch core complex
@@ -71,7 +71,7 @@ class Tile(st.Component):
         ################################################################
 
         # Stack Memory
-        stack_mem = Memory(self, 'stack_mem', size=0x1000, width_log2=int(math.log(4, 2.0)), atomics=True)
+        # stack_mem = Memory(self, 'stack_mem', size=0x1000, width_log2=int(math.log(4, 2.0)), atomics=True)
         
         # Snitch TCDM (L1 subsystem)
         l1 = l1_subsystem.L1_subsystem(self, 'l1', \
@@ -86,7 +86,7 @@ class Tile(st.Component):
         ico_list=[]
         for i in range(0, nb_cores_per_tile):
             ico_list.append(router.Router(self, 'ico%d' % i, bandwidth=4, latency=1))
-        stack_ico = router.Router(self, 'stack_ico', bandwidth=4, latency=1)
+        # stack_ico = router.Router(self, 'stack_ico', bandwidth=4, latency=1)
         axi_ico = router.Router(self, 'axi_ico', bandwidth=4, latency=1)
 
         # Core Complex
@@ -107,15 +107,15 @@ class Tile(st.Component):
         ##########################################################################
 
         # ICO --> stack_ico --> stack_mem (non-interleaved)
-        for i in range(0, nb_cores_per_tile):
-            ico_list[i].add_mapping('stack_mem', base=0x00000000 + global_tile_id * mem_size, remove_offset=0x00000000 + global_tile_id * mem_size, size=stack_size_per_tile)
-            self.bind(ico_list[i], 'stack_mem', stack_ico, 'input')
-        stack_ico.add_mapping('stack_mem', base=0x00000000 + global_tile_id * mem_size, remove_offset=0x00000000 + global_tile_id * mem_size, size=stack_size_per_tile)
-        self.bind(stack_ico, 'stack_mem', stack_mem, 'input')
+        # for i in range(0, nb_cores_per_tile):
+        #     ico_list[i].add_mapping('stack_mem', base=0x00000000 + global_tile_id * stack_size_per_tile, remove_offset=0x00000000 + global_tile_id * stack_size_per_tile, size=stack_size_per_tile)
+        #     self.bind(ico_list[i], 'stack_mem', stack_ico, 'input')
+        # stack_ico.add_mapping('stack_mem', base=0x00000000 + global_tile_id * stack_size_per_tile, remove_offset=0x00000000 + global_tile_id * stack_size_per_tile, size=stack_size_per_tile)
+        # self.bind(stack_ico, 'stack_mem', stack_mem, 'input')
 
         # ICO --> L1 TCDM
         for i in range(0, nb_cores_per_tile):
-            ico_list[i].add_mapping('l1', base=0x00000000 + stack_size_per_tile * nb_tiles_per_group * nb_groups, remove_offset=0x00000000 + stack_size_per_tile * nb_tiles_per_group * nb_groups, size=total_cores * bank_factor * 1024)
+            ico_list[i].add_mapping('l1', base=0x00000000, remove_offset=0x00000000, size=total_cores * bank_factor * 1024)
             self.bind(ico_list[i], 'l1', l1, f'pe_in{i}')
         
         # L1 TCDM --> Remote TCDM interfaces
