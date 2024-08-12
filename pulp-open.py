@@ -14,8 +14,6 @@
 # limitations under the License.
 #
 
-#### TASK - Change the path from pulp.chips.pulp_open.pulp_open_board to pulp.chips.pulp_open_hwpe.pulp_open_board
-
 from pulp.chips.pulp_open.pulp_open_board import Pulp_open_board
 import gvsoc.runner as gvsoc
 

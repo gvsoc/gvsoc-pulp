@@ -17,16 +17,12 @@
 import gvsoc.systree as st
 import pulp.cpu.iss.pulp_cores as iss
 from cache.hierarchical_cache import Hierarchical_cache
-
-#### TASK - Change the path from pulp.chips.pulp_open.l1_subsystem to pulp.chips.pulp_open_hwpe.l1_subsystem
-
 from pulp.chips.pulp_open.l1_subsystem import L1_subsystem
 from pulp.event_unit.event_unit_v3 import Event_unit
 from interco.router import Router
 from pulp.mchan.mchan_v7 import Mchan
 from pulp.timer.timer_v2 import Timer
 from pulp.cluster.cluster_control_v2 import Cluster_control
-
 from pulp.ne16.ne16 import Ne16
 from pulp.icache_ctrl.icache_ctrl_v2 import Icache_ctrl
 
@@ -86,6 +82,7 @@ class Cluster(st.Component):
         timer_irq_1         = self.get_property('pe/irq').index('timer_1')
         first_external_pcer = 12
         has_ne16 = False
+
 
         #
         # Components
@@ -239,7 +236,7 @@ class Cluster(st.Component):
                 self.bind(ne16, 'irq', event_unit, 'in_event_%d_pe_%d' % (ne16_irq, i))
 
             self.bind(ne16, 'out', l1, 'ne16_in')
-            
+
         # Icache controller
         self.bind(icache_ctrl, 'enable', icache, 'enable')
         self.bind(icache_ctrl, 'flush', icache, 'flush')
@@ -306,6 +303,6 @@ class Cluster(st.Component):
 
     def gen_gtkw_conf(self, tree, traces):
         if tree.get_view() == 'overview':
-            self.vcd_group(self, skip=True)
+            self.vcd_group(skip=True)
         else:
-            self.vcd_group(self, skip=False)
+            self.vcd_group(skip=False)
