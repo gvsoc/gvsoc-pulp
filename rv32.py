@@ -78,7 +78,9 @@ class Rv32(st.Component):
 
 class Target(gvsoc.Target):
 
+    gapy_description="RV32 virtual board"
+
     def __init__(self, parser, options):
         super(Target, self).__init__(parser, options,
-            model=Rv32, gapy_description="RV32 virtual board")
+            model=Rv32)
 
