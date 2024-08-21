@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2020 GreenWaves Technologies, SAS, ETH Zurich and University of Bologna
+# Copyright (C) 2020 GreenWaves Technologies
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,15 +15,15 @@
 #
 
 import gvsoc.systree as st
+import os
 
-class Stdout(st.Component):
+class Udma(st.Component):
+    def __init__(self, parent, name, config_file):
 
-    def __init__(self, parent, name):
+        super(Udma, self).__init__(parent, name)
 
-        super(Stdout, self).__init__(parent, name)
+        self.vcd_group(skip=True)
 
-        self.set_component('pulp.stdout.stdout_v3_impl')
-        self.add_properties({
-            'max_cluster': 1024,
-            'max_core_per_cluster': 16
-        })
+        self.set_component('pulp.udma.udma_v3_pulp_impl')
+
+        self.add_properties(self.load_property_file(config_file))

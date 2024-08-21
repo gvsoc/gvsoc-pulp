@@ -73,7 +73,7 @@ class ClusterCore(PulpCore):
 
 class FcCore(PulpCore):
 
-    def __init__(self, parent, name, fetch_enable: bool=False, boot_addr: int=0):
+    def __init__(self, parent, name, fetch_enable: bool=False, boot_addr: int=0, cluster_id: int=31):
 
-        super().__init__(parent, name, isa=_fc_isa, cluster_id=31, core_id=0,
+        super().__init__(parent, name, isa=_fc_isa, cluster_id=cluster_id, core_id=0,
             fetch_enable=fetch_enable, boot_addr=boot_addr)

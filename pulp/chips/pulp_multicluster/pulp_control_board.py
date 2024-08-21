@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2020 GreenWaves Technologies, SAS, ETH Zurich and University of Bologna
+# Copyright (C) 2020 ETH Zurich and University of Bologna
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,15 +15,12 @@
 #
 
 import gvsoc.systree as st
+from pulp_open.pulp_open_board import Pulp_open_board
+import interco.router_proxy as router_proxy
 
-class Stdout(st.Component):
+
+class Pulp_control_board(Pulp_open_board):
 
     def __init__(self, parent, name):
 
-        super(Stdout, self).__init__(parent, name)
-
-        self.set_component('pulp.stdout.stdout_v3_impl')
-        self.add_properties({
-            'max_cluster': 1024,
-            'max_core_per_cluster': 16
-        })
+        super(Pulp_control_board, self).__init__(parent, name)

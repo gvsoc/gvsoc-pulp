@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2020 GreenWaves Technologies, SAS, ETH Zurich and University of Bologna
+# Copyright (C) 2020 GreenWaves Technologies
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,14 +16,17 @@
 
 import gvsoc.systree as st
 
-class Stdout(st.Component):
+class Apb_soc_ctrl(st.Component):
 
-    def __init__(self, parent, name):
+    def __init__(self, parent, name, soc):
+        super(Apb_soc_ctrl, self).__init__(parent, name)
 
-        super(Stdout, self).__init__(parent, name)
+        self.set_component('pulp.chips.pulp.apb_soc_impl')
 
-        self.set_component('pulp.stdout.stdout_v3_impl')
         self.add_properties({
-            'max_cluster': 1024,
-            'max_core_per_cluster': 16
+            'cluster_power_event': soc.get_property('soc_events/soc_evt_cluster_pok'),
+            'cluster_clock_gate_event': soc.get_property('soc_events/soc_evt_cluster_cg_ok')
         })
+
+        self.add_properties(soc.get_property('peripherals/apb_soc_ctrl/config'))
+        

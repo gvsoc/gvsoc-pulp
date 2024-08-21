@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2020 GreenWaves Technologies, SAS, ETH Zurich and University of Bologna
+# Copyright (C) 2020 ETH Zurich and University of Bologna
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,16 +14,13 @@
 # limitations under the License.
 #
 
-import gvsoc.systree as st
+from pulp.chips.pulp_multicluster.pulp_open_board import Pulp_open_board
+import gvsoc.runner as gvsoc
 
-class Stdout(st.Component):
+class Target(gvsoc.Target):
 
-    def __init__(self, parent, name):
+    gapy_description="Pulp-open virtual board"
 
-        super(Stdout, self).__init__(parent, name)
-
-        self.set_component('pulp.stdout.stdout_v3_impl')
-        self.add_properties({
-            'max_cluster': 1024,
-            'max_core_per_cluster': 16
-        })
+    def __init__(self, parser, options):
+        super(Target, self).__init__(parser, options,
+            model=Pulp_open_board)
