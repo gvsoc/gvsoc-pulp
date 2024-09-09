@@ -144,9 +144,14 @@ uint32_t IDmaFeXdma::enqueue_copy(uint32_t config, uint32_t size, bool &granted)
     transfer->reps = this->reps.get();
     transfer->config = config;
 
-    // In case size is 0, directly terminate the transfer. This could be done few cycles
-    // after to better match HW.
-    if (size == 0)
+    this->trace.msg(vp::Trace::LEVEL_INFO, "Enqueuing transfer (id: %d, src: %llx, dst: %llx, "
+        "size: %llx, src_stride: %llx, dst_stride: %llx, reps: %llx, config: %llx)\n",
+        transfer_id, transfer->src, transfer->dst, transfer->size, transfer->src_stride,
+        transfer->dst_stride, transfer->reps, transfer->config);
+
+    // In case size is 0 or reps is 0 with 2d transfer, directly terminate the transfer.
+    // This could be done few cycles after to better match HW.
+    if (size == 0 || ((transfer->config >> 1) & 1) && transfer->reps == 0)
     {
         this->ack_transfer(transfer);
         return transfer_id;
