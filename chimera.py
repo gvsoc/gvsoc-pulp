@@ -18,14 +18,20 @@
 import gvsoc.runner
 import gvsoc.systree 
 
-# import cpu.iss.riscv as iss
+import pulp.chips.chimera.apb_soc_ctrl as apb_soc_ctrl
 import pulp.cpu.iss.pulp_cores as iss
-
 import memory.memory as memory
 from vp.clock_domain import Clock_domain
 import interco.router as router
 import utils.loader.loader
 from interco.bus_watchpoint import Bus_watchpoint
+import hjson
+import os 
+from pulp.fll.fll_v1 import Fll
+from pulp.padframe.padframe_v1 import Padframe
+from utils.clock_generator import Clock_generator
+import pulp.soc_eu.soc_eu_v2 as soc_eu_module
+import pulp.itc.itc_v1 as itc
 
 
 class SafetyIsland(gvsoc.systree.Component):
@@ -38,60 +44,90 @@ class SafetyIsland(gvsoc.systree.Component):
         if parser is not None:
             [args, otherArgs] = parser.parse_known_args()
             binary = args.binary
-        
-                # Create a dictionary with memory configuration
-        self.memory_config = {
-            "data": {
-                "remove_offset": 0x00000000,           
-                "base": 0x00000000,   
-                "size": 0x00010000    
-            },
-            "inst": {
-                "remove_offset": 0x00010000, 
-                "base": 0x00010000,   
-                "size": 0x00010000  
-            }
-        }
+
+        # Load configuration from HJSON file
+        with open('pulp/pulp/chips/chimera/safety-island.hjson', 'r') as file:
+            config = hjson.load(file)
+        self.add_properties(config)    
+        soc_events = self.get_property('soc_events')
 
 
-        l2_tcdm_ico            = router.Router(self, "l2_tcdm_ico")
-        l2_private_data_memory = memory.Memory(self, 'private_data_memory',
-                                                     size=self.memory_config["data"]["size"])
-        l2_private_inst_memory = memory.Memory(self, 'private_inst_memory', 
-                                                      size=self.memory_config["inst"]["size"])
+        soc_eu = soc_eu_module.Soc_eu(self, 'soc_eu', ref_clock_event=soc_events['soc_evt_ref_clock'], **self.get_property('peripherals/soc_eu/config'))
 
-        # host = iss.Riscv(self, 'fc', isa='rv32imafdc')
-        host = iss.FcCore(self, 'fc')
-        host.o_FETCH     (l2_tcdm_ico.i_INPUT    ())
-        host.o_DATA      (l2_tcdm_ico.i_INPUT    ())
-        host.o_DATA_DEBUG(l2_tcdm_ico.i_INPUT    ())
+        soc_ctrl = apb_soc_ctrl.Apb_soc_ctrl(self, 'soc_ctrl', self)
+        fll_soc     = Fll(self, 'fll_soc')
 
-        # Finally connect an ELF loader, which will execute first and will then
-        # send to the core the boot address and notify him he can start
+        fc_events = self.get_property('peripherals/fc_itc/irq')
+        fc_itc = itc.Itc_v1(self, 'fc_itc')
+
+
+
+        # Access memory and cluster configuration from the HJSON file
+        self.memory_config = config['memory_config']
+        self.cluster_config = config['cluster_config']
+
+        # Create loader using the binary provided
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
-        loader.o_OUT     (l2_tcdm_ico.i_INPUT    ())
-        loader.o_START   (host.i_FETCHEN ())
-        loader.o_ENTRY   (host.i_ENTRY   ())
+        obi_ico = router.Router(self, "obi_ico")
+        l2_tcdm_ico = router.Router(self, "l2_tcdm_ico")
 
-        l2_tcdm_ico.o_MAP(
-            l2_private_data_memory.i_INPUT(),
-            "data_memory",
-            **{
-                "base"          : self.memory_config["data"]["base"],
-                "remove_offset" : self.memory_config["data"]["remove_offset"],
-                "size"          : self.memory_config["data"]["size"]
-            }
-        )
 
-        l2_tcdm_ico.o_MAP(
-            l2_private_inst_memory.i_INPUT(),
-            "inst_memory",
-            **{
-                "base"          : self.memory_config["inst"]["base"],
-                "remove_offset" : self.memory_config["inst"]["remove_offset"],
-                "size"          : self.memory_config["inst"]["size"]
-            }
-        )
+
+        # Create the memory and router components based on the configuration
+        cluster_place_holder = memory.Memory(self, 'cluster_place_holder', size=self.cluster_config["size"])
+
+        l2_private_data_memory = memory.Memory(self, 'private_data_memory', size=self.memory_config["data"]["size"])
+        l2_private_inst_memory = memory.Memory(self, 'private_inst_memory', size=self.memory_config["inst"]["size"])
+
+        # Setup host and loader connections
+        host = iss.FcCore(self, 'fc')
+        
+        host.o_FETCH(l2_tcdm_ico.i_INPUT())
+        host.o_DATA(l2_tcdm_ico.i_INPUT())
+        host.o_DATA_DEBUG(l2_tcdm_ico.i_INPUT())
+
+        loader.o_OUT(l2_tcdm_ico.i_INPUT())
+        loader.o_START(host.i_FETCHEN())
+        loader.o_ENTRY(host.i_ENTRY())
+
+        # Mapping configurations for data, inst, and cluster memory
+        l2_tcdm_ico.o_MAP( l2_private_data_memory.i_INPUT(), "data_memory",          **self.get_property('memory_config/data'))
+        l2_tcdm_ico.o_MAP( l2_private_inst_memory.i_INPUT(), "inst_memory",          **self.get_property('memory_config/inst'))
+        l2_tcdm_ico.o_MAP( cluster_place_holder.i_INPUT(),   "cluster_place_holder", **self.get_property('cluster_config'))
+        l2_tcdm_ico.o_MAP( obi_ico.i_INPUT(),                "obi_ico",              **self.get_property('obi_ico/mapping'))
+
+
+
+        
+
+        obi_ico.add_mapping('soc_ctrl', **self.get_property('obi_ico/soc_ctrl'))
+        obi_ico.add_mapping('fll_soc', **self.get_property('obi_ico/fll_soc'))
+        obi_ico.add_mapping('soc_eu', **self.get_property('obi_ico/soc_eu'))
+        obi_ico.add_mapping('fc_itc', **self.get_property('obi_ico/fc_itc'))
+
+        # fll_periph  = Fll(self, 'fll_periph')
+        # fll_cluster = Fll(self, 'fll_cluster')
+
+        # Create and connect the SOC control component
+        self.bind(obi_ico, 'soc_ctrl', soc_ctrl, 'input')
+        self.bind(obi_ico, 'soc_eu', soc_eu, 'input')
+        self.bind(obi_ico, 'fll_soc', fll_soc, 'input')
+        self.bind(obi_ico, 'fc_itc', fc_itc, 'input')
+
+        self.bind(self, 'ref_clock', fll_soc, 'ref_clock')
+        self.bind(fll_soc, 'clock_out', self, 'fll_soc_clock')
+
+
+        # Interrupts
+        for name, irq in fc_events.items():
+            if len(name.split('.')) == 2:
+                comp_name, itf_name = name.split('.')
+                self.bind(self.get_component(comp_name), itf_name, fc_itc, 'in_event_%d' % irq)
+
+        self.bind(self, 'ref_clock', soc_eu, 'ref_clock')
+        self.bind(soc_eu, 'ref_clock_event', fc_itc, 'in_event_%d' % fc_events['evt_clkref'])
+        self.bind(soc_ctrl, 'event', soc_eu, 'event_in')
+
 
 
        
@@ -105,7 +141,24 @@ class ChimeraBoard(gvsoc.systree.Component):
 
         safety_island = SafetyIsland(self, 'safety_island', parser)
 
-        self.bind(clock, 'out', safety_island, 'clock')
+
+        padframe_config_file = 'pulp/chips/chimera/padframe.json'
+
+        padframe = Padframe(self, 'padframe', config_file=padframe_config_file)
+
+        ref_clock = Clock_domain(self, 'ref_clock', frequency=65536)
+        ref_clock_generator = Clock_generator(self, 'ref_clock_generator')
+        self.bind(ref_clock, 'out', ref_clock_generator, 'clock')
+
+        soc_clock = Clock_domain(self, 'soc_clock_domain', frequency=50000000)
+        self.bind(soc_clock, 'out', safety_island, 'clock')
+        self.bind(safety_island, 'fll_soc_clock', self, 'clock_in')
+        self.bind(ref_clock_generator, 'clock_sync', padframe, 'ref_clock_pad')
+
+
+        
+        self.bind(padframe, 'ref_clock', safety_island, 'ref_clock')
+        
 
 
 class Target(gvsoc.runner.Target):
