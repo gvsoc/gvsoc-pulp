@@ -59,6 +59,8 @@ private:
     int x;
     // Y position of this network interface in the grid
     int y;
+    // Maxinum number of pending input requests before the initiator is stalled
+    int max_input_req;
     // Input IO interface where incoming burst are injected into the network
     vp::IoSlave input_itf;
     // This block trace
@@ -84,4 +86,9 @@ private:
     // True when the output queue is stalled because a router denied a request. The network
     // interface can not send any request until it gets unstalled
     bool stalled;
+    // Number of pending input req. Used to stall the initiator when the max number is reached
+    int nb_pending_input_req;
+    // When initiator is stalled because max number of input pending req has been reached,
+    // this give the input request which has been stalled and must be granted.
+    vp::IoReq *denied_req;
 };

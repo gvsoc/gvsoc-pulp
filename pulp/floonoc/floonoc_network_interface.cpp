@@ -34,6 +34,7 @@ NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y)
     this->noc = noc;
     this->x = x;
     this->y = y;
+    this->max_input_req = 4;
 
     traces.new_trace("trace", &trace, vp::DEBUG);
 
@@ -60,6 +61,8 @@ void NetworkInterface::reset(bool active)
     {
         this->stalled = false;
         this->pending_burst_size = 0;
+        this->nb_pending_input_req = 0;
+        this->denied_req = NULL;
     }
 }
 
@@ -165,6 +168,7 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             if (_this->pending_burst_size == 0)
             {
                 _this->pending_bursts.pop();
+                _this->nb_pending_input_req--;
             }
 
             // Store information in the request which will be needed by the routers and the target
@@ -181,6 +185,14 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             // In this case we must stall the network interface
             Router *router = _this->noc->get_router(_this->x, _this->y);
             _this->stalled = router->handle_request(req, _this->x, _this->y);
+        }
+
+        // Now that we removed a pending req, we may need to unstall a denied request
+        if (_this->denied_req && _this->nb_pending_input_req != _this->max_input_req)
+        {
+            vp::IoReq *req = _this->denied_req;
+            _this->denied_req = NULL;
+            req->get_resp_port()->grant(req);
         }
 
         // Since we processed a burst, we need to check again in the next cycle if there is
@@ -239,5 +251,16 @@ vp::IoReqStatus NetworkInterface::req(vp::Block *__this, vp::IoReq *req)
     _this->pending_bursts.push(req);
     _this->fsm_event.enqueue();
 
-    return vp::IO_REQ_PENDING;
+    _this->nb_pending_input_req++;
+
+    // Only accept the request if we don't have too many pending requests
+    if (_this->nb_pending_input_req == _this->max_input_req)
+    {
+        _this->denied_req = req;
+        return vp::IO_REQ_DENIED;
+    }
+    else
+    {
+        return vp::IO_REQ_PENDING;
+    }
 }

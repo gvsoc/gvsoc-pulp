@@ -84,6 +84,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     }
 
     // Then go through the 5 queues until we find a request which can be propagated
+    bool output_full[5] = {false};
     for (int i=0; i<5; i++)
     {
         vp::Queue *queue = _this->input_queues[queue_index];
@@ -100,12 +101,21 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             // to go to the destination
             int next_x, next_y;
             _this->get_next_router_pos(to_x, to_y, next_x, next_y);
-            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Resolved next position (req: %p, next_position: (%d, %d))\n",
-                req, next_x, next_y);
+            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Resolved next position (req: %p, dest: (%d, %d), next_position: (%d, %d))\n",
+                req, to_x, to_y, next_x, next_y);
+
+            // Get output queue ID from next position
+            int queue_id = _this->get_req_queue(next_x, next_y);
+
+            // Only send one request per cycle to the same output            
+            if (output_full[queue_id])
+            {
+                continue;
+            }
+            output_full[queue_id] = true;
 
             // In case the request goes to a queue which is stalled, skip it
             // we'll retry later
-            int queue_id = _this->get_req_queue(next_x, next_y);
             if (_this->stalled_queues[queue_id])
             {
                 continue;
@@ -120,7 +130,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 // one more request
                 int pos_x, pos_y;
                 // Get the previous position out of the input queue index
-                _this->get_pos_from_queue(queue_id, pos_x, pos_y);
+                _this->get_pos_from_queue(queue_index, pos_x, pos_y);
 
                 if (pos_x == _this->x && pos_y == _this->y)
                 {
@@ -141,7 +151,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             if (to_x == _this->x && to_y == _this->y)
             {
                 // If next position is the same as the current one, it means it arrived to
-                // destination, we need to forward to the fina target
+                // destination, we need to forward to the final target
                 _this->send_to_target(req, _this->x, _this->y);
             }
             else
@@ -172,8 +182,10 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
             // Since we removed a request, check in next cycle if there is another one to handle
             _this->fsm_event.enqueue();
-
-            break;
+        }
+        else
+        {
+            queue->trigger_next();
         }
 
         // If we didn't any ready request, try with next queue
@@ -204,7 +216,7 @@ void Router::send_to_target(vp::IoReq *req, int pos_x, int pos_y)
         req->status = result;
         this->noc->handle_request_end(req);
     }
-    else if (vp::IO_REQ_DENIED)
+    else if (result == vp::IO_REQ_DENIED)
     {
         int queue = this->get_req_queue(pos_x, pos_y);
 
@@ -241,22 +253,30 @@ void Router::grant(vp::IoReq *req)
 
 void Router::get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_y)
 {
-    // Simple algorithm to reach the destination.
-    // We just move on the direction where we find the highest difference.
-    // To be checked on real HW, there is probably a better algorithm to take different paths
-    // depending on the congestion.
-    int x_diff = dest_x - this->x;
-    int y_diff = dest_y - this->y;
-
-    if (std::abs(x_diff) > std::abs(y_diff))
+    if (dest_x == this->x && dest_y == this->y)
     {
-        next_x = x_diff < 0 ? this->x - 1 : this->x + 1;
+        next_x = this->x;
         next_y = this->y;
     }
     else
     {
-        next_y = y_diff < 0 ? this->y - 1 : this->y + 1;
-        next_x = this->x;
+        // Simple algorithm to reach the destination.
+        // We just move on the direction where we find the highest difference.
+        // To be checked on real HW, there is probably a better algorithm to take different paths
+        // depending on the congestion.
+        int x_diff = dest_x - this->x;
+        int y_diff = dest_y - this->y;
+
+        if (std::abs(x_diff) > std::abs(y_diff))
+        {
+            next_x = x_diff < 0 ? this->x - 1 : this->x + 1;
+            next_y = this->y;
+        }
+        else
+        {
+            next_y = y_diff < 0 ? this->y - 1 : this->y + 1;
+            next_x = this->x;
+        }
     }
 }
 
@@ -292,11 +312,11 @@ int Router::get_req_queue(int from_x, int from_y)
     int queue_index = 0;
     if (from_x != this->x)
     {
-        queue_index = from_x < this->x ? FlooNoc::DIR_RIGHT : FlooNoc::DIR_LEFT;
+        queue_index = from_x < this->x ? FlooNoc::DIR_LEFT : FlooNoc::DIR_RIGHT;
     }
     else if (from_y != this->y)
     {
-        queue_index = from_y < this->y ? FlooNoc::DIR_UP : FlooNoc::DIR_DOWN;
+        queue_index = from_y < this->y ? FlooNoc::DIR_DOWN : FlooNoc::DIR_UP;
     }
     else
     {
