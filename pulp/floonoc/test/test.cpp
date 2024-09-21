@@ -23,7 +23,7 @@
 #include "test1.hpp"
 #include "test2.hpp"
 
-#define CYCLES_ERROR 0.1f
+#define CYCLES_ERROR 0.01f
 
 Testbench::Testbench(vp::ComponentConf &config)
     : vp::Component(config)
