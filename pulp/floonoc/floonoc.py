@@ -96,7 +96,7 @@ class FlooNoc2dMesh(gvsoc.systree.Component):
         self.get_property('network_interfaces').append([x, y])
 
     def o_MAP(self, itf: gvsoc.systree.SlaveItf, base: int, size: int,
-            x: int, y: int):
+            x: int, y: int, name: str=None):
         """Binds the output of a node to a target, associated to a memory-mapped region.
 
         Parameters
@@ -107,8 +107,12 @@ class FlooNoc2dMesh(gvsoc.systree.Component):
             X position of the target in the grid
         y: int
             Y position of the target in the grid
+        name: str
+            name of the mapping. Should be different for each mapping. Taken from itf component if
+            it is None
         """
-        name = itf.component.name
+        if name is None:
+            name = itf.component.name
         self.__add_mapping(name, base=base, size=size, x=x, y=y)
         self.itf_bind(name, itf, signature='io')
 
@@ -117,6 +121,13 @@ class FlooNoc2dMesh(gvsoc.systree.Component):
 
         Requests can be injected to the noc using this interface. The noc will then
         forward it to the right target.
+
+        Parameters
+        ----------
+        x: int
+            The x position of the node in the grid
+        y: int
+            The y position of the node in the grid
 
         Returns
         ----------
@@ -166,6 +177,13 @@ class FlooNocClusterGrid(FlooNoc2dMesh):
 
         The cluster can inject requests to the noc using this interface. The noc will then
         forward it to the right target.
+
+        Parameters
+        ----------
+        x: int
+            The x position of the cluster in the grid
+        y: int
+            The y position of the cluster in the grid
 
         Returns
         ----------
