@@ -12,10 +12,17 @@
         }
     },
     /* This is just a placeholder at the moment to enable boot process to succeed successful*/
-    cluster_config: {
+    cluster_l1_config: {
         base          : 0x10000000,
         size          : 0x00008000,
         remove_offset : 0x10000000
+    },
+    
+    /* JUNGVI: Memory island placeholder */
+    memory_island_config: {
+        base          : 0x50000000,
+        size          : 0x00800000,
+        remove_offset : 0x50000000
     },
 
     obi_ico: {
