@@ -7,9 +7,7 @@ import memory.memory as memory
 from vp.clock_domain import Clock_domain
 import interco.router as router
 import utils.loader.loader
-from interco.bus_watchpoint import Bus_watchpoint
 import hjson
-import os 
 from pulp.fll.fll_v1 import Fll
 from pulp.padframe.padframe_v1 import Padframe
 from utils.clock_generator import Clock_generator
@@ -34,7 +32,6 @@ class SafetyIsland(gvsoc.systree.Component):
         self.add_properties(config)    
         soc_events = self.get_property('soc_events')
 
-
         soc_eu    = soc_eu_module.Soc_eu(self, 'soc_eu', ref_clock_event=soc_events['soc_evt_ref_clock'], **self.get_property('peripherals/soc_eu/config'))
         soc_ctrl  = apb_soc_ctrl.Apb_soc_ctrl(self, 'soc_ctrl', self)
 
@@ -42,25 +39,24 @@ class SafetyIsland(gvsoc.systree.Component):
         fll_periph  = Fll(self, 'fll_periph')
         fll_cluster = Fll(self, 'fll_cluster')
 
-
         fc_events = self.get_property('peripherals/fc_itc/irq')
         fc_itc    = itc.Itc_v1(self, 'fc_itc')
 
-
-
         # Access memory and cluster configuration from the HJSON file
         self.memory_config  = config['memory_config']
-        self.cluster_config = config['cluster_config']
+        self.cluster_l1_config = config['cluster_l1_config']
+        self.memory_island_config = config['memory_island_config']
 
         # Create loader using the binary provided
         loader      = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
         obi_ico     = router.Router(self, "obi_ico")
         l2_tcdm_ico = router.Router(self, "l2_tcdm_ico")
 
-
-
         # Create the memory and router components based on the configuration
-        cluster_place_holder   = memory.Memory(self, 'cluster_place_holder', size=self.cluster_config["size"])
+        cluster_l1_placeholder = memory.Memory(self, 'cluster_l1_placeholder', size=self.cluster_l1_config["size"])
+
+        # JUNGVI: Memory component placeholder for the memory island
+        memory_island_placeholder = memory.Memory(self, 'memory_island_placeholder', size=self.memory_island_config["size"])
 
         l2_private_data_memory = memory.Memory(self, 'private_data_memory', size=self.memory_config["data"]["size"])
         l2_private_inst_memory = memory.Memory(self, 'private_inst_memory', size=self.memory_config["inst"]["size"])
@@ -79,9 +75,9 @@ class SafetyIsland(gvsoc.systree.Component):
         # Mapping configurations for data, inst, and cluster memory
         l2_tcdm_ico.o_MAP( l2_private_data_memory.i_INPUT(), "data_memory",          **self.get_property('memory_config/data'))
         l2_tcdm_ico.o_MAP( l2_private_inst_memory.i_INPUT(), "inst_memory",          **self.get_property('memory_config/inst'))
-        l2_tcdm_ico.o_MAP( cluster_place_holder.i_INPUT(),   "cluster_place_holder", **self.get_property('cluster_config'))
+        l2_tcdm_ico.o_MAP( cluster_l1_placeholder.i_INPUT(),   "cluster_l1_placeholder", **self.get_property('cluster_l1_config'))
         l2_tcdm_ico.o_MAP( obi_ico.i_INPUT(),                "obi_ico",              **self.get_property('obi_ico/mapping'))
-
+        l2_tcdm_ico.o_MAP( memory_island_placeholder.i_INPUT(),   "memory_island_placeholder", **self.get_property('memory_island_config'))
 
         obi_ico.add_mapping( 'soc_ctrl'   , **self.get_property('obi_ico/soc_ctrl'   ))             
         obi_ico.add_mapping( 'fll_soc'    , **self.get_property('obi_ico/fll_soc'    ))             
@@ -116,8 +112,6 @@ class SafetyIsland(gvsoc.systree.Component):
         self.bind( soc_ctrl, 'event'          , soc_eu, 'event_in')
 
 
-
-       
 class ChimeraBoard(gvsoc.systree.Component):
 
     def __init__(self, parent, name, parser, options):
@@ -127,7 +121,6 @@ class ChimeraBoard(gvsoc.systree.Component):
         clock = Clock_domain(self, 'clock', frequency=50000000)
 
         safety_island = SafetyIsland(self, 'safety_island', parser)
-
 
         padframe_config_file = 'pulp/chips/chimera/padframe.json'
 
@@ -143,11 +136,8 @@ class ChimeraBoard(gvsoc.systree.Component):
         self.bind(safety_island, 'fll_soc_clock', self, 'clock_in')
         self.bind(ref_clock_generator, 'clock_sync', padframe, 'ref_clock_pad')
 
-
-        
         self.bind(padframe, 'ref_clock', safety_island, 'ref_clock')
         
-
 
 class Target(gvsoc.runner.Target):
 
