@@ -183,6 +183,7 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
         self.add_c_flags([
             "-DPIPELINE_STAGES=1",
             "-DCONFIG_ISS_CORE=snitch_fast",
+            "-DCONFIG_GVSOC_ISS_SNITCH_FAST",
         ])
 
         self.add_sources([
