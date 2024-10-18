@@ -129,7 +129,7 @@ class SnitchArch:
 
 class Soc(gvsoc.systree.Component):
 
-    def __init__(self, parent, name, arch, binary, debug_binaries):
+    def __init__(self, parent, name, parser, arch, binary, debug_binaries):
         super().__init__(parent, name)
 
         entry = 0
@@ -155,7 +155,7 @@ class Soc(gvsoc.systree.Component):
         # Clusters
         clusters = []
         for id in range(0, arch.nb_cluster):
-            clusters.append(SnitchCluster(self, f'cluster_{id}', arch.get_cluster(id), entry=entry,
+            clusters.append(SnitchCluster(self, f'cluster_{id}', parser, arch.get_cluster(id), entry=entry,
                 binaries=debug_binaries))
 
         # NoC
@@ -299,13 +299,13 @@ class SocFlooNoc(gvsoc.systree.Component):
 
 class Snitch(gvsoc.systree.Component):
 
-    def __init__(self, parent, name, arch, binary, debug_binaries):
+    def __init__(self, parent, name, parser, arch, binary, debug_binaries):
         super(Snitch, self).__init__(parent, name)
 
         if arch.soc.floonoc:
             soc = SocFlooNoc(self, 'soc', arch.soc, binary, debug_binaries)
         else:
-            soc = Soc(self, 'soc', arch.soc, binary, debug_binaries)
+            soc = Soc(self, 'soc', parser, arch.soc, binary, debug_binaries)
 
         soc.o_HBM(self.i_HBM())
 
@@ -328,7 +328,7 @@ class SnitchBoard(gvsoc.systree.Component):
 
         arch = SnitchArch(self)
 
-        chip = Snitch(self, 'chip', arch.chip, args.binary, debug_binaries)
+        chip = Snitch(self, 'chip', parser, arch.chip, args.binary, debug_binaries)
 
         if arch.hbm.type == 'dramsys':
             mem = memory.dramsys.Dramsys(self, 'ddr')

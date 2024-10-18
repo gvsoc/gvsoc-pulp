@@ -99,7 +99,7 @@ class SnitchClusterTcdm(gvsoc.systree.Component):
 
 class SnitchCluster(gvsoc.systree.Component):
 
-    def __init__(self, parent, name, arch, entry=0, auto_fetch=True, binaries=None):
+    def __init__(self, parent, name, parser, arch, entry=0, auto_fetch=True, binaries=None):
         super().__init__(parent, name)
 
         #
@@ -131,12 +131,22 @@ class SnitchCluster(gvsoc.systree.Component):
         if xfrep:
             fpu_sequencers = []
 
+        [args, __] = parser.parse_known_args()
+
+        binary = None
+        binaries = []
+        if parser is not None:
+            [args, otherArgs] = parser.parse_known_args()
+            binary = args.binary
+            if binary is not None:
+                binaries = [binary]
+
         for core_id in range(0, arch.nb_core):
 
             if arch.core_type == 'fast':
                 cores.append(iss.SnitchFast(self, f'pe{core_id}', isa='rv32imfdvca',
                     fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
-                    core_id=arch.first_hartid + core_id))
+                    core_id=arch.first_hartid + core_id, htif=True, binaries=binaries))
 
             else:
                 cores.append(iss.Snitch(self, f'pe{core_id}', isa='rv32imfdvca',
@@ -222,6 +232,12 @@ class SnitchCluster(gvsoc.systree.Component):
                     self.bind(cores[core_id], 'acc_req_ready', fp_cores[core_id], 'acc_req_ready')
 
                 self.bind(fp_cores[core_id], 'acc_rsp', cores[core_id], 'acc_rsp')
+
+            else:
+                self.bind(cores[core_id], 'ssr_dm0', cores_ico[core_id], 'input')
+                self.bind(cores[core_id], 'ssr_dm1', cores_ico[core_id], 'input')
+                self.bind(cores[core_id], 'ssr_dm2', cores_ico[core_id], 'input')
+
 
         # Cluster peripherals
         narrow_axi.o_MAP(cluster_registers.i_INPUT(), base=arch.peripheral.base,
