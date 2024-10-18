@@ -151,6 +151,49 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
         self.itf_bind('barrier_req', itf, signature='wire<bool>')
 
 
+class SnitchFast(cpu.iss.riscv.RiscvCommon):
+
+    def __init__(self,
+            parent,
+            name,
+            isa: str='rv32imafdc',
+            misa: int=None,
+            binaries: list=[],
+            fetch_enable: bool=False,
+            boot_addr: int=0,
+            inc_spatz: bool=False,
+            core_id: int=0):
+
+
+        isa_instance = isa_instances.get(isa)
+
+        if isa_instances.get(isa) is None:
+            isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
+                extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ] )
+            # add_latencies(isa_instance)
+            isa_instances[isa] = isa_instance
+
+        if misa is None:
+            misa = isa_instance.misa
+
+        super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
+            fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True, 
+            prefetcher_size=32)
+
+        self.add_c_flags([
+            "-DPIPELINE_STAGES=1",
+            "-DCONFIG_ISS_CORE=snitch_fast",
+        ])
+
+        self.add_sources([
+            "cpu/iss/src/snitch_fast/snitch.cpp",
+            "cpu/iss/src/snitch/ssr.cpp",
+        ])
+
+
+    def o_BARRIER_REQ(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('barrier_req', itf, signature='wire<bool>')
+
 class SnitchBare(cpu.iss.riscv.RiscvCommon):
 
     def __init__(self,

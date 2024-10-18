@@ -36,6 +36,7 @@ class SnitchArchProperties:
         self.hbm_size                = 0x80000000
         self.hbm_type                = 'simple'
         self.noc_type                = 'simple'
+        self.core_type                = 'accurate'
 
 
     def declare_target_properties(self, target):
@@ -59,6 +60,10 @@ class SnitchArchProperties:
 
         self.noc_type = target.declare_user_property(
             name='noc_type', value=self.hbm_type, allowed_values=['simple', 'floonoc'], description='Type of the NoC'
+        )
+
+        self.core_type = target.declare_user_property(
+            name='core_type', value=self.core_type, allowed_values=['accurate', 'fast'], description='Type of the snitch model'
         )
 
 

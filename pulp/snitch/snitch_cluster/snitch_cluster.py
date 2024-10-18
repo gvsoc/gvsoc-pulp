@@ -51,6 +51,7 @@ class ClusterArch:
         self.tcdm          = ClusterArch.Tcdm(base, self.nb_core)
         self.peripheral    = Area( base + 0x0002_0000, 0x0001_0000)
         self.zero_mem      = Area( base + 0x0003_0000, 0x0001_0000)
+        self.core_type = properties.core_type
 
     class Tcdm:
         def __init__(self, base, nb_masters):
@@ -124,16 +125,24 @@ class SnitchCluster(gvsoc.systree.Component):
         xfrep = True
         if xfrep:
             fpu_sequencers = []
-        for core_id in range(0, arch.nb_core):
-            cores.append(iss.Snitch(self, f'pe{core_id}', isa='rv32imfdvca',
-                fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
-                core_id=arch.first_hartid + core_id, htif=False))
 
-            fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa='rv32imfdvca',
-                fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
-                core_id=arch.first_hartid + core_id, htif=False))
-            if xfrep:
-                fpu_sequencers.append(Sequencer(self, f'fpu_sequencer{core_id}', latency=0))
+        for core_id in range(0, arch.nb_core):
+
+            if arch.core_type == 'fast':
+                cores.append(iss.SnitchFast(self, f'pe{core_id}', isa='rv32imfdvca',
+                    fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
+                    core_id=arch.first_hartid + core_id))
+
+            else:
+                cores.append(iss.Snitch(self, f'pe{core_id}', isa='rv32imfdvca',
+                    fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
+                    core_id=arch.first_hartid + core_id, htif=False))
+
+                fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa='rv32imfdvca',
+                    fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
+                    core_id=arch.first_hartid + core_id, htif=False))
+                if xfrep:
+                    fpu_sequencers.append(Sequencer(self, f'fpu_sequencer{core_id}', latency=0))
 
             cores_ico.append(router.Router(self, f'pe{core_id}_ico', bandwidth=arch.tcdm.bank_width))
 
@@ -178,27 +187,28 @@ class SnitchCluster(gvsoc.systree.Component):
             cores[core_id].o_FETCH(narrow_axi.i_INPUT())
 
         for core_id in range(0, arch.nb_core):
-            fp_cores[core_id].o_DATA( cores_ico[core_id].i_INPUT() )
-            self.__o_FETCHEN( fp_cores[core_id].i_FETCHEN() )
+            if arch.core_type == 'accurate':
+                fp_cores[core_id].o_DATA( cores_ico[core_id].i_INPUT() )
+                self.__o_FETCHEN( fp_cores[core_id].i_FETCHEN() )
 
-            # SSR in fp subsystem datem mover <-> memory port
-            self.bind(fp_cores[core_id], 'ssr_dm0', cores_ico[core_id], 'input')
-            self.bind(fp_cores[core_id], 'ssr_dm1', cores_ico[core_id], 'input')
-            self.bind(fp_cores[core_id], 'ssr_dm2', cores_ico[core_id], 'input')
+                # SSR in fp subsystem datem mover <-> memory port
+                self.bind(fp_cores[core_id], 'ssr_dm0', cores_ico[core_id], 'input')
+                self.bind(fp_cores[core_id], 'ssr_dm1', cores_ico[core_id], 'input')
+                self.bind(fp_cores[core_id], 'ssr_dm2', cores_ico[core_id], 'input')
 
-            # Use WireMaster & WireSlave
-            # Add fpu sequence buffer in between int core and fp core to issue instructions
-            if xfrep:
-                self.bind(cores[core_id], 'acc_req', fpu_sequencers[core_id], 'input')
-                self.bind(fpu_sequencers[core_id], 'output', fp_cores[core_id], 'acc_req')
-                self.bind(cores[core_id], 'acc_req_ready', fpu_sequencers[core_id], 'acc_req_ready')
-                self.bind(fpu_sequencers[core_id], 'acc_req_ready_o', fp_cores[core_id], 'acc_req_ready')
-            else:
-                # Comment out if we want to add sequencer
-                self.bind(cores[core_id], 'acc_req', fp_cores[core_id], 'acc_req')
-                self.bind(cores[core_id], 'acc_req_ready', fp_cores[core_id], 'acc_req_ready')
+                # Use WireMaster & WireSlave
+                # Add fpu sequence buffer in between int core and fp core to issue instructions
+                if xfrep:
+                    self.bind(cores[core_id], 'acc_req', fpu_sequencers[core_id], 'input')
+                    self.bind(fpu_sequencers[core_id], 'output', fp_cores[core_id], 'acc_req')
+                    self.bind(cores[core_id], 'acc_req_ready', fpu_sequencers[core_id], 'acc_req_ready')
+                    self.bind(fpu_sequencers[core_id], 'acc_req_ready_o', fp_cores[core_id], 'acc_req_ready')
+                else:
+                    # Comment out if we want to add sequencer
+                    self.bind(cores[core_id], 'acc_req', fp_cores[core_id], 'acc_req')
+                    self.bind(cores[core_id], 'acc_req_ready', fp_cores[core_id], 'acc_req_ready')
 
-            self.bind(fp_cores[core_id], 'acc_rsp', cores[core_id], 'acc_rsp')
+                self.bind(fp_cores[core_id], 'acc_rsp', cores[core_id], 'acc_rsp')
 
         # Cluster peripherals
         narrow_axi.o_MAP(cluster_registers.i_INPUT(), base=arch.peripheral.base,
