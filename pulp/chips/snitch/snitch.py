@@ -33,7 +33,7 @@ class SnitchArchProperties:
     def __init__(self):
         self.nb_cluster              = 1
         self.nb_core_per_cluster     = 9
-        self.hbm_size                = 0x80000000
+        self.hbm_size                = 0x8000_0000
         self.hbm_type                = 'simple'
         self.noc_type                = 'simple'
 
@@ -76,23 +76,23 @@ class SnitchArch:
 
     class Hbm:
 
-        def __init__(self, properties):
+        def __init__(self, properties:SnitchArchProperties):
             self.size = properties.hbm_size
             self.type = properties.hbm_type
 
     class Chip:
 
-        def __init__(self, properties):
+        def __init__(self, properties:SnitchArchProperties):
 
             self.soc = SnitchArch.Chip.Soc(properties)
 
         class Soc:
 
-            def __init__(self, properties):
+            def __init__(self, properties:SnitchArchProperties):
                 current_hartid = 0
 
                 self.bootrom      = Area( 0x0000_1000,       0x0001_0000)
-                self.hbm          = Area( 0x8000_0000,       0x8000_0000)
+                self.hbm          = Area( 0x8000_0000,       0x4000_0000)
                 self.floonoc      = properties.noc_type == 'floonoc'
 
                 self.nb_cluster = properties.nb_cluster
@@ -195,7 +195,7 @@ class Soc(gvsoc.systree.Component):
 
 class SocFlooNoc(gvsoc.systree.Component):
 
-    def __init__(self, parent, name, arch, binary, debug_binaries):
+    def __init__(self, parent, name, arch:SnitchArch.Chip.Soc, binary, debug_binaries):
         super().__init__(parent, name)
 
         entry = 0
@@ -291,7 +291,7 @@ class SocFlooNoc(gvsoc.systree.Component):
 
 class Snitch(gvsoc.systree.Component):
 
-    def __init__(self, parent, name, arch, binary, debug_binaries):
+    def __init__(self, parent, name:str, arch:SnitchArch.Chip, binary, debug_binaries):
         super(Snitch, self).__init__(parent, name)
 
         if arch.soc.floonoc:
@@ -308,8 +308,8 @@ class Snitch(gvsoc.systree.Component):
 
 class SnitchBoard(gvsoc.systree.Component):
 
-    def __init__(self, parent, name, parser, options):
-        super(SnitchBoard, self).__init__(parent, name, options=options)
+    def __init__(self, parent, name:str, parser, options):
+        super().__init__(parent, name, options=options)
 
         [args, otherArgs] = parser.parse_known_args()
         debug_binaries = []
