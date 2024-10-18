@@ -19,6 +19,7 @@ from pulp.snitch.snitch_isa import *
 from cpu.iss.isa_gen.isa_rvv import *
 from cpu.iss.isa_gen.isa_smallfloats import *
 import gvsoc.systree
+import os
 
 
 def add_latencies(isa):
@@ -108,7 +109,6 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
             fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True,
-
             prefetcher_size=32, custom_sources=True, htif=htif, binaries=binaries)
 
         self.add_c_flags([
@@ -163,7 +163,8 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             fetch_enable: bool=False,
             boot_addr: int=0,
             inc_spatz: bool=False,
-            core_id: int=0):
+            core_id: int=0,
+            htif: bool=False):
 
 
         isa_instance = isa_instances.get(isa)
@@ -179,17 +180,29 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
             fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True,
-            prefetcher_size=32)
+            prefetcher_size=32, htif=htif, binaries=binaries)
 
         self.add_c_flags([
             "-DPIPELINE_STAGES=1",
             "-DCONFIG_ISS_CORE=snitch_fast",
+            "-DCONFIG_GVSOC_ISS_SNITCH_FAST",
         ])
 
         self.add_sources([
             "cpu/iss/src/snitch_fast/snitch.cpp",
-            "cpu/iss/src/snitch/ssr.cpp",
+            "cpu/iss/src/snitch_fast/ssr.cpp",
+            "cpu/iss/src/snitch_fast/sequencer.cpp",
         ])
+
+        path = os.path.dirname(__file__)
+        self.add_properties({
+            'regmap': {
+                'name': 'ssr',
+                'spec': f'{path}/archi/ssr.md',
+                'header_prefix':  f'{path}/archi/ssr',
+                'headers': [ 'gvsoc', 'regfields' ]
+            }
+        })
 
 
     def o_BARRIER_REQ(self, itf: gvsoc.systree.SlaveItf):
