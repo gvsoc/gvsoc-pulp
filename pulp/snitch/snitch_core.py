@@ -107,7 +107,7 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
             misa = isa_instance.misa
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
-            fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True, 
+            fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True,
             prefetcher_size=32, custom_sources=True, htif=htif)
 
         self.add_c_flags([
@@ -177,7 +177,7 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             misa = isa_instance.misa
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
-            fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True, 
+            fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True,
             prefetcher_size=32)
 
         self.add_c_flags([
@@ -188,7 +188,8 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
 
         self.add_sources([
             "cpu/iss/src/snitch_fast/snitch.cpp",
-            "cpu/iss/src/snitch/ssr.cpp",
+            "cpu/iss/src/snitch_fast/ssr.cpp",
+            "cpu/iss/src/snitch_fast/sequencer.cpp",
         ])
 
 
@@ -261,7 +262,7 @@ class Snitch_fp_ss(cpu.iss.riscv.RiscvCommon):
             misa = isa_instance.misa
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
-            fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True, 
+            fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True,
             prefetcher_size=32, timed=timed, custom_sources=True, htif=htif)
 
         self.add_c_flags([
