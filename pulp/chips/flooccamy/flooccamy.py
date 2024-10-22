@@ -17,16 +17,37 @@
 import gvsoc.runner
 import gvsoc.systree
 from pulp.snitch.snitch_cluster.snitch_cluster import ClusterArch, Area, SnitchCluster
+from pulp.chips.flooccamy.eoc_registers import EoC_Registers
 from vp.clock_domain import Clock_domain
 import memory.dramsys
 import memory.memory
 from elftools.elf.elffile import *
+from elftools.elf.sections import SymbolTableSection
 import interco.router as router
 import utils.loader.loader
 import pulp.floonoc.floonoc
 import math
 from typing import List
 import cpu.iss.riscv as iss
+
+#Function to get EoC entry
+def find_eoc_entry(elf_filename):
+    # Open the ELF file in binary mode
+    with open(elf_filename, 'rb') as f:
+        elffile = ELFFile(f)
+
+        # Find the symbol table section in the ELF file
+        for section in elffile.iter_sections():
+            if isinstance(section, SymbolTableSection):
+                # Iterate over symbols in the symbol table
+                for symbol in section.iter_symbols():
+                    # Check if this symbol's name matches "tohost"
+                    if symbol.name == 'tohost':
+                        # Return the symbol's address
+                        return symbol['st_value']
+
+    # If the symbol wasn't found, return None
+    return None
 
 # Class containing public properties accessible via Parser
 class FlooccamyArchProperties:
@@ -118,7 +139,9 @@ class SocFlooccamy(gvsoc.systree.Component):
         super().__init__(parent, name)
 
         entry = 0
+        eoc_entry = 0
         if binary is not None:
+            eoc_entry = find_eoc_entry(binary)
             with open(binary, 'rb') as file:
                 elffile = ELFFile(file)
                 entry = elffile['e_entry']
@@ -148,25 +171,17 @@ class SocFlooccamy(gvsoc.systree.Component):
         # Extra component for binary loading
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry_addr=arch.bootrom.base + 0x20)
 
-
-        # # CVA6
-        # # TODO binary loader is bypassing this boot addr
-        # host = iss.Riscv(self, 'host', isa="rv64imafdc", boot_addr=0x0100_0000, timed=False,
-        #     binaries=debug_binaries, htif=True)
-
+        # EoC Registers
+        eoc_registers = EoC_Registers(self, 'eoc_registers', eoc_entry)
 
         #
         # Bindings
         #
 
-        # # CVA6
-        # host.o_DATA(narrow_axi.i_INPUT())
-        # host.o_FETCH(noc.i_INPUT(1, 4))
-
+        # EoC
+        eoc_registers.o_OUTPUT(narrow_axi.i_INPUT())
 
         # Memory
-        narrow_axi.o_MAP ( noc.i_INPUT     (1, 1), base=arch.hbm.base, size=arch.hbm.size, rm_base=False )
-
         for id in range(0, arch.nb_cluster):
             tile_x = int(id % arch.nb_x_tiles)
             tile_y = int(id / arch.nb_x_tiles)
@@ -175,35 +190,34 @@ class SocFlooccamy(gvsoc.systree.Component):
 
             clusters[id].o_WIDE_SOC(noc.i_CLUSTER_INPUT(tile_x, tile_y))
 
-        # arange the hbm in a ring around the clusters
         current_bank_base = arch.hbm.base
         for i in range(1, arch.nb_x_tiles+1):
-            bank = memory.memory.Memory(self, f'bank_{i}_0', size=arch.bank_size)
+            bank = memory.memory.Memory(self, f'bank_{i}_0', size=arch.bank_size, atomics=True)
             noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
                 x=i, y=0)
+            narrow_axi.o_MAP (bank.i_INPUT(), base=current_bank_base, size=arch.bank_size, rm_base=True )
             current_bank_base += arch.bank_size
         for i in range(1, arch.nb_x_tiles+1):
-            bank = memory.memory.Memory(self, f'bank_{i}_{arch.nb_y_tiles+1}', size=arch.bank_size)
+            bank = memory.memory.Memory(self, f'bank_{i}_{arch.nb_y_tiles+1}', size=arch.bank_size, atomics=True)
             noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
                 x=i, y=arch.nb_x_tiles+1)
+            narrow_axi.o_MAP (bank.i_INPUT(), base=current_bank_base, size=arch.bank_size, rm_base=True )
             current_bank_base += arch.bank_size
         for i in range(1, arch.nb_y_tiles+1):
-            bank = memory.memory.Memory(self, f'bank_0_{i}', size=arch.bank_size)
+            bank = memory.memory.Memory(self, f'bank_0_{i}', size=arch.bank_size, atomics=True)
             noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
                 x=0, y=i)
+            narrow_axi.o_MAP (bank.i_INPUT(), base=current_bank_base, size=arch.bank_size, rm_base=True )
             current_bank_base += arch.bank_size
         for i in range(1, arch.nb_y_tiles+1):
-            bank = memory.memory.Memory(self, f'bank_{arch.nb_x_tiles+1}_{i}', size=arch.bank_size)
+            bank = memory.memory.Memory(self, f'bank_{arch.nb_x_tiles+1}_{i}', size=arch.bank_size, atomics=True)
             noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
                 x=arch.nb_x_tiles+1, y=i)
+            narrow_axi.o_MAP (bank.i_INPUT(), base=current_bank_base, size=arch.bank_size, rm_base=True )
             current_bank_base += arch.bank_size
 
-        # # HBM # only a single memory bank
-        # bank = memory.memory.Memory(self, f'bank_0_1', size=arch.hbm.size, atomics=True)
-        # noc.o_MAP ( bank.i_INPUT(), base=arch.hbm.base, size=arch.hbm.size, x=0, y=1)
-
         # ROM
-        narrow_axi.o_MAP ( rom.i_INPUT(), base=arch.bootrom.base, size=arch.bootrom.size, rm_base=True  )
+        narrow_axi.o_MAP ( rom.i_INPUT     (), base=arch.bootrom.base, size=arch.bootrom.size, rm_base=True  )
 
         # Clusters
         for id in range(0, arch.nb_cluster):
@@ -214,10 +228,7 @@ class SocFlooccamy(gvsoc.systree.Component):
         # Binary loader
         loader.o_OUT(narrow_axi.i_INPUT())
         for id in range(0, arch.nb_cluster):
-            # if id == 0:
             loader.o_START(clusters[id].i_FETCHEN())
-
-        # self.o_HBM(self.i_HBM())
 
 
     def i_HBM(self) -> gvsoc.systree.SlaveItf:
