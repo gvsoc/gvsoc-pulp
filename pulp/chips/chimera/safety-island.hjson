@@ -20,9 +20,16 @@
     
     /* JUNGVI: Memory island placeholder */
     memory_island_config: {
-        base          : 0x50000000,
-        size          : 0x00800000,
-        remove_offset : 0x50000000
+        mapping: {
+            base          : "0x50000000",
+            size          : "0x00800000",
+            remove_offset : "0x50000000"
+        }, 
+        properties : {
+            nb_wide_banks : 16, 
+            nb_narrow_per_wide_bank : 8,
+            narrow_word_size : 4 /* in bytes currently a constant*/       
+        }
     },
 
     obi_ico: {
