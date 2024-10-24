@@ -172,14 +172,13 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             }
 
             // Store information in the request which will be needed by the routers and the target
-            req->set_addr(base - entry->base);
+            req->set_addr(base - entry->remove_offset);
             *req->arg_get(FlooNoc::REQ_DEST_X) = (void *)(long)entry->x;
             *req->arg_get(FlooNoc::REQ_DEST_Y) = (void *)(long)entry->y;
-
             // And forward to the first router which is at the same position as the network
             // interface
             _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Injecting request to noc (req: %p, base: 0x%x, size: 0x%x, destination: (%d, %d))\n",
-                req, base, size, entry->x, entry->y);
+                req, req->get_addr(), size, entry->x, entry->y);
 
             // Noe that the router may not grant tje request if its input queue is full.
             // In this case we must stall the network interface
