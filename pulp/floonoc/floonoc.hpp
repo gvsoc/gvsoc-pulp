@@ -44,6 +44,8 @@ public:
     int x;
     // Y position of the target where requests to this mapping should be forwarded
     int y;
+    // Offset to be removed when request is forwarded
+    uint64_t remove_offset;
 };
 
 
