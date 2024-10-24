@@ -49,7 +49,7 @@ Router::Router(FlooNoc *noc, int x, int y, int queue_size)
 
 bool Router::handle_request(vp::IoReq *req, int from_x, int from_y)
 {
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Handle request (req: %p, from: (%d, %d)\n", req, from_x, from_y);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Handle request (req: %p, base: 0x%x, size: 0x%x, from: (%d, %d)\n", req, req->get_addr(), req->get_size(), from_x, from_y);
 
     // Each direction has its own input queue to properly implement the round-robin
     // Get the one for the router or network interface which sent this request
@@ -167,8 +167,8 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 }
                 else
                 {
-                    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Forwarding request to next router (req: %p, next_position: (%d, %d))\n",
-                        req, next_x, next_y);
+                    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Forwarding request to next router (req: %p, base: 0x%x, size: 0x%x, next_position: (%d, %d))\n",
+                        req, req->get_addr(),req->get_size(), next_x, next_y);
 
                     // Send the request to next router, and in case it reports that its input queue
                     // is full, stall the corresponding output queue to make sure we stop sending
@@ -203,8 +203,8 @@ void Router::send_to_target(vp::IoReq *req, int pos_x, int pos_y)
 {
     vp::IoMaster *target = this->noc->get_target(pos_x, pos_y);
 
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Sending request to target (req: %p, position: (%d, %d))\n",
-        req, pos_x, pos_y);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Sending request to target (req: %p, base: 0x%x, size: 0x%x, position: (%d, %d))\n",
+        req, req->get_addr(), req->get_size() ,pos_x, pos_y);
 
     vp::IoReqStatus result = target->req(req);
     if (result == vp::IO_REQ_OK || result == vp::IO_REQ_INVALID)

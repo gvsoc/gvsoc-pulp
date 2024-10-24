@@ -66,13 +66,14 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
             this->entries[id].size = config->get_uint("size");
             this->entries[id].x = config->get_int("x");
             this->entries[id].y = config->get_int("y");
+            this->entries[id].remove_offset = config->get_uint("remove_offset");
 
             // Once a request reaches the right position, the target will be retrieved through
             // this array indexed by the position
             this->targets[this->entries[id].y * this->dim_x + this->entries[id].x] = itf;
 
-            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding target (name: %s, base: 0x%x, size: 0x%x, x: %d, y: %d)\n",
-                mapping.first.c_str(), this->entries[id].base, this->entries[id].size, this->entries[id].x, this->entries[id].y);
+            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding target (name: %s, base: 0x%x, size: 0x%x, x: %d, y: %d, remove_offset: 0x%x)\n",
+                mapping.first.c_str(), this->entries[id].base, this->entries[id].size, this->entries[id].x, this->entries[id].y, this->entries[id].remove_offset);
 
             id++;
         }

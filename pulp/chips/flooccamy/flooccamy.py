@@ -152,7 +152,7 @@ class SocFlooccamy(gvsoc.systree.Component):
 
         # Bootrom
         rom = memory.memory.Memory(self, 'rom', size=arch.bootrom.size,
-            stim_file=self.get_file_path('pulp/snitch/bootrom.bin'))
+            stim_file=self.get_file_path('pulp/snitch/bootrom.bin'), atomics=True)
 
         # Narrow 64bits router
         narrow_axi = router.Router(self, 'narrow_axi', bandwidth=8)
@@ -190,31 +190,45 @@ class SocFlooccamy(gvsoc.systree.Component):
 
             clusters[id].o_WIDE_SOC(noc.i_CLUSTER_INPUT(tile_x, tile_y))
 
-        current_bank_base = arch.hbm.base
-        for i in range(1, arch.nb_x_tiles+1):
-            bank = memory.memory.Memory(self, f'bank_{i}_0', size=arch.bank_size, atomics=True)
-            noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
-                x=i, y=0)
-            narrow_axi.o_MAP (bank.i_INPUT(), base=current_bank_base, size=arch.bank_size, rm_base=True )
-            current_bank_base += arch.bank_size
-        for i in range(1, arch.nb_x_tiles+1):
-            bank = memory.memory.Memory(self, f'bank_{i}_{arch.nb_y_tiles+1}', size=arch.bank_size, atomics=True)
-            noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
-                x=i, y=arch.nb_x_tiles+1)
-            narrow_axi.o_MAP (bank.i_INPUT(), base=current_bank_base, size=arch.bank_size, rm_base=True )
-            current_bank_base += arch.bank_size
-        for i in range(1, arch.nb_y_tiles+1):
-            bank = memory.memory.Memory(self, f'bank_0_{i}', size=arch.bank_size, atomics=True)
-            noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
-                x=0, y=i)
-            narrow_axi.o_MAP (bank.i_INPUT(), base=current_bank_base, size=arch.bank_size, rm_base=True )
-            current_bank_base += arch.bank_size
-        for i in range(1, arch.nb_y_tiles+1):
-            bank = memory.memory.Memory(self, f'bank_{arch.nb_x_tiles+1}_{i}', size=arch.bank_size, atomics=True)
-            noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
-                x=arch.nb_x_tiles+1, y=i)
-            narrow_axi.o_MAP (bank.i_INPUT(), base=current_bank_base, size=arch.bank_size, rm_base=True )
-            current_bank_base += arch.bank_size
+        # current_bank_base = arch.hbm.base
+        # for i in range(1, arch.nb_x_tiles+1):
+        #     bank = memory.memory.Memory(self, f'bank_{i}_0', size=arch.bank_size, atomics=True)
+        #     noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
+        #         x=i, y=0)
+        #     narrow_axi.o_MAP (bank.i_INPUT(), base=current_bank_base, size=arch.bank_size, rm_base=True )
+        #     current_bank_base += arch.bank_size
+        # for i in range(1, arch.nb_x_tiles+1):
+        #     bank = memory.memory.Memory(self, f'bank_{i}_{arch.nb_y_tiles+1}', size=arch.bank_size, atomics=True)
+        #     noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
+        #         x=i, y=arch.nb_x_tiles+1)
+        #     narrow_axi.o_MAP (bank.i_INPUT(), base=current_bank_base, size=arch.bank_size, rm_base=True )
+        #     current_bank_base += arch.bank_size
+        # for i in range(1, arch.nb_y_tiles+1):
+        #     bank = memory.memory.Memory(self, f'bank_0_{i}', size=arch.bank_size, atomics=True)
+        #     noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
+        #         x=0, y=i)
+        #     narrow_axi.o_MAP (bank.i_INPUT(), base=current_bank_base, size=arch.bank_size, rm_base=True )
+        #     current_bank_base += arch.bank_size
+        # for i in range(1, arch.nb_y_tiles+1):
+        #     bank = memory.memory.Memory(self, f'bank_{arch.nb_x_tiles+1}_{i}', size=arch.bank_size, atomics=True)
+        #     noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
+        #         x=arch.nb_x_tiles+1, y=i)
+        #     narrow_axi.o_MAP (bank.i_INPUT(), base=current_bank_base, size=arch.bank_size, rm_base=True )
+        #     current_bank_base += arch.bank_size
+
+        bank_x = 1
+        bank_y = 0
+        bank1 = memory.memory.Memory(self, f'bank_{bank_x}_{bank_y}', size=arch.hbm.size, atomics=True)
+        noc.o_MAP(bank1.i_INPUT(), base=arch.hbm.base, size=arch.hbm.size,x=bank_x, y=bank_y, rm_base=True)
+        narrow_axi.o_MAP (bank1.i_INPUT(), base=arch.hbm.base, size=arch.hbm.size, rm_base=True )
+
+        # bank_x = 1
+        # bank_y = 0
+        # bank2 = memory.memory.Memory(self, f'bank_{bank_x}_{bank_y}', size=arch.hbm.size, atomics=True)
+        # noc.o_MAP(bank2.i_INPUT(), base=arch.hbm.base+arch.hbm.size, size=arch.hbm.size,x=bank_x, y=bank_y, rm_base=True)
+        # narrow_axi.o_MAP (bank2.i_INPUT(), base=arch.hbm.base+arch.hbm.size, size=arch.hbm.size, rm_base=True )
+
+
 
         # ROM
         narrow_axi.o_MAP ( rom.i_INPUT     (), base=arch.bootrom.base, size=arch.bootrom.size, rm_base=True  )
@@ -223,7 +237,7 @@ class SocFlooccamy(gvsoc.systree.Component):
         for id in range(0, arch.nb_cluster):
             clusters[id].o_NARROW_SOC(narrow_axi.i_INPUT())
             narrow_axi.o_MAP ( clusters[id].i_NARROW_INPUT (), base=arch.get_cluster_base(id),
-                size=arch.cluster.size, rm_base=True  )
+                size=arch.cluster.size, rm_base=False  )
 
         # Binary loader
         loader.o_OUT(narrow_axi.i_INPUT())
