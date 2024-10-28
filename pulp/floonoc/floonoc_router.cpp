@@ -253,6 +253,7 @@ void Router::grant(vp::IoReq *req)
 
 void Router::get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_y)
 {
+    // TODO If there is a gap in the mesh of routers this algorithm doesnt work
     if (dest_x == this->x && dest_y == this->y)
     {
         next_x = this->x;
@@ -267,7 +268,21 @@ void Router::get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_
         int x_diff = dest_x - this->x;
         int y_diff = dest_y - this->y;
 
-        if (std::abs(x_diff) > std::abs(y_diff))
+        // Dont go out of the grid if we are on the edge of the mesh
+        // This could only happen if x_diff and y_diff are the same
+        if (std::abs(x_diff) == std::abs(y_diff)){
+            // If same distance, we move on the y axis
+            next_x = this->x;
+            next_y = y_diff < 0 ? this->y - 1 : this->y + 1;
+            Router* next_router = this->noc->get_router(next_x, next_y);
+            if (next_router == NULL)
+            {
+                // If the next router is NULL, we move on the x axis
+                next_x = x_diff < 0 ? this->x - 1 : this->x + 1;
+                next_y = this->y;
+            }
+        }
+        else if (std::abs(x_diff) > std::abs(y_diff))
         {
             next_x = x_diff < 0 ? this->x - 1 : this->x + 1;
             next_y = this->y;
