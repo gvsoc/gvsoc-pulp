@@ -167,7 +167,6 @@ class SocFlooccamy(gvsoc.systree.Component):
         noc = pulp.floonoc.floonoc.FlooNocClusterGrid(self, 'noc', width=512/8,
             nb_x_clusters=arch.nb_x_tiles, nb_y_clusters=arch.nb_y_tiles)
 
-
         # Extra component for binary loading
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry_addr=arch.bootrom.base + 0x20)
 
@@ -181,42 +180,33 @@ class SocFlooccamy(gvsoc.systree.Component):
         # EoC
         eoc_registers.o_OUTPUT(narrow_axi.i_INPUT())
 
-        # Memory
+
+        # Clusters
+        # Narrow 64bits router
+        for id in range(0, arch.nb_cluster):
+            clusters[id].o_NARROW_SOC(narrow_axi.i_INPUT())
+            narrow_axi.o_MAP ( clusters[id].i_NARROW_INPUT(), base=arch.get_cluster_base(id),
+                size=arch.cluster.size, rm_base=False  )
+
+
+        # Wide 512 bits router / FlooNoC
         for id in range(0, arch.nb_cluster):
             tile_x = int(id % arch.nb_x_tiles)
             tile_y = int(id / arch.nb_x_tiles)
+
             noc.o_MAP(clusters[id].i_WIDE_INPUT(), base=arch.get_cluster_base(id), size=arch.cluster.size,
                 x=tile_x+1, y=tile_y+1)
 
-            clusters[id].o_WIDE_SOC(noc.i_CLUSTER_INPUT(tile_x, tile_y))
+            # DEBUG: If this is removed for target the request gets sent to the cluster (or at least get a response so it seems fine).
+            # If this is present the request gets sent to the NI. 
+            # However this i required toinject something into the NOC from the source
+            # if tile_x==1 and tile_y==0:
+            #     continue
+            clusters[id].o_WIDE_SOC(noc.i_CLUSTER_INPUT(tile_x, tile_y)) # <-----
 
-        # current_bank_base = arch.hbm.base
-        # for i in range(1, arch.nb_x_tiles+1):
-        #     bank = memory.memory.Memory(self, f'bank_{i}_0', size=arch.bank_size, atomics=True)
-        #     noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
-        #         x=i, y=0)
-        #     narrow_axi.o_MAP (bank.i_INPUT(), base=current_bank_base, size=arch.bank_size, rm_base=True )
-        #     current_bank_base += arch.bank_size
-        # for i in range(1, arch.nb_x_tiles+1):
-        #     bank = memory.memory.Memory(self, f'bank_{i}_{arch.nb_y_tiles+1}', size=arch.bank_size, atomics=True)
-        #     noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
-        #         x=i, y=arch.nb_x_tiles+1)
-        #     narrow_axi.o_MAP (bank.i_INPUT(), base=current_bank_base, size=arch.bank_size, rm_base=True )
-        #     current_bank_base += arch.bank_size
-        # for i in range(1, arch.nb_y_tiles+1):
-        #     bank = memory.memory.Memory(self, f'bank_0_{i}', size=arch.bank_size, atomics=True)
-        #     noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
-        #         x=0, y=i)
-        #     narrow_axi.o_MAP (bank.i_INPUT(), base=current_bank_base, size=arch.bank_size, rm_base=True )
-        #     current_bank_base += arch.bank_size
-        # for i in range(1, arch.nb_y_tiles+1):
-        #     bank = memory.memory.Memory(self, f'bank_{arch.nb_x_tiles+1}_{i}', size=arch.bank_size, atomics=True)
-        #     noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
-        #         x=arch.nb_x_tiles+1, y=i)
-        #     narrow_axi.o_MAP (bank.i_INPUT(), base=current_bank_base, size=arch.bank_size, rm_base=True )
-        #     current_bank_base += arch.bank_size
 
-        bank_x = 1
+        # Add a single HBM to allow running the binary
+        bank_x = 2
         bank_y = 0
         bank1 = memory.memory.Memory(self, f'bank_{bank_x}_{bank_y}', size=arch.hbm.size, atomics=True)
         noc.o_MAP(bank1.i_INPUT(), base=arch.hbm.base, size=arch.hbm.size,x=bank_x, y=bank_y, rm_base=True)
@@ -228,16 +218,8 @@ class SocFlooccamy(gvsoc.systree.Component):
         # noc.o_MAP(bank2.i_INPUT(), base=arch.hbm.base+arch.hbm.size, size=arch.hbm.size,x=bank_x, y=bank_y, rm_base=True)
         # narrow_axi.o_MAP (bank2.i_INPUT(), base=arch.hbm.base+arch.hbm.size, size=arch.hbm.size, rm_base=True )
 
-
-
         # ROM
         narrow_axi.o_MAP ( rom.i_INPUT     (), base=arch.bootrom.base, size=arch.bootrom.size, rm_base=True  )
-
-        # Clusters
-        for id in range(0, arch.nb_cluster):
-            clusters[id].o_NARROW_SOC(narrow_axi.i_INPUT())
-            narrow_axi.o_MAP ( clusters[id].i_NARROW_INPUT (), base=arch.get_cluster_base(id),
-                size=arch.cluster.size, rm_base=False  )
 
         # Binary loader
         loader.o_OUT(narrow_axi.i_INPUT())
@@ -272,13 +254,13 @@ class FlooccamyBoard(gvsoc.systree.Component):
         # Create the actual Soc
         chip = SocFlooccamy(self, 'chip', arch, args.binary, debug_binaries)
 
-        # Create the memory
-        if arch.hbm_type == 'dramsys':
-            mem = memory.dramsys.Dramsys(self, 'ddr')
-        else:
-            mem = memory.memory.Memory(self, 'mem', size=arch.hbm.size, atomics=True)
+        # # Create the memory
+        # if arch.hbm_type == 'dramsys':
+        #     mem = memory.dramsys.Dramsys(self, 'ddr')
+        # else:
+        #     mem = memory.memory.Memory(self, 'mem', size=arch.hbm.size, atomics=True)
 
         self.bind(clock, 'out', chip, 'clock')
-        self.bind(clock, 'out', mem, 'clock')
-        self.bind(chip, 'hbm', mem, 'input')
+        # self.bind(clock, 'out', mem, 'clock')
+        # self.bind(chip, 'hbm', mem, 'input')
 

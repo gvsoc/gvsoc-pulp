@@ -205,8 +205,8 @@ void Router::send_to_target(vp::IoReq *req, int pos_x, int pos_y)
 {
     vp::IoMaster *target = this->noc->get_target(pos_x, pos_y);
 
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Sending request to target (req: %p, base: 0x%x, size: 0x%x, position: (%d, %d))\n",
-        req, req->get_addr(), req->get_size() ,pos_x, pos_y);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Sending request to target (target name: %s)(req: %p, base: 0x%x, size: 0x%x, position: (%d, %d))\n",
+        target->get_name().c_str(), req, req->get_addr(), req->get_size() ,pos_x, pos_y);
 
     vp::IoReqStatus result = target->req(req);
     if (result == vp::IO_REQ_OK || result == vp::IO_REQ_INVALID)

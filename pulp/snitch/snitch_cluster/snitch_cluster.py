@@ -283,6 +283,7 @@ class SnitchCluster(gvsoc.systree.Component):
     def __o_FETCHEN(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('fetchen', itf, signature='wire<bool>', composite_bind=True)
 
+    # Wide router for dma and instruction cache accesses
     def i_WIDE_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'wide_input', signature='io')
 
@@ -292,9 +293,11 @@ class SnitchCluster(gvsoc.systree.Component):
     def i_WIDE_SOC(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'wide_soc', signature='io')
 
+    # Wide Output of the cluster
     def o_WIDE_SOC(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('wide_soc', itf, signature='io')
 
+    # Narrow router for cores data accesses
     def i_NARROW_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'narrow_input', signature='io')
 
@@ -303,6 +306,6 @@ class SnitchCluster(gvsoc.systree.Component):
 
     def i_NARROW_SOC(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'narrow_soc', signature='io')
-
+    # Narrow Output of the cluster
     def o_NARROW_SOC(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('narrow_soc', itf, signature='io')
