@@ -97,7 +97,7 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
 
     // Create the array of routers
     this->routers.resize(this->dim_x * this->dim_y);
-    js::Config *routers = get_js_config()->get("network_interfaces");
+    js::Config *routers = get_js_config()->get("routers");
     if (routers != NULL)
     {
         for (js::Config *router: routers->get_elems())
