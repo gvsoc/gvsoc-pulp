@@ -246,6 +246,12 @@ vp::IoReqStatus NetworkInterface::req(vp::Block *__this, vp::IoReq *req)
     _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received burst (burst: %p, offset: 0x%x, size: 0x%x, is_write: %d, op: %d)\n",
         req, offset, size, req->get_is_write(), req->get_opcode());
 
+    int dest_x = req->get_int(FlooNoc::REQ_DEST_X);
+    int dest_y = req->get_int(FlooNoc::REQ_DEST_Y);
+
+    if (dest_x == _this->x && dest_y == _this->y){
+        _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Burst is for this network interface\n");
+    }
     // Just enqueue it and trigger the FSM which will check if it must be processed now
     _this->pending_bursts.push(req);
     _this->fsm_event.enqueue();
