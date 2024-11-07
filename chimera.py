@@ -105,7 +105,9 @@ class SafetyIsland(gvsoc.systree.Component):
         l2_private_inst_memory = memory.Memory(self, 'private_inst_memory', size=self.memory_config["inst"]["size"])
 
         # Setup host and loader connections
-        host = iss.FcCore(self, 'fc')
+        host = iss.FcCore(self, 'fc', cluster_id = 0)
+        # host = iss.FcCore(self, 'fc', cluster_id = 31)
+
         
         host.o_FETCH      ( l2_tcdm_ico.i_INPUT() )
         host.o_DATA       ( l2_tcdm_ico.i_INPUT() )
