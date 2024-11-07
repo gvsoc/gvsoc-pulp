@@ -1,14 +1,39 @@
 {
+    // memory_config: {
+    //     data: {
+    //         base          : 0x1C000000,
+    //         size          : 0x00008000,
+    //         remove_offset : 0x1C000000
+    //     },
+    //     inst: {
+    //         base          : 0x1C008000,
+    //         size          : 0x00010000,
+    //         remove_offset : 0x1C008000
+    //     }
+    // },
+    // /* This is just a placeholder at the moment to enable boot process to succeed successful*/
+    // cluster_l1_config: {
+    //     base          : 0x10000000,
+    //     size          : 0x00008000,
+    //     remove_offset : 0x10000000
+    // },
+    
+    // /* JUNGVI: Memory island placeholder */
+    // memory_island_config: {
+    //     base          : 0x50000000,
+    //     size          : 0x00800000,
+    //     remove_offset : 0x50000000
+    // },
     memory_config: {
         data: {
-            base          : 0x1C000000,
+            base          : 0x10000000,
             size          : 0x00008000,
-            remove_offset : 0x1C000000
+            remove_offset : 0x10000000
         },
         inst: {
-            base          : 0x1C008000,
+            base          : 0x10008000,
             size          : 0x00010000,
-            remove_offset : 0x1C008000
+            remove_offset : 0x10008000
         }
     },
     /* This is just a placeholder at the moment to enable boot process to succeed successful*/
@@ -20,16 +45,9 @@
     
     /* JUNGVI: Memory island placeholder */
     memory_island_config: {
-        mapping: {
-            base          : "0x50000000",
-            size          : "0x00800000",
-            remove_offset : "0x50000000"
-        }, 
-        properties : {
-            nb_wide_banks : 16, 
-            nb_narrow_per_wide_bank : 8,
-            narrow_word_size : 4 /* in bytes currently a constant*/       
-        }
+        base          : 0x48000000,
+        size          : 0x00800000,
+        remove_offset : 0x48000000
     },
 
     obi_ico: {
