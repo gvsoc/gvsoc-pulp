@@ -191,17 +191,11 @@ class SocFlooccamy(gvsoc.systree.Component):
 
         # Wide 512 bits router / FlooNoC
         for id in range(0, arch.nb_cluster):
-            tile_x = int(id % arch.nb_x_tiles)
-            tile_y = int(id / arch.nb_x_tiles)
+            tile_x = int(id / arch.nb_x_tiles)
+            tile_y = int(id % arch.nb_x_tiles)
 
             noc.o_MAP(clusters[id].i_WIDE_INPUT(), base=arch.get_cluster_base(id), size=arch.cluster.size,
                 x=tile_x+1, y=tile_y+1)
-
-            # DEBUG: If this is removed for target the request gets sent to the cluster (or at least get a response so it seems fine).
-            # If this is present the request gets sent to the NI. 
-            # However this i required toinject something into the NOC from the source
-            # if tile_x==1 and tile_y==0:
-            #     continue
             clusters[id].o_WIDE_SOC(noc.i_CLUSTER_INPUT(tile_x, tile_y)) # <-----
 
 
