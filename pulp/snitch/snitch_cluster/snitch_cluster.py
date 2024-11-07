@@ -160,6 +160,9 @@ class SnitchCluster(gvsoc.systree.Component):
         self.o_WIDE_INPUT(wide_axi.i_INPUT())
         wide_axi.o_MAP(self.i_WIDE_SOC())
 
+        # Remote Access to TCDM
+        wide_axi.o_MAP(tcdm.i_DMA_INPUT(), base=arch.tcdm.area.base, size=arch.tcdm.area.size, rm_base=True)
+
         # Cores
         cores[arch.nb_core-1].o_OFFLOAD(idma.i_OFFLOAD())
         idma.o_OFFLOAD_GRANT(cores[arch.nb_core-1].i_OFFLOAD_GRANT())
