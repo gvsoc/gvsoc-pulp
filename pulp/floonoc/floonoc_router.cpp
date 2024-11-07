@@ -259,39 +259,20 @@ void Router::get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_
         next_x = this->x;
         next_y = this->y;
     }
+    else if (dest_x == this->x)
+    {
+        next_x = this->x;
+        next_y = dest_y < this->y ? this->y - 1 : this->y + 1;
+    }
     else
     {
-        // Simple algorithm to reach the destination.
-        // We just move on the direction where we find the highest difference.
-        // To be checked on real HW, there is probably a better algorithm to take different paths
-        // depending on the congestion.
-        int x_diff = dest_x - this->x;
-        int y_diff = dest_y - this->y;
+        next_x = dest_x < this->x ? this->x - 1 : this->x + 1;
+        next_y = this->y;
+    }
 
-        // Dont go out of the grid if we are on the edge of the mesh
-        // This could only happen if x_diff and y_diff are the same
-        if (std::abs(x_diff) == std::abs(y_diff)){
-            // If same distance, we move on the y axis
-            next_x = this->x;
-            next_y = y_diff < 0 ? this->y - 1 : this->y + 1;
-            Router* next_router = this->noc->get_router(next_x, next_y);
-            if (next_router == NULL)
-            {
-                // If the next router is NULL, we move on the x axis
-                next_x = x_diff < 0 ? this->x - 1 : this->x + 1;
-                next_y = this->y;
-            }
-        }
-        else if (std::abs(x_diff) > std::abs(y_diff))
-        {
-            next_x = x_diff < 0 ? this->x - 1 : this->x + 1;
-            next_y = this->y;
-        }
-        else
-        {
-            next_y = y_diff < 0 ? this->y - 1 : this->y + 1;
-            next_x = this->x;
-        }
+    Router *next_router = this->noc->get_router(next_x, next_y);
+    if (next_router == NULL){
+
     }
 }
 
