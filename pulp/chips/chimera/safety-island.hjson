@@ -46,13 +46,13 @@
     /* JUNGVI: Memory island placeholder */
     memory_island_config: {
         base          : "0x48000000",
-        size          : "0x00800000",
+        size          : "0x08000000",
         remove_offset : "0x48000000"
     },
 
     obi_ico: {
         mapping:{
-            base          : 0x1A100000,
+            base          : 0x03000000,
             size          : 0x00010000,
             remove_offset : 0x00000000
         },
@@ -74,9 +74,9 @@
             remove_offset : 0x1A100000
         },
         soc_ctrl: {
-            base          : 0x1A104000,
-            size          : 0x00001000,
-            remove_offset : 0x1A104000
+            base          : 0x03000000,
+            size          : 0x00010000,
+            remove_offset : 0x03000000
         },
 
         "soc_eu": {
