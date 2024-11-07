@@ -45,9 +45,9 @@
     
     /* JUNGVI: Memory island placeholder */
     memory_island_config: {
-        base          : 0x48000000,
-        size          : 0x00800000,
-        remove_offset : 0x48000000
+        base          : "0x48000000",
+        size          : "0x00800000",
+        remove_offset : "0x48000000"
     },
 
     obi_ico: {
