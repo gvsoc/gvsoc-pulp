@@ -19,6 +19,7 @@ from pulp.snitch.snitch_isa import *
 from cpu.iss.isa_gen.isa_rvv import *
 from cpu.iss.isa_gen.isa_smallfloats import *
 import gvsoc.systree
+import os
 
 
 def add_latencies(isa):
@@ -191,6 +192,16 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             "cpu/iss/src/snitch_fast/ssr.cpp",
             "cpu/iss/src/snitch_fast/sequencer.cpp",
         ])
+
+        path = os.path.dirname(__file__)
+        self.add_properties({
+            'regmap': {
+                'name': 'ssr',
+                'spec': f'{path}/archi/ssr.md',
+                'header_prefix':  f'{path}/archi/ssr',
+                'headers': [ 'gvsoc', 'regfields' ]
+            }
+        })
 
 
     def o_BARRIER_REQ(self, itf: gvsoc.systree.SlaveItf):

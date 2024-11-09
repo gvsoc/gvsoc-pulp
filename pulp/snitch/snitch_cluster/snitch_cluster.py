@@ -218,6 +218,12 @@ class SnitchCluster(gvsoc.systree.Component):
 
                 self.bind(fp_cores[core_id], 'acc_rsp', cores[core_id], 'acc_rsp')
 
+            else:
+                self.bind(cores[core_id], 'ssr_dm0', cores_ico[core_id], 'input')
+                self.bind(cores[core_id], 'ssr_dm1', cores_ico[core_id], 'input')
+                self.bind(cores[core_id], 'ssr_dm2', cores_ico[core_id], 'input')
+
+
         # Cluster peripherals
         narrow_axi.o_MAP(cluster_registers.i_INPUT(), base=arch.peripheral.base,
             size=arch.peripheral.size, rm_base=True)
