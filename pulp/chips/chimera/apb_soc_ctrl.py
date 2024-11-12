@@ -21,7 +21,7 @@ class Apb_soc_ctrl(st.Component):
     def __init__(self, parent, name, soc):
         super(Apb_soc_ctrl, self).__init__(parent, name)
 
-        self.set_component('pulp.chips.pulp.apb_soc_impl')
+        self.add_sources(['pulp/chips/chimera/apb_soc_impl.cpp'])
 
         print(f"Apb_soc_ctrl>>>>>>>>>>>>>>>>>>>>>  1  >>>>>>>>>>>>>>>>>>>>")
 
@@ -35,4 +35,6 @@ class Apb_soc_ctrl(st.Component):
 
         self.add_properties(soc.get_property('peripherals/soc_ctrl/config'))
         print(soc.get_property('peripherals/soc_ctrl/config'))
-        
+
+    def i_ENTRY(self) -> st.SlaveItf:
+            return st.SlaveItf(self, 'rom_bootaddr', signature='wire<uint64_t>')
