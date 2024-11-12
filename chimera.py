@@ -1,5 +1,5 @@
 import gvsoc.runner
-import gvsoc.systree 
+import gvsoc.systree
 
 import pulp.chips.chimera.apb_soc_ctrl as apb_soc_ctrl
 import pulp.cpu.iss.pulp_cores as iss
@@ -13,6 +13,7 @@ from pulp.padframe.padframe_v1 import Padframe
 from utils.clock_generator import Clock_generator
 import pulp.soc_eu.soc_eu_v2 as soc_eu_module
 import pulp.itc.itc_v1 as itc
+import cpu.clint
 
 
 class SafetyIsland(gvsoc.systree.Component):
@@ -29,7 +30,7 @@ class SafetyIsland(gvsoc.systree.Component):
         # Load configuration from HJSON file
         with open('pulp/pulp/chips/chimera/safety-island.hjson', 'r') as file:
             config = hjson.load(file)
-        self.add_properties(config)    
+        self.add_properties(config)
         soc_events = self.get_property('soc_events')
 
         soc_eu    = soc_eu_module.Soc_eu(self, 'soc_eu', ref_clock_event=soc_events['soc_evt_ref_clock'], **self.get_property('peripherals/soc_eu/config'))
@@ -55,22 +56,28 @@ class SafetyIsland(gvsoc.systree.Component):
         # Create the memory and router components based on the configuration
         cluster_l1_placeholder = memory.Memory(self, 'cluster_l1_placeholder', size=self.cluster_l1_config["size"])
 
+        rom = memory.Memory(self, 'rom', size=0x1000, stim_file=self.get_file_path('pulp/chips/chimera/bootrom.bin'))
+
+        clint = cpu.clint.Clint(self, 'clint')
+
         # JUNGVI: Memory component placeholder for the memory island
         memory_island_placeholder = memory.Memory(self, 'memory_island_placeholder', size=self.memory_island_config["size"])
 
         l2_private_data_memory = memory.Memory(self, 'private_data_memory', size=self.memory_config["data"]["size"])
         l2_private_inst_memory = memory.Memory(self, 'private_inst_memory', size=self.memory_config["inst"]["size"])
 
+
+
         # Setup host and loader connections
-        host = iss.FcCore(self, 'fc', cluster_id=0)
-        
+        host = iss.FcCore(self, 'fc', cluster_id=0, boot_addr=0x02000000)
+
         host.o_FETCH      ( l2_tcdm_ico.i_INPUT() )
         host.o_DATA       ( l2_tcdm_ico.i_INPUT() )
         host.o_DATA_DEBUG ( l2_tcdm_ico.i_INPUT() )
 
         loader.o_OUT      ( l2_tcdm_ico.i_INPUT() )
         loader.o_START    ( host.i_FETCHEN()      )
-        loader.o_ENTRY    ( host.i_ENTRY()        )
+        loader.o_ENTRY    ( soc_ctrl.i_ENTRY()        )
 
         # Mapping configurations for data, inst, and cluster memory
         l2_tcdm_ico.o_MAP( l2_private_data_memory.i_INPUT(), "data_memory",          **self.get_property('memory_config/data'))
@@ -78,13 +85,15 @@ class SafetyIsland(gvsoc.systree.Component):
         l2_tcdm_ico.o_MAP( cluster_l1_placeholder.i_INPUT(),   "cluster_l1_placeholder", **self.get_property('cluster_l1_config'))
         l2_tcdm_ico.o_MAP( obi_ico.i_INPUT(),                "obi_ico",              **self.get_property('obi_ico/mapping'))
         l2_tcdm_ico.o_MAP( memory_island_placeholder.i_INPUT(),   "memory_island_placeholder", **self.get_property('memory_island_config'))
+        l2_tcdm_ico.o_MAP( rom.i_INPUT(),  base=0x2000000, size=0x1000)
+        l2_tcdm_ico.o_MAP ( clint.i_INPUT   (), base=0x02040000, size=0x0010_0000 )
 
-        obi_ico.add_mapping( 'soc_ctrl'   , **self.get_property('obi_ico/soc_ctrl'   ))             
-        obi_ico.add_mapping( 'fll_soc'    , **self.get_property('obi_ico/fll_soc'    ))             
-        obi_ico.add_mapping( 'fll_periph' , **self.get_property('obi_ico/fll_periph' ))             
-        obi_ico.add_mapping( 'fll_cluster', **self.get_property('obi_ico/fll_cluster'))             
-        obi_ico.add_mapping( 'soc_eu'     , **self.get_property('obi_ico/soc_eu'     ))             
-        obi_ico.add_mapping( 'fc_itc'     , **self.get_property('obi_ico/fc_itc'     ))             
+        obi_ico.add_mapping( 'soc_ctrl'   , **self.get_property('obi_ico/soc_ctrl'   ))
+        obi_ico.add_mapping( 'fll_soc'    , **self.get_property('obi_ico/fll_soc'    ))
+        obi_ico.add_mapping( 'fll_periph' , **self.get_property('obi_ico/fll_periph' ))
+        obi_ico.add_mapping( 'fll_cluster', **self.get_property('obi_ico/fll_cluster'))
+        obi_ico.add_mapping( 'soc_eu'     , **self.get_property('obi_ico/soc_eu'     ))
+        obi_ico.add_mapping( 'fc_itc'     , **self.get_property('obi_ico/fc_itc'     ))
 
         # Create and connect the SOC control component
         self.bind( obi_ico, 'soc_ctrl'   , soc_ctrl   , 'input' )
@@ -137,7 +146,7 @@ class ChimeraBoard(gvsoc.systree.Component):
         self.bind(ref_clock_generator, 'clock_sync', padframe, 'ref_clock_pad')
 
         self.bind(padframe, 'ref_clock', safety_island, 'ref_clock')
-        
+
 
 class Target(gvsoc.runner.Target):
 
