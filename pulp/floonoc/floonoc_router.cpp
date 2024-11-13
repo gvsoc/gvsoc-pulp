@@ -59,7 +59,7 @@ bool Router::handle_request(vp::IoReq *req, int from_x, int from_y)
 
     // And push it to the queue. The queue will automatically trigger the FSM if needed
     vp::Queue *queue = this->input_queues[queue_index];
-    queue->push_back(req, 3);
+    queue->push_back(req, 1);
 
 
     // We let the source enqueue one more request than what is possible to model the fact the fact
@@ -175,7 +175,8 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                     // is full, stall the corresponding output queue to make sure we stop sending
                     // there until the queue is unstalled
                     if (router->handle_request(req, _this->x, _this->y))
-                    {
+                    {   
+                        _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Stalling queue (position: (%d, %d), queue: %d)\n", _this->x, _this->y, queue_id);
                         _this->stalled_queues[queue_id] = true;
                     }
                 }
@@ -244,6 +245,7 @@ void Router::grant(vp::IoReq *req)
 {
     // Now that the stalled request has been granted, we need to unstall the queue
     int queue = *(int *)req->arg_get(FlooNoc::REQ_QUEUE);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Unstalling queue(f:grant) (position: (%d, %d), queue: %d)\n", *(int *)req->arg_get(FlooNoc::REQ_DEST_X), *(int *)req->arg_get(FlooNoc::REQ_DEST_Y), queue);
     this->stalled_queues[queue] = false;
 
     // And check in next cycle if another request can be sent
@@ -284,6 +286,7 @@ void Router::unstall_queue(int from_x, int from_y)
     // This gets called when an output queue gets unstalled because the denied request gets granted.
     // Just unstall the queue and trigger the fsm, in case we can now send a new request
     int queue = this->get_req_queue(from_x, from_y);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Unstalling queue(f:unstall_queue) (position: (%d, %d), queue: %d)\n", from_x, from_y, queue);
     this->stalled_queues[queue] = false;
     this->fsm_event.enqueue();
 }
