@@ -155,7 +155,7 @@ class SocFlooccamy(gvsoc.systree.Component):
             stim_file=self.get_file_path('pulp/snitch/bootrom.bin'), atomics=True)
 
         # Narrow 64bits router
-        narrow_axi = router.Router(self, 'narrow_axi', bandwidth=8)
+        narrow_axi = router.Router(self, 'narrow_axi', bandwidth=8, synchronous=True)
 
         # Clusters
         clusters:List[SnitchCluster] = []
