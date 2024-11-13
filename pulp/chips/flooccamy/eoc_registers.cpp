@@ -58,7 +58,7 @@ EoC_Registers::EoC_Registers(vp::ComponentConf &config)
 
 void EoC_Registers::reset(bool active)
 {
-   std::cout << "[EoC_Registers]: Reset "<< std::endl;
+   this->trace.msg(vp::Trace::LEVEL_TRACE, "[EoC_Registers]: Reset ");
    this->event_enqueue(this->eoc_event, this->interval);
 }
 
