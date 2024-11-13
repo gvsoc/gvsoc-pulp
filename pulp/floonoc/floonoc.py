@@ -174,7 +174,7 @@ class FlooNocClusterGrid(FlooNoc2dMesh):
     def __init__(self, parent: gvsoc.systree.Component, name, width: int, nb_x_clusters: int,
             nb_y_clusters):
         # The total grid contains 1 more node on each direction for the targets
-        super(FlooNocClusterGrid, self).__init__(parent, name, width, dim_x=nb_x_clusters+2, dim_y=nb_y_clusters+2)
+        super(FlooNocClusterGrid, self).__init__(parent, name, width, dim_x=nb_x_clusters+2, dim_y=nb_y_clusters+2, ni_outstanding_reqs=64)
 
         for tile_x in range(0, nb_x_clusters):
             for tile_y in range(0, nb_y_clusters):
