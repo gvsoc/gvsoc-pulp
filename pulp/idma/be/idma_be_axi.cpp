@@ -173,8 +173,8 @@ void IDmaBeAxi::send_read_burst_to_axi()
     // And also trigger the middle-end in case it has another burst to push
     this->be->update();
 
-    this->trace.msg(vp::Trace::LEVEL_TRACE, "Sending read burst to AXI (burst: %p, base: 0x%lx, size: 0x%lx)\n",
-        req, req->get_addr(), req->get_size());
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Sending read burst to AXI (burst: %p, base: 0x%lx, size: 0x%lx, latency:%d)\n",
+        req, req->get_addr(), req->get_size(), req->get_latency());
 
     // Reinit timings
     req->prepare();
@@ -205,6 +205,7 @@ void IDmaBeAxi::send_read_burst_to_axi()
 void IDmaBeAxi::read_handle_req_end(vp::IoReq *req)
 {
     // Remember at which timestamp the burst must be notified
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Handling end of read request (req: %p, latency %d)\n", req, req->get_latency());
     this->read_timestamps[req->id] = this->clock.get_cycles() + req->get_latency();
     // Queue the requests, they will be notified in order.
     this->read_waiting_bursts.push(req);
