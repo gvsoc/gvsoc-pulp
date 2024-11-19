@@ -85,8 +85,12 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     // We get there when we may have a request to send. This can happen if:
     // - The network interface is not stalled due to a denied request
     // - There is at least one burst pending
+    // - The timestamp of the first pending burst has passed
     // - There is at least one available internal request
-    if (!_this->stalled && _this->pending_bursts.size() > 0 && _this->free_reqs.size() > 0)
+    if (!_this->stalled
+        && _this->pending_bursts.size() > 0
+        && _this->pending_bursts_timestamp.front() <= _this->clock.get_cycles()
+        && _this->free_reqs.size() > 0)
     {
         vp::IoReq *burst = _this->pending_bursts.front();
 
@@ -107,7 +111,7 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             *(int *)burst->arg_get_last() = burst->get_size();
         }
 
-        // THen pop an internal request and fill it from current burst information
+        // Then pop an internal request and fill it from current burst information
         vp::IoReq *req = _this->free_reqs.front();
         _this->free_reqs.pop();
 
@@ -148,6 +152,7 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             *(int *)burst->arg_get_last() -= _this->pending_burst_size;
             _this->pending_burst_size = 0;
             _this->pending_bursts.pop();
+            _this->pending_bursts_timestamp.pop();
             // And respond to the current burst as it is over with an error only if there is
             // no request on-going for it.
             // Otherwise, the response will be sent when last request response is received
@@ -168,6 +173,7 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             if (_this->pending_burst_size == 0)
             {
                 _this->pending_bursts.pop();
+                _this->pending_bursts_timestamp.pop();
                 _this->nb_pending_input_req--;
             }
 
@@ -198,6 +204,14 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         // anything to do.
         _this->fsm_event.enqueue();
     }
+    else if (!_this->stalled && _this->pending_bursts.size() > 0 && _this->free_reqs.size() > 0)
+    {
+        // If we did not handle the first pending burst because we haven't reached its
+        // timestamp, schedule the event at this timestamp to be able to process it
+        _this->fsm_event.enqueue(
+            _this->pending_bursts_timestamp.front() - _this->clock.get_cycles()
+        );
+    }
 }
 
 
@@ -206,8 +220,7 @@ void NetworkInterface::handle_response(vp::IoReq *req)
 {
     // This gets called by the routers when an internal request has been handled
     // First extract the corresponding burst from the request so that we can update the burst.
-    vp::IoReq *burst = *(vp::IoReq **)req->arg_get(1);
-
+    vp::IoReq *burst = *(vp::IoReq **)req->arg_get(FlooNoc::REQ_DEST_BURST);
     this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received request response (req: %p)\n", req);
 
     // If at least one of the request is invalid, this makes the whole burst invalid
@@ -222,7 +235,7 @@ void NetworkInterface::handle_response(vp::IoReq *req)
     // And respond to it if all responses have been received
     if (*(int *)burst->arg_get_last() == 0)
     {
-        this->trace.msg(vp::Trace::LEVEL_DEBUG, "Finished burst (burst: %p)\n", burst);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "Finished burst (burst: %p, latency: %d)\n", burst, burst->get_latency());
         burst->get_resp_port()->resp(burst);
     }
 
@@ -254,7 +267,15 @@ vp::IoReqStatus NetworkInterface::req(vp::Block *__this, vp::IoReq *req)
     }
     // Just enqueue it and trigger the FSM which will check if it must be processed now
     _this->pending_bursts.push(req);
-    _this->fsm_event.enqueue();
+    // We also need to push at which timestamp the burst can start being processed.
+    // Since we handle it asynchronously, we need to start it only once its latency has been
+    // reached
+    _this->pending_bursts_timestamp.push(_this->clock.get_cycles() + req->get_latency());
+    // We must also reset it, since it will be covered by the asynchronous reply
+    req->set_latency(0);
+    _this->fsm_event.enqueue(
+        std::max((int64_t)0, _this->pending_bursts_timestamp.front() - _this->clock.get_cycles())
+    );
 
     _this->nb_pending_input_req++;
 

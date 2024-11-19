@@ -68,6 +68,9 @@ private:
     // Queue of pending incoming bursts. Any received burst is pushed there and they are processed
     // one by one sequentially by the network interface.
     std::queue<vp::IoReq *> pending_bursts;
+    // Also a maintain a queue of timestamps at which the corresponding burst can start to take
+    // into account the burst latency.
+    std::queue<int64_t> pending_bursts_timestamp;
     // Current base address of the burst currently being processed. It is used to update the address
     // of the internal requests send to the routers to process the burst
     uint64_t pending_burst_base;
