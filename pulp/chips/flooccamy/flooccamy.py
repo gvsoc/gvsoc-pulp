@@ -200,9 +200,9 @@ class SocFlooccamy(gvsoc.systree.Component):
 
 
         # Add a single HBM to allow running the binary
-        bank_x = 2
-        bank_y = 0
-        bank1 = memory.memory.Memory(self, f'bank_{bank_x}_{bank_y}', size=arch.hbm.size, atomics=True)
+        bank_x = 0
+        bank_y = 1
+        bank1 = memory.memory.Memory(self, f'bank_{bank_x}_{bank_y}', size=arch.hbm.size, width_log2 = 6,atomics=True)
         noc.o_MAP(bank1.i_INPUT(), base=arch.hbm.base, size=arch.hbm.size,x=bank_x, y=bank_y, rm_base=True)
         narrow_axi.o_MAP (bank1.i_INPUT(), base=arch.hbm.base, size=arch.hbm.size, rm_base=True )
 
