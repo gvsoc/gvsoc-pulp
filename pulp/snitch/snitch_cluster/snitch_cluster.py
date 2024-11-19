@@ -168,7 +168,7 @@ class SnitchCluster(gvsoc.systree.Component):
 
         # Cluster DMA
         idma = SnitchDma(self, 'idma', loc_base=arch.tcdm.area.base, loc_size=arch.tcdm.area.size,
-            tcdm_width=64)
+            tcdm_width=4096) # 4096 exp change from 64 for floonoc
 
         #
         # Bindings
