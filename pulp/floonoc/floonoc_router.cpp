@@ -275,10 +275,7 @@ void Router::get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_
         next_y = this->y;
     }
 
-    Router *next_router = this->noc->get_router(next_x, next_y);
-    if (next_router == NULL){
 
-    }
 }
 
 

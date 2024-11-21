@@ -137,7 +137,8 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         req->set_size(size);
         req->set_data(_this->pending_burst_data);
         req->set_is_write(burst->get_is_write());
-
+        req->set_opcode(burst->get_opcode());
+        req->set_second_data(burst->get_second_data());
         // Get the target entry corresponding to the current base
         Entry *entry = _this->noc->get_entry(base, size);
         if (entry == NULL)
