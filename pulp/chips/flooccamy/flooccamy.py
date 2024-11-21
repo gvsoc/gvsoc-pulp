@@ -157,15 +157,25 @@ class SocFlooccamy(gvsoc.systree.Component):
         # Narrow 64bits router
         narrow_axi = router.Router(self, 'narrow_axi', bandwidth=0, synchronous=True)
 
+        narrow_noc = pulp.floonoc.floonoc.FlooNocClusterGrid(self, 'narrow_noc', width=64/8, 
+            nb_x_clusters=arch.nb_x_tiles, nb_y_clusters=arch.nb_y_tiles, router_input_queue_size=32, ni_outstanding_reqs=64) # Queue size of 16 will stop the sanity.elf from finishing, 32 works
+        
+        # Add routers on left and right edges of the Narrow Noc
+        for i in range(1, arch.nb_x_tiles+1):
+            narrow_noc.add_router(0,i)
+            narrow_noc.add_router(arch.nb_y_tiles+1,i)
+        # NIs are only needed where we have a target that can send a request
+        narrow_noc.add_network_interface(5,1)
+        narrow_noc.add_network_interface(5,2)
+
         # Clusters
         clusters:List[SnitchCluster] = []
         for id in range(0, arch.nb_cluster):
             clusters.append(SnitchCluster(self, f'cluster_{id}', arch.get_cluster_arch(id), entry=entry))
 
         # NoC
-        # if arch.noc_type_is_floonoc:
-        noc = pulp.floonoc.floonoc.FlooNocClusterGrid(self, 'noc', width=512/8,
-            nb_x_clusters=arch.nb_x_tiles, nb_y_clusters=arch.nb_y_tiles)
+        wide_noc = pulp.floonoc.floonoc.FlooNocClusterGrid(self, 'wide_noc', width=512/8,
+            nb_x_clusters=arch.nb_x_tiles, nb_y_clusters=arch.nb_y_tiles, ni_outstanding_reqs=64)
 
         # Extra component for binary loading
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry_addr=arch.bootrom.base + 0x20)
@@ -178,15 +188,21 @@ class SocFlooccamy(gvsoc.systree.Component):
         #
 
         # EoC
+        # eoc_registers.o_OUTPUT(narrow_noc.i_INPUT(5,2))
         eoc_registers.o_OUTPUT(narrow_axi.i_INPUT())
 
 
         # Clusters
         # Narrow 64bits router
         for id in range(0, arch.nb_cluster):
-            clusters[id].o_NARROW_SOC(narrow_axi.i_INPUT())
+            tile_x = int(id / arch.nb_x_tiles)
+            tile_y = int(id % arch.nb_x_tiles)
+            clusters[id].o_NARROW_SOC(narrow_noc.i_CLUSTER_INPUT(tile_x, tile_y)) # --------------------
+            narrow_noc.o_MAP ( clusters[id].i_NARROW_INPUT(), base=arch.get_cluster_base(id),
+                size=arch.cluster.size,x=tile_y+1, y=tile_y+1, rm_base=False)
+            # clusters[id].o_NARROW_SOC(narrow_axi.i_INPUT())
             narrow_axi.o_MAP ( clusters[id].i_NARROW_INPUT(), base=arch.get_cluster_base(id),
-                size=arch.cluster.size, rm_base=False  )
+            size=arch.cluster.size, rm_base=False  )
 
 
         # Wide 512 bits router / FlooNoC
@@ -194,32 +210,30 @@ class SocFlooccamy(gvsoc.systree.Component):
             tile_x = int(id / arch.nb_x_tiles)
             tile_y = int(id % arch.nb_x_tiles)
 
-            noc.o_MAP(clusters[id].i_WIDE_INPUT(), base=arch.get_cluster_base(id), size=arch.cluster.size,
+            wide_noc.o_MAP(clusters[id].i_WIDE_INPUT(), base=arch.get_cluster_base(id), size=arch.cluster.size,
                 x=tile_x+1, y=tile_y+1)
-            clusters[id].o_WIDE_SOC(noc.i_CLUSTER_INPUT(tile_x, tile_y)) # <-----
+            clusters[id].o_WIDE_SOC(wide_noc.i_CLUSTER_INPUT(tile_x, tile_y)) # <-----
+
 
 
         # Add a single HBM to allow running the binary
         bank_x = 0
         bank_y = 1
-        bank1 = memory.memory.Memory(self, f'bank_{bank_x}_{bank_y}', size=arch.hbm.size, width_log2 = 6,atomics=True)
-        noc.o_MAP(bank1.i_INPUT(), base=arch.hbm.base, size=arch.hbm.size,x=bank_x, y=bank_y, rm_base=True)
+        bank1 = memory.memory.Memory(self, f'bank_{bank_x}_{bank_y}', size=arch.hbm.size, width_log2 = 6, atomics=True)
+        wide_noc.o_MAP(bank1.i_INPUT(), base=arch.hbm.base, size=arch.hbm.size,x=bank_x, y=bank_y, rm_base=True)
+        narrow_noc.o_MAP (bank1.i_INPUT(), base=arch.hbm.base, size=arch.hbm.size,x=bank_x,y=bank_y, rm_base=True )
         narrow_axi.o_MAP (bank1.i_INPUT(), base=arch.hbm.base, size=arch.hbm.size, rm_base=True )
 
-        # bank_x = 1
-        # bank_y = 0
-        # bank2 = memory.memory.Memory(self, f'bank_{bank_x}_{bank_y}', size=arch.hbm.size, atomics=True)
-        # noc.o_MAP(bank2.i_INPUT(), base=arch.hbm.base+arch.hbm.size, size=arch.hbm.size,x=bank_x, y=bank_y, rm_base=True)
-        # narrow_axi.o_MAP (bank2.i_INPUT(), base=arch.hbm.base+arch.hbm.size, size=arch.hbm.size, rm_base=True )
 
-        # ROM
-        narrow_axi.o_MAP ( rom.i_INPUT     (), base=arch.bootrom.base, size=arch.bootrom.size, rm_base=True  )
 
+        # BootROM
+        narrow_noc.o_MAP ( rom.i_INPUT(), base=arch.bootrom.base, size=arch.bootrom.size, x=5,y=3, rm_base=True  )
+        narrow_axi.o_MAP ( rom.i_INPUT(), base=arch.bootrom.base, size=arch.bootrom.size, rm_base=True  )
         # Binary loader
-        loader.o_OUT(narrow_axi.i_INPUT())
+        loader.o_OUT(narrow_noc.i_INPUT(5,1)) # ------------------------------------
+        # loader.o_OUT(narrow_axi.i_INPUT())
         for id in range(0, arch.nb_cluster):
             loader.o_START(clusters[id].i_FETCHEN())
-
 
     def i_HBM(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'hbm', signature='io')
