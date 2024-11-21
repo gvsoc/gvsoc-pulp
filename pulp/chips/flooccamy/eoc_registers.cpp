@@ -77,15 +77,15 @@ void EoC_Registers::eoc_event_handler(vp::Block *__this, vp::ClockEvent *event) 
 
     //Check error
     if (err != vp::IO_REQ_OK) {
-        _this->trace.fatal("[EoC_Registers] There was an error while reading addr 0x%x \n", _this->eoc_entry);
+        _this->trace.fatal("[EoC_Registers] There was an error while reading addr 0x%x error id: %d\n", _this->eoc_entry, err);
     }
 
     _this->trace.msg(vp::Trace::LEVEL_TRACE,"[EoC_Registers] Value is %d\n", _this->access_buffer[0]);
     if (_this->access_buffer[0] == 1)
-    {
+    {   
+        _this->trace.msg(vp::Trace::LEVEL_INFO, "[EoC_Registers] EoC detected, quitting\n");
         _this->time.get_engine()->quit(0);
     }
-
     _this->event_enqueue(_this->eoc_event, _this->interval);
 }
 
