@@ -32,7 +32,8 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
     this->traces.new_trace("trace", &trace, vp::DEBUG);
 
     // Get properties from generator
-    this->width = get_js_config()->get("width")->get_int();
+    this->wide_width = get_js_config()->get("wide_width")->get_int();
+    this->narrow_width = get_js_config()->get("narrow_width")->get_int();
     this->dim_x = get_js_config()->get_int("dim_x");
     this->dim_y = get_js_config()->get_int("dim_y");
     this->router_input_queue_size = get_js_config()->get_int("router_input_queue_size");
@@ -96,7 +97,11 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
     }
 
     // Create the array of routers
-    this->routers.resize(this->dim_x * this->dim_y);
+    this->req_routers.resize(this->dim_x * this->dim_y);
+    this->rsp_routers.resize(this->dim_x * this->dim_y);
+    this->wide_routers.resize(this->dim_x * this->dim_y);
+
+
     js::Config *routers = get_js_config()->get("routers");
     if (routers != NULL)
     {
@@ -105,9 +110,11 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
             int x = router->get_elem(0)->get_int();
             int y = router->get_elem(1)->get_int();
 
-            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding router (x: %d, y: %d)\n", x, y);
+            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding routers (req, rsp and wide) (x: %d, y: %d)\n", x, y);
 
-            this->routers[y*this->dim_x + x] = new Router(this, x, y, this->router_input_queue_size);
+            this->req_routers[y*this->dim_x + x] = new Router(this,"req_router_", x, y, this->router_input_queue_size);
+            this->rsp_routers[y*this->dim_x + x] = new Router(this, "rsp_router_", x, y, this->router_input_queue_size);
+            this->wide_routers[y*this->dim_x + x] = new Router(this, "wide_router_", x, y, this->router_input_queue_size);
         }
     }
 }
@@ -126,12 +133,30 @@ void FlooNoc::handle_request_end(vp::IoReq *req)
 
 
 
-Router *FlooNoc::get_router(int x, int y)
+Router *FlooNoc::get_req_router(int x, int y)
 {
-    return this->routers[y * this->dim_x + x];
+    return this->req_routers[y * this->dim_x + x];
 }
 
+Router *FlooNoc::get_rsp_router(int x, int y)
+{
+    return this->rsp_routers[y * this->dim_x + x];
+}
 
+Router *FlooNoc::get_wide_router(int x, int y)
+{
+    return this->wide_routers[y * this->dim_x + x];
+}
+
+Router *FlooNoc::get_router(int x, int y, bool wide, bool write){
+    if (wide){
+        return this->get_wide_router(x, y);
+    } else if (write){
+        return this->get_req_router(x, y);
+    } else {
+        return this->get_rsp_router(x, y);
+    }
+}
 
 NetworkInterface *FlooNoc::get_network_interface(int x, int y)
 {

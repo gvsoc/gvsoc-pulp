@@ -34,7 +34,7 @@ class FlooNoc;
 class Router : public vp::Block
 {
 public:
-    Router(FlooNoc *noc, int x, int y, int queue_size);
+    Router(FlooNoc *noc, std::string name, int x, int y, int queue_size);
 
     void reset(bool active);
 

@@ -76,7 +76,11 @@ public:
     void reset(bool active);
 
     // Return the router at specified position
-    Router *get_router(int x, int y);
+    Router *get_req_router(int x, int y);
+    Router *get_rsp_router(int x, int y);
+    Router *get_wide_router(int x, int y);
+    Router *get_router(int x, int y, bool wide, bool write);
+
     // Return the target at specified position
     vp::IoMaster *get_target(int x, int y);
     // Return the network interface at specified position
@@ -97,7 +101,8 @@ public:
     static constexpr int REQ_DEST_Y = 4;      // Y coordinate of the destination target
     static constexpr int REQ_ROUTER = 5;      // When a request is stalled, this gives the router where to grant it
     static constexpr int REQ_QUEUE = 6;       // When a request is stalled, this gives the queue where to grant it
-    static constexpr int REQ_NB_ARGS = 7;     // Number of request data required by this model
+    static constexpr int REQ_WIDE = 7;        // Indicates if a request is a wide request or not. 1 for wide, 0 for narrow
+    static constexpr int REQ_NB_ARGS = 8;     // Number of request data required by this model
 
     // The following constants gives the index in the queue array of the queue associated to each direction
     static constexpr int DIR_RIGHT = 0;
@@ -108,7 +113,8 @@ public:
 
     // Width in bytes of the noc. This is used to split incoming bursts into internal requests of
     // this width so that the bandwidth corresponds to the width.
-    uint64_t width;
+    uint64_t wide_width;
+    uint64_t narrow_width;
 
 private:
     // Callback called when a target request is asynchronously granted after a denied error was
@@ -131,7 +137,9 @@ private:
     // output queue of the sender.
     int router_input_queue_size;
     // Array of routers of the noc, sorted by position from first line to last line
-    std::vector<Router *> routers;
+    std::vector<Router *> req_routers;
+    std::vector<Router *> rsp_routers;
+    std::vector<Router *> wide_routers;
     // Array of targets of the noc, sorted by position from first line to last line. This contains
     // both the targets on the edges and the targets at each node
     std::vector<vp::IoMaster *> targets;

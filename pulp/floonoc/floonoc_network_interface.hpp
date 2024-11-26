@@ -52,6 +52,8 @@ public:
 
 private:
     // Input method called when a burst is received from the local initiator
+    static vp::IoReqStatus narrow_req(vp::Block *__this, vp::IoReq *req);
+    static vp::IoReqStatus wide_req(vp::Block *__this, vp::IoReq *req);
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
     // FSM event handler called when something happened and queues need to be checked to see
     // if a request should be handled.
@@ -66,7 +68,8 @@ private:
     // Maxinum number of pending input requests before the initiator is stalled
     int max_input_req;
     // Input IO interface where incoming burst are injected into the network
-    vp::IoSlave input_itf;
+    vp::IoSlave wide_input_itf;
+    vp::IoSlave narrow_input_itf;
     // This block trace
     vp::Trace trace;
     // Queue of pending incoming bursts. Any received burst is pushed there and they are processed
