@@ -166,8 +166,8 @@ class SocFlooccamy(gvsoc.systree.Component):
             narrow_noc.add_router(0,i)
             narrow_noc.add_router(arch.nb_y_tiles+1,i)
         # NIs are only needed where we have a target that can send a request
-        narrow_noc.add_network_interface(5,1)
-        narrow_noc.add_network_interface(5,2)
+        # narrow_noc.add_network_interface(5,1)
+        # narrow_noc.add_network_interface(5,2)
 
         # Clusters
         clusters:List[SnitchCluster] = []

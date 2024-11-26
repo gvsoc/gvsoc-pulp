@@ -187,7 +187,7 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Injecting request to noc (req: %p, base: 0x%x, size: 0x%x, destination: (%d, %d))\n",
                 req, req->get_addr(), size, entry->x, entry->y);
 
-            // Noe that the router may not grant tje request if its input queue is full.
+            // Note that the router may not grant the request if its input queue is full.
             // In this case we must stall the network interface
             Router *router = _this->noc->get_router(_this->x, _this->y);
             _this->stalled = router->handle_request(req, _this->x, _this->y);
@@ -263,9 +263,6 @@ vp::IoReqStatus NetworkInterface::req(vp::Block *__this, vp::IoReq *req)
     int dest_x = req->get_int(FlooNoc::REQ_DEST_X);
     int dest_y = req->get_int(FlooNoc::REQ_DEST_Y);
 
-    if (dest_x == _this->x && dest_y == _this->y){
-        _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Burst is for this network interface\n");
-    }
     // Just enqueue it and trigger the FSM which will check if it must be processed now
     _this->pending_bursts.push(req);
     // We also need to push at which timestamp the burst can start being processed.
@@ -289,5 +286,36 @@ vp::IoReqStatus NetworkInterface::req(vp::Block *__this, vp::IoReq *req)
     else
     {
         return vp::IO_REQ_PENDING;
+    }
+}
+
+
+vp::IoReqStatus NetworkInterface::send_to_target(vp::IoReq *req, int pos_x, int pos_y)
+{
+    vp::IoMaster *target = this->noc->get_target(pos_x, pos_y);
+
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Sending request to target (target name: %s)(req: %p, base: 0x%x, size: 0x%x, position: (%d, %d))\n",
+        target->get_name().c_str(), req, req->get_addr(), req->get_size() ,pos_x, pos_y);
+
+    vp::IoReqStatus result = target->req(req);
+    if (result == vp::IO_REQ_OK || result == vp::IO_REQ_INVALID)
+    {
+        // If the request is processed synchronously, immediately notify the network interface
+
+        // We need to store the status in the request so that it is properly propagated to the
+        // initiator request
+        req->status = result;
+        this->noc->handle_request_end(req);
+        return result;
+    }
+    else if (result == vp::IO_REQ_DENIED)
+    {
+        return result;
+    }
+    else
+    {
+        // In case of asynchronous response, the network interface will be notified by the
+        // the response callback
+        return result;
     }
 }

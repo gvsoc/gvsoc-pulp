@@ -46,6 +46,10 @@ public:
     // a request was denied because the input queue of the router was full
     void unstall_queue(int from_x, int from_y);
 
+    // This gets called by a router when the destination is reached and the request must be
+    // sent to the target
+    vp::IoReqStatus send_to_target(vp::IoReq *req, int pos_x, int pos_y);
+
 private:
     // Input method called when a burst is received from the local initiator
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
