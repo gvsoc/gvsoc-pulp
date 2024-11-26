@@ -154,9 +154,10 @@ class SocFlooccamy(gvsoc.systree.Component):
         rom = memory.memory.Memory(self, 'rom', size=arch.bootrom.size,
             stim_file=self.get_file_path('pulp/snitch/bootrom.bin'), atomics=True)
 
-        # Narrow 64bits router
+        # Narrow 64bits router, only used for eoc registers
         narrow_axi = router.Router(self, 'narrow_axi', bandwidth=0, synchronous=True)
 
+        # Narrow Noc
         narrow_noc = pulp.floonoc.floonoc.FlooNocClusterGrid(self, 'narrow_noc', width=64/8, 
             nb_x_clusters=arch.nb_x_tiles, nb_y_clusters=arch.nb_y_tiles, router_input_queue_size=32, ni_outstanding_reqs=64) # Queue size of 16 will stop the sanity.elf from finishing, 32 works
         
@@ -173,7 +174,7 @@ class SocFlooccamy(gvsoc.systree.Component):
         for id in range(0, arch.nb_cluster):
             clusters.append(SnitchCluster(self, f'cluster_{id}', arch.get_cluster_arch(id), entry=entry))
 
-        # NoC
+        # Wide NoC
         wide_noc = pulp.floonoc.floonoc.FlooNocClusterGrid(self, 'wide_noc', width=512/8,
             nb_x_clusters=arch.nb_x_tiles, nb_y_clusters=arch.nb_y_tiles, ni_outstanding_reqs=64)
 
@@ -189,7 +190,7 @@ class SocFlooccamy(gvsoc.systree.Component):
 
         # EoC
         # eoc_registers.o_OUTPUT(narrow_noc.i_INPUT(5,2))
-        eoc_registers.o_OUTPUT(narrow_axi.i_INPUT())
+        eoc_registers.o_OUTPUT(narrow_axi.i_INPUT()) # This is still going over the narrow axi because the eoc registers can't handle stalled requests
 
 
         # Clusters
