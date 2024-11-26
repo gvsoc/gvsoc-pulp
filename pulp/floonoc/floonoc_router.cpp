@@ -202,24 +202,13 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
 
 void Router::send_to_target(vp::IoReq *req, int pos_x, int pos_y)
-{
-    vp::IoMaster *target = this->noc->get_target(pos_x, pos_y);
+{   
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Sending request to target NI (req: %p, position: (%d, %d))\n",
+        req, pos_x, pos_y);
+    NetworkInterface *ni = this->noc->get_network_interface(pos_x, pos_y);
+    vp::IoReqStatus result = ni->send_to_target(req, pos_x, pos_y);
 
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Sending request to target (target name: %s)(req: %p, base: 0x%x, size: 0x%x, position: (%d, %d))\n",
-        target->get_name().c_str(), req, req->get_addr(), req->get_size() ,pos_x, pos_y);
-
-    vp::IoReqStatus result = target->req(req);
-    if (result == vp::IO_REQ_OK || result == vp::IO_REQ_INVALID)
-    {
-        // If the request is processed synchronously, immediately notify the network interface
-
-        // We need to store the status in the request so that it is properly propagated to the
-        // initiator request
-        req->status = result;
-        this->noc->handle_request_end(req);
-    }
-    else if (result == vp::IO_REQ_DENIED)
-    {
+    if (result == vp::IO_REQ_DENIED){
         int queue = this->get_req_queue(pos_x, pos_y);
 
         // In case it is denied, the request has been queued in the target, we just need to make
@@ -231,11 +220,6 @@ void Router::send_to_target(vp::IoReq *req, int pos_x, int pos_y)
         *(Router **)req->arg_get(FlooNoc::REQ_ROUTER) = this;
         // Also store the queue, the router will use it to know which queue to unstall
         *(int *)req->arg_get(FlooNoc::REQ_QUEUE) = queue;
-    }
-    else
-    {
-        // In case of asynchronous response, the network interface will be notified by the
-        // the response callback
     }
 }
 
