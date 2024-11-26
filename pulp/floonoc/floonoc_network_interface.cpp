@@ -39,9 +39,13 @@ NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y)
     traces.new_trace("trace", &trace, vp::DEBUG);
 
     // Network interface input port
-    this->input_itf.set_req_meth(&NetworkInterface::req);
-    noc->new_slave_port("input_" + std::to_string(x) + "_"  + std::to_string(y),
-        &this->input_itf, this);
+    this->narrow_input_itf.set_req_meth(&NetworkInterface::narrow_req);
+    noc->new_slave_port("narrow_input_" + std::to_string(x) + "_"  + std::to_string(y),
+        &this->narrow_input_itf, this);
+    this->wide_input_itf.set_req_meth(&NetworkInterface::wide_req);
+    noc->new_slave_port("wide_input_" + std::to_string(x) + "_"  + std::to_string(y),
+        &this->wide_input_itf, this);
+
 
     // Create one req for each possible outstanding req.
     // Internal requests will be taken from here to model the fact only a limited number
@@ -110,7 +114,8 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             // last internal request has been handled to notify the end of burst
             *(int *)burst->arg_get_last() = burst->get_size();
         }
-
+        bool wide = *(bool *)burst->arg_get(FlooNoc::REQ_WIDE);
+        uint64_t width = wide ? _this->noc->wide_width : _this->noc->narrow_width;
         // Then pop an internal request and fill it from current burst information
         vp::IoReq *req = _this->free_reqs.front();
         _this->free_reqs.pop();
@@ -119,9 +124,9 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         uint64_t base = _this->pending_burst_base;
 
         // Size must be at max the noc width to respect the bandwidth
-        uint64_t size = std::min(_this->noc->width, _this->pending_burst_size);
+        uint64_t size = std::min(width, _this->pending_burst_size);
         // And must not cross a page to fall into one target
-        uint64_t next_page = (base + _this->noc->width - 1) & ~(_this->noc->width - 1);
+        uint64_t next_page = (base + width - 1) & ~(width - 1);
         if (next_page > base)
         {
             size = std::min(next_page - base, size);
@@ -134,6 +139,7 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         *req->arg_get(FlooNoc::REQ_DEST_NI) = (void *)_this;
         *req->arg_get(FlooNoc::REQ_DEST_BURST) = (void *)burst;
         *req->arg_get(FlooNoc::REQ_DEST_BASE) = (void *)base;
+        *req->arg_get(FlooNoc::REQ_WIDE) = (void *)wide;
         req->set_size(size);
         req->set_data(_this->pending_burst_data);
         req->set_is_write(burst->get_is_write());
@@ -189,7 +195,8 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
             // Note that the router may not grant the request if its input queue is full.
             // In this case we must stall the network interface
-            Router *router = _this->noc->get_router(_this->x, _this->y);
+
+            Router *router = _this->noc->get_router(_this->x, _this->y, wide, req->get_is_write());
             _this->stalled = router->handle_request(req, _this->x, _this->y);
         }
 
@@ -248,6 +255,23 @@ void NetworkInterface::handle_response(vp::IoReq *req)
 
 
 
+vp::IoReqStatus NetworkInterface::narrow_req(vp::Block *__this, vp::IoReq *req)
+{
+    // This gets called when a burst is received
+    NetworkInterface *_this = (NetworkInterface *)__this;
+    *req->arg_get(FlooNoc::REQ_WIDE) = (void *) 0;
+    vp::IoReqStatus result = _this->req(_this, req);
+    return result;
+}
+
+vp::IoReqStatus NetworkInterface::wide_req(vp::Block *__this, vp::IoReq *req)
+{
+    NetworkInterface *_this = (NetworkInterface *)__this;
+    *req->arg_get(FlooNoc::REQ_WIDE) = (void *) 1;
+    vp::IoReqStatus result = _this->req(_this, req);
+    return result;
+}
+
 vp::IoReqStatus NetworkInterface::req(vp::Block *__this, vp::IoReq *req)
 {
     // This gets called when a burst is received
@@ -257,8 +281,8 @@ vp::IoReqStatus NetworkInterface::req(vp::Block *__this, vp::IoReq *req)
     uint8_t *data = req->get_data();
     uint64_t size = req->get_size();
 
-    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received burst (burst: %p, offset: 0x%x, size: 0x%x, is_write: %d, op: %d)\n",
-        req, offset, size, req->get_is_write(), req->get_opcode());
+    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received %s burst (burst: %p, offset: 0x%x, size: 0x%x, is_write: %d, op: %d)\n",
+        req->get_int(FlooNoc::REQ_WIDE)?"wide":"narrow",req, offset, size, req->get_is_write(), req->get_opcode());
 
     int dest_x = req->get_int(FlooNoc::REQ_DEST_X);
     int dest_y = req->get_int(FlooNoc::REQ_DEST_Y);

@@ -27,8 +27,8 @@
 
 
 
-Router::Router(FlooNoc *noc, int x, int y, int queue_size)
-    : vp::Block(noc, "router_" + std::to_string(x) + "_" + std::to_string(y)),
+Router::Router(FlooNoc *noc, std::string name, int x, int y, int queue_size)
+    : vp::Block(noc, name + std::to_string(x) + "_" + std::to_string(y)),
     fsm_event(this, &Router::fsm_handler)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
@@ -143,7 +143,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 else
                 {
                     // Otherwise it comes from a router
-                    Router *router = _this->noc->get_router(pos_x, pos_y);
+                    Router *router = _this->noc->get_router(pos_x, pos_y, req->get_int(FlooNoc::REQ_WIDE),req->get_is_write());
                     router->unstall_queue(_this->x, _this->y);
                 }
             }
@@ -158,7 +158,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             else
             {
                 // Otherwise forward to next position
-                Router *router = _this->noc->get_router(next_x, next_y);
+                Router *router = _this->noc->get_router(next_x, next_y, req->get_int(FlooNoc::REQ_WIDE),req->get_is_write());
 
                 if (router == NULL)
                 {
