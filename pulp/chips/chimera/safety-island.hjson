@@ -42,6 +42,8 @@
         size          : 0x00008000,
         remove_offset : 0x10000000
     },
+
+    
     
     /* JUNGVI: Memory island placeholder */
     memory_island_config: {
@@ -55,6 +57,11 @@
             base          : 0x03000000,
             size          : 0x00010000,
             remove_offset : 0x00000000
+        },
+        cfgreg:{
+            base          : 0x30001000,
+            size          : 0x00001000,
+            remove_offset : 0x30001000
         },
         fll_soc: {
             base          : 0x1A100000,
