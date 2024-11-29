@@ -61,6 +61,16 @@ class SnitchClusterGroup(gvsoc.systree.Component):
             self.clusters[id].o_NARROW_SOC(self.narrow_axi.i_INPUT())
             self.clusters[id].o_WIDE_SOC(self.wide_axi.i_INPUT())
 
+            for core in range(0, cluster_arch.nb_core):
+                core_id = core+id*cluster_arch.nb_core
+                self.__o_SW_IRQ(core_id, self.clusters[id].i_MSIP(core))
+
+    def i_SW_IRQ(self, core) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'sw_irq_{core}', signature='wire<bool>')
+
+    def __o_SW_IRQ(self, core, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind(f'sw_irq_{core}', itf, signature='wire<bool>', composite_bind=True)
+
 
 class SafetyIsland(gvsoc.systree.Component):
 
@@ -169,6 +179,10 @@ class SafetyIsland(gvsoc.systree.Component):
         # for i in range(0,5):
         #     self.bind(loader, "start", snitch_cluster_group.clusters[i], "fetchen")
             # loader.o_START(snitch_cluster_group.clusters[i].i_FETCHEN())
+
+        for i in range(0, 46):
+            clint.o_SW_IRQ( i, snitch_cluster_group.i_SW_IRQ(i))
+
 
         # Interrupts
         for name, irq in fc_events.items():
