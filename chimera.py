@@ -114,7 +114,7 @@ class SafetyIsland(gvsoc.systree.Component):
 
         rom = memory.Memory(self, 'rom', size=0x1000, stim_file=self.get_file_path('pulp/chips/chimera/bootrom.bin'))
 
-        clint = cpu.clint.Clint(self, 'clint', nb_cores=46)
+        clint = cpu.clint.Clint(self, 'clint', nb_cores=47)
 
         # JUNGVI: Memory component placeholder for the memory island
         memory_island_placeholder = memory.Memory(self, 'memory_island_placeholder', size=self.memory_island_config["size"])
@@ -181,7 +181,7 @@ class SafetyIsland(gvsoc.systree.Component):
             # loader.o_START(snitch_cluster_group.clusters[i].i_FETCHEN())
 
         for i in range(0, 46):
-            clint.o_SW_IRQ( i, snitch_cluster_group.i_SW_IRQ(i))
+            clint.o_SW_IRQ( i+1, snitch_cluster_group.i_SW_IRQ(i))
 
 
         # Interrupts
