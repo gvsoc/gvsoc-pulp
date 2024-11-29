@@ -207,6 +207,9 @@ class SnitchCluster(gvsoc.systree.Component):
             self.bind(cluster_registers, f'barrier_ack', cores[core_id], 'barrier_ack')
         for core_id in range(0, arch.nb_core):
             cluster_registers.o_EXTERNAL_IRQ(core_id, cores[core_id].i_IRQ(arch.barrier_irq))
+            self.__o_MSIP(core_id, cores[core_id].i_IRQ(3))
+            self.__o_MTIP(core_id, cores[core_id].i_IRQ(7))
+            self.__o_MEIP(core_id, cores[core_id].i_IRQ(11))
 
         # Cluster DMA
         idma.o_AXI(wide_axi.i_INPUT())
@@ -215,6 +218,24 @@ class SnitchCluster(gvsoc.systree.Component):
         # Zero mem
         wide_axi.o_MAP(zero_mem.i_INPUT(), base=arch.zero_mem.base, size=arch.zero_mem.size, rm_base=True)
         narrow_axi.o_MAP(wide_axi.i_INPUT(), name='zero_mem', base=arch.zero_mem.base, size=arch.zero_mem.size, rm_base=False)
+
+    def i_MEIP(self, core: int) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'meip_{core}', signature='wire<bool>')
+
+    def __o_MEIP(self, core: int, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind(f'meip_{core}', itf, signature='wire<bool>', composite_bind=True)
+
+    def i_MTIP(self, core: int) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'mtip_{core}', signature='wire<bool>')
+
+    def __o_MTIP(self, core: int, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind(f'mtip_{core}', itf, signature='wire<bool>', composite_bind=True)
+
+    def i_MSIP(self, core: int) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'msip_{core}', signature='wire<bool>')
+
+    def __o_MSIP(self, core: int, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind(f'msip_{core}', itf, signature='wire<bool>', composite_bind=True)
 
     def i_FETCHEN(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'fetchen', signature='wire<bool>')
