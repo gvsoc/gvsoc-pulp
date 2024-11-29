@@ -14,6 +14,52 @@ from utils.clock_generator import Clock_generator
 import pulp.soc_eu.soc_eu_v2 as soc_eu_module
 import pulp.itc.itc_v1 as itc
 import cpu.clint
+from pulp.snitch.snitch_cluster.snitch_cluster import ClusterArch, Area, SnitchCluster
+from pulp.chips.snitch.snitch import SnitchArchProperties
+
+class SnitchClusterGroup(gvsoc.systree.Component):
+
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
+
+        entry = 0x30000000
+        # if binary is not None:
+        #     with open(binary, 'rb') as file:
+        #         elffile = ELFFile(file)
+        #         entry = elffile['e_entry']
+        #
+        # Components
+        #
+        nb_clusters = 5
+
+        # Bootrom
+        snitch_rom = memory.Memory(self, 'snitch_rom', size=0x1000, stim_file="pulp/pulp/chips/chimera/snitch/snitch_bootrom.bin")
+
+        # Narrow 64bits router
+        self.narrow_axi = router.Router(self, 'narrow_axi', bandwidth=4)
+
+        # Wide 512 bits router
+        self.wide_axi = router.Router(self, 'wide_axi', bandwidth=64)
+
+        cluster_start_addr = [0x40800000, 0x40600000, 0x40400000, 0x40200000, 0x40000000]
+
+        self.clusters = []
+        for id in range(0, nb_clusters):
+            properties = SnitchArchProperties()
+            cluster_arch = ClusterArch(properties=properties, base=cluster_start_addr[id],  first_hartid=(id*9)+1, auto_fetch=True, boot_addr=0x30000000)
+            self.clusters.append(SnitchCluster(self, f'cluster_{id}', cluster_arch, entry=entry))
+
+        self.narrow_axi.o_MAP ( snitch_rom.i_INPUT     (), base=0x30000000, size=0x1000, rm_base=True  )
+        self.narrow_axi.add_mapping("clu_reg", base=0x30001000, size=0x80000000, remove_offset=0x0)
+        self.narrow_axi.add_mapping("clint", base=0x02040000, size=0x0010_0000, remove_offset=0x0)
+        self.bind(self.narrow_axi, "clu_reg", self, "clu_reg_ext")
+        self.bind(self.narrow_axi, "clint", self, "clint_ext")
+
+
+        # Clusters
+        for id in range(0, nb_clusters):
+            self.clusters[id].o_NARROW_SOC(self.narrow_axi.i_INPUT())
+            self.clusters[id].o_WIDE_SOC(self.wide_axi.i_INPUT())
 
 
 class SafetyIsland(gvsoc.systree.Component):
@@ -58,13 +104,14 @@ class SafetyIsland(gvsoc.systree.Component):
 
         rom = memory.Memory(self, 'rom', size=0x1000, stim_file=self.get_file_path('pulp/chips/chimera/bootrom.bin'))
 
-        clint = cpu.clint.Clint(self, 'clint')
+        clint = cpu.clint.Clint(self, 'clint', nb_cores=46)
 
         # JUNGVI: Memory component placeholder for the memory island
         memory_island_placeholder = memory.Memory(self, 'memory_island_placeholder', size=self.memory_island_config["size"])
 
         l2_private_data_memory = memory.Memory(self, 'private_data_memory', size=self.memory_config["data"]["size"])
         l2_private_inst_memory = memory.Memory(self, 'private_inst_memory', size=self.memory_config["inst"]["size"])
+        sn_cluster_cfgregs = memory.Memory(self, 'cluster_cfgregs', size=config["obi_ico"]["cfgreg"]["size"])
 
 
 
@@ -87,6 +134,7 @@ class SafetyIsland(gvsoc.systree.Component):
         l2_tcdm_ico.o_MAP( memory_island_placeholder.i_INPUT(),   "memory_island_placeholder", **self.get_property('memory_island_config'))
         l2_tcdm_ico.o_MAP( rom.i_INPUT(),  base=0x2000000, size=0x1000)
         l2_tcdm_ico.o_MAP ( clint.i_INPUT   (), base=0x02040000, size=0x0010_0000 )
+        l2_tcdm_ico.o_MAP ( sn_cluster_cfgregs.i_INPUT(), "cluster_cfgregs", **self.get_property('obi_ico/cfgreg'))
 
         obi_ico.add_mapping( 'soc_ctrl'   , **self.get_property('obi_ico/soc_ctrl'   ))
         obi_ico.add_mapping( 'fll_soc'    , **self.get_property('obi_ico/fll_soc'    ))
@@ -109,6 +157,18 @@ class SafetyIsland(gvsoc.systree.Component):
         self.bind( fll_soc    , 'clock_out', self       , 'fll_soc_clock'     )
         self.bind( fll_periph , 'clock_out', self       , 'fll_periph_clock'  )
         self.bind( fll_cluster, 'clock_out', self       , 'fll_cluster_clock' )
+
+
+        snitch_cluster_group = SnitchClusterGroup(self, "snitch_cluster_group")
+        self.bind(snitch_cluster_group, "clu_reg_ext", l2_tcdm_ico, "input")
+        self.bind(snitch_cluster_group, "clint_ext", l2_tcdm_ico, "input")
+        # snitch_cluster_group.o_EXT_NARROW_INPUT ( l2_tcdm_ico.i_INPUT() )
+
+        # snitch_cluster_group.narrow_axi.o_MAP()
+        # self.bind(snitch_cluster_group.narrow_axi, "output", l2_tcdm_ico, "input")
+        # for i in range(0,5):
+        #     self.bind(loader, "start", snitch_cluster_group.clusters[i], "fetchen")
+            # loader.o_START(snitch_cluster_group.clusters[i].i_FETCHEN())
 
         # Interrupts
         for name, irq in fc_events.items():
