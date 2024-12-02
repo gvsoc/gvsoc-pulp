@@ -23,6 +23,7 @@
 #include "debug.hpp"
 #include "datatype.hpp"
 #include "params.hpp"
+#include <cassert>
 template <typename HwpeType>
 class RegConfigManager{
 
@@ -58,98 +59,63 @@ class RegConfigManager{
     }
 
  
-  int RegfileRead(int addr, PendingFrames neureka_pending_frames) 
-  {
-    pending_frames = neureka_pending_frames;
-    if(addr == NEUREKA_SPECIAL_TRACE_REG) {
-      if(trace_level == L0_CONFIG) {
-        return 0;
+    int RegfileRead(int addr, PendingFrames &pending_frames) {
+      if(addr < register_count_) {
+        assert(this->ctxt_cfg_ptr_ == 0 || this->ctxt_cfg_ptr_ == 1 && "Unknown ctxt_cfg_ptr_");
+        return this->ctxt_[this->ctxt_cfg_ptr_][addr];
       }
-      else if(trace_level == L1_ACTIV_INOUT) {
-        return 1;
+      else if (addr < 2*register_count_) {
+        return this->ctxt_[0][addr - register_count_];
       }
-      else if(trace_level == L2_DEBUG) {
-        return 2;
+      else if (addr < 3*register_count_) {
+        return this->ctxt_[1][addr - 2*register_count_];
+      } else {
+        switch (addr) {
+          case NEUREKA_SPECIAL_TRACE_REG: 
+            return trace_level;
+          case NEUREKA_SPECIAL_FRAME_REG:
+            {
+              if (pending_frames.num_elements == 0) {
+                return 0;
+              }
+              int sid = pending_frames.list[0];
+              int batch = pending_frames.received[sid];
+              int regframe_status = ((batch-1)<<FRAME_BATCH_MASK) | ((sid)<<FRAME_SID_MASK);
+              hwpe_instance_->trace.msg("sid : %d, batch : %d, status : %d\n", sid, batch, regframe_status);
+              return regframe_status;
+            }
+          default:
+            return 0xabababab;
+        }
       }
-      else {
-        return 3;
     }
-  }
 
-  if(addr == NEUREKA_SPECIAL_FRAME_REG){
-    int regframe_status = 0x0; 
-    int sid = pending_frames.list[0];
-    int batch = 0;
-    if(pending_frames.num_elements > 0)
-    {
-      regframe_status = 0x1; 
-      batch = pending_frames.received[sid];
-      if(regframe_status == 0x1){
-        regframe_status |=((batch-1)<<FRAME_BATCH_MASK);
-        regframe_status |=((sid)<<FRAME_SID_MASK);
+    void RegfileWrite(int addr, int value) {
+      if(addr < register_count_) {
+        assert(this->ctxt_cfg_ptr_ == 0 || this->ctxt_cfg_ptr_ == 1 && "Unknown ctxt_cfg_ptr_");
+        this->ctxt_[this->ctxt_cfg_ptr_][addr] = value;
       }
-      hwpe_instance_->trace.msg("sid : %d, batch : %d, status : %d\n", sid, batch, regframe_status);
+      else if (addr < 2*register_count_) {
+        this->ctxt_[0][addr - register_count_] = value;
+      }
+      else if (addr < 3*register_count_) {
+        this->ctxt_[1][addr - 2*register_count_] = value;
+      } else {
+        switch (addr) {
+          case NEUREKA_SPECIAL_TRACE_REG:
+            assert(value >= 0 && value <= 3 && "Trace level out of bounds");
+            trace_level = static_cast<NeurekaTraceLevel>(value);
+          case NEUREKA_SPECIAL_FORMAT_TRACE_REG:
+            trace_format = value;
+        }
+      }
     }
-    return regframe_status;
-  }
-  else if(addr < register_count_) {
-    if (this->ctxt_cfg_ptr_ == 0) {
-      return this->ctxt_[0][addr];
-    }
-    else {
-      return this->ctxt_[1][addr];
-    }
-  }
-  else if (addr < 2*register_count_) {
-    return this->ctxt_[0][addr - register_count_];
-  }
-  else {
-    return this->ctxt_[1][addr - 2*register_count_];
-  }
-}
-
-void RegfileWrite(int addr, int value) {
-  if(addr == NEUREKA_SPECIAL_TRACE_REG) {
-    if(value == 0) {
-      trace_level = L0_CONFIG;
-    }
-    else if(value == 1) {
-      trace_level = L1_ACTIV_INOUT;
-    }
-    else if(value == 2) {
-      trace_level = L2_DEBUG;
-    }
-    else {
-      trace_level = L3_ALL;
-    }
-  }
-  else if (addr == NEUREKA_SPECIAL_FORMAT_TRACE_REG) {
-    trace_format = value;
-  }
-  else if(addr < register_count_) {
-
-    if (this->ctxt_cfg_ptr_ == 0) {
-      this->ctxt_[0][addr] = value;
-
-    }
-    else if(this->ctxt_cfg_ptr_ == 1) {
-  
-      this->ctxt_[1][addr] = value;
-
-    }
-  }
-  else if (addr < 2*register_count_) {
-    this->ctxt_[0][addr - register_count_] = value;
-  }
-  else {
-    this->ctxt_[1][addr - 2*register_count_] = value;
-  }
-}
 
 RegConfig RegfileCtxt() {
 
   for(auto addr=0; addr<register_count_; addr++) {
-    auto value = this->ctxt_use_ptr_ == 0 ? this->ctxt_[0][addr] : this->ctxt_[1][addr];
+    assert(this->ctxt_use_ptr_ == 0 || this->ctxt_use_ptr_ == 1 && "Unknown ctxt_cfg_ptr_");
+    auto value = this->ctxt_[this->ctxt_use_ptr_][addr];
     hwpe_instance_->trace.msg("addr = 0x%x, value = 0x%x\n", addr, value);
 
     switch(addr) {
@@ -318,6 +284,7 @@ RegConfig RegfileCtxt() {
   }
   return reg_config_;
 }
+
 void Commit() {
   this->job_pending_++;
   this->job_state_ = 0;
