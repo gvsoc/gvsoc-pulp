@@ -2,6 +2,7 @@ import gvsoc.runner
 import gvsoc.systree
 
 import pulp.chips.chimera.apb_soc_ctrl as apb_soc_ctrl
+import pulp.chips.chimera.chimera_reg_top as chimera_reg_top
 import pulp.cpu.iss.pulp_cores as iss
 import memory.memory as memory
 from vp.clock_domain import Clock_domain
@@ -121,7 +122,8 @@ class SafetyIsland(gvsoc.systree.Component):
 
         l2_private_data_memory = memory.Memory(self, 'private_data_memory', size=self.memory_config["data"]["size"])
         l2_private_inst_memory = memory.Memory(self, 'private_inst_memory', size=self.memory_config["inst"]["size"])
-        sn_cluster_cfgregs = memory.Memory(self, 'cluster_cfgregs', size=config["obi_ico"]["cfgreg"]["size"])
+        # sn_cluster_cfgregs = memory.Memory(self, 'cluster_cfgregs', size=config["obi_ico"]["cfgreg"]["size"])
+        reg_top = chimera_reg_top.chimera_reg_top(self, 'reg_top')
 
 
 
@@ -144,7 +146,7 @@ class SafetyIsland(gvsoc.systree.Component):
         l2_tcdm_ico.o_MAP( memory_island_placeholder.i_INPUT(),   "memory_island_placeholder", **self.get_property('memory_island_config'))
         l2_tcdm_ico.o_MAP( rom.i_INPUT(),  base=0x2000000, size=0x1000)
         l2_tcdm_ico.o_MAP ( clint.i_INPUT   (), base=0x02040000, size=0x0010_0000 )
-        l2_tcdm_ico.o_MAP ( sn_cluster_cfgregs.i_INPUT(), "cluster_cfgregs", **self.get_property('obi_ico/cfgreg'))
+        l2_tcdm_ico.o_MAP ( reg_top.i_INPUT(), **self.get_property('obi_ico/cfgreg'))
 
         obi_ico.add_mapping( 'soc_ctrl'   , **self.get_property('obi_ico/soc_ctrl'   ))
         obi_ico.add_mapping( 'fll_soc'    , **self.get_property('obi_ico/fll_soc'    ))
