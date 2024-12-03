@@ -143,7 +143,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 else
                 {
                     // Otherwise it comes from a router
-                    Router *router = _this->noc->get_router(pos_x, pos_y, req->get_int(FlooNoc::REQ_WIDE),req->get_is_write());
+                    Router *router = _this->noc->get_router(pos_x, pos_y, req->get_int(FlooNoc::REQ_WIDE),req->get_is_write(), false);
                     router->unstall_queue(_this->x, _this->y);
                 }
             }
@@ -158,7 +158,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             else
             {
                 // Otherwise forward to next position
-                Router *router = _this->noc->get_router(next_x, next_y, req->get_int(FlooNoc::REQ_WIDE),req->get_is_write());
+                Router *router = _this->noc->get_router(next_x, next_y, req->get_int(FlooNoc::REQ_WIDE),req->get_is_write(), false);
 
                 if (router == NULL)
                 {
