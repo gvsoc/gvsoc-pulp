@@ -29,7 +29,8 @@
 
 NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y)
     : vp::Block(noc, "ni_" + std::to_string(x) + "_" + std::to_string(y)),
-    fsm_event(this, &NetworkInterface::fsm_handler)
+    fsm_event(this, &NetworkInterface::fsm_handler),
+    response_event(this, &NetworkInterface::response_handler)
 {
     this->noc = noc;
     this->x = x;
@@ -223,6 +224,36 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 }
 
 
+void NetworkInterface::response_handler(vp::Block *__this, vp::ClockEvent *event)
+{
+    NetworkInterface *_this = (NetworkInterface *)__this;
+    _this->trace.msg(vp::DEBUG, "Delayed reponse handler\n");
+
+    
+    int qsize = _this->pending_send_target_reqs.size();
+    uint64_t next_timestamp = UINT64_MAX;
+    for (int i = 0; i < qsize; i++)
+    {   
+        vp::IoReq *req =  _this->pending_send_target_reqs.front();
+        uint64_t timestamp = _this->pending_send_target_timestamps.front();
+        if (timestamp <= _this->clock.get_cycles())
+        {
+            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Handling response (req: %p)\n", req);
+            _this->pending_send_target_reqs.pop();
+            _this->pending_send_target_timestamps.pop();
+            _this->noc->handle_request_end(req);
+        }
+        else{
+            next_timestamp = min(next_timestamp, timestamp);
+        }
+    }
+    if (next_timestamp != UINT64_MAX)
+    {
+        _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Too early, Enqueuing response handler for timestamp: %ld)\n", req, next_timestamp);
+        _this->response_event.enqueue(next_timestamp - _this->clock.get_cycles()); // Maybe need to search for next timestamp and only enque once
+    }
+}
+
 
 void NetworkInterface::handle_response(vp::IoReq *req)
 {
@@ -320,17 +351,29 @@ vp::IoReqStatus NetworkInterface::send_to_target(vp::IoReq *req, int pos_x, int 
 
     this->trace.msg(vp::Trace::LEVEL_DEBUG, "Sending request to target (target name: %s)(req: %p, base: 0x%x, size: 0x%x, position: (%d, %d))\n",
         target->get_name().c_str(), req, req->get_addr(), req->get_size() ,pos_x, pos_y);
-
     vp::IoReqStatus result = target->req(req);
     if (result == vp::IO_REQ_OK || result == vp::IO_REQ_INVALID)
     {
         // If the request is processed synchronously, immediately notify the network interface
+        req->status = result;
+        if(req->get_latency() > 1 && (req->get_opcode() == vp::IoReqOpcode::READ || req->get_opcode() == vp::IoReqOpcode::WRITE))
+        {
+            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Delaying response because request has a latency of %d\n", req->get_latency());
+            // The target might have a latency, but still return sychronosuly. In this case, we need to account for the latency
+            this->pending_send_target_reqs.push(req);
+            this->pending_send_target_timestamps.push(this->clock.get_cycles() + req->get_latency());
+            this->response_event.enqueue(req->get_latency());
+            return vp::IO_REQ_PENDING;
+        }
+        else{
+
+            this->noc->handle_request_end(req);
+            return result;
+        }
 
         // We need to store the status in the request so that it is properly propagated to the
         // initiator request
-        req->status = result;
-        this->noc->handle_request_end(req);
-        return result;
+
     }
     else if (result == vp::IO_REQ_DENIED)
     {
