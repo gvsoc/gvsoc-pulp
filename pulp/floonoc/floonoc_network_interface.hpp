@@ -58,7 +58,7 @@ private:
     // FSM event handler called when something happened and queues need to be checked to see
     // if a request should be handled.
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
-
+    static void response_handler(vp::Block *__this, vp::ClockEvent *event);
     // Pointer to top
     FlooNoc *noc;
     // X position of this network interface in the grid
@@ -89,6 +89,9 @@ private:
     // Clock event used to schedule FSM handler. This is scheduled eveytime something may need to
     // be done
     vp::ClockEvent fsm_event;
+    vp::ClockEvent response_event;
+    std::queue<vp::IoReq *>pending_send_target_reqs;
+    std::queue<int64_t>pending_send_target_timestamps;
     // List of available internal requests used to process a burst. The network interface will send
     // requests out of the burst until there is no more available, and will continue when one
     // becomes free
