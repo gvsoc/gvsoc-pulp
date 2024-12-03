@@ -152,7 +152,7 @@ class SocFlooccamy(gvsoc.systree.Component):
 
         # Bootrom
         rom = memory.memory.Memory(self, 'rom', size=arch.bootrom.size,
-            stim_file=self.get_file_path('pulp/snitch/bootrom.bin'), atomics=True)
+            stim_file=self.get_file_path('pulp/snitch/bootrom.bin'), atomics=True, width_log2=0)
 
         # Narrow 64bits router, only used for eoc registers
         narrow_axi = router.Router(self, 'narrow_axi', bandwidth=0, synchronous=True)
@@ -194,10 +194,10 @@ class SocFlooccamy(gvsoc.systree.Component):
         for id in range(0, arch.nb_cluster):
             tile_x = int(id / arch.nb_x_tiles)
             tile_y = int(id % arch.nb_x_tiles)
+            # clusters[id].o_NARROW_SOC(narrow_axi.i_INPUT())
             clusters[id].o_NARROW_SOC(narrow_wide_noc.i_CLUSTER_NARROW_INPUT(tile_x, tile_y)) # --------------------
             narrow_wide_noc.o_NARROW_MAP ( clusters[id].i_NARROW_INPUT(), base=arch.get_cluster_base(id),
                 size=arch.cluster.size,x=tile_x+1, y=tile_y+1, rm_base=False)
-            # clusters[id].o_NARROW_SOC(narrow_axi.i_INPUT())
             narrow_axi.o_MAP ( clusters[id].i_NARROW_INPUT(), base=arch.get_cluster_base(id),
             size=arch.cluster.size, rm_base=False  )
 
@@ -209,7 +209,7 @@ class SocFlooccamy(gvsoc.systree.Component):
 
             narrow_wide_noc.o_WIDE_MAP(clusters[id].i_WIDE_INPUT(), base=arch.get_cluster_base(id), size=arch.cluster.size,
                 x=tile_x+1, y=tile_y+1)
-            clusters[id].o_WIDE_SOC(narrow_wide_noc.i_CLUSTER_WIDE_INPUT(tile_x, tile_y)) # <-----
+            clusters[id].o_WIDE_SOC(narrow_wide_noc.i_CLUSTER_WIDE_INPUT(tile_x, tile_y))
 
 
 
