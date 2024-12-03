@@ -197,7 +197,7 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             // Note that the router may not grant the request if its input queue is full.
             // In this case we must stall the network interface
 
-            Router *router = _this->noc->get_router(_this->x, _this->y, wide, req->get_is_write());
+            Router *router = _this->noc->get_router(_this->x, _this->y, wide, req->get_is_write(), false);
             _this->stalled = router->handle_request(req, _this->x, _this->y);
         }
 
@@ -317,6 +317,7 @@ vp::IoReqStatus NetworkInterface::req(vp::Block *__this, vp::IoReq *req)
 
     int dest_x = req->get_int(FlooNoc::REQ_DEST_X);
     int dest_y = req->get_int(FlooNoc::REQ_DEST_Y);
+    *req->arg_get(FlooNoc::REQ_IS_ADDRESS) = (void*) 1;
 
     // Just enqueue it and trigger the FSM which will check if it must be processed now
     _this->pending_bursts.push(req);

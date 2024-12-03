@@ -148,13 +148,19 @@ Router *FlooNoc::get_wide_router(int x, int y)
     return this->wide_routers[y * this->dim_x + x];
 }
 
-Router *FlooNoc::get_router(int x, int y, bool wide, bool write){
-    if (wide){
-        return this->get_wide_router(x, y);
-    } else if (write){
-        return this->get_req_router(x, y);
+Router *FlooNoc::get_router(int x, int y, bool is_wide, bool is_write, bool is_address){
+    if (is_wide){
+        if (is_address && !is_write){ // Wide AR are mapped to req routers
+            return this->get_req_router(x, y);
+        } else {
+            return this->get_wide_router(x, y); // All other wide are mapped to wide routers
+        }
     } else {
-        return this->get_rsp_router(x, y);
+        if (!is_write && !is_address){ // Narrow R are mapped to rsp routers
+            return this->get_rsp_router(x, y);
+        } else {
+            return this->get_req_router(x, y); // All other narrow are mapped to req routers
+        }
     }
 }
 

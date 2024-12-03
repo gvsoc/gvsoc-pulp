@@ -79,7 +79,8 @@ public:
     Router *get_req_router(int x, int y);
     Router *get_rsp_router(int x, int y);
     Router *get_wide_router(int x, int y);
-    Router *get_router(int x, int y, bool wide, bool write);
+    // Return the router at specified position based on the request type
+    Router *get_router(int x, int y, bool is_wide, bool is_write, bool is_address);
 
     // Return the target at specified position
     vp::IoMaster *get_target(int x, int y);
@@ -102,7 +103,8 @@ public:
     static constexpr int REQ_ROUTER = 5;      // When a request is stalled, this gives the router where to grant it
     static constexpr int REQ_QUEUE = 6;       // When a request is stalled, this gives the queue where to grant it
     static constexpr int REQ_WIDE = 7;        // Indicates if a request is a wide request or not. 1 for wide, 0 for narrow
-    static constexpr int REQ_NB_ARGS = 8;     // Number of request data required by this model
+    static constexpr int REQ_IS_ADDRESS = 8;     // Indicates if the request is a AR/AW request or not. 1 for address, 0 for data
+    static constexpr int REQ_NB_ARGS = 9;     // Number of request data required by this model
 
     // The following constants gives the index in the queue array of the queue associated to each direction
     static constexpr int DIR_RIGHT = 0;
