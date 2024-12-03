@@ -94,13 +94,16 @@ vp::IoReqStatus chimera_reg_top::req(vp::Block *__this, vp::IoReq *req)
   uint8_t *data = req->get_data();
   uint64_t size = req->get_size();
   bool is_write = req->get_is_write();
-  if(is_write){
-    _this->registers[offset] = *((uint32_t*) data);
+  uint32_t temp;
+  if (is_write) {
+      temp = *(reinterpret_cast<uint32_t*>(data));
+      _this->registers[offset] = temp;
   } else {
-    *data = (uint8_t)(*(_this->registers + offset));
+      temp = _this->registers[offset];
+      *reinterpret_cast<uint32_t*>(data) = temp;
   }
-  _this->trace.msg("offset: 0x%x, data: 0x%x, write: %d\n", offset, *data, is_write );
 
+  _this->trace.msg("offset: 0x%x, data: 0x%x, write: %d\n", offset, temp, is_write);
   return vp::IO_REQ_OK;
 }
 
