@@ -28,6 +28,7 @@ from pulp.cluster.l1_interleaver import L1_interleaver
 import gvsoc.runner
 import math
 from pulp.snitch.sequencer import Sequencer
+from pulp.snitch.hierarchical_cache import Hierarchical_cache
 
 
 
@@ -118,6 +119,10 @@ class SnitchCluster(gvsoc.systree.Component):
         # Zero memory
         zero_mem = ZeroMem(self, 'zero_mem', size=arch.zero_mem.size)
 
+        # Shared icache
+        icache = Hierarchical_cache(self, 'icache', nb_cores=arch.nb_core, has_cc=0,
+            l1_line_size_bits=7)
+
         # Cores
         cores = []
         fp_cores = []
@@ -169,6 +174,9 @@ class SnitchCluster(gvsoc.systree.Component):
         self.o_WIDE_INPUT(wide_axi.i_INPUT())
         wide_axi.o_MAP(self.i_WIDE_SOC())
 
+        # Icache
+        icache.o_REFILL( wide_axi.i_INPUT() )
+
         # Cores
         cores[arch.nb_core-1].o_OFFLOAD(idma.i_OFFLOAD())
         idma.o_OFFLOAD_GRANT(cores[arch.nb_core-1].i_OFFLOAD_GRANT())
@@ -184,7 +192,7 @@ class SnitchCluster(gvsoc.systree.Component):
             cores_ico[core_id].o_MAP(tcdm.i_INPUT(core_id), base=arch.tcdm.area.base,
                 size=arch.tcdm.area.size, rm_base=True)
             cores_ico[core_id].o_MAP(narrow_axi.i_INPUT())
-            cores[core_id].o_FETCH(narrow_axi.i_INPUT())
+            cores[core_id].o_FETCH(icache.i_INPUT(core_id))
 
         for core_id in range(0, arch.nb_core):
             if arch.core_type == 'accurate':

@@ -42,9 +42,9 @@ class Soc(st.Component):
         super().__init__(parent, name)
 
         # The cluster has 8 computation cores and one DMA core.
-        nb_cores = 8 + 1     
+        nb_cores = 8 + 1
         Xfrep = 1
-        
+
         # Snitch core complex
         int_cores = []
         fp_cores = []
@@ -67,13 +67,13 @@ class Soc(st.Component):
         rom = memory.Memory(self, 'rom', size=0x10000, width_log2=3, stim_file=self.get_file_path('pulp/snitch/bootrom.bin'))
 
         mem = memory.Memory(self, 'mem', size=0x80000000, width_log2=6, atomics=True)
-        
+
         # Zero memory
         zero_mem = ZeroMem(self, 'zero_mem', size=0x10000)
-        
+
         # Snitch TCDM (L1 subsystem)
         l1 = l1_subsystem.L1_subsystem(self, 'l1', self, nb_pe=nb_cores, size=0x20000, nb_port=3, bandwidth=8)
-        
+
         # Shared icache
         icache = Hierarchical_cache(self, 'shared_icache', nb_cores=nb_cores, has_cc=0, l1_line_size_bits=7)
 
@@ -107,20 +107,20 @@ class Soc(st.Component):
         self.bind(ico, 'rom', rom, 'input')
         dma_ico.add_mapping('rom', base=0x00001000, remove_offset=0x00001000, size=0x10000)
         self.bind(dma_ico, 'rom', rom, 'input')
-        
+
         ico.add_mapping('zero_mem', base=0x10030000, remove_offset=0x10030000, size=0x0010000)
         self.bind(ico, 'zero_mem', zero_mem, 'input')
         dma_ico.add_mapping('zero_mem', base=0x10030000, remove_offset=0x10030000, size=0x0010000)
         self.bind(dma_ico, 'zero_mem', zero_mem, 'input')
-        
+
         self.bind(l1, 'cluster_ico', ico, 'input')
         self.bind(ico, 'l1', l1, 'input')
         ico.add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000)
         # self.bind(l1, 'cluster_ico', dma_ico, 'input')
         # self.bind(dma_ico, 'l1', l1, 'input')
         # dma_ico.add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000)
-        
-        self.bind(icache, 'refill', dma_ico, 'input')
+
+        icache.o_REFILL( dma_ico.i_INPUT() )
 
 
         # RISCV bus watchpoint
@@ -146,15 +146,15 @@ class Soc(st.Component):
         cluster_registers = ClusterRegisters(self, 'cluster_registers', boot_addr=entry, nb_cores=nb_cores)
         ico.add_mapping('cluster_registers', base=0x10020000, remove_offset=0x10020000, size=0x10000)
         self.bind(ico, 'cluster_registers', cluster_registers, 'input')
-        
-        
+
+
         # Cluster DMA
         idma = SnitchDma(self, 'idma', loc_base=0x10000000, loc_size=0x20000, tcdm_width=64)
-        
+
         # TCDM and DMA bindings
         idma.o_AXI(dma_ico.i_INPUT())
         idma.o_TCDM(l1.i_DMA_INPUT())
-        
+
         # DMA Core and DMA bindings
         int_cores[nb_cores-1].o_OFFLOAD(idma.i_OFFLOAD())
         idma.o_OFFLOAD_GRANT(int_cores[nb_cores-1].i_OFFLOAD_GRANT())
@@ -173,29 +173,29 @@ class Soc(st.Component):
         for core_id in range(0, nb_cores):
             # Buswatchpoint
             self.bind(bus_watchpoints[core_id], 'output', l1, 'data_pe_%d' % core_id)
-            
+
             # Icache
             self.bind(int_cores[core_id], 'flush_cache_req', icache, 'flush')
             self.bind(icache, 'flush_ack', int_cores[core_id], 'flush_cache_ack')
-            
+
             # Snitch integer cores
             self.bind(int_cores[core_id], 'data', bus_watchpoints[core_id], 'input')
-            self.bind(int_cores[core_id], 'fetch', icache, 'input_%d' % core_id)
+            int_cores[core_id].o_FETCH( icache.i_INPUT(core_id))
             self.bind(loader, 'start', int_cores[core_id], 'fetchen')
             self.bind(loader, 'entry', int_cores[core_id], 'bootaddr')
-            
+
             # Snitch fp subsystems
             # Pay attention to interactions and bandwidth between subsystem and tohost.
             self.bind(fp_cores[core_id], 'data', bus_watchpoints[core_id], 'input')
             # FP subsystem doesn't fetch instructions from core->ico->memory, but from integer cores acc_req.
             self.bind(loader, 'start', fp_cores[core_id], 'fetchen')
             self.bind(loader, 'entry', fp_cores[core_id], 'bootaddr')
-            
+
             # SSR in fp subsystem datem mover <-> memory port
             self.bind(fp_cores[core_id], 'ssr_dm0', l1, 'data_pe_%d' % core_id)
             self.bind(fp_cores[core_id], 'ssr_dm1', l1, 'ssr_1_pe_%d' % core_id)
             self.bind(fp_cores[core_id], 'ssr_dm2', l1, 'ssr_2_pe_%d' % core_id)
-            
+
             # Use WireMaster & WireSlave
             # Add fpu sequence buffer in between int core and fp core to issue instructions
             if Xfrep:
@@ -207,7 +207,7 @@ class Soc(st.Component):
                 # Comment out if we want to add sequencer
                 self.bind(int_cores[core_id], 'acc_req', fp_cores[core_id], 'acc_req')
                 self.bind(int_cores[core_id], 'acc_req_ready', fp_cores[core_id], 'acc_req_ready')
-            
+
             self.bind(fp_cores[core_id], 'acc_rsp', int_cores[core_id], 'acc_rsp')
 
         # DMA and Wider AXI interconnections

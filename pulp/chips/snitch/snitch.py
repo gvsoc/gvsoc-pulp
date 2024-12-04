@@ -174,6 +174,7 @@ class Soc(gvsoc.systree.Component):
         narrow_axi.o_MAP ( wide_axi.i_INPUT(), base=arch.hbm.base, size=arch.hbm.size, rm_base=False )
 
         # ROM
+        wide_axi.o_MAP ( rom.i_INPUT     (), base=arch.bootrom.base, size=arch.bootrom.size, rm_base=True  )
         narrow_axi.o_MAP ( rom.i_INPUT     (), base=arch.bootrom.base, size=arch.bootrom.size, rm_base=True  )
 
         # Clusters
@@ -335,4 +336,3 @@ class SnitchBoard(gvsoc.systree.Component):
         self.bind(clock, 'out', chip, 'clock')
         self.bind(clock, 'out', mem, 'clock')
         self.bind(chip, 'hbm', mem, 'input')
-
