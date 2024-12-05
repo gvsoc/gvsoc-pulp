@@ -59,6 +59,7 @@ class FlooccamyArchProperties:
         self.hbm_size                = 0x4000_0000
         self.hbm_type                = 'simple'
         # self.noc_type                = 'floonoc'
+        self.core_type ="accurate"
 
 
     def declare_target_properties(self, target:gvsoc.systree.Component):
@@ -107,7 +108,6 @@ class FlooccamyArch:
         # self.noc_type_is_floonoc = properties.noc_type == 'floonoc'
         self.nb_cluster = properties.nb_cluster
         self.cluster = Area(0x1000_0000, 0x0004_0000)
-
 
         self.cluster_archs = []
         for id in range(0, self.nb_cluster):
