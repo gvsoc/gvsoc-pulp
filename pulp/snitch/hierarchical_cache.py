@@ -29,11 +29,11 @@ class Hierarchical_cache(gvsoc.systree.Component):
         #
         # Properties
         #
-        
+
         self.add_property('nb_cores', nb_cores)
         self.add_property('has_cc', has_cc)
         self.add_property('l1_line_size_bits', l1_line_size_bits)
-        
+
         nb_l1_banks = 1
         nb_l1_banks_log2 = int(math.log(nb_l1_banks, 2.0))
         nb_pes = nb_cores - 1 if has_cc else nb_cores
@@ -48,7 +48,7 @@ class Hierarchical_cache(gvsoc.systree.Component):
         l0_caches = []
         for i in range(0, nb_pes):
             l0_caches.append(Cache(self, 'l0_bank%d' % i, nb_sets_bits=0, nb_ways_bits=0, line_size_bits=5, refill_latency=0, enabled=True))
-        
+
         # L1 caches
         l1_caches = []
         for i in range(0, nb_l1_banks):
@@ -66,14 +66,14 @@ class Hierarchical_cache(gvsoc.systree.Component):
 
         # L0 caches
         for i in range(0, nb_cores):
-            self.bind(self, 'input_%d' % i, l0_caches[i], 'input')
+            self.o_INPUT(i, l0_caches[i].i_INPUT())
             self.bind(l0_caches[i], 'refill', interleaver, 'input')
             self.bind(self, 'enable', l0_caches[i], 'enable')
             self.bind(self, 'flush', l0_caches[i], 'flush')
 
         # L1 cache
         for i in range(0, nb_l1_banks):
-            self.bind(l1_caches[i], 'refill', self, 'refill')
+            l1_caches[i].o_REFILL( self.__i_REFILL())
             self.bind(self, 'enable', l1_caches[i], 'enable')
             self.bind(self, 'flush', l1_caches[i], 'flush')
 
@@ -88,3 +88,15 @@ class Hierarchical_cache(gvsoc.systree.Component):
             self.bind(l1_caches[i], 'flush_ack', flush_ack, f'input_{i + nb_cores}')
 
         self.bind(flush_ack, 'output', self, 'flush_ack')
+
+    def __i_REFILL(self) -> gvsoc.systree.SlaveItf:
+            return gvsoc.systree.SlaveItf(self, 'refill', signature='io')
+
+    def o_REFILL(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('refill', itf, signature='io')
+
+    def i_INPUT(self, id:int ) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'input_{id}', signature='io')
+
+    def o_INPUT(self, id: int, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind(f'input_{id}', itf, signature='io', composite_bind=True)

@@ -36,6 +36,7 @@ class SnitchArchProperties:
         self.hbm_size                = 0x8000_0000
         self.hbm_type                = 'simple'
         self.noc_type                = 'simple'
+        self.core_type                = 'accurate'
 
 
     def declare_target_properties(self, target):
@@ -59,6 +60,10 @@ class SnitchArchProperties:
 
         self.noc_type = target.declare_user_property(
             name='noc_type', value=self.hbm_type, allowed_values=['simple', 'floonoc'], description='Type of the NoC'
+        )
+
+        self.core_type = target.declare_user_property(
+            name='core_type', value=self.core_type, allowed_values=['accurate', 'fast'], description='Type of the snitch model'
         )
 
 
@@ -169,6 +174,7 @@ class Soc(gvsoc.systree.Component):
         narrow_axi.o_MAP ( wide_axi.i_INPUT(), base=arch.hbm.base, size=arch.hbm.size, rm_base=False )
 
         # ROM
+        wide_axi.o_MAP ( rom.i_INPUT     (), base=arch.bootrom.base, size=arch.bootrom.size, rm_base=True  )
         narrow_axi.o_MAP ( rom.i_INPUT     (), base=arch.bootrom.base, size=arch.bootrom.size, rm_base=True  )
 
         # Clusters
@@ -330,4 +336,3 @@ class SnitchBoard(gvsoc.systree.Component):
         self.bind(clock, 'out', chip, 'clock')
         self.bind(clock, 'out', mem, 'clock')
         self.bind(chip, 'hbm', mem, 'input')
-

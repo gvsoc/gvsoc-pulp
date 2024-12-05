@@ -28,6 +28,7 @@ from pulp.cluster.l1_interleaver import L1_interleaver
 import gvsoc.runner
 import math
 from pulp.snitch.sequencer import Sequencer
+from pulp.snitch.hierarchical_cache import Hierarchical_cache
 
 
 
@@ -51,6 +52,7 @@ class ClusterArch:
         self.tcdm          = ClusterArch.Tcdm(base, self.nb_core)
         self.peripheral    = Area( base + 0x0002_0000, 0x0001_0000)
         self.zero_mem      = Area( base + 0x0003_0000, 0x0001_0000)
+        self.core_type = properties.core_type
 
     class Tcdm:
         def __init__(self, base, nb_masters):
@@ -117,6 +119,10 @@ class SnitchCluster(gvsoc.systree.Component):
         # Zero memory
         zero_mem = ZeroMem(self, 'zero_mem', size=arch.zero_mem.size)
 
+        # Shared icache
+        icache = Hierarchical_cache(self, 'icache', nb_cores=arch.nb_core, has_cc=0,
+            l1_line_size_bits=7)
+
         # Cores
         cores = []
         fp_cores = []
@@ -124,16 +130,24 @@ class SnitchCluster(gvsoc.systree.Component):
         xfrep = True
         if xfrep:
             fpu_sequencers = []
-        for core_id in range(0, arch.nb_core):
-            cores.append(iss.Snitch(self, f'pe{core_id}', isa='rv32imfdvca',
-                fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
-                core_id=arch.first_hartid + core_id, htif=False))
 
-            fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa='rv32imfdvca',
-                fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
-                core_id=arch.first_hartid + core_id, htif=False))
-            if xfrep:
-                fpu_sequencers.append(Sequencer(self, f'fpu_sequencer{core_id}', latency=0))
+        for core_id in range(0, arch.nb_core):
+
+            if arch.core_type == 'fast':
+                cores.append(iss.SnitchFast(self, f'pe{core_id}', isa='rv32imfdvca',
+                    fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
+                    core_id=arch.first_hartid + core_id))
+
+            else:
+                cores.append(iss.Snitch(self, f'pe{core_id}', isa='rv32imfdvca',
+                    fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
+                    core_id=arch.first_hartid + core_id, htif=False))
+
+                fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa='rv32imfdvca',
+                    fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
+                    core_id=arch.first_hartid + core_id, htif=False))
+                if xfrep:
+                    fpu_sequencers.append(Sequencer(self, f'fpu_sequencer{core_id}', latency=0))
 
             cores_ico.append(router.Router(self, f'pe{core_id}_ico', bandwidth=arch.tcdm.bank_width))
 
@@ -160,6 +174,9 @@ class SnitchCluster(gvsoc.systree.Component):
         self.o_WIDE_INPUT(wide_axi.i_INPUT())
         wide_axi.o_MAP(self.i_WIDE_SOC())
 
+        # Icache
+        icache.o_REFILL( wide_axi.i_INPUT() )
+
         # Remote Access to TCDM
         wide_axi.o_MAP(tcdm.i_DMA_INPUT(), base=arch.tcdm.area.base, size=arch.tcdm.area.size, rm_base=True)
 
@@ -178,30 +195,31 @@ class SnitchCluster(gvsoc.systree.Component):
             cores_ico[core_id].o_MAP(tcdm.i_INPUT(core_id), base=arch.tcdm.area.base,
                 size=arch.tcdm.area.size, rm_base=True)
             cores_ico[core_id].o_MAP(narrow_axi.i_INPUT())
-            cores[core_id].o_FETCH(narrow_axi.i_INPUT())
+            cores[core_id].o_FETCH(icache.i_INPUT(core_id))
 
         for core_id in range(0, arch.nb_core):
-            fp_cores[core_id].o_DATA( cores_ico[core_id].i_INPUT() )
-            self.__o_FETCHEN( fp_cores[core_id].i_FETCHEN() )
+            if arch.core_type == 'accurate':
+                fp_cores[core_id].o_DATA( cores_ico[core_id].i_INPUT() )
+                self.__o_FETCHEN( fp_cores[core_id].i_FETCHEN() )
 
-            # SSR in fp subsystem datem mover <-> memory port
-            self.bind(fp_cores[core_id], 'ssr_dm0', cores_ico[core_id], 'input')
-            self.bind(fp_cores[core_id], 'ssr_dm1', cores_ico[core_id], 'input')
-            self.bind(fp_cores[core_id], 'ssr_dm2', cores_ico[core_id], 'input')
+                # SSR in fp subsystem datem mover <-> memory port
+                self.bind(fp_cores[core_id], 'ssr_dm0', cores_ico[core_id], 'input')
+                self.bind(fp_cores[core_id], 'ssr_dm1', cores_ico[core_id], 'input')
+                self.bind(fp_cores[core_id], 'ssr_dm2', cores_ico[core_id], 'input')
 
-            # Use WireMaster & WireSlave
-            # Add fpu sequence buffer in between int core and fp core to issue instructions
-            if xfrep:
-                self.bind(cores[core_id], 'acc_req', fpu_sequencers[core_id], 'input')
-                self.bind(fpu_sequencers[core_id], 'output', fp_cores[core_id], 'acc_req')
-                self.bind(cores[core_id], 'acc_req_ready', fpu_sequencers[core_id], 'acc_req_ready')
-                self.bind(fpu_sequencers[core_id], 'acc_req_ready_o', fp_cores[core_id], 'acc_req_ready')
-            else:
-                # Comment out if we want to add sequencer
-                self.bind(cores[core_id], 'acc_req', fp_cores[core_id], 'acc_req')
-                self.bind(cores[core_id], 'acc_req_ready', fp_cores[core_id], 'acc_req_ready')
+                # Use WireMaster & WireSlave
+                # Add fpu sequence buffer in between int core and fp core to issue instructions
+                if xfrep:
+                    self.bind(cores[core_id], 'acc_req', fpu_sequencers[core_id], 'input')
+                    self.bind(fpu_sequencers[core_id], 'output', fp_cores[core_id], 'acc_req')
+                    self.bind(cores[core_id], 'acc_req_ready', fpu_sequencers[core_id], 'acc_req_ready')
+                    self.bind(fpu_sequencers[core_id], 'acc_req_ready_o', fp_cores[core_id], 'acc_req_ready')
+                else:
+                    # Comment out if we want to add sequencer
+                    self.bind(cores[core_id], 'acc_req', fp_cores[core_id], 'acc_req')
+                    self.bind(cores[core_id], 'acc_req_ready', fp_cores[core_id], 'acc_req_ready')
 
-            self.bind(fp_cores[core_id], 'acc_rsp', cores[core_id], 'acc_rsp')
+                self.bind(fp_cores[core_id], 'acc_rsp', cores[core_id], 'acc_rsp')
 
         # Cluster peripherals
         narrow_axi.o_MAP(cluster_registers.i_INPUT(), base=arch.peripheral.base,
@@ -210,6 +228,9 @@ class SnitchCluster(gvsoc.systree.Component):
             self.bind(cluster_registers, f'barrier_ack', cores[core_id], 'barrier_ack')
         for core_id in range(0, arch.nb_core):
             cluster_registers.o_EXTERNAL_IRQ(core_id, cores[core_id].i_IRQ(arch.barrier_irq))
+            self.__o_MSIP(core_id, cores[core_id].i_IRQ(3))
+            self.__o_MTIP(core_id, cores[core_id].i_IRQ(7))
+            self.__o_MEIP(core_id, cores[core_id].i_IRQ(11))
 
         # Cluster DMA
         idma.o_AXI(wide_axi.i_INPUT())
@@ -218,6 +239,24 @@ class SnitchCluster(gvsoc.systree.Component):
         # Zero mem
         wide_axi.o_MAP(zero_mem.i_INPUT(), base=arch.zero_mem.base, size=arch.zero_mem.size, rm_base=True)
         narrow_axi.o_MAP(wide_axi.i_INPUT(), name='zero_mem', base=arch.zero_mem.base, size=arch.zero_mem.size, rm_base=False)
+
+    def i_MEIP(self, core: int) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'meip_{core}', signature='wire<bool>')
+
+    def __o_MEIP(self, core: int, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind(f'meip_{core}', itf, signature='wire<bool>', composite_bind=True)
+
+    def i_MTIP(self, core: int) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'mtip_{core}', signature='wire<bool>')
+
+    def __o_MTIP(self, core: int, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind(f'mtip_{core}', itf, signature='wire<bool>', composite_bind=True)
+
+    def i_MSIP(self, core: int) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'msip_{core}', signature='wire<bool>')
+
+    def __o_MSIP(self, core: int, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind(f'msip_{core}', itf, signature='wire<bool>', composite_bind=True)
 
     def i_FETCHEN(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'fetchen', signature='wire<bool>')

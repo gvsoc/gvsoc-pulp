@@ -25,6 +25,7 @@ class OccamyArchProperties:
         self.nb_core_per_cluster     = 9
         self.hbm_size                = 0x80000000
         self.hbm_type                = 'simple'
+        self.core_type                = 'accurate'
 
 
     def declare_target_properties(self, target):
@@ -50,6 +51,9 @@ class OccamyArchProperties:
             name='soc/quadrant/cluster/nb_core', value=self.nb_core_per_cluster, cast=int, description='Number of cores per cluster'
         )
 
+        self.core_type = target.declare_user_property(
+                    name='core_type', value=self.core_type, allowed_values=['accurate', 'fast'], description='Type of the snitch model'
+        )
 
 
 
