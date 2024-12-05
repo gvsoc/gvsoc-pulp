@@ -62,12 +62,14 @@ NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y)
 
 void NetworkInterface::reset(bool active)
 {
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Resetting network interface\n");
     if (active)
     {
         this->stalled = false;
         this->pending_burst_size = 0;
         this->nb_pending_input_req = 0;
         this->denied_req = NULL;
+        this->pending_burst_waiting_for_req = false;
     }
 }
 
@@ -95,10 +97,12 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     if (!_this->stalled
         && _this->pending_bursts.size() > 0
         && _this->pending_bursts_timestamp.front() <= _this->clock.get_cycles()
-        && _this->free_reqs.size() > 0)
+        && _this->free_reqs.size() > 0
+        && !_this->pending_burst_waiting_for_req)
     {
         vp::IoReq *burst = _this->pending_bursts.front();
-
+        bool first_time = false;
+        bool wide = *(bool *)burst->arg_get(FlooNoc::REQ_WIDE);
         // In case the burst is being handled for the first time, initialize the current burst
         if (_this->pending_burst_size == 0)
         {
@@ -114,8 +118,17 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             // We use one data in the current burst to store the remaining size and know when the
             // last internal request has been handled to notify the end of burst
             *(int *)burst->arg_get_last() = burst->get_size();
+
+            // First send a dummy request to simulate the "forward" request of the noc
+            if (wide){ // For now only on wide noc. because narrow is loaded already due to missing I Cache
+                first_time = true;
+            }
+            else{
+                first_time = false;
+            }
+
         }
-        bool wide = *(bool *)burst->arg_get(FlooNoc::REQ_WIDE);
+
         uint64_t width = wide ? _this->noc->wide_width : _this->noc->narrow_width;
         // Then pop an internal request and fill it from current burst information
         vp::IoReq *req = _this->free_reqs.front();
@@ -141,6 +154,7 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         *req->arg_get(FlooNoc::REQ_DEST_BURST) = (void *)burst;
         *req->arg_get(FlooNoc::REQ_DEST_BASE) = (void *)base;
         *req->arg_get(FlooNoc::REQ_WIDE) = (void *)wide;
+        *req->arg_get(FlooNoc::REQ_IS_ADDRESS) = first_time ? (void *) 1: (void *) 0;
         req->set_size(size);
         req->set_data(_this->pending_burst_data);
         req->set_is_write(burst->get_is_write());
@@ -169,7 +183,21 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 burst->get_resp_port()->resp(burst);
             }
         }
-        else
+        else if (*req->arg_get(FlooNoc::REQ_IS_ADDRESS)){
+            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Sending dummy req request to noc (req: %p, base: 0x%x, size: 0x%x, destination: (%d, %d))\n",
+                req, req->get_addr(), size, entry->x, entry->y);
+            _this->pending_burst_waiting_for_req = true;
+            first_time = false;
+            req->set_addr(base - entry->remove_offset);
+            *req->arg_get(FlooNoc::REQ_DEST_X) = (void *)(long)entry->x;
+            *req->arg_get(FlooNoc::REQ_DEST_Y) = (void *)(long)entry->y;
+
+            // Note that the router may not grant the request if its input queue is full.
+            // In this case we must stall the network interface
+            Router *router = _this->noc->get_router(_this->x, _this->y, wide, req->get_is_write(), true);
+            _this->stalled = router->handle_request(req, _this->x, _this->y);
+        }
+        else 
         {
             // Update the current burst for next request
             _this->pending_burst_base += size;
@@ -204,6 +232,7 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         // Now that we removed a pending req, we may need to unstall a denied request
         if (_this->denied_req && _this->nb_pending_input_req != _this->max_input_req)
         {
+            _this->trace.msg(vp::Trace::LEVEL_TRACE, "Unstalling denied request (req: %p)\n", _this->denied_req);
             vp::IoReq *req = _this->denied_req;
             _this->denied_req = NULL;
             req->get_resp_port()->grant(req);
@@ -213,10 +242,11 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         // anything to do.
         _this->fsm_event.enqueue();
     }
-    else if (!_this->stalled && _this->pending_bursts.size() > 0 && _this->free_reqs.size() > 0)
+    else if (!_this->stalled && _this->pending_bursts.size() > 0 && _this->free_reqs.size() > 0 && !_this->pending_burst_waiting_for_req)
     {
         // If we did not handle the first pending burst because we haven't reached its
         // timestamp, schedule the event at this timestamp to be able to process it
+        _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Nothing todo. Enqueuing response handler for timestamp: %ld)\n", _this->pending_bursts_timestamp.front());
         _this->fsm_event.enqueue(
             _this->pending_bursts_timestamp.front() - _this->clock.get_cycles()
         );
@@ -249,7 +279,7 @@ void NetworkInterface::response_handler(vp::Block *__this, vp::ClockEvent *event
     }
     if (next_timestamp != UINT64_MAX)
     {
-        _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Too early, Enqueuing response handler for timestamp: %ld)\n", req, next_timestamp);
+        _this->trace.msg(vp::Trace::LEVEL_TRACE, "Too early, Enqueuing response handler for timestamp: %ld)\n", req, next_timestamp);
         _this->response_event.enqueue(next_timestamp - _this->clock.get_cycles()); // Maybe need to search for next timestamp and only enque once
     }
 }
@@ -268,13 +298,20 @@ void NetworkInterface::handle_response(vp::IoReq *req)
         burst->status = vp::IO_REQ_INVALID;
     }
 
-    // Account the received response on the burst
-    *(int *)burst->arg_get_last() -= req->get_size();
-
+    if(*req->arg_get(FlooNoc::REQ_IS_ADDRESS)){
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "Finished dummy req request to noc (req: %p)\n", req);
+        this->pending_burst_waiting_for_req = false;
+    }
+    else{
+        this->trace.msg(vp::Trace::LEVEL_TRACE, "Reducing remaining size of burst (burst: %p, size: %d, req: %p, size %d)\n",
+        burst, *(int *)burst->arg_get_last(), req, req->get_size());
+        // Account the received response on the burst
+        *(int *)burst->arg_get_last() -= req->get_size();
+    }
     // And respond to it if all responses have been received
     if (*(int *)burst->arg_get_last() == 0)
     {
-        this->trace.msg(vp::Trace::LEVEL_DEBUG, "Finished burst (burst: %p, latency: %d)\n", burst, burst->get_latency());
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "Finished %s burst (burst: %p, latency: %d)\n", burst->get_int(FlooNoc::REQ_WIDE)?"wide":"narrow",burst, burst->get_latency());
         burst->get_resp_port()->resp(burst);
     }
 
@@ -317,7 +354,7 @@ vp::IoReqStatus NetworkInterface::req(vp::Block *__this, vp::IoReq *req)
 
     int dest_x = req->get_int(FlooNoc::REQ_DEST_X);
     int dest_y = req->get_int(FlooNoc::REQ_DEST_Y);
-    *req->arg_get(FlooNoc::REQ_IS_ADDRESS) = (void*) 1;
+    // *req->arg_get(FlooNoc::REQ_IS_ADDRESS) = (void*) 1;
 
     // Just enqueue it and trigger the FSM which will check if it must be processed now
     _this->pending_bursts.push(req);
