@@ -92,6 +92,12 @@ private:
     vp::ClockEvent response_event;
     std::queue<vp::IoReq *>pending_send_target_reqs;
     std::queue<int64_t>pending_send_target_timestamps;
+
+    // In the real NOC a burst sends a single packet on the forward path and all data on the backward path.
+    // This indicates if the "forward" path req request is still pending. Only after that we can start with the "backward" path. 
+    // Note: There is no actual backward path in this gvsoc model.
+    bool pending_burst_waiting_for_req;
+
     // List of available internal requests used to process a burst. The network interface will send
     // requests out of the burst until there is no more available, and will continue when one
     // becomes free

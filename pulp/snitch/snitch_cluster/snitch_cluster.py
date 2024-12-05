@@ -71,7 +71,7 @@ class SnitchClusterTcdm(gvsoc.systree.Component):
         nb_banks = arch.nb_superbanks * arch.nb_banks_per_superbank
         for i in range(0, nb_banks):
             banks.append(memory.Memory(self, f'bank_{i}', size=arch.bank_size, atomics=True,
-                width_log2=int(math.log2(arch.bank_width)), latency=5))
+                width_log2=int(math.log2(arch.bank_width)), latency=0))
 
         interleaver = L1_interleaver(self, 'interleaver', nb_slaves=nb_banks,
             nb_masters=arch.nb_masters, interleaving_bits=int(math.log2(arch.bank_width)))
