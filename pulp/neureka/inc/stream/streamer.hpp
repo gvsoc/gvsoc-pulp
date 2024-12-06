@@ -141,22 +141,20 @@ void inline Streamer<AddrType, HwpeType, DataType, BandWidth>::SingleBankTransac
   } else {
     err = this->accel_instance_->tcdm_port.req(&this->accel_instance_->io_req);
   }
+
   if (err == vp::IO_REQ_OK) {
     int64_t latency = this->accel_instance_->io_req.get_latency();
     if (latency > max_latency) {
       max_latency = latency;
     }
-    int32_t data_word = ((*data) & 0xFF) + (((*(data+1)) & 0xFF)<<8) + (((*(data+2)) & 0xFF)<<16) + (((*(data+3)) & 0xFF)<<24);
-    if(verbose)
-    {
-        // this->accel_instance_->trace.msg("max_latency = %d, Address =%x, size=%x, latency=%d, we=%d, data=0x%x\n", max_latency, address, size, latency, write_enable, data_word);
-        this->accel_instance_->trace.msg("max_latency = %d, Address =%x, size=%x, latency=%d, we=%d, data[0]=%d, data[1]=%d, data[2]=%d, data[3]=%d\n", max_latency, address, size, latency, write_enable, (*data)&0xFF, (*(data+1))&0xFF, (*(data+2))&0xFF, (*(data+3))&0xFF);
+
+    if (verbose) {
+        this->accel_instance_->trace.msg("max_latency = %d, Address =%x, size=%x, latency=%d, we=%d, data[0]=%02x, data[1]=%02x, data[2]=%02x, data[3]=%02x\n", max_latency, address, size, latency, write_enable, (*data)&0xFF, (*(data+1))&0xFF, (*(data+2))&0xFF, (*(data+3))&0xFF);
     }
   }
   else {
     this->accel_instance_->trace.fatal("Unsupported asynchronous reply\n");
   }
-  
 }
 #else
 template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
@@ -183,7 +181,7 @@ void Streamer<AddrType, HwpeType, DataType, BandWidth>::AlignedLoad( bool write_
     for(int i=0; i<(aligned_width/size); i++) {
         SingleBankTransaction(write_enable, address+i*4, load_data, cycles, size, max_latency, wmem, verbose);
         for(int j=0; j<size; j++){
-            int index = i*4 + j;
+            int index = i*size + j;
             data[index + offset_width] = load_data[j]; 
         }
     }
@@ -225,6 +223,9 @@ void Streamer<AddrType, HwpeType, DataType, BandWidth>::MisalignedPostambleStore
     SingleBankTransaction(write_enable, address, store_data, cycles, size, max_latency, wmem, verbose);
     delete[] store_data;
 }
+
+#define SEMI_EFFICIENT_MEMORY_ACCESS
+
 #ifdef INEFFICIENT_MEMORY_ACCESS
     template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
     void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorLoad(int width, int64_t& cycles, DataType* load_data, bool wmem, bool verbose) // Only for single load transaction. So the width should be less than the bandwidth 
@@ -259,6 +260,45 @@ void Streamer<AddrType, HwpeType, DataType, BandWidth>::MisalignedPostambleStore
 
         cycles += max_latency+1;
     }
+#elif defined SEMI_EFFICIENT_MEMORY_ACCESS
+// Only for single load transaction. So the width should be less than the bandwidth
+template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
+void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorLoad(int width, int64_t& cycles, DataType* load_data, bool wmem, bool verbose) {
+    int64_t max_latency = 0;
+    const AddrType addr_next = Iterate();
+    const AddrType addr_start_offset = addr_next % alignment_in_bytes_;
+    const AddrType addr_start_aligned = addr_next - addr_start_offset;
+
+    // Increase the width by the start offset so that the start is aligned
+    int width_aligned = width + addr_start_offset;
+
+    // Increase the width by what's missing to have an aligned load at the end too
+    const int addr_end_offset = width_aligned % alignment_in_bytes_;
+    if (addr_end_offset > 0) {
+        width_aligned += alignment_in_bytes_ - addr_end_offset;
+    }
+
+    assert(width_aligned % alignment_in_bytes_ == 0 && "Width_aligned is not aligned");
+    assert(width_aligned <= BandWidth + 8 && "Width is larger than the BandWidth + 8");
+
+    // Do the aligned fetch
+    DataType data_aligned[BandWidth];
+    DataType *data_ptr = data_aligned;
+    AddrType addr_aligned = addr_start_aligned;
+    for (int i = 0; i < width_aligned / alignment_in_bytes_; i++) {
+        SingleBankTransaction(false, addr_aligned, data_ptr, cycles, alignment_in_bytes_, max_latency, wmem, verbose);
+        data_ptr += alignment_in_bytes_;
+        addr_aligned += alignment_in_bytes_;
+    }
+
+    // Extract only the data we need
+    memcpy(load_data, &data_aligned[addr_start_offset], width);
+
+    cycles += max_latency + 1;
+    if(verbose){
+        this->accel_instance_->trace.msg(" latency : %d, max_latency : %d\n", max_latency, cycles);
+    }
+}
 #else 
     template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
     void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorLoad(int width, int64_t& cycles, DataType* load_data, bool wmem, bool verbose) // Only for single load transaction. So the width should be less than the bandwidth 
