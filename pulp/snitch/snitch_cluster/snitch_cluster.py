@@ -194,6 +194,11 @@ class SnitchCluster(gvsoc.systree.Component):
             cores_ico[core_id].o_MAP(narrow_axi.i_INPUT())
             cores[core_id].o_FETCH(icache.i_INPUT(core_id))
 
+            # Icache
+            cores[core_id].o_FLUSH_CACHE(icache.i_FLUSH())
+            icache.o_FLUSH_ACK(cores[core_id].i_FLUSH_CACHE_ACK())
+
+
         for core_id in range(0, arch.nb_core):
             if arch.core_type == 'accurate':
                 fp_cores[core_id].o_DATA( cores_ico[core_id].i_INPUT() )

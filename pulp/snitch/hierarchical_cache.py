@@ -66,7 +66,7 @@ class Hierarchical_cache(gvsoc.systree.Component):
 
         # L0 caches
         for i in range(0, nb_cores):
-            self.o_INPUT(i, l0_caches[i].i_INPUT())
+            self.__o_INPUT(i, l0_caches[i].i_INPUT())
             self.bind(l0_caches[i], 'refill', interleaver, 'input')
             self.bind(self, 'enable', l0_caches[i], 'enable')
             self.bind(self, 'flush', l0_caches[i], 'flush')
@@ -75,7 +75,7 @@ class Hierarchical_cache(gvsoc.systree.Component):
         for i in range(0, nb_l1_banks):
             l1_caches[i].o_REFILL( self.__i_REFILL())
             self.bind(self, 'enable', l1_caches[i], 'enable')
-            self.bind(self, 'flush', l1_caches[i], 'flush')
+            self.__o_FLUSH( l1_caches[i].i_FLUSH() )
 
         # Interleaver
         for i in range(0, nb_l1_banks):
@@ -87,7 +87,7 @@ class Hierarchical_cache(gvsoc.systree.Component):
         for i in range(0, nb_l1_banks):
             self.bind(l1_caches[i], 'flush_ack', flush_ack, f'input_{i + nb_cores}')
 
-        self.bind(flush_ack, 'output', self, 'flush_ack')
+        flush_ack.o_OUTPUT( self.__i_FLUSH_ACK() )
 
     def __i_REFILL(self) -> gvsoc.systree.SlaveItf:
             return gvsoc.systree.SlaveItf(self, 'refill', signature='io')
@@ -98,5 +98,17 @@ class Hierarchical_cache(gvsoc.systree.Component):
     def i_INPUT(self, id:int ) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'input_{id}', signature='io')
 
-    def o_INPUT(self, id: int, itf: gvsoc.systree.SlaveItf):
+    def __o_INPUT(self, id: int, itf: gvsoc.systree.SlaveItf):
         self.itf_bind(f'input_{id}', itf, signature='io', composite_bind=True)
+
+    def i_FLUSH(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'flush', signature='wire<bool>')
+
+    def __o_FLUSH(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('flush', itf, signature='wire<bool>', composite_bind=True)
+
+    def __i_FLUSH_ACK(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'flush_ack', signature='wire<bool>')
+
+    def o_FLUSH_ACK(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('flush_ack', itf, signature='wire<bool>')

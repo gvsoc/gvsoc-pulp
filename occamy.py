@@ -130,6 +130,7 @@ class Soc(gvsoc.systree.Component):
         narrow_axi.o_MAP ( wide_axi.i_INPUT(), base=arch.hbm_0_alias.base, size=arch.hbm_0_alias.size, rm_base=False )
 
         # ROM
+        wide_axi.o_MAP   ( rom.i_INPUT     (), base=arch.bootrom.base, size=arch.bootrom.size, rm_base=True  )
         narrow_axi.o_MAP ( rom.i_INPUT     (), base=arch.bootrom.base, size=arch.bootrom.size, rm_base=True  )
 
         # Soc control
@@ -225,4 +226,3 @@ class Target(gvsoc.runner.Target):
     def __init__(self, parser, options):
         super(Target, self).__init__(parser, options,
             model=OccamyBoard)
-
