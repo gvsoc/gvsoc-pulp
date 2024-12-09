@@ -24,6 +24,7 @@
 #include "datatype.hpp"
 #include "params.hpp"
 #include <cassert>
+#include <sstream>
 template <typename HwpeType>
 class RegConfigManager{
 
@@ -378,7 +379,7 @@ void PrintReg()
   string_stream<<"regconfig_manager >> filter_mode : "<<std::dec<<reg_config_.config0.filter_mode<<"\n";
   string_stream<<"regconfig_manager >> outfeat_quant : "<<std::boolalpha<<reg_config_.config0.outfeat_quant<<"\n";
   string_stream<<"regconfig_manager >> weight_bit_count : "<<std::dec<<reg_config_.config0.weight_bit_count<<"\n";
-  string s = string_stream.str();
+  std::string s = string_stream.str();
   hwpe_instance_->trace.msg(s.c_str());
 }
 };
