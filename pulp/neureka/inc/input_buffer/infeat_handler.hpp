@@ -23,6 +23,7 @@
 
 #include "datatype.hpp"
 #include "params.hpp"
+#include "matrix_buffer.hpp"
 template <typename HwpeType>
 
 class InFeatBuffer{
