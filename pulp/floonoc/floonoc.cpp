@@ -30,7 +30,6 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
     : vp::Component(config)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
-
     // Get properties from generator
     this->wide_width = get_js_config()->get("wide_width")->get_int();
     this->narrow_width = get_js_config()->get("narrow_width")->get_int();
@@ -127,7 +126,7 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
 // In both cases, the requests is accounted on the initiator burst, in the network interface
 void FlooNoc::handle_request_end(vp::IoReq *req)
 {
-    NetworkInterface *ni = *(NetworkInterface **)req->arg_get(FlooNoc::REQ_DEST_NI);
+    NetworkInterface *ni = *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);
     ni->handle_response(req);
 }
 
