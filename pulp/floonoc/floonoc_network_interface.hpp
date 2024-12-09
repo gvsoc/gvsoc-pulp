@@ -46,19 +46,24 @@ public:
     // a request was denied because the input queue of the router was full
     void unstall_queue(int from_x, int from_y);
 
-    // This gets called by a router when the destination is reached and the request must be
-    // sent to the target
-    vp::IoReqStatus send_to_target(vp::IoReq *req, int pos_x, int pos_y);
+    // This gets called by a router when the destination is reached and the request is sent from the router to the network interface
+    vp::IoReqStatus req_from_router(vp::IoReq *req, int pos_x, int pos_y);
+    // Can be used to retrieve the x coordinate of the network interface
+    int get_x();
+    // Can be used to retrieve the y coordinate of the network interface
+    int get_y();
 
 private:
-    // Input method called when a burst is received from the local initiator
+    // Input method called when a narrow burst is received from the local initiator
     static vp::IoReqStatus narrow_req(vp::Block *__this, vp::IoReq *req);
+    // Input method called when a wide burst is received from the local initiator
     static vp::IoReqStatus wide_req(vp::Block *__this, vp::IoReq *req);
+    // This gets called internally by the wide_req and narrow_req when a burst is received
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
     // FSM event handler called when something happened and queues need to be checked to see
     // if a request should be handled.
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
-    static void response_handler(vp::Block *__this, vp::ClockEvent *event);
+    static void response_handler(vp::Block *__this, vp::ClockEvent *event); // TODO remove/fix
     // Pointer to top
     FlooNoc *noc;
     // X position of this network interface in the grid
@@ -67,17 +72,23 @@ private:
     int y;
     // Maxinum number of pending input requests before the initiator is stalled
     int max_input_req;
-    // Input IO interface where incoming burst are injected into the network
+    // Input IO interface where wide incoming bursts are injected into the network
     vp::IoSlave wide_input_itf;
+    // Input IO interface where narrow incoming bursts are injected into the network
     vp::IoSlave narrow_input_itf;
     // This block trace
     vp::Trace trace;
     // Queue of pending incoming bursts. Any received burst is pushed there and they are processed
     // one by one sequentially by the network interface.
-    std::queue<vp::IoReq *> pending_bursts;
+    std::queue<vp::IoReq *> pending_bursts_src;
     // Also a maintain a queue of timestamps at which the corresponding burst can start to take
     // into account the burst latency.
-    std::queue<int64_t> pending_bursts_timestamp;
+    std::queue<int64_t> pending_bursts_src_timestamp;
+    // Queue of pending bursts for which the forward path has been completed. Processed sequentially by the network interface, by sending back the data to the initiator
+    std::queue<vp::IoReq *> pending_bursts_dst;
+    // Also store the origin position of the burst to know where to send the response requests
+    std::queue<std::tuple<int, int>> pending_bursts_origin_pos;
+    std::queue<int64_t> pending_bursts_dst_timestamp; // TODO remove/fix
     // Current base address of the burst currently being processed. It is used to update the address
     // of the internal requests send to the routers to process the burst
     uint64_t pending_burst_base;
@@ -89,12 +100,12 @@ private:
     // Clock event used to schedule FSM handler. This is scheduled eveytime something may need to
     // be done
     vp::ClockEvent fsm_event;
-    vp::ClockEvent response_event;
-    std::queue<vp::IoReq *>pending_send_target_reqs;
-    std::queue<int64_t>pending_send_target_timestamps;
-
+    vp::ClockEvent response_event; // TODO remove/fix
+    std::queue<vp::IoReq *> pending_send_target_reqs; // TODO remove/fix
+    std::queue<int64_t> pending_send_target_timestamps; // TODO remove/fix
+    std::vector<vp::IoReq *> outstanding_bursts;
     // In the real NOC a burst sends a single packet on the forward path and all data on the backward path.
-    // This indicates if the "forward" path req request is still pending. Only after that we can start with the "backward" path. 
+    // This indicates if the "forward" path req request is still pending. Only after that we can start with the "backward" path.
     // Note: There is no actual backward path in this gvsoc model.
     bool pending_burst_waiting_for_req;
 

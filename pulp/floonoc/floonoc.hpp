@@ -95,8 +95,8 @@ public:
 
     // Internal router information is stored inside the requests.
     // These constants give the indices where the information is stored in the requests data.
-    static constexpr int REQ_DEST_NI = 0;     // Pointer to network interface where the request was received
-    static constexpr int REQ_DEST_BURST = 1;  // Burst received from network interface
+    static constexpr int REQ_SRC_NI = 0;     // Pointer to network interface where the request was received
+    static constexpr int REQ_BURST = 1;  // Burst received from network interface
     static constexpr int REQ_DEST_BASE = 2;   // Base address of the destination target
     static constexpr int REQ_DEST_X = 3;      // X coordinate of the destination target
     static constexpr int REQ_DEST_Y = 4;      // Y coordinate of the destination target

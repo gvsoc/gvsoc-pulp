@@ -38,7 +38,7 @@ public:
 
     void reset(bool active);
 
-    // This gets called by other routers or a network interface to move a requet to this router
+    // This gets called by other routers or a network interface to move a request to this router
     bool handle_request(vp::IoReq *req, int from_x, int from_y);
     // This gets called by the top noc to grant a a request denied by a target
     void grant(vp::IoReq *req);
@@ -48,7 +48,7 @@ private:
     // if a request should be handled.
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
     // Called when a request has reached its destination position and should be sent to a target
-    void send_to_target(vp::IoReq *req, int pos_x, int pos_y);
+    void send_to_target_ni(vp::IoReq *req, int pos_x, int pos_y);
     // Get the position of the next router which should handle a request.
     void get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_y);
     // Get the index of the queue corresponding to a source or destination position
