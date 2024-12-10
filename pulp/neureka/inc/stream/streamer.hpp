@@ -22,10 +22,7 @@
 #define STREAMER_H
 #include "datatype.hpp"
 
-// Task 7 - Disable INEFFICIENT_MEMORY_ACCESS
-// #define INEFFICIENT_MEMORY_ACCESS
-
-template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
+template<typename HwpeType, int BandWidth>
 class Streamer{
     private:
         int d0_stride_, d1_stride_, d2_stride_;
@@ -41,10 +38,10 @@ class Streamer{
     AddrType Iterate();
     void UpdateCount();
     void ResetCount();
-    void inline SingleBankTransaction(AddrType address, DataType* &data, int size, int64_t& cycles, int64_t& max_latency, bool wmem, bool is_write, bool verbose);
-    void VectorTransaction(DataType* data, int size, int64_t& cycles, bool wmem, bool is_write, bool verbose);
-    void VectorStore(DataType* data, int size, int64_t& cycles, bool wmem, bool verbose);
-    void VectorLoad(DataType* data, int size, int64_t& cycles, bool wmem, bool verbose);
+    void inline SingleBankTransaction(AddrType address, uint8_t* &data, int size, int64_t& cycles, int64_t& max_latency, bool wmem, bool is_write, bool verbose);
+    void VectorTransaction(uint8_t* data, int size, int64_t& cycles, bool wmem, bool is_write, bool verbose);
+    void VectorStore(uint8_t* data, int size, int64_t& cycles, bool wmem, bool verbose);
+    void VectorLoad(uint8_t* data, int size, int64_t& cycles, bool wmem, bool verbose);
     Streamer(){};
     Streamer(HwpeType* accel, AddrType baseAddr, int d0Stride, int d1Stride, int d2Stride, int d0Length, int d1Length, int d2Length, int bandwidthInBytes, int alignment = 4){
         accel_instance_ = accel;
@@ -75,15 +72,15 @@ class Streamer{
     }
 };
 
-template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-void Streamer<AddrType, HwpeType, DataType, BandWidth>::ResetCount()
+template<typename HwpeType, int BandWidth>
+void Streamer<HwpeType, BandWidth>::ResetCount()
 {
     d0_count_ = 0;
     d1_count_ = 0;
     d2_count_ = 0;
 }
-template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-void Streamer<AddrType, HwpeType, DataType, BandWidth>::UpdateCount()
+template<typename HwpeType, int BandWidth>
+void Streamer<HwpeType, BandWidth>::UpdateCount()
 {
   if(d0_count_ != d0_length_-1) d0_count_++;
   else if(d1_count_ != d1_length_-1) {d1_count_++, d0_count_=0;}
@@ -94,18 +91,18 @@ void Streamer<AddrType, HwpeType, DataType, BandWidth>::UpdateCount()
   }
 }
 
-template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-AddrType Streamer<AddrType, HwpeType, DataType, BandWidth>::ComputeAddressOffset()const {  
+template<typename HwpeType, int BandWidth>
+AddrType Streamer<HwpeType, BandWidth>::ComputeAddressOffset()const {  
     return d2_count_*d2_stride_ + d1_count_*d1_stride_ + d0_count_*d0_stride_;
 }
 
-template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-AddrType Streamer<AddrType, HwpeType, DataType, BandWidth>::ComputeAddress()const {  
+template<typename HwpeType, int BandWidth>
+AddrType Streamer<HwpeType, BandWidth>::ComputeAddress()const {  
     return base_addr_ + ComputeAddressOffset();
 }
 
-template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-AddrType Streamer<AddrType, HwpeType, DataType, BandWidth>::Iterate()
+template<typename HwpeType, int BandWidth>
+AddrType Streamer<HwpeType, BandWidth>::Iterate()
 {
     AddrType address = ComputeAddress();
     if(!((d0_count_== (d0_length_-1)) && (d1_count_==(d1_length_-1)) && (d2_count_==(d2_length_-1))))
@@ -113,8 +110,8 @@ AddrType Streamer<AddrType, HwpeType, DataType, BandWidth>::Iterate()
     return address;
 }
 
-template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-void inline Streamer<AddrType, HwpeType, DataType, BandWidth>::SingleBankTransaction(AddrType address, DataType* &data, int size, int64_t& cycles, int64_t& max_latency, bool wmem, bool write_enable, bool verbose)
+template<typename HwpeType, int BandWidth>
+void inline Streamer<HwpeType, BandWidth>::SingleBankTransaction(AddrType address, uint8_t* &data, int size, int64_t& cycles, int64_t& max_latency, bool wmem, bool write_enable, bool verbose)
 {
   this->accel_instance_->io_req.init();
   this->accel_instance_->io_req.set_addr(address);
@@ -149,12 +146,12 @@ void inline Streamer<AddrType, HwpeType, DataType, BandWidth>::SingleBankTransac
 }
 
 // Only for single load transaction. So the width should be less than the bandwidth
-template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorTransaction(DataType* data, int size, int64_t& cycles, bool wmem, bool is_write, bool verbose) {
+template<typename HwpeType, int BandWidth>
+void Streamer<HwpeType, BandWidth>::VectorTransaction(uint8_t* data, int size, int64_t& cycles, bool wmem, bool is_write, bool verbose) {
     int64_t max_latency = 0;
     AddrType addr = Iterate();
     const AddrType addr_start_offset = addr % alignment_in_bytes_;
-    DataType* data_ptr = data;
+    uint8_t* data_ptr = data;
     int32_t remainding_size = size;
 
     // This if statement takes care of the initial unaligned transaction
@@ -182,14 +179,14 @@ void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorTransaction(DataTy
 }
 
 // Only for single load transaction. So the width should be less than the bandwidth
-template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorLoad(DataType* data, int size, int64_t& cycles, bool wmem, bool verbose) {
+template<typename HwpeType, int BandWidth>
+void Streamer<HwpeType, BandWidth>::VectorLoad(uint8_t* data, int size, int64_t& cycles, bool wmem, bool verbose) {
     const bool is_write = false;
     VectorTransaction(data, size, cycles, wmem, is_write, verbose);
 }
 
-template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorStore(DataType* data, int size, int64_t& cycles, bool wmem, bool verbose) // Only for single load transaction. So the width should be less than the bandwidth 
+template<typename HwpeType, int BandWidth>
+void Streamer<HwpeType, BandWidth>::VectorStore(uint8_t* data, int size, int64_t& cycles, bool wmem, bool verbose) // Only for single load transaction. So the width should be less than the bandwidth 
 {
     const bool is_write = true;
     VectorTransaction(data, size, cycles, wmem, is_write, verbose);

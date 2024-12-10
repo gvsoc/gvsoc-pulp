@@ -35,13 +35,13 @@ Neureka::Neureka(vp::ComponentConf &config)
 
   this->ctrl_instance = Control<Neureka>(this);
   this->regconfig_manager_instance = RegConfigManager<Neureka>(this, NeurekaRegisterContextCount, NEUREKA_NB_REG);
-  this->infeat_streamer_instance = Streamer<AddrType, Neureka, InFeatType, L1BandwidthInBytes>(this,  0, 0, 0, 0, 0, 0, 0,32, 4);
-  this->streamin_streamer_instance = Streamer<AddrType, Neureka, StreamerDataType, L1BandwidthInBytes>(this,  0, 0, 0, 0, 0, 0, 0,32, 4);
-  this->outfeat_streamer_instance = Streamer<AddrType, Neureka, StreamerDataType, L1BandwidthInBytes>(this,  0, 0, 0, 0, 0, 0, 0,32, 4);
-  this->weight_streamer_instance = Streamer<AddrType, Neureka, StreamerDataType, WmemBandwidthInBytes>(this,  0, 0, 0, 0, 0, 0, 0,32, 4);
-  this->normquant_shift_streamer_instance=Streamer<AddrType, Neureka, StreamerDataType, L1BandwidthInBytes>(this,  0, 0, 0, 0, 0, 0, 0,32, 4);
-  this->normquant_bias_streamer_instance=Streamer<AddrType, Neureka, StreamerDataType, L1BandwidthInBytes>(this,  0, 0, 0, 0, 0, 0, 0,32, 4);
-  this->normquant_mult_streamer_instance=Streamer<AddrType, Neureka, StreamerDataType, L1BandwidthInBytes>(this,  0, 0, 0, 0, 0, 0, 0,32, 4);
+  this->infeat_streamer_instance = Streamer<Neureka, L1BandwidthInBytes>(this,  0, 0, 0, 0, 0, 0, 0,32, 4);
+  this->streamin_streamer_instance = Streamer<Neureka, L1BandwidthInBytes>(this,  0, 0, 0, 0, 0, 0, 0,32, 4);
+  this->outfeat_streamer_instance = Streamer<Neureka, L1BandwidthInBytes>(this,  0, 0, 0, 0, 0, 0, 0,32, 4);
+  this->weight_streamer_instance = Streamer<Neureka, WmemBandwidthInBytes>(this,  0, 0, 0, 0, 0, 0, 0,32, 4);
+  this->normquant_shift_streamer_instance=Streamer<Neureka, L1BandwidthInBytes>(this,  0, 0, 0, 0, 0, 0, 0,32, 4);
+  this->normquant_bias_streamer_instance=Streamer<Neureka, L1BandwidthInBytes>(this,  0, 0, 0, 0, 0, 0, 0,32, 4);
+  this->normquant_mult_streamer_instance=Streamer<Neureka, L1BandwidthInBytes>(this,  0, 0, 0, 0, 0, 0, 0,32, 4);
   this->traces.new_trace("trace", &this->trace, vp::DEBUG);
   this->trace_level = L0_CONFIG;
   this->trace_format = 0;
