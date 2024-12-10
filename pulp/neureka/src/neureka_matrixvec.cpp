@@ -50,7 +50,7 @@ void Neureka::WeightLoadSetup() {
 void Neureka::WeightLoad(int& latency, std::array<StreamerDataType, WmemBandwidthInBytes>& weight) {
   int width = WmemBandwidthInBytes;
   // Load data using streamer
-  int64_t cycles = 0;
+  uint64_t cycles = 0;
   StreamerDataType weight_data_temp[width];
   if(reg_config_.config0.residual)  {
 

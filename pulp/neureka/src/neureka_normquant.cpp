@@ -52,7 +52,7 @@ void Neureka::NormQuantBiasSetup(){
 
 bool Neureka::NormQuantMultExecute(int& latency){
   int width = this->ctrl_instance.GetNormQuantMultWidth();
-  int64_t cycles = 0;
+  uint64_t cycles = 0;
   std::array<InFeatType, L1BandwidthInBytes> normquant_mult_8bits;
 
   InFeatType normquant_mult_8bits_temp[width];
@@ -109,7 +109,7 @@ bool Neureka::NormQuantMultExecute(int& latency){
 
 bool Neureka::NormQuantShiftExecute(int& latency){
   int width = this->ctrl_instance.GetNormQuantShiftWidth();
-  int64_t cycles = 0;
+  uint64_t cycles = 0;
   std::array<InFeatType, L1BandwidthInBytes> normquant_shift_8bits = {};
   std::fill(normquant_shift_8bits.begin(), normquant_shift_8bits.end(), 0);
   InFeatType normquant_shift_8bits_temp[width];
@@ -131,7 +131,7 @@ bool Neureka::NormQuantShiftExecute(int& latency){
 
 bool Neureka::NormQuantBiasExecute(int& latency){
   int width = this->ctrl_instance.GetNormQuantBiasWidth();
-  int64_t cycles = 0;
+  uint64_t cycles = 0;
   std::array<InFeatType,32> normquant_bias_8bits={};
   std::array<OutFeatType,32>  normquant_bias_32bits={}; 
   InFeatType normquant_bias_8bits_temp[width];

@@ -41,7 +41,7 @@ bool Neureka::InFeatLoadExecute(int& latency)
   }
 
   int width = L1BandwidthInBytes;
-  int64_t cycles = 0;
+  uint64_t cycles = 0;
   std::array<bool, NeurekaInFeatScalarBufferCount> padding_enable;
   std::fill(padding_enable.begin(), padding_enable.end(), 0);
   padding_enable=this->ctrl_instance.GetPaddingEnable();

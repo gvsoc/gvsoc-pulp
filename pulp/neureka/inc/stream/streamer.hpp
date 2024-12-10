@@ -41,12 +41,12 @@ class Streamer{
     AddrType ComputeAddress() const;
     void UpdateCount();
     void ResetCount();
-    void inline SingleBankTransaction(AddrType address, uint8_t* &data, int size, int64_t& cycles, int64_t& max_latency, bool wmem, bool is_write, bool verbose);
-    void VectorTransaction(uint8_t* data, int size, int64_t& cycles, bool wmem, bool is_write, bool verbose);
+    void inline SingleBankTransaction(AddrType address, uint8_t* &data, int size, uint64_t& cycles, uint64_t& max_latency, bool wmem, bool is_write, bool verbose);
+    void VectorTransaction(uint8_t* data, int size, uint64_t& cycles, bool wmem, bool is_write, bool verbose);
 
     public:
-    void VectorStore(uint8_t* data, int size, int64_t& cycles, bool wmem, bool verbose);
-    void VectorLoad(uint8_t* data, int size, int64_t& cycles, bool wmem, bool verbose);
+    void VectorStore(uint8_t* data, int size, uint64_t& cycles, bool wmem, bool verbose);
+    void VectorLoad(uint8_t* data, int size, uint64_t& cycles, bool wmem, bool verbose);
     Streamer(){};
     Streamer(vp::Trace* trace_, vp::IoReq* io_req_, vp::IoMaster* tcdm_port_, vp::IoMaster* wmem_port_){
         trace = trace_;
@@ -96,7 +96,7 @@ AddrType Streamer<BandWidth>::ComputeAddress()const {
 }
 
 template<int BandWidth>
-void inline Streamer<BandWidth>::SingleBankTransaction(AddrType address, uint8_t* &data, int size, int64_t& cycles, int64_t& max_latency, bool wmem, bool write_enable, bool verbose)
+void inline Streamer<BandWidth>::SingleBankTransaction(AddrType address, uint8_t* &data, int size, uint64_t& cycles, uint64_t& max_latency, bool wmem, bool write_enable, bool verbose)
 {
   io_req->init();
   io_req->set_addr(address);
@@ -116,7 +116,7 @@ void inline Streamer<BandWidth>::SingleBankTransaction(AddrType address, uint8_t
   }
 
   if (err == vp::IO_REQ_OK) {
-    int64_t latency = io_req->get_latency();
+    uint64_t latency = io_req->get_latency();
     if (latency > max_latency) {
       max_latency = latency;
     }
@@ -132,8 +132,8 @@ void inline Streamer<BandWidth>::SingleBankTransaction(AddrType address, uint8_t
 
 // Only for single load transaction. So the width should be less than the bandwidth
 template<int BandWidth>
-void Streamer<BandWidth>::VectorTransaction(uint8_t* data, int size, int64_t& cycles, bool wmem, bool is_write, bool verbose) {
-    int64_t max_latency = 0;
+void Streamer<BandWidth>::VectorTransaction(uint8_t* data, int size, uint64_t& cycles, bool wmem, bool is_write, bool verbose) {
+    uint64_t max_latency = 0;
     AddrType addr = ComputeAddress();
     const AddrType addr_start_offset = addr % bank_alignment;
     uint8_t* data_ptr = data;
@@ -167,13 +167,13 @@ void Streamer<BandWidth>::VectorTransaction(uint8_t* data, int size, int64_t& cy
 
 // Only for single load transaction. So the width should be less than the bandwidth
 template<int BandWidth>
-void Streamer<BandWidth>::VectorLoad(uint8_t* data, int size, int64_t& cycles, bool wmem, bool verbose) {
+void Streamer<BandWidth>::VectorLoad(uint8_t* data, int size, uint64_t& cycles, bool wmem, bool verbose) {
     const bool is_write = false;
     VectorTransaction(data, size, cycles, wmem, is_write, verbose);
 }
 
 template<int BandWidth>
-void Streamer<BandWidth>::VectorStore(uint8_t* data, int size, int64_t& cycles, bool wmem, bool verbose) // Only for single load transaction. So the width should be less than the bandwidth 
+void Streamer<BandWidth>::VectorStore(uint8_t* data, int size, uint64_t& cycles, bool wmem, bool verbose) // Only for single load transaction. So the width should be less than the bandwidth 
 {
     const bool is_write = true;
     VectorTransaction(data, size, cycles, wmem, is_write, verbose);

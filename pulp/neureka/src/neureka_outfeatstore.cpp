@@ -84,7 +84,7 @@ bool Neureka::OutFeatStoreExecute(int& latency)
   else this->trace.fatal("Unsupported Quantization bit count \n");
 
   
-  int64_t cycles = 0;
+  uint64_t cycles = 0;
 
   this->outfeat_streamer_instance.VectorStore(store_data, width, cycles, false, this->trace_config.streamer.outfeat_store);
   latency = latency + (int)cycles ? latency + (int)cycles : 1 ;

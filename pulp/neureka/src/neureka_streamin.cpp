@@ -36,7 +36,7 @@ bool Neureka::StreaminExecute(int& latency)
   int pe_index = this->ctrl_instance.GetStreaminLinearBufferIndex();// which accumulator buffer to be used
   int word_index = this->ctrl_instance.GetStreaminWordIndex();
 
-  int64_t cycles = 0;
+  uint64_t cycles = 0;
   std::array<StreamerDataType, L1BandwidthInBytes> streamin_data;
   std::fill(streamin_data.begin(), streamin_data.end(), 0);
 
