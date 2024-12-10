@@ -35,7 +35,6 @@ class Streamer{
 
     AddrType ComputeAddressOffset() const;
     AddrType ComputeAddress() const;
-    AddrType Iterate();
     void UpdateCount();
     void ResetCount();
     void inline SingleBankTransaction(AddrType address, uint8_t* &data, int size, int64_t& cycles, int64_t& max_latency, bool wmem, bool is_write, bool verbose);
@@ -73,9 +72,9 @@ void Streamer<HwpeType, BandWidth>::UpdateCount()
   if(d0_count_ != d0_length_-1) d0_count_++;
   else if(d1_count_ != d1_length_-1) {d1_count_++, d0_count_=0;}
   else if(d2_count_ != d2_length_-1) {d2_count_++; d1_count_=0; d0_count_=0;}
-  else 
-  {
-      throw std::runtime_error("Counter Size is exhausted\n");
+  else {
+    d2_count_ = 0; d1_count_ = 0; d0_count_ = 0;
+    this->accel_instance_->trace.warning("Restarting counters due to overflow");
   }
 }
 
@@ -87,15 +86,6 @@ AddrType Streamer<HwpeType, BandWidth>::ComputeAddressOffset()const {
 template<typename HwpeType, int BandWidth>
 AddrType Streamer<HwpeType, BandWidth>::ComputeAddress()const {  
     return base_addr_ + ComputeAddressOffset();
-}
-
-template<typename HwpeType, int BandWidth>
-AddrType Streamer<HwpeType, BandWidth>::Iterate()
-{
-    AddrType address = ComputeAddress();
-    if(!((d0_count_== (d0_length_-1)) && (d1_count_==(d1_length_-1)) && (d2_count_==(d2_length_-1))))
-        UpdateCount();
-    return address;
 }
 
 template<typename HwpeType, int BandWidth>
@@ -137,7 +127,7 @@ void inline Streamer<HwpeType, BandWidth>::SingleBankTransaction(AddrType addres
 template<typename HwpeType, int BandWidth>
 void Streamer<HwpeType, BandWidth>::VectorTransaction(uint8_t* data, int size, int64_t& cycles, bool wmem, bool is_write, bool verbose) {
     int64_t max_latency = 0;
-    AddrType addr = Iterate();
+    AddrType addr = ComputeAddress();
     const AddrType addr_start_offset = addr % bank_alignment;
     uint8_t* data_ptr = data;
     int32_t remainding_size = size;
@@ -159,6 +149,8 @@ void Streamer<HwpeType, BandWidth>::VectorTransaction(uint8_t* data, int size, i
         addr += transaction_size;
         remainding_size -= transaction_size;
     }
+
+    UpdateCount();
 
     cycles += max_latency + 1;
     if(verbose){
