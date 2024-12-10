@@ -213,43 +213,6 @@ void Streamer<AddrType, HwpeType, DataType, BandWidth>::MisalignedPostambleStore
     delete[] store_data;
 }
 
-#define SEMI_EFFICIENT_MEMORY_ACCESS
-
-#ifdef INEFFICIENT_MEMORY_ACCESS
-    template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-    void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorLoad(int width, int64_t& cycles, DataType* load_data, bool wmem, bool verbose) // Only for single load transaction. So the width should be less than the bandwidth 
-    {
-        int64_t max_latency = 0;
-        AddrType start_address     = Iterate();
-        for(int i=0; i<width; i++){
-            this->accel_instance_->io_req.init();
-            this->accel_instance_->io_req.set_addr(start_address+i);
-            this->accel_instance_->io_req.set_size(1);
-            this->accel_instance_->io_req.set_data(&load_data[i]);
-            this->accel_instance_->io_req.set_is_write(false);
-            int err = 0;
-            if(wmem) {
-                err = this->accel_instance_->wmem_port.req(&this->accel_instance_->io_req);
-            } else {
-                err = this->accel_instance_->tcdm_port.req(&this->accel_instance_->io_req);
-            }
-            if (err == vp::IO_REQ_OK) {
-                int64_t latency = this->accel_instance_->io_req.get_latency();
-                if (latency > max_latency) {
-                    max_latency = latency;
-                }
-                if(verbose)
-                    this->accel_instance_->trace.msg("max_latency = %d, Address =%x, size=%x, latency=%d, we=%d, data=0x%x\n", max_latency, start_address, 1, latency, false, load_data[i]);
-            }
-            else {
-                this->accel_instance_->trace.fatal("Unsupported asynchronous reply\n");
-            }
-        }
-
-
-        cycles += max_latency+1;
-    }
-#elif defined SEMI_EFFICIENT_MEMORY_ACCESS
 // Only for single load transaction. So the width should be less than the bandwidth
 template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
 void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorLoad(int width, int64_t& cycles, DataType* load_data, bool wmem, bool verbose) {
@@ -288,45 +251,7 @@ void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorLoad(int width, in
         this->accel_instance_->trace.msg(" latency : %d, max_latency : %d\n", max_latency, cycles);
     }
 }
-#else 
-    template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-    void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorLoad(int width, int64_t& cycles, DataType* load_data, bool wmem, bool verbose) // Only for single load transaction. So the width should be less than the bandwidth 
-    {
-        int64_t max_latency = 0;
-        AddrType start_address     = Iterate();
-        AddrType end_address       = start_address + width;
 
-        AddrType offset_address    = start_address % alignment_in_bytes_;
-        AddrType preamble_address  = start_address - offset_address; // for misaligned address;
-        AddrType aligned_address   = offset_address ? ((preamble_address + alignment_in_bytes_ > end_address) ? preamble_address : preamble_address + alignment_in_bytes_) : start_address ;
-        AddrType postamble_address = alignment_in_bytes_ * (end_address/alignment_in_bytes_);
-
-        int preamble_width  = start_address-preamble_address ? alignment_in_bytes_ - (start_address-preamble_address) : 0;
-        preamble_width = preamble_width > width ? width : preamble_width;
-        int aligned_width   = (postamble_address - aligned_address) > 0 ? (postamble_address - aligned_address) : 0;
-        aligned_width = aligned_width+preamble_width > width ? (width - preamble_width > 0 ? width-preamble_width : 0) : aligned_width ;  
-        int postamble_width = (width - (preamble_width + aligned_width)) > 0 ? (width - (preamble_width + aligned_width)): 0 ;
-
-        if(verbose){
-        this->accel_instance_->trace.msg(" start_address : 0x%x, end_address : 0x%x,  offset_address : 0x%x, preamble_address : 0x%x, aligned_address : 0x%x, postamble_address : 0x%x\n", start_address, end_address, offset_address, preamble_address, aligned_address, postamble_address);
-        this->accel_instance_->trace.msg(" width : %d, preamble_width : %d, aligned_width : %d, postamble_width : %d\n", width, preamble_width, aligned_width, postamble_width);
-        }
-
-        if(preamble_width > 0)
-            MisalignedPreambleLoad(false, preamble_address, load_data, preamble_width, cycles, alignment_in_bytes_, max_latency, wmem, verbose );    
-
-        if(aligned_width > 0)
-            AlignedLoad(false, aligned_address, load_data, aligned_width, preamble_width, cycles, alignment_in_bytes_, max_latency, wmem, verbose );
-
-        if(postamble_width > 0)
-            MisalignedPostambleLoad( false, postamble_address, load_data, postamble_width, preamble_width+aligned_width, cycles, alignment_in_bytes_, max_latency, wmem, verbose );
-
-        cycles += max_latency+1;
-        if(verbose){
-            this->accel_instance_->trace.msg(" latency : %d, max_latency : %d\n", max_latency, cycles);
-        }
-    }
-#endif
 template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
 void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorStore(DataType* data, int width, int64_t& cycles, bool wmem, bool verbose) // Only for single load transaction. So the width should be less than the bandwidth 
 {
