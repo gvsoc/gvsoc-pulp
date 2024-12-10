@@ -42,9 +42,6 @@ class Streamer{
     void UpdateCount();
     void ResetCount();
     void inline SingleBankTransaction(bool write_enable, AddrType address, DataType* &data, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose);
-    void MisalignedPreambleLoad( bool write_enable, AddrType address, DataType* &data, int& preamble_width, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose);
-    void AlignedLoad( bool write_enable, AddrType address, DataType* &data, int& aligned_width, int offset_width, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose);
-    void MisalignedPostambleLoad( bool write_enable, AddrType address, DataType* &data, int& postamble_width, int offset_width, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose);
     void MisalignedPreambleStore( bool write_enable, AddrType address, DataType* &data, int& preamble_width, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose);
     void AlignedStore( bool write_enable, AddrType address, DataType* &data, int& aligned_width, int offset_width, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose);
     void MisalignedPostambleStore( bool write_enable, AddrType address, DataType* &data, int& postamble_width, int offset_width, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose);
@@ -153,37 +150,6 @@ void inline Streamer<AddrType, HwpeType, DataType, BandWidth>::SingleBankTransac
   }
 }
 
-template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-void Streamer<AddrType, HwpeType, DataType, BandWidth>::MisalignedPreambleLoad( bool write_enable, AddrType address, DataType* &data, int& preamble_width, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose) {
-    DataType* load_data = new DataType[4];  
-    SingleBankTransaction(write_enable, address, load_data, cycles, size, max_latency, wmem, verbose);
-    int start_index = size - preamble_width;
-    for(int i=0; i<preamble_width; i++){
-        data[i] = load_data[size-preamble_width + i]; 
-        // std::cout<<"index="<<size-preamble_width + i<<"\n";
-    }
-    delete[] load_data;
-}
-template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-void Streamer<AddrType, HwpeType, DataType, BandWidth>::AlignedLoad( bool write_enable, AddrType address, DataType* &data, int& aligned_width, int offset_width, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose ) {
-    DataType* load_data = new DataType[size];  
-    for(int i=0; i<(aligned_width/size); i++) {
-        SingleBankTransaction(write_enable, address+i*4, load_data, cycles, size, max_latency, wmem, verbose);
-        for(int j=0; j<size; j++){
-            int index = i*size + j;
-            data[index + offset_width] = load_data[j]; 
-        }
-    }
-    delete[] load_data;
-}
-template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-void Streamer<AddrType, HwpeType, DataType, BandWidth>::MisalignedPostambleLoad( bool write_enable, AddrType address, DataType* &data, int& postamble_width, int offset_width, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose ) {
-    DataType* load_data = new DataType[4]; 
-    SingleBankTransaction(write_enable, address, load_data, cycles, size, max_latency, wmem, verbose);
-    for(int i=0; i<postamble_width; i++)
-        data[offset_width + i] = load_data[i]; 
-    delete[] load_data;
-}
 template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
 void Streamer<AddrType, HwpeType, DataType, BandWidth>::MisalignedPreambleStore( bool write_enable, AddrType address, DataType* &data, int& preamble_width, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose ) {
     DataType* store_data = new DataType[preamble_width];  
