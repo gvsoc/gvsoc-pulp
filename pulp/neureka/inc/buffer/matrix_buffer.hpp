@@ -20,6 +20,7 @@
 #ifndef MATRIX_BUFFER_H
 #define MATRIX_BUFFER_H
 #include "datatype.hpp"
+#include "linear_buffer.hpp"
 template <typename T, int ParamInFeatLinearBufferCount, int ParamInFeatScalarBufferCount>
 /**
  * @brief This is a class handing Matrix buffer. 
