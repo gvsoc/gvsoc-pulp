@@ -35,6 +35,8 @@ class Streamer{
         HwpeType* accel_instance_;
         vp::Trace* trace;
         vp::IoReq* io_req;
+        vp::IoMaster* tcdm_port;
+        vp::IoMaster* wmem_port;
 
     AddrType ComputeAddressOffset() const;
     AddrType ComputeAddress() const;
@@ -47,10 +49,12 @@ class Streamer{
     void VectorStore(uint8_t* data, int size, int64_t& cycles, bool wmem, bool verbose);
     void VectorLoad(uint8_t* data, int size, int64_t& cycles, bool wmem, bool verbose);
     Streamer(){};
-    Streamer(HwpeType* accel, vp::Trace* trace_, vp::IoReq* io_req_){
+    Streamer(HwpeType* accel, vp::Trace* trace_, vp::IoReq* io_req_, vp::IoMaster* tcdm_port_, vp::IoMaster* wmem_port_){
         accel_instance_ = accel;
         trace = trace_;
         io_req = io_req_;
+        tcdm_port = tcdm_port_;
+        wmem_port = wmem_port_;
     } 
     void Init(AddrType baseAddr, int d0Stride, int d1Stride, int d2Stride, int d0Length, int d1Length, int d2Length){
       base_addr_ = baseAddr;
@@ -104,13 +108,13 @@ void inline Streamer<HwpeType, BandWidth>::SingleBankTransaction(AddrType addres
   int err = 0;
   if(wmem) {
     #if WMEM_L1==1
-        err = this->accel_instance_->tcdm_port.req(io_req);
+        err = tcdm_port->req(io_req);
     #else 
-        err = this->accel_instance_->wmem_port.req(io_req);
+        err = wmem_port->req(io_req);
     #endif 
 
   } else {
-    err = this->accel_instance_->tcdm_port.req(io_req);
+    err = tcdm_port->req(io_req);
   }
 
   if (err == vp::IO_REQ_OK) {
