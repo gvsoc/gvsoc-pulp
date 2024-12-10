@@ -23,8 +23,6 @@
 #include "datatype.hpp"
 #include "vp/itf/io.hpp"
 
-static const AddrType bank_alignment = 4;
-
 template<int BandWidth>
 class Streamer{
     private:
@@ -43,6 +41,8 @@ class Streamer{
     void ResetCount();
     void inline SingleBankTransaction(AddrType address, uint8_t* &data, int size, uint64_t& max_latency, bool wmem, bool is_write, bool verbose);
     void VectorTransaction(uint8_t* data, int size, uint64_t& cycles, bool wmem, bool is_write, bool verbose);
+
+    static const AddrType bank_alignment = 4;
 
     public:
     void VectorStore(uint8_t* data, int size, uint64_t& cycles, bool wmem, bool verbose);
