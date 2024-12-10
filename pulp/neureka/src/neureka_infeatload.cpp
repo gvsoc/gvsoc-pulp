@@ -27,7 +27,7 @@ void Neureka::InFeatLoadSetup() {
   else 
     this->infeat_dual_buffer_write_index = 1;
   StreamerConfig streamer_config = this->ctrl_instance.GetInFeatLoadStreamerConfig();
-  this->infeat_streamer_instance.UpdateParams(streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2, L1BandwidthInBytes);
+  this->infeat_streamer_instance.UpdateParams(streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2);
   this->ctrl_instance.ResetInFeatLoadIteration();
   if(this->trace_config.setup.infeat_load)
     this->trace.msg("InFeatLoad Setup is done addr : 0x%x, strides( d0 : 0x%x, d1 : 0x%x, d2 : 0x%x), lengths(d0 : %d, d1 : %d, d2 : %d)\n", streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2);

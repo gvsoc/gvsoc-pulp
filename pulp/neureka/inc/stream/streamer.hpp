@@ -32,7 +32,6 @@ class Streamer{
         int d0_count_, d1_count_, d2_count_;
         AddrType base_addr_;
         HwpeType* accel_instance_;
-        int bandwidth_in_bytes_;
     public:
     AddrType ComputeAddressOffset() const;
     AddrType ComputeAddress() const;
@@ -44,7 +43,7 @@ class Streamer{
     void VectorStore(uint8_t* data, int size, int64_t& cycles, bool wmem, bool verbose);
     void VectorLoad(uint8_t* data, int size, int64_t& cycles, bool wmem, bool verbose);
     Streamer(){};
-    Streamer(HwpeType* accel, AddrType baseAddr, int d0Stride, int d1Stride, int d2Stride, int d0Length, int d1Length, int d2Length, int bandwidthInBytes){
+    Streamer(HwpeType* accel, AddrType baseAddr, int d0Stride, int d1Stride, int d2Stride, int d0Length, int d1Length, int d2Length){
         accel_instance_ = accel;
         base_addr_ = baseAddr;
         d0_stride_ = d0Stride;
@@ -56,9 +55,8 @@ class Streamer{
         d0_count_  = 0;
         d1_count_  = 0;
         d2_count_  = 0;
-        bandwidth_in_bytes_ = bandwidthInBytes;
     } 
-    void UpdateParams(AddrType baseAddr, int d0Stride, int d1Stride, int d2Stride, int d0Length, int d1Length, int d2Length, int bandwidthInBytes){
+    void UpdateParams(AddrType baseAddr, int d0Stride, int d1Stride, int d2Stride, int d0Length, int d1Length, int d2Length){
       base_addr_ = baseAddr;
       d0_stride_ = d0Stride;
       d1_stride_ = d1Stride;
@@ -67,7 +65,6 @@ class Streamer{
       d1_length_ = d1Length;
       d2_length_ = d2Length;
       ResetCount();
-      bandwidth_in_bytes_ = bandwidthInBytes;
     }
 };
 
