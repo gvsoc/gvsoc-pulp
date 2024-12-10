@@ -41,7 +41,7 @@ class Streamer{
     AddrType ComputeAddress() const;
     void UpdateCount();
     void ResetCount();
-    void inline SingleBankTransaction(AddrType address, uint8_t* &data, int size, uint64_t& cycles, uint64_t& max_latency, bool wmem, bool is_write, bool verbose);
+    void inline SingleBankTransaction(AddrType address, uint8_t* &data, int size, uint64_t& max_latency, bool wmem, bool is_write, bool verbose);
     void VectorTransaction(uint8_t* data, int size, uint64_t& cycles, bool wmem, bool is_write, bool verbose);
 
     public:
@@ -96,13 +96,13 @@ AddrType Streamer<BandWidth>::ComputeAddress()const {
 }
 
 template<int BandWidth>
-void inline Streamer<BandWidth>::SingleBankTransaction(AddrType address, uint8_t* &data, int size, uint64_t& cycles, uint64_t& max_latency, bool wmem, bool write_enable, bool verbose)
+void inline Streamer<BandWidth>::SingleBankTransaction(AddrType address, uint8_t* &data, int size, uint64_t& max_latency, bool wmem, bool is_write, bool verbose)
 {
   io_req->init();
   io_req->set_addr(address);
   io_req->set_size(size);
   io_req->set_data(data);
-  io_req->set_is_write(write_enable);
+  io_req->set_is_write(is_write);
   int err = 0;
   if(wmem) {
     #if WMEM_L1==1
@@ -122,7 +122,7 @@ void inline Streamer<BandWidth>::SingleBankTransaction(AddrType address, uint8_t
     }
 
     if (verbose) {
-        trace->msg("max_latency = %d, Address =%x, size=%x, latency=%d, we=%d, data[0]=%02x, data[1]=%02x, data[2]=%02x, data[3]=%02x\n", max_latency, address, size, latency, write_enable, (*data)&0xFF, (*(data+1))&0xFF, (*(data+2))&0xFF, (*(data+3))&0xFF);
+        trace->msg("max_latency = %llu, Address =%x, size=%x, latency=%llu, we=%d, data[0]=%02x, data[1]=%02x, data[2]=%02x, data[3]=%02x\n", max_latency, address, size, latency, is_write, data[0], data[1], data[2], data[3]);
     }
   }
   else {
@@ -142,7 +142,7 @@ void Streamer<BandWidth>::VectorTransaction(uint8_t* data, int size, uint64_t& c
     // This if statement takes care of the initial unaligned transaction
     if (remainding_size > 0 && addr_start_offset > 0) {
         const int transaction_size = std::min((uint32_t)(bank_alignment - addr_start_offset), (uint32_t) remainding_size);
-        SingleBankTransaction(addr, data_ptr, transaction_size, cycles, max_latency, wmem, is_write, verbose);
+        SingleBankTransaction(addr, data_ptr, transaction_size, max_latency, wmem, is_write, verbose);
         data_ptr += transaction_size;
         addr += transaction_size;
         remainding_size -= transaction_size;
@@ -151,7 +151,7 @@ void Streamer<BandWidth>::VectorTransaction(uint8_t* data, int size, uint64_t& c
     // Aligned accesses of "bank_alignment" size, except for the last one which might be less, that's why the "min" check
     while (remainding_size > 0) {
         const int transaction_size = std::min(bank_alignment, (uint32_t) remainding_size);
-        SingleBankTransaction(addr, data_ptr, transaction_size, cycles, max_latency, wmem, is_write, verbose);
+        SingleBankTransaction(addr, data_ptr, transaction_size, max_latency, wmem, is_write, verbose);
         data_ptr += transaction_size;
         addr += transaction_size;
         remainding_size -= transaction_size;
@@ -161,7 +161,7 @@ void Streamer<BandWidth>::VectorTransaction(uint8_t* data, int size, uint64_t& c
 
     cycles += max_latency + 1;
     if(verbose){
-        trace->msg(" latency : %d, max_latency : %d\n", max_latency, cycles);
+        trace->msg("cycles : %llu, max_latency : %llu\n", cycles, max_latency);
     }
 }
 
