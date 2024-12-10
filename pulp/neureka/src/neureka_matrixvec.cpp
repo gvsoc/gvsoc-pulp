@@ -59,7 +59,7 @@ void Neureka::WeightLoad(int& latency, std::array<StreamerDataType, WmemBandwidt
     }
   }
   else{
-    this->weight_streamer_instance.VectorLoad(width, cycles,  weight_data_temp, this->reg_config_.config0.weight_from_wmem, this->trace_config.streamer.weight_load);
+    this->weight_streamer_instance.VectorLoad(weight_data_temp, width, cycles, this->reg_config_.config0.weight_from_wmem, this->trace_config.streamer.weight_load);
     this->num_mem_access_bytes.weight_load += width;
     latency = (latency + (int)cycles) ? (latency + (int)cycles) : 1 ;
   }

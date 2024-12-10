@@ -41,10 +41,10 @@ class Streamer{
     AddrType Iterate();
     void UpdateCount();
     void ResetCount();
-    void inline SingleBankTransaction(bool write_enable, AddrType address, DataType* &data, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose);
-    void VectorTransaction(int width, int64_t& cycles, DataType* data, bool wmem, bool verbose, bool is_write);
-    void VectorStore(DataType* data, int width, int64_t& cycles, bool wmem, bool verbose);
-    void VectorLoad(int width, int64_t& cycles, DataType* data, bool wmem, bool verbose);
+    void inline SingleBankTransaction(AddrType address, DataType* &data, int size, int64_t& cycles, int64_t& max_latency, bool wmem, bool is_write, bool verbose);
+    void VectorTransaction(DataType* data, int size, int64_t& cycles, bool wmem, bool is_write, bool verbose);
+    void VectorStore(DataType* data, int size, int64_t& cycles, bool wmem, bool verbose);
+    void VectorLoad(DataType* data, int size, int64_t& cycles, bool wmem, bool verbose);
     Streamer(){};
     Streamer(HwpeType* accel, AddrType baseAddr, int d0Stride, int d1Stride, int d2Stride, int d0Length, int d1Length, int d2Length, int bandwidthInBytes, int alignment = 4){
         accel_instance_ = accel;
@@ -114,7 +114,7 @@ AddrType Streamer<AddrType, HwpeType, DataType, BandWidth>::Iterate()
 }
 
 template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-void inline Streamer<AddrType, HwpeType, DataType, BandWidth>::SingleBankTransaction(bool write_enable, AddrType address, DataType* &data, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose)
+void inline Streamer<AddrType, HwpeType, DataType, BandWidth>::SingleBankTransaction(AddrType address, DataType* &data, int size, int64_t& cycles, int64_t& max_latency, bool wmem, bool write_enable, bool verbose)
 {
   this->accel_instance_->io_req.init();
   this->accel_instance_->io_req.set_addr(address);
@@ -150,29 +150,29 @@ void inline Streamer<AddrType, HwpeType, DataType, BandWidth>::SingleBankTransac
 
 // Only for single load transaction. So the width should be less than the bandwidth
 template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorTransaction(int width, int64_t& cycles, DataType* load_data, bool wmem, bool verbose, bool is_write) {
+void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorTransaction(DataType* data, int size, int64_t& cycles, bool wmem, bool is_write, bool verbose) {
     int64_t max_latency = 0;
     AddrType addr = Iterate();
     const AddrType addr_start_offset = addr % alignment_in_bytes_;
-    DataType* data_ptr = load_data;
-    int32_t remainder_bytes = width;
+    DataType* data_ptr = data;
+    int32_t remainding_size = size;
 
     // This if statement takes care of the initial unaligned transaction
-    if (remainder_bytes > 0 && addr_start_offset > 0) {
-        const int transaction_size = std::min((uint32_t)(alignment_in_bytes_ - addr_start_offset), (uint32_t) remainder_bytes);
-        SingleBankTransaction(is_write, addr, data_ptr, cycles, transaction_size, max_latency, wmem, verbose);
+    if (remainding_size > 0 && addr_start_offset > 0) {
+        const int transaction_size = std::min((uint32_t)(alignment_in_bytes_ - addr_start_offset), (uint32_t) remainding_size);
+        SingleBankTransaction(addr, data_ptr, transaction_size, cycles, max_latency, wmem, is_write, verbose);
         data_ptr += transaction_size;
         addr += transaction_size;
-        remainder_bytes -= transaction_size;
+        remainding_size -= transaction_size;
     }
 
     // Aligned accesses of "alignment" size, except for the last one which might be less, that's why the "min" check
-    while (remainder_bytes > 0) {
-        const int transaction_size = std::min(alignment_in_bytes_, (uint32_t) remainder_bytes);
-        SingleBankTransaction(is_write, addr, data_ptr, cycles, transaction_size, max_latency, wmem, verbose);
+    while (remainding_size > 0) {
+        const int transaction_size = std::min(alignment_in_bytes_, (uint32_t) remainding_size);
+        SingleBankTransaction(addr, data_ptr, transaction_size, cycles, max_latency, wmem, is_write, verbose);
         data_ptr += transaction_size;
         addr += transaction_size;
-        remainder_bytes -= transaction_size;
+        remainding_size -= transaction_size;
     }
 
     cycles += max_latency + 1;
@@ -183,15 +183,15 @@ void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorTransaction(int wi
 
 // Only for single load transaction. So the width should be less than the bandwidth
 template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorLoad(int width, int64_t& cycles, DataType* load_data, bool wmem, bool verbose) {
+void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorLoad(DataType* data, int size, int64_t& cycles, bool wmem, bool verbose) {
     const bool is_write = false;
-    VectorTransaction(width, cycles, load_data, wmem, verbose, is_write);
+    VectorTransaction(data, size, cycles, wmem, is_write, verbose);
 }
 
 template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorStore(DataType* data, int width, int64_t& cycles, bool wmem, bool verbose) // Only for single load transaction. So the width should be less than the bandwidth 
+void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorStore(DataType* data, int size, int64_t& cycles, bool wmem, bool verbose) // Only for single load transaction. So the width should be less than the bandwidth 
 {
     const bool is_write = true;
-    VectorTransaction(width, cycles, data, wmem, verbose, is_write);
+    VectorTransaction(data, size, cycles, wmem, is_write, verbose);
 }
 #endif

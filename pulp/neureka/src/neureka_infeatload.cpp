@@ -48,7 +48,7 @@ bool Neureka::InFeatLoadExecute(int& latency)
   this->ctrl_instance.InFeatLoadIteration();
   InFeatType infeat_data_temp[NeurekaInFeatScalarBufferCount];
 
-  this->infeat_streamer_instance.VectorLoad(width, cycles, infeat_data_temp, false, this->trace_config.streamer.infeat_load);
+  this->infeat_streamer_instance.VectorLoad(infeat_data_temp, width, cycles, false, this->trace_config.streamer.infeat_load);
   int access_width = reg_config_.config0.broadcast ? 1 : width;
   this->num_mem_access_bytes.infeat_load += access_width;
 
