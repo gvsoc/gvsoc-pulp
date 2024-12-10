@@ -42,6 +42,8 @@ Router::Router(FlooNoc *noc, int x, int y, int queue_size)
     {
         this->input_queues[i] = new vp::Queue(this, "input_queue_" + std::to_string(i),
             &this->fsm_event);
+
+        this->stalled_queues[i] = false;
     }
 }
 
@@ -107,7 +109,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             // Get output queue ID from next position
             int queue_id = _this->get_req_queue(next_x, next_y);
 
-            // Only send one request per cycle to the same output            
+            // Only send one request per cycle to the same output
             if (output_full[queue_id])
             {
                 continue;
@@ -335,4 +337,3 @@ void Router::reset(bool active)
         this->current_queue = 0;
     }
 }
-
