@@ -129,13 +129,13 @@ private:
 
   InFeatBuffer<InFeatType> infeat_buffer_instance;
   std::array<ProcessingEngine<Neureka, InFeatType, SignedInFeatType, OutFeatType, OutFeatType>, NeurekaTotalPECountXY> pe_instances; 
-  Streamer<Neureka, L1BandwidthInBytes> infeat_streamer_instance;
-  Streamer<Neureka, L1BandwidthInBytes> streamin_streamer_instance;
-  Streamer<Neureka, L1BandwidthInBytes> outfeat_streamer_instance;
-  Streamer<Neureka, WmemBandwidthInBytes> weight_streamer_instance;
-  Streamer<Neureka, L1BandwidthInBytes> normquant_shift_streamer_instance;
-  Streamer<Neureka, L1BandwidthInBytes> normquant_bias_streamer_instance;
-  Streamer<Neureka, L1BandwidthInBytes> normquant_mult_streamer_instance;
+  Streamer<L1BandwidthInBytes> infeat_streamer_instance;
+  Streamer<L1BandwidthInBytes> streamin_streamer_instance;
+  Streamer<L1BandwidthInBytes> outfeat_streamer_instance;
+  Streamer<WmemBandwidthInBytes> weight_streamer_instance;
+  Streamer<L1BandwidthInBytes> normquant_shift_streamer_instance;
+  Streamer<L1BandwidthInBytes> normquant_bias_streamer_instance;
+  Streamer<L1BandwidthInBytes> normquant_mult_streamer_instance;
   int infeat_dual_buffer_read_index, infeat_dual_buffer_write_index;
 
   // Streamer<AddrType, Neureka, StreamerDataType> normquant_streamer_instance;
