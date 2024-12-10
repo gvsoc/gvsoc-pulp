@@ -86,7 +86,7 @@ bool Neureka::OutFeatStoreExecute(int& latency)
   
   uint64_t cycles = 0;
 
-  this->outfeat_streamer_instance.VectorStore(store_data, width, cycles, false, this->trace_config.streamer.outfeat_store);
+  this->outfeat_streamer_instance.VectorStore(store_data, width, cycles, this->trace_config.streamer.outfeat_store);
   latency = latency + (int)cycles ? latency + (int)cycles : 1 ;
   this->num_mem_access_bytes.outfeat_store += width;
   

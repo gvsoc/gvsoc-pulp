@@ -41,7 +41,7 @@ bool Neureka::StreaminExecute(int& latency)
   std::fill(streamin_data.begin(), streamin_data.end(), 0);
 
   StreamerDataType streamin_data_temp[width];
-  this->streamin_streamer_instance.VectorLoad(streamin_data_temp, width, cycles, false, this->trace_config.streamer.streamin);
+  this->streamin_streamer_instance.VectorLoad(streamin_data_temp, width, cycles, this->trace_config.streamer.streamin);
 
   for(int i=0; i<width; i++)
     streamin_data[i] = streamin_data_temp[i];
