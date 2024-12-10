@@ -266,7 +266,7 @@ class SocFlooNoc(gvsoc.systree.Component):
             noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
                 x=0, y=i)
             current_bank_base += arch.bank_size
-        for i in range(1, arch.nb_y_tiles+1):
+        for i in range(1, arch.nb_y_tiles):
             bank = memory.memory.Memory(self, f'bank_{arch.nb_x_tiles+1}_{i}', size=arch.bank_size)
             noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
                 x=arch.nb_x_tiles+1, y=i)
@@ -274,6 +274,7 @@ class SocFlooNoc(gvsoc.systree.Component):
 
         # ROM
         narrow_axi.o_MAP ( rom.i_INPUT     (), base=arch.bootrom.base, size=arch.bootrom.size, rm_base=True  )
+        noc.o_MAP ( narrow_axi.i_INPUT     (), base=0, size=arch.bootrom.size, x=arch.nb_x_tiles+1, y=arch.nb_y_tiles  )
 
         # Clusters
         for id in range(0, arch.nb_cluster):
