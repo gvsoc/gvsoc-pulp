@@ -34,7 +34,7 @@ class Streamer{
         AddrType base_addr_;
         HwpeType* accel_instance_;
         int bandwidth_in_bytes_;
-        int alignment_in_bytes_; // 32-bit aligned banks in general
+        uint32_t alignment_in_bytes_; // 32-bit aligned banks in general
     public:
     AddrType ComputeAddressOffset() const;
     AddrType ComputeAddress() const;
@@ -42,9 +42,7 @@ class Streamer{
     void UpdateCount();
     void ResetCount();
     void inline SingleBankTransaction(bool write_enable, AddrType address, DataType* &data, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose);
-    void MisalignedPreambleStore( bool write_enable, AddrType address, DataType* &data, int& preamble_width, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose);
-    void AlignedStore( bool write_enable, AddrType address, DataType* &data, int& aligned_width, int offset_width, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose);
-    void MisalignedPostambleStore( bool write_enable, AddrType address, DataType* &data, int& postamble_width, int offset_width, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose);
+    void VectorTransaction(int width, int64_t& cycles, DataType* data, bool wmem, bool verbose, bool is_write);
     void VectorStore(DataType* data, int width, int64_t& cycles, bool wmem, bool verbose);
     void VectorLoad(int width, int64_t& cycles, DataType* data, bool wmem, bool verbose);
     Streamer(){};
@@ -150,67 +148,32 @@ void inline Streamer<AddrType, HwpeType, DataType, BandWidth>::SingleBankTransac
   }
 }
 
-template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-void Streamer<AddrType, HwpeType, DataType, BandWidth>::MisalignedPreambleStore( bool write_enable, AddrType address, DataType* &data, int& preamble_width, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose ) {
-    DataType* store_data = new DataType[preamble_width];  
-    for(int i=0; i<preamble_width; i++)
-        store_data[i] = data[i];
-    SingleBankTransaction(write_enable, address, store_data, cycles, size, max_latency, wmem, verbose);
-    delete[] store_data;
-}
-template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-void Streamer<AddrType, HwpeType, DataType, BandWidth>::AlignedStore( bool write_enable, AddrType address, DataType* &data, int& aligned_width, int offset_width, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose ) {
-    DataType* store_data = new DataType[size];  
-    for(int i=0; i<(aligned_width/size); i++){
-        for(int j=0; j<size; j++){
-            int index = offset_width + 4*i + j;
-            store_data[j]=data[index];
-        }
-        SingleBankTransaction(write_enable, address+i*4, store_data, cycles, size, max_latency, wmem, verbose);
-    }
-    delete[] store_data;
-}
-template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-void Streamer<AddrType, HwpeType, DataType, BandWidth>::MisalignedPostambleStore( bool write_enable, AddrType address, DataType* &data, int& postamble_width, int offset_width, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose ) {
-    DataType* store_data = new DataType[postamble_width]; 
-    for(int i=0; i<postamble_width; i++)
-        store_data[i] = data[i+offset_width];
-    SingleBankTransaction(write_enable, address, store_data, cycles, size, max_latency, wmem, verbose);
-    delete[] store_data;
-}
-
 // Only for single load transaction. So the width should be less than the bandwidth
 template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorLoad(int width, int64_t& cycles, DataType* load_data, bool wmem, bool verbose) {
+void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorTransaction(int width, int64_t& cycles, DataType* load_data, bool wmem, bool verbose, bool is_write) {
     int64_t max_latency = 0;
-    const AddrType addr_next = Iterate();
-    const AddrType addr_start_offset = addr_next % alignment_in_bytes_;
-    const AddrType addr_start_aligned = addr_next - addr_start_offset;
+    AddrType addr = Iterate();
+    const AddrType addr_start_offset = addr % alignment_in_bytes_;
+    DataType* data_ptr = load_data;
+    int32_t remainder_bytes = width;
 
-    // Increase the width by the start offset so that the start is aligned
-    int width_aligned = width + addr_start_offset;
-
-    // Increase the width by what's missing to have an aligned load at the end too
-    const int addr_end_offset = width_aligned % alignment_in_bytes_;
-    if (addr_end_offset > 0) {
-        width_aligned += alignment_in_bytes_ - addr_end_offset;
+    // This if statement takes care of the initial unaligned transaction
+    if (remainder_bytes > 0 && addr_start_offset > 0) {
+        const int transaction_size = std::min((uint32_t)(alignment_in_bytes_ - addr_start_offset), (uint32_t) remainder_bytes);
+        SingleBankTransaction(is_write, addr, data_ptr, cycles, transaction_size, max_latency, wmem, verbose);
+        data_ptr += transaction_size;
+        addr += transaction_size;
+        remainder_bytes -= transaction_size;
     }
 
-    assert(width_aligned % alignment_in_bytes_ == 0 && "Width_aligned is not aligned");
-    assert(width_aligned <= BandWidth + 8 && "Width is larger than the BandWidth + 8");
-
-    // Do the aligned fetch
-    DataType data_aligned[BandWidth];
-    DataType *data_ptr = data_aligned;
-    AddrType addr_aligned = addr_start_aligned;
-    for (int i = 0; i < width_aligned / alignment_in_bytes_; i++) {
-        SingleBankTransaction(false, addr_aligned, data_ptr, cycles, alignment_in_bytes_, max_latency, wmem, verbose);
-        data_ptr += alignment_in_bytes_;
-        addr_aligned += alignment_in_bytes_;
+    // Aligned accesses of "alignment" size, except for the last one which might be less, that's why the "min" check
+    while (remainder_bytes > 0) {
+        const int transaction_size = std::min(alignment_in_bytes_, (uint32_t) remainder_bytes);
+        SingleBankTransaction(is_write, addr, data_ptr, cycles, transaction_size, max_latency, wmem, verbose);
+        data_ptr += transaction_size;
+        addr += transaction_size;
+        remainder_bytes -= transaction_size;
     }
-
-    // Extract only the data we need
-    memcpy(load_data, &data_aligned[addr_start_offset], width);
 
     cycles += max_latency + 1;
     if(verbose){
@@ -218,31 +181,17 @@ void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorLoad(int width, in
     }
 }
 
+// Only for single load transaction. So the width should be less than the bandwidth
+template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
+void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorLoad(int width, int64_t& cycles, DataType* load_data, bool wmem, bool verbose) {
+    const bool is_write = false;
+    VectorTransaction(width, cycles, load_data, wmem, verbose, is_write);
+}
+
 template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
 void Streamer<AddrType, HwpeType, DataType, BandWidth>::VectorStore(DataType* data, int width, int64_t& cycles, bool wmem, bool verbose) // Only for single load transaction. So the width should be less than the bandwidth 
 {
-    int64_t max_latency = 0;
-    AddrType start_address     = Iterate();
-    AddrType end_address       = start_address + width;
-
-    AddrType offset_address    = start_address % alignment_in_bytes_;
-    AddrType preamble_address  = start_address - offset_address; // for misaligned address;
-    AddrType aligned_address   = offset_address ? ((preamble_address + alignment_in_bytes_ > end_address) ? preamble_address : preamble_address + alignment_in_bytes_) : start_address ;
-    AddrType postamble_address = alignment_in_bytes_ * (end_address/alignment_in_bytes_);
-
-    int preamble_width  = start_address-preamble_address ? alignment_in_bytes_ - (start_address-preamble_address) : 0;
-    preamble_width = preamble_width > width ? width : preamble_width;
-    int aligned_width   = (postamble_address - aligned_address) > 0 ? (postamble_address - aligned_address) : 0;
-    aligned_width = aligned_width+preamble_width > width ? (width - preamble_width > 0 ? width-preamble_width : 0) : aligned_width ;  
-    int postamble_width = (width - (preamble_width + aligned_width)) > 0 ? (width - (preamble_width + aligned_width)): 0 ;
-
-    if(preamble_width > 0)
-        MisalignedPreambleStore(true, start_address, data, preamble_width, cycles, preamble_width, max_latency, wmem, verbose );
-    if(aligned_width > 0)
-        AlignedStore(true, aligned_address, data, aligned_width, preamble_width, cycles, alignment_in_bytes_, max_latency, wmem, verbose );
-    if(postamble_width > 0)
-        MisalignedPostambleStore( true, postamble_address, data, postamble_width, preamble_width+aligned_width, cycles, postamble_width, max_latency, wmem, verbose );
-    cycles += max_latency+1;
-    
+    const bool is_write = true;
+    VectorTransaction(width, cycles, data, wmem, verbose, is_write);
 }
 #endif
