@@ -119,7 +119,6 @@ public:
 
   vp::IoReq io_req;
   vp::IoMaster tcdm_port;
-  vp::IoMaster wmem_tcdm_port;
   vp::IoMaster wmem_port;
   IoMasterDemux<2, bool> demux_port;
 
