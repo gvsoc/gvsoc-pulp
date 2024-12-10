@@ -23,7 +23,7 @@
 #include <limits.h>
 void Neureka::OutFeatStoreSetup() {
   StreamerConfig streamer_config = this->ctrl_instance.GetOutFeatStoreStreamerConfig();
-  this->outfeat_streamer_instance.UpdateParams(streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2);
+  this->outfeat_streamer_instance.Init(streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2);
   this->ctrl_instance.ResetOutFeatStoreIteration();
   if(this->trace_config.setup.outfeat_store)
     this->trace.msg("OutFeatStore Setup is done addr : 0x%x, strides( d0 : 0x%x, d1 : 0x%x, d2 : 0x%x), lengths(d0 : %d, d1 : %d, d2 : %d)\n", streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2);

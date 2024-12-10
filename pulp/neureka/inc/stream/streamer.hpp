@@ -48,7 +48,7 @@ class Streamer{
     Streamer(HwpeType* accel){
         accel_instance_ = accel;
     } 
-    void UpdateParams(AddrType baseAddr, int d0Stride, int d1Stride, int d2Stride, int d0Length, int d1Length, int d2Length){
+    void Init(AddrType baseAddr, int d0Stride, int d1Stride, int d2Stride, int d0Length, int d1Length, int d2Length){
       base_addr_ = baseAddr;
       d0_stride_ = d0Stride;
       d1_stride_ = d1Stride;
