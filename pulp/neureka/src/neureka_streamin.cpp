@@ -23,7 +23,7 @@
 void Neureka::StreaminSetup() {
   this->ctrl_instance.ComputeDimensions();
   StreamerConfig streamer_config = this->ctrl_instance.GetStreaminStreamerConfig();
-  this->streamin_streamer_instance.UpdateParams(streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2, L1BandwidthInBytes, 4);
+  this->streamin_streamer_instance.UpdateParams(streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2, L1BandwidthInBytes);
   this->ctrl_instance.ResetStreaminIteration();
   if(this->trace_config.setup.streamin)
     this->trace.msg("Stramin Setup is done addr : 0x%x, strides( d0 : 0x%x, d1 : 0x%x, d2 : 0x%x), lengths(d0 : %d, d1 : %d, d2 : %d)\n", streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2);

@@ -34,7 +34,7 @@ void Neureka::WeightLoadSetup() {
   
   int bandwidth = this->reg_config_.config0.weight_from_wmem ? WmemBandwidthInBytes : L1BandwidthInBytes;
   
-  this->weight_streamer_instance.UpdateParams(streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2, bandwidth, 4);
+  this->weight_streamer_instance.UpdateParams(streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2, bandwidth);
   
   this->ctrl_instance.ResetWeightLoadIteration();
   // this->trace.msg("Weight load setup %d \n", this->infeat_dual_buffer_read_index);

@@ -22,6 +22,8 @@
 #define STREAMER_H
 #include "datatype.hpp"
 
+static const AddrType bank_alignment = 4;
+
 template<typename HwpeType, int BandWidth>
 class Streamer{
     private:
@@ -31,7 +33,6 @@ class Streamer{
         AddrType base_addr_;
         HwpeType* accel_instance_;
         int bandwidth_in_bytes_;
-        uint32_t alignment_in_bytes_; // 32-bit aligned banks in general
     public:
     AddrType ComputeAddressOffset() const;
     AddrType ComputeAddress() const;
@@ -43,9 +44,8 @@ class Streamer{
     void VectorStore(uint8_t* data, int size, int64_t& cycles, bool wmem, bool verbose);
     void VectorLoad(uint8_t* data, int size, int64_t& cycles, bool wmem, bool verbose);
     Streamer(){};
-    Streamer(HwpeType* accel, AddrType baseAddr, int d0Stride, int d1Stride, int d2Stride, int d0Length, int d1Length, int d2Length, int bandwidthInBytes, int alignment = 4){
+    Streamer(HwpeType* accel, AddrType baseAddr, int d0Stride, int d1Stride, int d2Stride, int d0Length, int d1Length, int d2Length, int bandwidthInBytes){
         accel_instance_ = accel;
-        alignment_in_bytes_ = alignment;
         base_addr_ = baseAddr;
         d0_stride_ = d0Stride;
         d1_stride_ = d1Stride;
@@ -58,7 +58,7 @@ class Streamer{
         d2_count_  = 0;
         bandwidth_in_bytes_ = bandwidthInBytes;
     } 
-    void UpdateParams(AddrType baseAddr, int d0Stride, int d1Stride, int d2Stride, int d0Length, int d1Length, int d2Length, int bandwidthInBytes, int alignment = 4){
+    void UpdateParams(AddrType baseAddr, int d0Stride, int d1Stride, int d2Stride, int d0Length, int d1Length, int d2Length, int bandwidthInBytes){
       base_addr_ = baseAddr;
       d0_stride_ = d0Stride;
       d1_stride_ = d1Stride;
@@ -67,7 +67,6 @@ class Streamer{
       d1_length_ = d1Length;
       d2_length_ = d2Length;
       ResetCount();
-      alignment_in_bytes_ = alignment;
       bandwidth_in_bytes_ = bandwidthInBytes;
     }
 };
@@ -150,22 +149,22 @@ template<typename HwpeType, int BandWidth>
 void Streamer<HwpeType, BandWidth>::VectorTransaction(uint8_t* data, int size, int64_t& cycles, bool wmem, bool is_write, bool verbose) {
     int64_t max_latency = 0;
     AddrType addr = Iterate();
-    const AddrType addr_start_offset = addr % alignment_in_bytes_;
+    const AddrType addr_start_offset = addr % bank_alignment;
     uint8_t* data_ptr = data;
     int32_t remainding_size = size;
 
     // This if statement takes care of the initial unaligned transaction
     if (remainding_size > 0 && addr_start_offset > 0) {
-        const int transaction_size = std::min((uint32_t)(alignment_in_bytes_ - addr_start_offset), (uint32_t) remainding_size);
+        const int transaction_size = std::min((uint32_t)(bank_alignment - addr_start_offset), (uint32_t) remainding_size);
         SingleBankTransaction(addr, data_ptr, transaction_size, cycles, max_latency, wmem, is_write, verbose);
         data_ptr += transaction_size;
         addr += transaction_size;
         remainding_size -= transaction_size;
     }
 
-    // Aligned accesses of "alignment" size, except for the last one which might be less, that's why the "min" check
+    // Aligned accesses of "bank_alignment" size, except for the last one which might be less, that's why the "min" check
     while (remainding_size > 0) {
-        const int transaction_size = std::min(alignment_in_bytes_, (uint32_t) remainding_size);
+        const int transaction_size = std::min(bank_alignment, (uint32_t) remainding_size);
         SingleBankTransaction(addr, data_ptr, transaction_size, cycles, max_latency, wmem, is_write, verbose);
         data_ptr += transaction_size;
         addr += transaction_size;
