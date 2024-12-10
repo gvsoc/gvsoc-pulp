@@ -34,6 +34,7 @@ class Streamer{
         AddrType base_addr_;
         HwpeType* accel_instance_;
         vp::Trace* trace;
+        vp::IoReq* io_req;
 
     AddrType ComputeAddressOffset() const;
     AddrType ComputeAddress() const;
@@ -46,9 +47,10 @@ class Streamer{
     void VectorStore(uint8_t* data, int size, int64_t& cycles, bool wmem, bool verbose);
     void VectorLoad(uint8_t* data, int size, int64_t& cycles, bool wmem, bool verbose);
     Streamer(){};
-    Streamer(HwpeType* accel, vp::Trace* trace_){
+    Streamer(HwpeType* accel, vp::Trace* trace_, vp::IoReq* io_req_){
         accel_instance_ = accel;
         trace = trace_;
+        io_req = io_req_;
     } 
     void Init(AddrType baseAddr, int d0Stride, int d1Stride, int d2Stride, int d0Length, int d1Length, int d2Length){
       base_addr_ = baseAddr;
@@ -94,25 +96,25 @@ AddrType Streamer<HwpeType, BandWidth>::ComputeAddress()const {
 template<typename HwpeType, int BandWidth>
 void inline Streamer<HwpeType, BandWidth>::SingleBankTransaction(AddrType address, uint8_t* &data, int size, int64_t& cycles, int64_t& max_latency, bool wmem, bool write_enable, bool verbose)
 {
-  this->accel_instance_->io_req.init();
-  this->accel_instance_->io_req.set_addr(address);
-  this->accel_instance_->io_req.set_size(size);
-  this->accel_instance_->io_req.set_data(data);
-  this->accel_instance_->io_req.set_is_write(write_enable);
+  io_req->init();
+  io_req->set_addr(address);
+  io_req->set_size(size);
+  io_req->set_data(data);
+  io_req->set_is_write(write_enable);
   int err = 0;
   if(wmem) {
     #if WMEM_L1==1
-        err = this->accel_instance_->tcdm_port.req(&this->accel_instance_->io_req);
+        err = this->accel_instance_->tcdm_port.req(io_req);
     #else 
-        err = this->accel_instance_->wmem_port.req(&this->accel_instance_->io_req);
+        err = this->accel_instance_->wmem_port.req(io_req);
     #endif 
 
   } else {
-    err = this->accel_instance_->tcdm_port.req(&this->accel_instance_->io_req);
+    err = this->accel_instance_->tcdm_port.req(io_req);
   }
 
   if (err == vp::IO_REQ_OK) {
-    int64_t latency = this->accel_instance_->io_req.get_latency();
+    int64_t latency = io_req->get_latency();
     if (latency > max_latency) {
       max_latency = latency;
     }
