@@ -21,9 +21,6 @@
 #ifndef STREAMER_H
 #define STREAMER_H
 #include "datatype.hpp"
-#ifndef GVSoC 
-#define GVSoC 
-#endif
 
 // Task 7 - Disable INEFFICIENT_MEMORY_ACCESS
 // #define INEFFICIENT_MEMORY_ACCESS
@@ -121,7 +118,6 @@ AddrType Streamer<AddrType, HwpeType, DataType, BandWidth>::Iterate()
     return address;
 }
 
-#ifdef GVSoC
 template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
 void inline Streamer<AddrType, HwpeType, DataType, BandWidth>::SingleBankTransaction(bool write_enable, AddrType address, DataType* &data, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose)
 {
@@ -156,14 +152,7 @@ void inline Streamer<AddrType, HwpeType, DataType, BandWidth>::SingleBankTransac
     this->accel_instance_->trace.fatal("Unsupported asynchronous reply\n");
   }
 }
-#else
-template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
-void Streamer<AddrType, HwpeType, DataType, BandWidth>::SingleBankTransaction(bool write_enable, AddrType address, DataType* &data, int64_t& cycles, int size, int64_t& max_latency, bool wmem)
-{
-    for(int i=0; i<size; i++)
-        std::cout<<"index "<<i<<" we="<<(int)write_enable<<std::hex<<" addr="<<(int)(address+i)<<" data="<<(int)data[i]<<"\n";
-}
-#endif
+
 template<typename AddrType, typename HwpeType, typename DataType, int BandWidth>
 void Streamer<AddrType, HwpeType, DataType, BandWidth>::MisalignedPreambleLoad( bool write_enable, AddrType address, DataType* &data, int& preamble_width, int64_t& cycles, int size, int64_t& max_latency, bool wmem, bool verbose) {
     DataType* load_data = new DataType[4];  
