@@ -86,6 +86,25 @@ void print3DArray(const std::array<std::array<std::array<T, L>, M>, N>& arr, int
     }
 }
 
+template<int DemuxSize, typename IndexType>
+class IoMasterDemux : public vp::IoMaster {
+public:
+    IoMasterDemux() {};
+    IoMasterDemux(std::array<vp::IoMaster*, DemuxSize> ports, IndexType* index) {
+        this->ports = ports;
+        this->index = index;
+    }
+
+    inline vp::IoReqStatus req(vp::IoReq* req) {
+        assert(*index < ports.size() && "Out-of-bound index");
+        return ports[*index]->req(req);
+    }
+private:
+    std::array<vp::IoMaster*, DemuxSize> ports;
+    IndexType* index;
+};
+
+
 class Neureka : public vp::Component
 {
   friend class Neureka_base;
@@ -102,6 +121,8 @@ public:
   vp::IoMaster tcdm_port;
   vp::IoMaster wmem_tcdm_port;
   vp::IoMaster wmem_port;
+  IoMasterDemux<2, bool> demux_port;
+
   StateParams<std::chrono::high_resolution_clock::time_point> cpu_cycles_start, cpu_cycles_end;
   StateParams<std::chrono::duration<double>> cpu_cycles_duration={};
   StateParams<int> num_mem_access_bytes; 
@@ -129,13 +150,13 @@ private:
 
   InFeatBuffer<InFeatType> infeat_buffer_instance;
   std::array<ProcessingEngine<Neureka, InFeatType, SignedInFeatType, OutFeatType, OutFeatType>, NeurekaTotalPECountXY> pe_instances; 
-  Streamer<L1BandwidthInBytes> infeat_streamer_instance;
-  Streamer<L1BandwidthInBytes> streamin_streamer_instance;
-  Streamer<L1BandwidthInBytes> outfeat_streamer_instance;
-  Streamer<WmemBandwidthInBytes> weight_streamer_instance;
-  Streamer<L1BandwidthInBytes> normquant_shift_streamer_instance;
-  Streamer<L1BandwidthInBytes> normquant_bias_streamer_instance;
-  Streamer<L1BandwidthInBytes> normquant_mult_streamer_instance;
+  Streamer<L1BandwidthInBytes, vp::IoMaster> infeat_streamer_instance;
+  Streamer<L1BandwidthInBytes, vp::IoMaster> streamin_streamer_instance;
+  Streamer<L1BandwidthInBytes, vp::IoMaster> outfeat_streamer_instance;
+  Streamer<WmemBandwidthInBytes, IoMasterDemux<2, bool>> weight_streamer_instance;
+  Streamer<L1BandwidthInBytes, vp::IoMaster> normquant_shift_streamer_instance;
+  Streamer<L1BandwidthInBytes, vp::IoMaster> normquant_bias_streamer_instance;
+  Streamer<L1BandwidthInBytes, vp::IoMaster> normquant_mult_streamer_instance;
   int infeat_dual_buffer_read_index, infeat_dual_buffer_write_index;
 
   // Streamer<AddrType, Neureka, StreamerDataType> normquant_streamer_instance;

@@ -33,15 +33,17 @@ Neureka::Neureka(vp::ComponentConf &config)
   for(int i=0; i<NeurekaTotalPECountXY; i++)
     this->pe_instances[i] = ProcessingEngine<Neureka, InFeatType, SignedInFeatType, OutFeatType, OutFeatType>(this);
 
+  demux_port = IoMasterDemux<2, bool>({{&tcdm_port, &wmem_port}}, &reg_config_.config0.weight_from_wmem);
+
   this->ctrl_instance = Control<Neureka>(this);
   this->regconfig_manager_instance = RegConfigManager<Neureka>(this, NeurekaRegisterContextCount, NEUREKA_NB_REG);
-  this->infeat_streamer_instance = Streamer<L1BandwidthInBytes>(&trace, &io_req, &tcdm_port, &wmem_port);
-  this->streamin_streamer_instance = Streamer<L1BandwidthInBytes>(&trace, &io_req, &tcdm_port, &wmem_port);
-  this->outfeat_streamer_instance = Streamer<L1BandwidthInBytes>(&trace, &io_req, &tcdm_port, &wmem_port);
-  this->weight_streamer_instance = Streamer<WmemBandwidthInBytes>(&trace, &io_req, &tcdm_port, &wmem_port);
-  this->normquant_shift_streamer_instance=Streamer<L1BandwidthInBytes>(&trace, &io_req, &tcdm_port, &wmem_port);
-  this->normquant_bias_streamer_instance=Streamer<L1BandwidthInBytes>(&trace, &io_req, &tcdm_port, &wmem_port);
-  this->normquant_mult_streamer_instance=Streamer<L1BandwidthInBytes>(&trace, &io_req, &tcdm_port, &wmem_port);
+  this->infeat_streamer_instance = Streamer<L1BandwidthInBytes, vp::IoMaster>(&trace, &io_req, &tcdm_port);
+  this->streamin_streamer_instance = Streamer<L1BandwidthInBytes, vp::IoMaster>(&trace, &io_req, &tcdm_port);
+  this->outfeat_streamer_instance = Streamer<L1BandwidthInBytes, vp::IoMaster>(&trace, &io_req, &tcdm_port);
+  this->weight_streamer_instance = Streamer<WmemBandwidthInBytes, IoMasterDemux<2, bool>>(&trace, &io_req, &demux_port);
+  this->normquant_shift_streamer_instance=Streamer<L1BandwidthInBytes, vp::IoMaster>(&trace, &io_req, &tcdm_port);
+  this->normquant_bias_streamer_instance=Streamer<L1BandwidthInBytes, vp::IoMaster>(&trace, &io_req, &tcdm_port);
+  this->normquant_mult_streamer_instance=Streamer<L1BandwidthInBytes, vp::IoMaster>(&trace, &io_req, &tcdm_port);
   this->traces.new_trace("trace", &this->trace, vp::DEBUG);
   this->trace_level = L0_CONFIG;
   this->trace_format = 0;

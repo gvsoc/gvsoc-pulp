@@ -23,7 +23,7 @@
 #include "datatype.hpp"
 #include "vp/itf/io.hpp"
 
-template<int BandWidth>
+template<int BandWidth, typename PortType>
 class Streamer{
     private:
         int d0_stride_, d1_stride_, d2_stride_;
@@ -32,8 +32,7 @@ class Streamer{
         AddrType base_addr_;
         vp::Trace* trace;
         vp::IoReq* io_req;
-        vp::IoMaster* tcdm_port;
-        vp::IoMaster* wmem_port;
+        PortType* port;
 
     AddrType ComputeAddressOffset() const;
     AddrType ComputeAddress() const;
@@ -48,11 +47,10 @@ class Streamer{
     void VectorStore(uint8_t* data, int size, uint64_t& cycles, bool wmem, bool verbose);
     void VectorLoad(uint8_t* data, int size, uint64_t& cycles, bool wmem, bool verbose);
     Streamer(){};
-    Streamer(vp::Trace* trace_, vp::IoReq* io_req_, vp::IoMaster* tcdm_port_, vp::IoMaster* wmem_port_){
-        trace = trace_;
-        io_req = io_req_;
-        tcdm_port = tcdm_port_;
-        wmem_port = wmem_port_;
+    Streamer(vp::Trace* trace, vp::IoReq* io_req, PortType* port){
+        this->trace = trace;
+        this->io_req = io_req;
+        this->port = port;
     } 
     void Init(AddrType baseAddr, int d0Stride, int d1Stride, int d2Stride, int d0Length, int d1Length, int d2Length){
       base_addr_ = baseAddr;
@@ -66,15 +64,15 @@ class Streamer{
     }
 };
 
-template<int BandWidth>
-void Streamer<BandWidth>::ResetCount()
+template<int BandWidth, typename PortType>
+void Streamer<BandWidth, PortType>::ResetCount()
 {
     d0_count_ = 0;
     d1_count_ = 0;
     d2_count_ = 0;
 }
-template<int BandWidth>
-void Streamer<BandWidth>::UpdateCount()
+template<int BandWidth, typename PortType>
+void Streamer<BandWidth, PortType>::UpdateCount()
 {
   if(d0_count_ != d0_length_-1) d0_count_++;
   else if(d1_count_ != d1_length_-1) {d1_count_++, d0_count_=0;}
@@ -85,35 +83,26 @@ void Streamer<BandWidth>::UpdateCount()
   }
 }
 
-template<int BandWidth>
-AddrType Streamer<BandWidth>::ComputeAddressOffset()const {  
+template<int BandWidth, typename PortType>
+AddrType Streamer<BandWidth, PortType>::ComputeAddressOffset()const {  
     return d2_count_*d2_stride_ + d1_count_*d1_stride_ + d0_count_*d0_stride_;
 }
 
-template<int BandWidth>
-AddrType Streamer<BandWidth>::ComputeAddress()const {  
+template<int BandWidth, typename PortType>
+AddrType Streamer<BandWidth, PortType>::ComputeAddress()const {  
     return base_addr_ + ComputeAddressOffset();
 }
 
-template<int BandWidth>
-void inline Streamer<BandWidth>::SingleBankTransaction(AddrType address, uint8_t* &data, int size, uint64_t& max_latency, bool wmem, bool is_write, bool verbose)
+template<int BandWidth, typename PortType>
+void inline Streamer<BandWidth, PortType>::SingleBankTransaction(AddrType address, uint8_t* &data, int size, uint64_t& max_latency, bool wmem, bool is_write, bool verbose)
 {
   io_req->init();
   io_req->set_addr(address);
   io_req->set_size(size);
   io_req->set_data(data);
   io_req->set_is_write(is_write);
-  int err = 0;
-  if(wmem) {
-    #if WMEM_L1==1
-        err = tcdm_port->req(io_req);
-    #else 
-        err = wmem_port->req(io_req);
-    #endif 
 
-  } else {
-    err = tcdm_port->req(io_req);
-  }
+  const int err = port->req(io_req);
 
   if (err == vp::IO_REQ_OK) {
     uint64_t latency = io_req->get_latency();
@@ -131,8 +120,8 @@ void inline Streamer<BandWidth>::SingleBankTransaction(AddrType address, uint8_t
 }
 
 // Only for single load transaction. So the width should be less than the bandwidth
-template<int BandWidth>
-void Streamer<BandWidth>::VectorTransaction(uint8_t* data, int size, uint64_t& cycles, bool wmem, bool is_write, bool verbose) {
+template<int BandWidth, typename PortType>
+void Streamer<BandWidth, PortType>::VectorTransaction(uint8_t* data, int size, uint64_t& cycles, bool wmem, bool is_write, bool verbose) {
     uint64_t max_latency = 0;
     AddrType addr = ComputeAddress();
     const AddrType addr_start_offset = addr % bank_alignment;
@@ -166,14 +155,14 @@ void Streamer<BandWidth>::VectorTransaction(uint8_t* data, int size, uint64_t& c
 }
 
 // Only for single load transaction. So the width should be less than the bandwidth
-template<int BandWidth>
-void Streamer<BandWidth>::VectorLoad(uint8_t* data, int size, uint64_t& cycles, bool wmem, bool verbose) {
+template<int BandWidth, typename PortType>
+void Streamer<BandWidth, PortType>::VectorLoad(uint8_t* data, int size, uint64_t& cycles, bool wmem, bool verbose) {
     const bool is_write = false;
     VectorTransaction(data, size, cycles, wmem, is_write, verbose);
 }
 
-template<int BandWidth>
-void Streamer<BandWidth>::VectorStore(uint8_t* data, int size, uint64_t& cycles, bool wmem, bool verbose) // Only for single load transaction. So the width should be less than the bandwidth 
+template<int BandWidth, typename PortType>
+void Streamer<BandWidth, PortType>::VectorStore(uint8_t* data, int size, uint64_t& cycles, bool wmem, bool verbose) // Only for single load transaction. So the width should be less than the bandwidth 
 {
     const bool is_write = true;
     VectorTransaction(data, size, cycles, wmem, is_write, verbose);
