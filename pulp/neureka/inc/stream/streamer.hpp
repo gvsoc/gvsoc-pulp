@@ -32,7 +32,7 @@ class Streamer{
         int d0_count_, d1_count_, d2_count_;
         AddrType base_addr_;
         HwpeType* accel_instance_;
-    public:
+
     AddrType ComputeAddressOffset() const;
     AddrType ComputeAddress() const;
     AddrType Iterate();
@@ -40,6 +40,8 @@ class Streamer{
     void ResetCount();
     void inline SingleBankTransaction(AddrType address, uint8_t* &data, int size, int64_t& cycles, int64_t& max_latency, bool wmem, bool is_write, bool verbose);
     void VectorTransaction(uint8_t* data, int size, int64_t& cycles, bool wmem, bool is_write, bool verbose);
+
+    public:
     void VectorStore(uint8_t* data, int size, int64_t& cycles, bool wmem, bool verbose);
     void VectorLoad(uint8_t* data, int size, int64_t& cycles, bool wmem, bool verbose);
     Streamer(){};
