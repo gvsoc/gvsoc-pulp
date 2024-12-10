@@ -22,6 +22,7 @@
 #define STREAMER_H
 #include "datatype.hpp"
 #include "vp/itf/io.hpp"
+#include "vp/trace/trace.hpp"
 
 template<int BandWidth, typename PortType>
 class Streamer{
@@ -102,26 +103,20 @@ void inline Streamer<BandWidth, PortType>::SingleBankTransaction(AddrType addres
   io_req->set_data(data);
   io_req->set_is_write(is_write);
 
-  const int err = port->req(io_req);
+  vp_assert_always(port->req(io_req) == vp::IO_REQ_OK, trace, "Unsupported async reply\n");
 
-  if (err == vp::IO_REQ_OK) {
-    uint64_t latency = io_req->get_latency();
-    if (latency > max_latency) {
-      max_latency = latency;
-    }
+  max_latency = std::max(io_req->get_latency(), max_latency);
 
-    if (verbose) {
-        trace->msg("max_latency = %llu, Address =%x, size=%x, latency=%llu, we=%d, data[0]=%02x, data[1]=%02x, data[2]=%02x, data[3]=%02x\n", max_latency, address, size, latency, is_write, data[0], data[1], data[2], data[3]);
-    }
-  }
-  else {
-    trace->fatal("Unsupported asynchronous reply\n");
+  if (verbose) {
+      trace->msg("max_latency = %llu, Address =%x, size=%x, latency=%llu, we=%d, data[0]=%02x, data[1]=%02x, data[2]=%02x, data[3]=%02x\n", max_latency, address, size, io_req->get_latency(), is_write, data[0], data[1], data[2], data[3]);
   }
 }
 
-// Only for single load transaction. So the width should be less than the bandwidth
+// Only for single load transaction. So the transaction size should be less than the bandwidth
 template<int BandWidth, typename PortType>
 void Streamer<BandWidth, PortType>::VectorTransaction(uint8_t* data, int size, uint64_t& cycles, bool is_write, bool verbose) {
+    vp_assert_always(size <= BandWidth, trace, "Size (%d) is bigger then the BandWidth (%d)\n", size, BandWidth);
+
     uint64_t max_latency = 0;
     AddrType addr = ComputeAddress();
     const AddrType addr_start_offset = addr % bank_alignment;
