@@ -35,13 +35,13 @@ Neureka::Neureka(vp::ComponentConf &config)
 
   this->ctrl_instance = Control<Neureka>(this);
   this->regconfig_manager_instance = RegConfigManager<Neureka>(this, NeurekaRegisterContextCount, NEUREKA_NB_REG);
-  this->infeat_streamer_instance = Streamer<Neureka, L1BandwidthInBytes>(this);
-  this->streamin_streamer_instance = Streamer<Neureka, L1BandwidthInBytes>(this);
-  this->outfeat_streamer_instance = Streamer<Neureka, L1BandwidthInBytes>(this);
-  this->weight_streamer_instance = Streamer<Neureka, WmemBandwidthInBytes>(this);
-  this->normquant_shift_streamer_instance=Streamer<Neureka, L1BandwidthInBytes>(this);
-  this->normquant_bias_streamer_instance=Streamer<Neureka, L1BandwidthInBytes>(this);
-  this->normquant_mult_streamer_instance=Streamer<Neureka, L1BandwidthInBytes>(this);
+  this->infeat_streamer_instance = Streamer<Neureka, L1BandwidthInBytes>(this, &trace);
+  this->streamin_streamer_instance = Streamer<Neureka, L1BandwidthInBytes>(this, &trace);
+  this->outfeat_streamer_instance = Streamer<Neureka, L1BandwidthInBytes>(this, &trace);
+  this->weight_streamer_instance = Streamer<Neureka, WmemBandwidthInBytes>(this, &trace);
+  this->normquant_shift_streamer_instance=Streamer<Neureka, L1BandwidthInBytes>(this, &trace);
+  this->normquant_bias_streamer_instance=Streamer<Neureka, L1BandwidthInBytes>(this, &trace);
+  this->normquant_mult_streamer_instance=Streamer<Neureka, L1BandwidthInBytes>(this, &trace);
   this->traces.new_trace("trace", &this->trace, vp::DEBUG);
   this->trace_level = L0_CONFIG;
   this->trace_format = 0;

@@ -21,6 +21,7 @@
 #ifndef STREAMER_H
 #define STREAMER_H
 #include "datatype.hpp"
+#include "vp/itf/io.hpp"
 
 static const AddrType bank_alignment = 4;
 
@@ -32,6 +33,7 @@ class Streamer{
         int d0_count_, d1_count_, d2_count_;
         AddrType base_addr_;
         HwpeType* accel_instance_;
+        vp::Trace* trace;
 
     AddrType ComputeAddressOffset() const;
     AddrType ComputeAddress() const;
@@ -44,8 +46,9 @@ class Streamer{
     void VectorStore(uint8_t* data, int size, int64_t& cycles, bool wmem, bool verbose);
     void VectorLoad(uint8_t* data, int size, int64_t& cycles, bool wmem, bool verbose);
     Streamer(){};
-    Streamer(HwpeType* accel){
+    Streamer(HwpeType* accel, vp::Trace* trace_){
         accel_instance_ = accel;
+        trace = trace_;
     } 
     void Init(AddrType baseAddr, int d0Stride, int d1Stride, int d2Stride, int d0Length, int d1Length, int d2Length){
       base_addr_ = baseAddr;
@@ -74,7 +77,7 @@ void Streamer<HwpeType, BandWidth>::UpdateCount()
   else if(d2_count_ != d2_length_-1) {d2_count_++; d1_count_=0; d0_count_=0;}
   else {
     d2_count_ = 0; d1_count_ = 0; d0_count_ = 0;
-    this->accel_instance_->trace.warning("Restarting counters due to overflow");
+    trace->msg(vp::Trace::LEVEL_WARNING, "Restarting counters due to overflow\n");
   }
 }
 
@@ -115,11 +118,11 @@ void inline Streamer<HwpeType, BandWidth>::SingleBankTransaction(AddrType addres
     }
 
     if (verbose) {
-        this->accel_instance_->trace.msg("max_latency = %d, Address =%x, size=%x, latency=%d, we=%d, data[0]=%02x, data[1]=%02x, data[2]=%02x, data[3]=%02x\n", max_latency, address, size, latency, write_enable, (*data)&0xFF, (*(data+1))&0xFF, (*(data+2))&0xFF, (*(data+3))&0xFF);
+        trace->msg("max_latency = %d, Address =%x, size=%x, latency=%d, we=%d, data[0]=%02x, data[1]=%02x, data[2]=%02x, data[3]=%02x\n", max_latency, address, size, latency, write_enable, (*data)&0xFF, (*(data+1))&0xFF, (*(data+2))&0xFF, (*(data+3))&0xFF);
     }
   }
   else {
-    this->accel_instance_->trace.fatal("Unsupported asynchronous reply\n");
+    trace->fatal("Unsupported asynchronous reply\n");
   }
 }
 
@@ -154,7 +157,7 @@ void Streamer<HwpeType, BandWidth>::VectorTransaction(uint8_t* data, int size, i
 
     cycles += max_latency + 1;
     if(verbose){
-        this->accel_instance_->trace.msg(" latency : %d, max_latency : %d\n", max_latency, cycles);
+        trace->msg(" latency : %d, max_latency : %d\n", max_latency, cycles);
     }
 }
 
