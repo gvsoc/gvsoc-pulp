@@ -21,6 +21,7 @@
 #ifndef LINEAR_BUFFER_H
 #define LINEAR_BUFFER_H
 #include "datatype.hpp"
+#include "scalar_buffer.hpp"
 template <typename T, int ParamInFeatScalarBufferCount>
 /**
  * @brief This is a class handing 1-D buffer. 

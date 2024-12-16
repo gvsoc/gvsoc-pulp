@@ -330,7 +330,7 @@ struct PendingFrames{
 
 #define L1BandwidthInBytes (256/8)
 #define WmemBandwidthInBytes (288/8) // assuming full bandwidth at the moment 
-#define L1_MASK 0x007fffff
+#define L1_MASK 0x3ffff
 // #define WMEM_MASK 0x007fffff
 #define WMEM_MASK 0xFFFFFFFF
 #endif
