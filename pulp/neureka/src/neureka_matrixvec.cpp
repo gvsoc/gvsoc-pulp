@@ -70,34 +70,28 @@ void Neureka::WeightLoad(int& latency, std::array<StreamerDataType, WmemBandwidt
 }
 
 void WeightUnpack3x3(std::array<StreamerDataType, WmemBandwidthInBytes>& weight, std::array<std::array<uint8_t, NeurekaComputeRowCount>, NeurekaInFeatScalarBufferCount >& weight_unpacked) {
-    // Reshape w
-    for (size_t i = 0; i < NeurekaComputeRowCount; ++i) {
-        for (size_t j = 0; j < (NeurekaInFeatScalarBufferCount/8); ++j) {
-          for (size_t k = 0; k < 8; ++k) {
-            weight_unpacked[j*8+k][i] = (weight[i*(NeurekaInFeatScalarBufferCount/8)+j] >> k) & 0x1; 
-          }
-        }
-    }
+  // Reshape w
+  for (size_t i = 0; i < NeurekaComputeRowCount; ++i)
+    for (size_t j = 0; j < (NeurekaInFeatScalarBufferCount/8); ++j)
+      for (size_t k = 0; k < 8; ++k)
+        weight_unpacked[j*8+k][i] = (weight[i*(NeurekaInFeatScalarBufferCount/8)+j] >> k) & 0x1; 
 }
 
+void WeightUnpack1x1(std::array<StreamerDataType, WmemBandwidthInBytes>& weight, std::array<std::array<uint8_t, NeurekaComputeRowCount>, NeurekaInFeatScalarBufferCount >& weight_unpacked) {
+  for (int col = 0; col < NeurekaColumnPerPECount; col++)
+    for (int row = 0; row < NeurekaComputeRowCount; row++) 
+      weight_unpacked[col][row] = (weight[col] >> row) & 0x1;
+}
 
 void Neureka::WeightUnpack(Mode filter_mode,  std::array<StreamerDataType, WmemBandwidthInBytes>& weight, std::array<std::array<InFeatType, NeurekaBinConvPerColumnCount>,NeurekaColumnPerPECount>& weight_unpacked, int num_bits=NeurekaColumnPerPECount) {
-  if(filter_mode != Pointwise){
+  if(filter_mode == Pointwise){
+    WeightUnpack1x1(weight, weight_unpacked);
+  } else {
     WeightUnpack3x3(weight, weight_unpacked);
-    return;
   }
-  
-  for (int row = 0; row < NeurekaComputeRowCount; row++) 
-    for(int byte = 0; byte < (NeurekaColumnPerPECount/8); byte++)
-      for (int bit = 0; bit < 8; bit++){ 
-          int index = byte*8 + bit;
-          weight_unpacked[index][row] = (weight[index] >> row) & 0x1;
-        }
 }
 
 void Neureka::Accumulate(const std::array<std::array<InFeatType, NeurekaBinConvPerColumnCount>,NeurekaColumnPerPECount>& weight_array) {
-  
-  
   std::array<std::array<std::array<bool,NeurekaBinConvPerColumnCount>,NeurekaColumnPerPECount>,NeurekaTotalPECountXY> compute_binconv_enable = this->ctrl_instance.ComputeBinconvEnable(false);
   std::array<std::array<std::array<InFeatType, NeurekaComputeRowCount>,NeurekaInFeatScalarBufferCount>,NeurekaTotalPECountXY> infeat_mapped_to_pe = this->infeat_buffer_instance.ReadInFeatMappedToPE();
   std::array<bool, NeurekaTotalPECountXY> compute_pe_enable = this->ctrl_instance.ComputePEEnable();
@@ -105,26 +99,25 @@ void Neureka::Accumulate(const std::array<std::array<InFeatType, NeurekaBinConvP
   compute_col_enable = this->ctrl_instance.ComputeColumnEnable(false);
   bool is_signed = reg_config_.config0.signed_activation;
   std::array<InFeatType, NeurekaColumnPerPECount> shift_per_pe_array = {};
-  int accum_index = 0;
+
   if(this->reg_config_.config0.filter_mode==Pointwise) { 
     std::array<InFeatType, NeurekaRepeated1x1> shift_values;
     for (int i = 0; i < NeurekaRepeated1x1; ++i) {
         shift_values[i] = i;
     }
-    for(int i=0; i<NeurekaRepeated1x1; i++)
-      for(int j=0; j<NeurekaChannelwise1x1; j++){
-        shift_per_pe_array[i*NeurekaChannelwise1x1+j] = shift_values[i];
-      }
 
-    accum_index = this->ctrl_instance.GetWeightLoadKoutIndex(); // index to write into
+    for(int i=0; i<NeurekaRepeated1x1; i++)
+      for(int j=0; j<NeurekaChannelwise1x1; j++)
+        shift_per_pe_array[i*NeurekaChannelwise1x1+j] = shift_values[i];
   }
   else if(this->reg_config_.config0.filter_mode==Dense3x3 || this->reg_config_.config0.filter_mode==Depthwise){
-    int weight_index = this->ctrl_instance.GetWeightLoadWeightIndex(); // index to write into
-    for(int i=0; i<NeurekaColumnPerPECount; i++){
+    const int weight_index = this->ctrl_instance.GetWeightLoadWeightIndex(); // index to write into
+    for(int i=0; i<NeurekaColumnPerPECount; i++) {
       shift_per_pe_array[i] = weight_index;
     }
-    accum_index = this->ctrl_instance.GetWeightLoadKoutIndex();
   }
+
+  const int accum_index = this->ctrl_instance.GetWeightLoadKoutIndex();
 
   std::array<bool, NeurekaColumnPerPECount> col_enable_array;
   std::array<bool, NeurekaColumnPerPECount> pe_col_enable_array;
