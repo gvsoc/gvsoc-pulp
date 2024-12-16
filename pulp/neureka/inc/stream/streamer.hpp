@@ -121,24 +121,24 @@ void Streamer<BandWidth, PortType>::VectorTransaction(uint8_t* data, int size, u
     AddrType addr = ComputeAddress();
     const AddrType addr_start_offset = addr % bank_alignment;
     uint8_t* data_ptr = data;
-    int32_t remainding_size = size;
+    int32_t remaining_size = size;
 
     // This if statement takes care of the initial unaligned transaction
-    if (remainding_size > 0 && addr_start_offset > 0) {
-        const int transaction_size = std::min((uint32_t)(bank_alignment - addr_start_offset), (uint32_t) remainding_size);
+    if (remaining_size > 0 && addr_start_offset > 0) {
+        const int transaction_size = std::min((uint32_t)(bank_alignment - addr_start_offset), (uint32_t) remaining_size);
         SingleBankTransaction(addr, data_ptr, transaction_size, max_latency, is_write, verbose);
         data_ptr += transaction_size;
         addr += transaction_size;
-        remainding_size -= transaction_size;
+        remaining_size -= transaction_size;
     }
 
     // Aligned accesses of "bank_alignment" size, except for the last one which might be less, that's why the "min" check
-    while (remainding_size > 0) {
-        const int transaction_size = std::min(bank_alignment, (uint32_t) remainding_size);
+    while (remaining_size > 0) {
+        const int transaction_size = std::min(bank_alignment, (uint32_t) remaining_size);
         SingleBankTransaction(addr, data_ptr, transaction_size, max_latency, is_write, verbose);
         data_ptr += transaction_size;
         addr += transaction_size;
-        remainding_size -= transaction_size;
+        remaining_size -= transaction_size;
     }
 
     UpdateCount();
