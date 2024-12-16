@@ -21,6 +21,7 @@
 #define CONTROL_H
 #include "debug.hpp"
 #include "datatype.hpp"
+#include "params.hpp"
 template <typename HwpeType>
 class Control 
 {
@@ -536,7 +537,7 @@ StreamerConfig GetInFeatLoadStreamerConfig(){
   }
 
   StreamerConfig infeat;
-  infeat.base_addr = L1_MASK & (ctrl_config_.infeat_ptr + addr_hin + addr_win + addr_kin);
+  infeat.base_addr = ctrl_config_.infeat_ptr + addr_hin + addr_win + addr_kin;
   infeat.stride.d0 = ctrl_config_.infeat_stride.d0;
   infeat.stride.d1 = ctrl_config_.infeat_stride.d1;
   infeat.stride.d2 = ctrl_config_.infeat_stride.d2;
@@ -549,17 +550,19 @@ StreamerConfig GetInFeatLoadStreamerConfig(){
 StreamerConfig GetWeightLoadStreamerConfig(){
   Mode mode = ctrl_config_.config0.filter_mode;
   int qw = ctrl_config_.config0.weight_bit_count;
-  AddrType addr_fs   = (NeurekaInFeatScalarBufferCount>>3)*(mode == Pointwise ? 1 : 3*3);
-  AddrType addr_qw   = (mode == Depthwise ? tiles.index.kout :tiles.index.kin)*addr_fs*qw;
-  AddrType addr_kout = mode == Depthwise ? 0 : tiles.index.kout*ctrl_config_.kin_tile_count*NeurekaAccumulatorPerPECount*qw*addr_fs;
-  // hwpe_instance_->trace.msg(" control >> addr fs : 0x%x, qw : 0x%x, kout : 0x%x, kin : %d, qw : %d\n", addr_fs, addr_qw, addr_kout, tiles.index.kin, qw);
+
   StreamerConfig weight;
-  weight.base_addr =  ctrl_config_.weight_ptr + addr_kout + addr_qw;
-  #if WMEM_L1==0
-    weight.base_addr = weight.base_addr & WMEM_MASK;
-  #else 
-    weight.base_addr = weight.base_addr & L1_MASK;
-  #endif
+  const AddrType filter_size = mode == Pointwise ? 1*1 : 3*3;
+  const AddrType kin_tile_stride = qw * filter_size * NeurekaColumnPerPECount / 8;
+
+  if (mode != Depthwise) {
+    const AddrType kout_tile_stride = NeurekaAccumulatorPerPECount * ctrl_config_.kin_tile_count * kin_tile_stride;
+    weight.base_addr = ctrl_config_.weight_ptr + tiles.index.kout * kout_tile_stride + tiles.index.kin * kin_tile_stride;
+  } else {
+    const AddrType kout_tile_stride = kin_tile_stride;
+    weight.base_addr = ctrl_config_.weight_ptr + tiles.index.kout * kout_tile_stride;
+  }
+
   weight.stride.d0 = ctrl_config_.weight_stride.d0;
   weight.stride.d1 = ctrl_config_.weight_stride.d1;
   weight.stride.d2 = ctrl_config_.weight_stride.d2;
@@ -640,7 +643,7 @@ StreamerConfig GetOutFeatStoreStreamerConfig(){
   // hwpe_instance_->trace.msg(" control >> GetOutFeatStoreStreamerConfig DONE    (kin : %d, kout : %d, hout : %d, wout : %d)\n", prev_tiles.done.kin, prev_tiles.done.kout, prev_tiles.done.hout, prev_tiles.done.wout);
 
   StreamerConfig outfeat;
-  outfeat.base_addr = L1_MASK & (ctrl_config_.outfeat_ptr + addr_kout + addr_wout + addr_hout);
+  outfeat.base_addr = ctrl_config_.outfeat_ptr + addr_kout + addr_wout + addr_hout;
 
   // std::cout<<"outfeat.base_addr = "<<outfeat.base_addr<<"\n";
 
@@ -720,7 +723,7 @@ StreamerConfig GetStreaminStreamerConfig(){
   int quant_bits = ctrl_config_.config0.quantization_bit_count;
   int streamin_bits = ctrl_config_.config0.streamin_bit_count;
   StreamerConfig streamin;
-  streamin.base_addr = L1_MASK & (ctrl_config_.streamin_ptr + addr_kout + addr_wout + addr_hout);
+  streamin.base_addr = ctrl_config_.streamin_ptr + addr_kout + addr_wout + addr_hout;
   streamin.stride.d0 = ctrl_config_.outfeat_stride.d0;
   streamin.stride.d1 = quant_bits==streamin_bits ? ctrl_config_.outfeat_stride.d1 : (quant_bits==32 && streamin_bits==8) ? (ctrl_config_.outfeat_stride.d1>>2) : (ctrl_config_.outfeat_stride.d1<<2);
   streamin.stride.d2 = quant_bits==streamin_bits ? ctrl_config_.outfeat_stride.d2 : (quant_bits==32 && streamin_bits==8) ? (ctrl_config_.outfeat_stride.d2>>2) : (ctrl_config_.outfeat_stride.d2<<2);
@@ -790,7 +793,7 @@ int GetNormQuantShiftWidth(){
 StreamerConfig GetNormquantMultStreamerConfig(){
   AddrType addr_kout = (ctrl_config_.config0.normalization_bit_count == 32 ? 4 : 1) * prev_tiles.index.kout*NeurekaAccumulatorPerPECount;
   StreamerConfig normquant_mult;
-  normquant_mult.base_addr = L1_MASK & (ctrl_config_.scale_ptr + addr_kout );
+  normquant_mult.base_addr = ctrl_config_.scale_ptr + addr_kout;
   normquant_mult.stride.d0 = 32; // if it is 4 bits then 1 iteration is enough
   normquant_mult.stride.d1 = 0;// unused
   normquant_mult.stride.d2 = 0;//unused
@@ -804,7 +807,7 @@ StreamerConfig GetNormquantMultStreamerConfig(){
 StreamerConfig GetNormquantBiasStreamerConfig(){
   AddrType addr_kout = 4*prev_tiles.index.kout*NeurekaAccumulatorPerPECount;// always 32bits
   StreamerConfig normquant_bias;
-  normquant_bias.base_addr = L1_MASK & (ctrl_config_.scale_bias_ptr + addr_kout);
+  normquant_bias.base_addr = ctrl_config_.scale_bias_ptr + addr_kout;
   normquant_bias.stride.d0 = 32; // if it is 4 bits then 1 iteration is enough
   normquant_bias.stride.d1 = 0;// unused
   normquant_bias.stride.d2 = 0;//unused
@@ -820,7 +823,7 @@ StreamerConfig GetNormquantBiasStreamerConfig(){
 StreamerConfig GetNormquantShiftStreamerConfig(){
   AddrType addr_kout = prev_tiles.index.kout*NeurekaAccumulatorPerPECount;
   StreamerConfig normquant_shift;
-  normquant_shift.base_addr = L1_MASK & (ctrl_config_.scale_shift_ptr + addr_kout );
+  normquant_shift.base_addr = ctrl_config_.scale_shift_ptr + addr_kout;
   normquant_shift.stride.d0 = 32; // if it is 4 bits then 1 iteration is enough
   normquant_shift.stride.d1 = 0;// unused
   normquant_shift.stride.d2 = 0;//unused

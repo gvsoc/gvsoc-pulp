@@ -45,6 +45,7 @@
 #include "debug.hpp"
 #include "params.hpp"
 #include "regconfig_manager.hpp"
+#include "utils/datatype.hpp"
 
 #define N_LAYERS 10000
 
@@ -86,11 +87,30 @@ void print3DArray(const std::array<std::array<std::array<T, L>, M>, N>& arr, int
     }
 }
 
+
+class IoMasterAddrMasked : public vp::IoMaster {
+public:
+    IoMasterAddrMasked() {};
+    IoMasterAddrMasked(vp::IoMaster* port, AddrType mask) {
+        this->port = port;
+        this->mask = mask;
+    }
+
+    inline vp::IoReqStatus req(vp::IoReq* req) {
+        req->set_addr(req->get_addr() & mask);
+        return port->req(req);
+    }
+private:
+    vp::IoMaster* port;
+    AddrType mask;
+};
+
+
 template<int DemuxSize, typename IndexType>
 class IoMasterDemux : public vp::IoMaster {
 public:
     IoMasterDemux() {};
-    IoMasterDemux(std::array<vp::IoMaster*, DemuxSize> ports, IndexType* index) {
+    IoMasterDemux(std::array<IoMasterAddrMasked*, DemuxSize> ports, IndexType* index) {
         this->ports = ports;
         this->index = index;
     }
@@ -100,7 +120,7 @@ public:
         return ports[*index]->req(req);
     }
 private:
-    std::array<vp::IoMaster*, DemuxSize> ports;
+    std::array<IoMasterAddrMasked*, DemuxSize> ports;
     IndexType* index;
 };
 
@@ -120,6 +140,8 @@ public:
   vp::IoReq io_req;
   vp::IoMaster tcdm_port;
   vp::IoMaster wmem_port;
+  IoMasterAddrMasked tcdm_masked_addr_port;
+  IoMasterAddrMasked wmem_masked_addr_port;
   IoMasterDemux<2, bool> demux_port;
 
   StateParams<std::chrono::high_resolution_clock::time_point> cpu_cycles_start, cpu_cycles_end;
@@ -149,13 +171,13 @@ private:
 
   InFeatBuffer<InFeatType> infeat_buffer_instance;
   std::array<ProcessingEngine<Neureka, InFeatType, SignedInFeatType, OutFeatType, OutFeatType>, NeurekaTotalPECountXY> pe_instances; 
-  Streamer<L1BandwidthInBytes, vp::IoMaster> infeat_streamer_instance;
-  Streamer<L1BandwidthInBytes, vp::IoMaster> streamin_streamer_instance;
-  Streamer<L1BandwidthInBytes, vp::IoMaster> outfeat_streamer_instance;
+  Streamer<L1BandwidthInBytes, IoMasterAddrMasked> infeat_streamer_instance;
+  Streamer<L1BandwidthInBytes, IoMasterAddrMasked> streamin_streamer_instance;
+  Streamer<L1BandwidthInBytes, IoMasterAddrMasked> outfeat_streamer_instance;
   Streamer<WmemBandwidthInBytes, IoMasterDemux<2, bool>> weight_streamer_instance;
-  Streamer<L1BandwidthInBytes, vp::IoMaster> normquant_shift_streamer_instance;
-  Streamer<L1BandwidthInBytes, vp::IoMaster> normquant_bias_streamer_instance;
-  Streamer<L1BandwidthInBytes, vp::IoMaster> normquant_mult_streamer_instance;
+  Streamer<L1BandwidthInBytes, IoMasterAddrMasked> normquant_shift_streamer_instance;
+  Streamer<L1BandwidthInBytes, IoMasterAddrMasked> normquant_bias_streamer_instance;
+  Streamer<L1BandwidthInBytes, IoMasterAddrMasked> normquant_mult_streamer_instance;
   int infeat_dual_buffer_read_index, infeat_dual_buffer_write_index;
 
   // Streamer<AddrType, Neureka, StreamerDataType> normquant_streamer_instance;
