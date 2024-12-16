@@ -42,41 +42,43 @@ bool Neureka::InFeatLoadExecute(int& latency)
 
   int width = L1BandwidthInBytes;
   uint64_t cycles = 0;
-  std::array<bool, NeurekaInFeatScalarBufferCount> padding_enable;
-  std::fill(padding_enable.begin(), padding_enable.end(), 0);
-  padding_enable=this->ctrl_instance.GetPaddingEnable();
-  this->ctrl_instance.InFeatLoadIteration();
-  InFeatType infeat_data_temp[NeurekaInFeatScalarBufferCount];
 
+  InFeatType infeat_data_temp[NeurekaInFeatScalarBufferCount];
   this->infeat_streamer_instance.VectorLoad(infeat_data_temp, width, cycles, this->trace_config.streamer.infeat_load);
+
   int access_width = reg_config_.config0.broadcast ? 1 : width;
   this->num_mem_access_bytes.infeat_load += access_width;
 
   latency = latency + (int)cycles ? latency + (int)cycles : 1 ;
 
-  std::array<bool, NeurekaInFeatScalarBufferCount> enable;
   std::array<InFeatType, NeurekaInFeatScalarBufferCount> infeat_data;
 
-
-  for(int i=0; i<width; i++){
-    if(padding_enable[i]==true)
-      infeat_data_temp[i] = this->reg_config_.padding.value;
-    else if(reg_config_.config0.broadcast)
-      infeat_data_temp[i] = infeat_data_temp[0];
-
-    infeat_data[i] = infeat_data_temp[i];
-    enable[i] = true; 
+  if (ctrl_instance.isPadding()) {
+    std::fill(infeat_data.begin(), infeat_data.end(), this->reg_config_.padding.value);
+  } else if(reg_config_.config0.broadcast) {
+    std::fill(infeat_data.begin(), infeat_data.end(), infeat_data_temp[0]);
+  } else {
+    for (int i = 0; i < width; i++) {
+      infeat_data[i] = infeat_data_temp[i];
+    }
   }
 
-  // for(int i=0; i<NeurekaInFeatScalarBufferCount; i++){
-  //   this->trace.msg("enable[%d] : %d\n", i, enable[i]);
-  // }
+  const auto& h_index = ctrl_instance.load_store_status.infeat.index.hin;
+  const auto& w_index = ctrl_instance.load_store_status.infeat.index.win;
+  const int infeat_buffer_index = h_index * NeurekaInFeatBufferSizeX + w_index;
 
-  // this->trace.msg("Load at buffer index %d \n", this->infeat_dual_buffer_write_index);
-  int infeat_buffer_index = this->ctrl_instance.load_store_status.infeat.index.hinXwin;
-  // this->trace.msg("infeat_buffer_index : %d\n", infeat_buffer_index);
+  std::array<bool, NeurekaInFeatScalarBufferCount> enable;
+  std::fill(enable.begin(), enable.end(), true);
+
   this->infeat_buffer_instance.WriteLinearBufferAtIndex(this->infeat_dual_buffer_write_index, infeat_buffer_index, enable, infeat_data);
-  if(this->ctrl_instance.load_store_status.infeat.done)
+
+  const bool done = this->ctrl_instance.InFeatLoadLastIteration();
+
+  if (done) {
     this->ctrl_instance.PrefetchCheckTileStatus();
-  return this->ctrl_instance.load_store_status.infeat.done;
+  }
+
+  this->ctrl_instance.InFeatLoadUpdate();
+
+  return done;
 }

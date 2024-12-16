@@ -315,23 +315,34 @@ void SetConfig(RegConfig config) {
   // PrintReg();
 }
 
-void ResetInFeatLoadIteration(){
-  load_store_status.infeat.done = false; 
+void ResetInFeatLoadIteration() {
   load_store_status.infeat.index.win = 0;
   load_store_status.infeat.index.hin = 0;
 }
 
-void InFeatLoadIteration(){
-  int hin_count = load_store_status.infeat.count.hin - 1;
-  int win_count = load_store_status.infeat.count.win - 1;
-  int win_index = load_store_status.infeat.index.win;
-  int hin_index = load_store_status.infeat.index.hin;
-  load_store_status.infeat.done=false;
-  load_store_status.infeat.index.hinXwin = hin_index*NeurekaInFeatBufferSizeX+win_index;
-  load_store_status.infeat.index.win = (win_index == win_count) ? 0 : 1 + load_store_status.infeat.index.win ;
-  load_store_status.infeat.index.hin = (win_index == win_count) && (hin_index == hin_count) ? 0 : (win_index == win_count) && (hin_index < hin_count) ? 1 + load_store_status.infeat.index.hin : load_store_status.infeat.index.hin;
-  load_store_status.infeat.done      = (win_index == win_count) && (hin_index == hin_count) ? true : false;
+bool InFeatLoadLastIteration() {
+  const auto& h_count = load_store_status.infeat.count.hin;
+  const auto& w_count = load_store_status.infeat.count.win;
+  const auto& h_index = load_store_status.infeat.index.hin;
+  const auto& w_index = load_store_status.infeat.index.win;
 
+  return w_index == w_count - 1 && h_index == h_count - 1;
+}
+
+void InFeatLoadUpdate() {
+  const auto& h_count = load_store_status.infeat.count.hin;
+  const auto& w_count = load_store_status.infeat.count.win;
+  auto& h_index = load_store_status.infeat.index.hin;
+  auto& w_index = load_store_status.infeat.index.win;
+
+  ++w_index;
+  if (w_index >= w_count) {
+    w_index = 0;
+    ++h_index;
+    if (h_index >= h_count) {
+      h_index = 0;
+    }
+  }
 }
 
 int GetWeightLoadWeightIndex(){ 
@@ -513,28 +524,24 @@ int StreaminLoadWidth(){
 }
 
 StreamerConfig GetInFeatLoadStreamerConfig(){
+  const auto& is_broadcast = ctrl_config_.config0.broadcast;
+  const auto& filter_mode = ctrl_config_.config0.filter_mode;
 
-  // used are tiles.index, total_size, load_store_status
-  AddrType addr_kin, addr_win, addr_hin;
-  if(ctrl_config_.config0.filter_mode!=Depthwise){
-    addr_kin = prefetch_tiles.index.kin*NeurekaInFeatScalarBufferCount;
-    if(ctrl_config_.padding.left&&ctrl_config_.padding.right&&ctrl_config_.padding.top&&ctrl_config_.padding.bottom){
-      addr_win = prefetch_tiles.index.win*NeurekaPECountX*total_size.kin;
-      addr_hin = prefetch_tiles.index.hin*NeurekaPECountY*(total_size.win-(ctrl_config_.padding.left<<1))*total_size.kin;
-    }else {
-      addr_win = prefetch_tiles.index.win*NeurekaPECountX*total_size.kin;
-      addr_hin = prefetch_tiles.index.hin*NeurekaPECountY*total_size.win*total_size.kin;
-    }
-  } else {
-    addr_kin = ctrl_config_.config0.broadcast ? prefetch_tiles.index.kout*1 : prefetch_tiles.index.kout*NeurekaInFeatScalarBufferCount;
-     if(ctrl_config_.padding.left&&ctrl_config_.padding.right&&ctrl_config_.padding.top&&ctrl_config_.padding.bottom){
-        addr_win = ctrl_config_.config0.broadcast ? prefetch_tiles.index.win*NeurekaPECountX : prefetch_tiles.index.win*NeurekaPECountX*total_size.kout;
-        addr_hin = ctrl_config_.config0.broadcast ? prefetch_tiles.index.hin*NeurekaPECountY*(total_size.win-(ctrl_config_.padding.left<<1)) : prefetch_tiles.index.hin*NeurekaPECountY*(total_size.win-2)*total_size.kout;
-      }else {
-        addr_win = ctrl_config_.config0.broadcast ? prefetch_tiles.index.win*NeurekaPECountX : prefetch_tiles.index.win*NeurekaPECountX*total_size.kout;
-        addr_hin = ctrl_config_.config0.broadcast ? prefetch_tiles.index.hin*NeurekaPECountY*total_size.win : prefetch_tiles.index.hin*NeurekaPECountY*total_size.win*total_size.kout;
-      }
-  }
+  //addr_kin calculation
+  const auto k_index = filter_mode == Depthwise ? prefetch_tiles.index.kout :
+      prefetch_tiles.index.kin;
+  const AddrType addr_kin = is_broadcast ? k_index :
+      k_index * NeurekaInFeatScalarBufferCount;
+
+  const auto k_total = is_broadcast ? 1 :
+      filter_mode == Depthwise ? total_size.kout : total_size.kin;
+
+  //addr_win calculation
+  const AddrType addr_win = prefetch_tiles.index.win * NeurekaPECountX * k_total;
+
+  //addr_hin calculation
+  const auto w_total = total_size.win - ctrl_config_.padding.left - ctrl_config_.padding.right;
+  const AddrType addr_hin = prefetch_tiles.index.hin * NeurekaPECountY * w_total * k_total;
 
   StreamerConfig infeat;
   infeat.base_addr = ctrl_config_.infeat_ptr + addr_hin + addr_win + addr_kin;
@@ -834,47 +841,18 @@ StreamerConfig GetNormquantShiftStreamerConfig(){
 }
 
 
-// std::array<bool, NeurekaInFeatScalarBufferCount>  GetPaddingEnable(){
-//   int h_index = load_store_status.infeat.index.hin;
-//   int w_index = load_store_status.infeat.index.win;
-//   int h_count = load_store_status.infeat.count.hin;
-//   int w_count = load_store_status.infeat.count.win;
-//   Padding padding= ctrl_config_.padding;
-  
-//   std::array<bool, NeurekaInFeatScalarBufferCount> enable;
-//   std::fill(enable.begin(), enable.end(), 0);
-//   int padding_lim = padding.left;
+bool isPadding() {
+  const int h_index = load_store_status.infeat.index.hin;
+  const int w_index = load_store_status.infeat.index.win;
+  const int h_count = load_store_status.infeat.count.hin;
+  const int w_count = load_store_status.infeat.count.win;
+  const Padding padding = ctrl_config_.padding;
 
-//   if(padding.left > 0 && w_index<padding.left && prefetch_tiles.index.win==0)
-//     enable = xt::ones<bool>({hw_param_.InFeatScalarBufferCount});
-//   if(padding.top > 0 && h_index<padding.top && prefetch_tiles.index.hin==0)
-//     enable = xt::ones<bool>({hw_param_.InFeatScalarBufferCount});
-//   if(padding.right > 0 && w_index>=w_count-padding_lim && prefetch_tiles.index.win==prefetch_tiles.count.win-1)
-//     enable = xt::ones<bool>({hw_param_.InFeatScalarBufferCount});
-//   if(padding.bottom > 0 && h_index>=h_count-padding_lim && prefetch_tiles.index.hin==prefetch_tiles.count.hin-1)
-//     enable = xt::ones<bool>({hw_param_.InFeatScalarBufferCount});
-//   return enable;
-// }
-
-std::array<bool, NeurekaInFeatScalarBufferCount>  GetPaddingEnable(){
-  int h_index = load_store_status.infeat.index.hin;
-  int w_index = load_store_status.infeat.index.win;
-  int h_count = load_store_status.infeat.count.hin;
-  int w_count = load_store_status.infeat.count.win;
-  Padding padding = ctrl_config_.padding;
-  std::array<bool, NeurekaInFeatScalarBufferCount> enable;
-  std::fill(enable.begin(), enable.end(), 0);
-  int padding_lim = padding.left;
-  if(padding.left > 0 && w_index<padding.left && prefetch_tiles.index.win==0)
-    std::fill(enable.begin(), enable.end(), 1);
-  if(padding.top > 0 && h_index<padding.top && prefetch_tiles.index.hin==0)
-    std::fill(enable.begin(), enable.end(), 1);
-  if(padding.right > 0 && w_index>=w_count-padding_lim && prefetch_tiles.index.win==prefetch_tiles.count.win-1)
-    std::fill(enable.begin(), enable.end(), 1);
-  if(padding.bottom > 0 && h_index>=h_count-padding_lim && prefetch_tiles.index.hin==prefetch_tiles.count.hin-1)
-    std::fill(enable.begin(), enable.end(), 1);
-
-  return enable;
+  // TODO: Should the prefetch conditions also check for the value of padding or be hardcoded like this?
+  return ((w_index < padding.left && prefetch_tiles.index.win == 0) ||
+          (h_index < padding.top  && prefetch_tiles.index.hin == 0) ||
+          (w_index >= w_count - padding.right  && prefetch_tiles.index.win == prefetch_tiles.count.win - 1) ||
+          (h_index >= h_count - padding.bottom && prefetch_tiles.index.hin == prefetch_tiles.count.hin - 1));
 }
 
 };
