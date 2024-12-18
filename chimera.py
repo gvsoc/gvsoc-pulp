@@ -24,13 +24,6 @@ class SnitchClusterGroup(gvsoc.systree.Component):
         super().__init__(parent, name)
 
         entry = 0x30000000
-        # if binary is not None:
-        #     with open(binary, 'rb') as file:
-        #         elffile = ELFFile(file)
-        #         entry = elffile['e_entry']
-        #
-        # Components
-        #
         nb_clusters = 5
 
         # Bootrom
@@ -51,16 +44,24 @@ class SnitchClusterGroup(gvsoc.systree.Component):
             self.clusters.append(SnitchCluster(self, f'cluster_{id}', cluster_arch, entry=entry))
 
         self.narrow_axi.o_MAP ( snitch_rom.i_INPUT     (), base=0x30000000, size=0x1000, rm_base=True  )
-        self.narrow_axi.add_mapping("clu_reg", base=0x30001000, size=0x80000000, remove_offset=0x0)
+        self.narrow_axi.add_mapping("clu_reg", base=0x30001000, size=0x10000000, remove_offset=0x0)
+        self.narrow_axi.add_mapping("mem_island", base=0x48000000, size=0x08000000, remove_offset=0x0)
         self.narrow_axi.add_mapping("clint", base=0x02040000, size=0x0010_0000, remove_offset=0x0)
         self.bind(self.narrow_axi, "clu_reg", self, "clu_reg_ext")
         self.bind(self.narrow_axi, "clint", self, "clint_ext")
+        self.bind(self.narrow_axi, "mem_island", self, "mem_island_ext")
+        self.o_NARROW_INPUT(self.narrow_axi.i_INPUT())
 
 
         # Clusters
         for id in range(0, nb_clusters):
             self.clusters[id].o_NARROW_SOC(self.narrow_axi.i_INPUT())
             self.clusters[id].o_WIDE_SOC(self.wide_axi.i_INPUT())
+            self.narrow_axi.o_MAP(self.clusters[id].i_NARROW_INPUT(), base=cluster_start_addr[id],
+                size=0x00200000, rm_base=False)
+            
+            # self.bind(self.narrow_axi, "mem_island", self, "mem_island_ext")
+
 
             for core in range(0, cluster_arch.nb_core):
                 core_id = core+id*cluster_arch.nb_core
@@ -71,6 +72,12 @@ class SnitchClusterGroup(gvsoc.systree.Component):
 
     def __o_SW_IRQ(self, core, itf: gvsoc.systree.SlaveItf):
         self.itf_bind(f'sw_irq_{core}', itf, signature='wire<bool>', composite_bind=True)
+    
+    def i_NARROW_INPUT(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'narrow_input', signature='io')
+
+    def o_NARROW_INPUT(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('narrow_input', itf, signature='io', composite_bind=True)
 
 
 class SafetyIsland(gvsoc.systree.Component):
@@ -174,13 +181,8 @@ class SafetyIsland(gvsoc.systree.Component):
         snitch_cluster_group = SnitchClusterGroup(self, "snitch_cluster_group")
         self.bind(snitch_cluster_group, "clu_reg_ext", l2_tcdm_ico, "input")
         self.bind(snitch_cluster_group, "clint_ext", l2_tcdm_ico, "input")
-        # snitch_cluster_group.o_EXT_NARROW_INPUT ( l2_tcdm_ico.i_INPUT() )
-
-        # snitch_cluster_group.narrow_axi.o_MAP()
-        # self.bind(snitch_cluster_group.narrow_axi, "output", l2_tcdm_ico, "input")
-        # for i in range(0,5):
-        #     self.bind(loader, "start", snitch_cluster_group.clusters[i], "fetchen")
-            # loader.o_START(snitch_cluster_group.clusters[i].i_FETCHEN())
+        self.bind(snitch_cluster_group, "mem_island_ext", l2_tcdm_ico, "input")
+        l2_tcdm_ico.o_MAP(snitch_cluster_group.i_NARROW_INPUT(), base=0x4000_0000, size=0x0100_0000, rm_base=False)
 
         for i in range(0, 46):
             clint.o_SW_IRQ( i+1, snitch_cluster_group.i_SW_IRQ(i))
