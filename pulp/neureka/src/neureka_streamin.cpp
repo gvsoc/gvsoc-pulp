@@ -23,7 +23,7 @@
 void Neureka::StreaminSetup() {
   this->ctrl_instance.ComputeDimensions();
   StreamerConfig streamer_config = this->ctrl_instance.GetStreaminStreamerConfig();
-  this->streamin_streamer_instance.UpdateParams(streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2, L1BandwidthInBytes, 4);
+  this->streamin_streamer_instance.Init(streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2);
   this->ctrl_instance.ResetStreaminIteration();
   if(this->trace_config.setup.streamin)
     this->trace.msg("Stramin Setup is done addr : 0x%x, strides( d0 : 0x%x, d1 : 0x%x, d2 : 0x%x), lengths(d0 : %d, d1 : %d, d2 : %d)\n", streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2);
@@ -36,12 +36,12 @@ bool Neureka::StreaminExecute(int& latency)
   int pe_index = this->ctrl_instance.GetStreaminLinearBufferIndex();// which accumulator buffer to be used
   int word_index = this->ctrl_instance.GetStreaminWordIndex();
 
-  int64_t cycles = 0;
+  uint64_t cycles = 0;
   std::array<StreamerDataType, L1BandwidthInBytes> streamin_data;
   std::fill(streamin_data.begin(), streamin_data.end(), 0);
 
   StreamerDataType streamin_data_temp[width];
-  this->streamin_streamer_instance.VectorLoad(width, cycles, streamin_data_temp, false, this->trace_config.streamer.streamin);
+  this->streamin_streamer_instance.VectorLoad(streamin_data_temp, width, cycles, this->trace_config.streamer.streamin);
 
   for(int i=0; i<width; i++)
     streamin_data[i] = streamin_data_temp[i];

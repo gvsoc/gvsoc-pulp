@@ -33,15 +33,20 @@ Neureka::Neureka(vp::ComponentConf &config)
   for(int i=0; i<NeurekaTotalPECountXY; i++)
     this->pe_instances[i] = ProcessingEngine<Neureka, InFeatType, SignedInFeatType, OutFeatType, OutFeatType>(this);
 
+  tcdm_masked_addr_port = IoMasterAddrMasked(&tcdm_port, L1_MASK);
+  wmem_masked_addr_port = IoMasterAddrMasked(&wmem_port, WMEM_MASK);
+
+  demux_port = IoMasterDemux<2, bool>({{&tcdm_masked_addr_port, &wmem_masked_addr_port}}, &reg_config_.config0.weight_from_wmem);
+
   this->ctrl_instance = Control<Neureka>(this);
   this->regconfig_manager_instance = RegConfigManager<Neureka>(this, NeurekaRegisterContextCount, NEUREKA_NB_REG);
-  this->infeat_streamer_instance = Streamer<AddrType, Neureka, InFeatType, L1BandwidthInBytes>(this,  0, 0, 0, 0, 0, 0, 0,32, 4);
-  this->streamin_streamer_instance = Streamer<AddrType, Neureka, StreamerDataType, L1BandwidthInBytes>(this,  0, 0, 0, 0, 0, 0, 0,32, 4);
-  this->outfeat_streamer_instance = Streamer<AddrType, Neureka, StreamerDataType, L1BandwidthInBytes>(this,  0, 0, 0, 0, 0, 0, 0,32, 4);
-  this->weight_streamer_instance = Streamer<AddrType, Neureka, StreamerDataType, WmemBandwidthInBytes>(this,  0, 0, 0, 0, 0, 0, 0,32, 4);
-  this->normquant_shift_streamer_instance=Streamer<AddrType, Neureka, StreamerDataType, L1BandwidthInBytes>(this,  0, 0, 0, 0, 0, 0, 0,32, 4);
-  this->normquant_bias_streamer_instance=Streamer<AddrType, Neureka, StreamerDataType, L1BandwidthInBytes>(this,  0, 0, 0, 0, 0, 0, 0,32, 4);
-  this->normquant_mult_streamer_instance=Streamer<AddrType, Neureka, StreamerDataType, L1BandwidthInBytes>(this,  0, 0, 0, 0, 0, 0, 0,32, 4);
+  this->infeat_streamer_instance = Streamer<L1BandwidthInBytes, IoMasterAddrMasked>(&trace, &io_req, &tcdm_masked_addr_port);
+  this->streamin_streamer_instance = Streamer<L1BandwidthInBytes, IoMasterAddrMasked>(&trace, &io_req, &tcdm_masked_addr_port);
+  this->outfeat_streamer_instance = Streamer<L1BandwidthInBytes, IoMasterAddrMasked>(&trace, &io_req, &tcdm_masked_addr_port);
+  this->weight_streamer_instance = Streamer<WmemBandwidthInBytes, IoMasterDemux<2, bool>>(&trace, &io_req, &demux_port);
+  this->normquant_shift_streamer_instance=Streamer<L1BandwidthInBytes, IoMasterAddrMasked>(&trace, &io_req, &tcdm_masked_addr_port);
+  this->normquant_bias_streamer_instance=Streamer<L1BandwidthInBytes, IoMasterAddrMasked>(&trace, &io_req, &tcdm_masked_addr_port);
+  this->normquant_mult_streamer_instance=Streamer<L1BandwidthInBytes, IoMasterAddrMasked>(&trace, &io_req, &tcdm_masked_addr_port);
   this->traces.new_trace("trace", &this->trace, vp::DEBUG);
   this->trace_level = L0_CONFIG;
   this->trace_format = 0;

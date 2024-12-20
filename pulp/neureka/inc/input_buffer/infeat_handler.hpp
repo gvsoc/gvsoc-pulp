@@ -23,6 +23,7 @@
 
 #include "datatype.hpp"
 #include "params.hpp"
+#include "matrix_buffer.hpp"
 template <typename HwpeType>
 
 class InFeatBuffer{
@@ -71,7 +72,7 @@ void MapInFeatToEnginesIn1x1(const int& index) {
           int buffer_col_index = buffer_rem_index * 8 + row_index; 
           pe_data[pe_index][col_index][row_index] = buffer_data[buffer_pe_index][buffer_col_index];
         }
-        pe_data[pe_index][col_index][NeurekaComputeRowCount] = 0;
+        pe_data[pe_index][col_index][NeurekaComputeRowCount-1] = 0;
       }
     }
   }

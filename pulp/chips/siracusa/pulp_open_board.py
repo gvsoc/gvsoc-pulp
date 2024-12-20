@@ -18,7 +18,6 @@ import gvsoc.systree as st
 from pulp.chips.siracusa.pulp_open import Pulp_open
 from devices.hyperbus.hyperflash import Hyperflash
 from devices.hyperbus.hyperram import Hyperram
-from devices.testbench.testbench import Testbench
 from devices.uart.uart_checker import Uart_checker
 import gvsoc.runner
 from gapylib.chips.pulp.flash import *

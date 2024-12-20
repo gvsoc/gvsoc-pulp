@@ -25,7 +25,7 @@ void Neureka::NormQuantMultSetup(){
   for(int i=0; i<NeurekaTotalPECountXY; i++)
     this->pe_instances[i].SetConfig(reg_config_);
   StreamerConfig streamer_config = this->ctrl_instance.GetNormquantMultStreamerConfig();
-  this->normquant_mult_streamer_instance.UpdateParams(streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2, L1BandwidthInBytes, 4);
+  this->normquant_mult_streamer_instance.Init(streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2);
   this->ctrl_instance.ResetNormQuantMultIteration();
   if(this->trace_config.setup.norm_mult)
     this->trace.msg("Normquant mult Setup is done addr : 0x%x, strides( d0 : 0x%x, d1 : 0x%x, d2 : 0x%x), lengths(d0 : %d, d1 : %d, d2 : %d)\n", streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2);
@@ -36,14 +36,14 @@ void Neureka::NormQuantShiftSetup(){
   for(int i=0; i<NeurekaTotalPECountXY; i++)
     this->pe_instances[i].SetConfig(reg_config_);
   StreamerConfig streamer_config = this->ctrl_instance.GetNormquantShiftStreamerConfig();
-  this->normquant_shift_streamer_instance.UpdateParams(streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2, L1BandwidthInBytes, 4);
+  this->normquant_shift_streamer_instance.Init(streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2);
   this->ctrl_instance.ResetNormQuantShiftIteration();
   if(this->trace_config.setup.norm_shift)
     this->trace.msg("Normquant shift Setup is done addr : 0x%x, strides( d0 : 0x%x, d1 : 0x%x, d2 : 0x%x), lengths(d0 : %d, d1 : %d, d2 : %d)\n", streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2);   
 }
 void Neureka::NormQuantBiasSetup(){
   StreamerConfig streamer_config = this->ctrl_instance.GetNormquantBiasStreamerConfig();
-  this->normquant_bias_streamer_instance.UpdateParams(streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2, L1BandwidthInBytes, 4);
+  this->normquant_bias_streamer_instance.Init(streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2);
   this->ctrl_instance.ResetNormQuantBiasIteration();
   if(this->trace_config.setup.norm_bias)
     this->trace.msg("Normquant bias Setup is done addr : 0x%x, strides( d0 : 0x%x, d1 : 0x%x, d2 : 0x%x), lengths(d0 : %d, d1 : %d, d2 : %d)\n", streamer_config.base_addr, streamer_config.stride.d0, streamer_config.stride.d1, streamer_config.stride.d2, streamer_config.length.d0, streamer_config.length.d1, streamer_config.length.d2);    
@@ -52,14 +52,14 @@ void Neureka::NormQuantBiasSetup(){
 
 bool Neureka::NormQuantMultExecute(int& latency){
   int width = this->ctrl_instance.GetNormQuantMultWidth();
-  int64_t cycles = 0;
+  uint64_t cycles = 0;
   std::array<InFeatType, L1BandwidthInBytes> normquant_mult_8bits;
 
   InFeatType normquant_mult_8bits_temp[width];
   if(this->reg_config_.config0.residual)
       std::fill(normquant_mult_8bits.begin(), normquant_mult_8bits.end(), 1);
   else {
-    this->normquant_mult_streamer_instance.VectorLoad(width, cycles, normquant_mult_8bits_temp, false, this->trace_config.streamer.norm_mult);
+    this->normquant_mult_streamer_instance.VectorLoad(normquant_mult_8bits_temp, width, cycles, this->trace_config.streamer.norm_mult);
     for(int i=0; i<width; i++){
       normquant_mult_8bits[i] = normquant_mult_8bits_temp[i];
     }
@@ -109,11 +109,11 @@ bool Neureka::NormQuantMultExecute(int& latency){
 
 bool Neureka::NormQuantShiftExecute(int& latency){
   int width = this->ctrl_instance.GetNormQuantShiftWidth();
-  int64_t cycles = 0;
+  uint64_t cycles = 0;
   std::array<InFeatType, L1BandwidthInBytes> normquant_shift_8bits = {};
   std::fill(normquant_shift_8bits.begin(), normquant_shift_8bits.end(), 0);
   InFeatType normquant_shift_8bits_temp[width];
-  this->normquant_shift_streamer_instance.VectorLoad(width, cycles, normquant_shift_8bits_temp, false, this->trace_config.streamer.norm_shift);
+  this->normquant_shift_streamer_instance.VectorLoad(normquant_shift_8bits_temp, width, cycles, this->trace_config.streamer.norm_shift);
   for(int i=0; i<width; i++)
     normquant_shift_8bits[i] = normquant_shift_8bits_temp[i]; 
   latency = latency + (int)cycles ? latency + (int)cycles : 1 ;
@@ -131,11 +131,11 @@ bool Neureka::NormQuantShiftExecute(int& latency){
 
 bool Neureka::NormQuantBiasExecute(int& latency){
   int width = this->ctrl_instance.GetNormQuantBiasWidth();
-  int64_t cycles = 0;
+  uint64_t cycles = 0;
   std::array<InFeatType,32> normquant_bias_8bits={};
   std::array<OutFeatType,32>  normquant_bias_32bits={}; 
   InFeatType normquant_bias_8bits_temp[width];
-  this->normquant_bias_streamer_instance.VectorLoad(width, cycles, normquant_bias_8bits_temp, false, this->trace_config.streamer.norm_bias);
+  this->normquant_bias_streamer_instance.VectorLoad(normquant_bias_8bits_temp, width, cycles, this->trace_config.streamer.norm_bias);
   std::array<OutFeatType, NeurekaAccumulatorPerPECount> accum = this->pe_instances[0].ReadAllAccumBuffer();
   for(int i=0; i<width; i++){
     normquant_bias_8bits[i] = normquant_bias_8bits_temp[i];
