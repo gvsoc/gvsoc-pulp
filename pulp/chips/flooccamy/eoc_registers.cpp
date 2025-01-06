@@ -58,21 +58,20 @@ EoC_Registers::EoC_Registers(vp::ComponentConf &config)
 
 void EoC_Registers::reset(bool active)
 {
-   this->trace.msg(vp::Trace::LEVEL_TRACE, "[EoC_Registers]: Reset ");
+   this->trace.msg(vp::Trace::LEVEL_DEBUG, "[EoC_Registers]: Reset\n");
    this->event_enqueue(this->eoc_event, this->interval);
 }
 
 
 void EoC_Registers::eoc_event_handler(vp::Block *__this, vp::ClockEvent *event) {
+    printf("EoC event handler\n");
     EoC_Registers *_this = (EoC_Registers *)__this;
-
     _this->output_req->init();
     _this->output_req->set_addr(_this->eoc_entry);
     _this->output_req->set_data((uint8_t*)_this->access_buffer);
     _this->output_req->set_size(4);
-
     //Send request
-    _this->trace.msg(vp::Trace::LEVEL_TRACE,"[EoC_Registers] Checking EoC at 0x%x\n", _this->eoc_entry);
+    _this->trace.msg(vp::Trace::LEVEL_DEBUG,"[EoC_Registers] Checking EoC at 0x%x\n", _this->eoc_entry);
     vp::IoReqStatus err = _this->output_itf.req(_this->output_req);
 
     //Check error
@@ -80,7 +79,7 @@ void EoC_Registers::eoc_event_handler(vp::Block *__this, vp::ClockEvent *event) 
         _this->trace.fatal("[EoC_Registers] There was an error while reading addr 0x%x error id: %d\n", _this->eoc_entry, err);
     }
 
-    _this->trace.msg(vp::Trace::LEVEL_TRACE,"[EoC_Registers] Value is %d\n", _this->access_buffer[0]);
+    _this->trace.msg(vp::Trace::LEVEL_DEBUG,"[EoC_Registers] Value is %d\n", _this->access_buffer[0]);
     if (_this->access_buffer[0] == 1)
     {   
         _this->trace.msg(vp::Trace::LEVEL_INFO, "[EoC_Registers] EoC detected, quitting\n");

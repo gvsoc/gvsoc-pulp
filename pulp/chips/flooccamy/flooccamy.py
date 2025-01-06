@@ -158,16 +158,13 @@ class SocFlooccamy(gvsoc.systree.Component):
         narrow_axi = router.Router(self, 'narrow_axi', bandwidth=0, synchronous=True)
 
         narrow_wide_noc = pulp.floonoc.floonoc.FlooNocClusterGridNarrowWide(self, 'narrow_wide_noc', wide_width=512/8, narrow_width=64/8,
-            nb_x_clusters=arch.nb_x_tiles, nb_y_clusters=arch.nb_y_tiles, ni_outstanding_reqs=64, router_input_queue_size=32) # Queue size of 16 will stop the sanity.elf from finishing, 32 works
+            nb_x_clusters=arch.nb_x_tiles, nb_y_clusters=arch.nb_y_tiles, ni_outstanding_reqs=64, router_input_queue_size=4) 
 
         
         # Add routers on left and right edges of the Narrow Noc
         for i in range(1, arch.nb_x_tiles+1):
             narrow_wide_noc.add_router(0,i)
             narrow_wide_noc.add_router(arch.nb_y_tiles+1,i)
-        # NIs are only needed where we have a target that can send a request
-        # narrow_noc.add_network_interface(5,1)
-        # narrow_noc.add_network_interface(5,2)
 
         # Clusters
         clusters:List[SnitchCluster] = []
@@ -213,18 +210,18 @@ class SocFlooccamy(gvsoc.systree.Component):
 
 
 
-        # Add a single HBM to allow running the binarywide_noc
-        bank_x = 0
-        bank_y = 1
-        bank1 = memory.memory.Memory(self, f'bank_{bank_x}_{bank_y}', size=arch.hbm.size, width_log2 = 6, atomics=True)
-        narrow_wide_noc.o_WIDE_MAP(bank1.i_INPUT(), base=arch.hbm.base, size=arch.hbm.size,x=bank_x, y=bank_y, rm_base=True)
-        narrow_wide_noc.o_NARROW_MAP (bank1.i_INPUT(), base=arch.hbm.base, size=arch.hbm.size,x=bank_x, y=bank_y, rm_base=True )
-        narrow_axi.o_MAP (bank1.i_INPUT(), base=arch.hbm.base, size=arch.hbm.size, rm_base=True )
-
+        # Add a external memory to allow running the binary 
+        hbms:List[memory.memory.Memory] = []
+        for i in range(4):
+            hbms.append(memory.memory.Memory(self, f'hbm_{i}', size=arch.hbm.size, width_log2 = 6, atomics=True)) # is bank_size wrong variable?
+            base = arch.hbm.base + i*arch.hbm.size
+            narrow_wide_noc.o_WIDE_MAP(hbms[i].i_INPUT(), base=base, size=arch.hbm.size,x=0, y=i+1, rm_base=True)
+            narrow_wide_noc.o_NARROW_MAP (hbms[i].i_INPUT(), base=base, size=arch.hbm.size,x=0, y=i+1, rm_base=True)
+            narrow_axi.o_MAP (hbms[i].i_INPUT(), base=base, size=arch.hbm.size, rm_base=True )
 
 
         # BootROM
-        narrow_wide_noc.o_NARROW_MAP ( rom.i_INPUT(), base=arch.bootrom.base, size=arch.bootrom.size, x=5,y=3, rm_base=True  )
+        narrow_wide_noc.o_NARROW_MAP ( rom.i_INPUT(), base=arch.bootrom.base, size=arch.bootrom.size, x=5,y=3, rm_base=True  ) # should move to 5,2 to be same as in rtl
         narrow_axi.o_MAP ( rom.i_INPUT(), base=arch.bootrom.base, size=arch.bootrom.size, rm_base=True  )
         # Binary loader
         loader.o_OUT(narrow_wide_noc.i_NARROW_INPUT(5,1)) # ------------------------------------
