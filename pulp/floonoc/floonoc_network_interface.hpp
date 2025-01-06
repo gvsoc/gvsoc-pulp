@@ -63,7 +63,8 @@ private:
     // FSM event handler called when something happened and queues need to be checked to see
     // if a request should be handled.
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
-    static void response_handler(vp::Block *__this, vp::ClockEvent *event); // TODO remove/fix
+    void handle_forward_req(void);
+    void handle_backward_req(void);
     // Pointer to top
     FlooNoc *noc;
     // X position of this network interface in the grid
@@ -88,7 +89,7 @@ private:
     std::queue<vp::IoReq *> pending_bursts_dst;
     // Also store the origin position of the burst to know where to send the response requests
     std::queue<std::tuple<int, int>> pending_bursts_origin_pos;
-    std::queue<int64_t> pending_bursts_dst_timestamp; // TODO remove/fix
+    std::queue<bool> pending_burst_is_forward; // Store if the burst is a forward burst or a backward burst
     // Current base address of the burst currently being processed. It is used to update the address
     // of the internal requests send to the routers to process the burst
     uint64_t pending_burst_base;
@@ -100,14 +101,6 @@ private:
     // Clock event used to schedule FSM handler. This is scheduled eveytime something may need to
     // be done
     vp::ClockEvent fsm_event;
-    vp::ClockEvent response_event; // TODO remove/fix
-    std::queue<vp::IoReq *> pending_send_target_reqs; // TODO remove/fix
-    std::queue<int64_t> pending_send_target_timestamps; // TODO remove/fix
-    std::vector<vp::IoReq *> outstanding_bursts;
-    // In the real NOC a burst sends a single packet on the forward path and all data on the backward path.
-    // This indicates if the "forward" path req request is still pending. Only after that we can start with the "backward" path.
-    // Note: There is no actual backward path in this gvsoc model.
-    bool pending_burst_waiting_for_req;
 
     // List of available internal requests used to process a burst. The network interface will send
     // requests out of the burst until there is no more available, and will continue when one
