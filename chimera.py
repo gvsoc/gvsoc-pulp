@@ -44,7 +44,7 @@ class SnitchClusterGroup(gvsoc.systree.Component):
             self.clusters.append(SnitchCluster(self, f'cluster_{id}', cluster_arch, entry=entry))
 
         self.narrow_axi.o_MAP ( snitch_rom.i_INPUT     (), base=0x30000000, size=0x1000, rm_base=True  )
-        self.narrow_axi.add_mapping("clu_reg", base=0x30001000, size=0x10000000, remove_offset=0x0)
+        self.narrow_axi.add_mapping("clu_reg", base=0x30001000, size=0x1000, remove_offset=0x0)
         self.narrow_axi.add_mapping("mem_island", base=0x48000000, size=0x08000000, remove_offset=0x0)
         self.narrow_axi.add_mapping("clint", base=0x02040000, size=0x0010_0000, remove_offset=0x0)
         self.bind(self.narrow_axi, "clu_reg", self, "clu_reg_ext")
