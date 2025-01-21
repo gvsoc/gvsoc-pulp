@@ -186,7 +186,7 @@ void Udma_channel::check_state()
 
   if (free_reqs->is_full())
   {
-    this->state_event.event(NULL);
+    this->state_event.event_highz();
   }
   else
   {
@@ -323,7 +323,7 @@ void Udma_channel::reset(bool active)
     current_cmd = NULL;
     continuous_mode = 0;
     transfer_size = 0;
-    this->state_event.event(NULL);
+    this->state_event.event_highz();
   }
 }
 
