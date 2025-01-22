@@ -99,7 +99,7 @@ class SnitchClusterTcdm(gvsoc.systree.Component):
 
 class SnitchCluster(gvsoc.systree.Component):
 
-    def __init__(self, parent, name, arch, entry=0, auto_fetch=True):
+    def __init__(self, parent, name, arch, entry=0, auto_fetch=True, binaries=None):
         super().__init__(parent, name)
 
         #
@@ -141,11 +141,11 @@ class SnitchCluster(gvsoc.systree.Component):
             else:
                 cores.append(iss.Snitch(self, f'pe{core_id}', isa='rv32imfdvca',
                     fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
-                    core_id=arch.first_hartid + core_id, htif=False))
+                    core_id=arch.first_hartid + core_id, htif=True, binaries=binaries))
 
                 fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa='rv32imfdvca',
                     fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
-                    core_id=arch.first_hartid + core_id, htif=False))
+                    core_id=arch.first_hartid + core_id, htif=True, binaries=binaries))
                 if xfrep:
                     fpu_sequencers.append(Sequencer(self, f'fpu_sequencer{core_id}', latency=0))
 

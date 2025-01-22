@@ -108,7 +108,8 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
             fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True,
-            prefetcher_size=32, custom_sources=True, htif=htif)
+
+            prefetcher_size=32, custom_sources=True, htif=htif, binaries=binaries)
 
         self.add_c_flags([
             "-DPIPELINE_STAGES=1",

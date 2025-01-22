@@ -155,7 +155,8 @@ class Soc(gvsoc.systree.Component):
         # Clusters
         clusters = []
         for id in range(0, arch.nb_cluster):
-            clusters.append(SnitchCluster(self, f'cluster_{id}', arch.get_cluster(id), entry=entry))
+            clusters.append(SnitchCluster(self, f'cluster_{id}', arch.get_cluster(id), entry=entry,
+                binaries=debug_binaries))
 
         # NoC
         if arch.floonoc:
