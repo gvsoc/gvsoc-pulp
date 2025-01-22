@@ -37,8 +37,8 @@ def add_latencies(isa):
 
     xfvec_isa = isa.get_isa('fvec')
     for insn in xfvec_isa.get_insns():
-        if 'f16vec' in insn.isa_tags or 'f16vecd' in insn.isa_tags or 'f8vec' in insn.isa_tags \
-                 or 'f8vecf' in insn.isa_tags or 'f8vecd' in insn.isa_tags:
+        if ('f16vec' in insn.isa_tags or 'f16vecd' in insn.isa_tags or 'f8vec' in insn.isa_tags \
+                 or 'f8vecf' in insn.isa_tags or 'f8vecd' in insn.isa_tags) and not 'noalt' in insn.isa_tags:
             insn.exec_func = insn.exec_func + '_switch'
             insn.exec_func_fast = insn.exec_func_fast + '_switch'
 
