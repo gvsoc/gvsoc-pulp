@@ -99,7 +99,7 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
 
         if isa_instances.get(isa) is None:
             isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
-                extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ] )
+                extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ] )
             add_latencies(isa_instance)
             isa_instances[isa] = isa_instance
 
@@ -107,7 +107,7 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
             misa = isa_instance.misa
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
-            fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True, 
+            fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True,
             prefetcher_size=32, custom_sources=True, htif=htif)
 
         self.add_c_flags([
@@ -169,15 +169,15 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
 
         if isa_instances.get(isa) is None:
             isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
-                extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ] )
-            # add_latencies(isa_instance)
+                extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ] )
+            add_latencies(isa_instance)
             isa_instances[isa] = isa_instance
 
         if misa is None:
             misa = isa_instance.misa
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
-            fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True, 
+            fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True,
             prefetcher_size=32)
 
         self.add_c_flags([
@@ -252,7 +252,7 @@ class Snitch_fp_ss(cpu.iss.riscv.RiscvCommon):
 
 
         isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_fp_ss_" + isa, isa,
-            extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ] )
+            extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ] )
 
         add_latencies(isa_instance)
 
@@ -260,7 +260,7 @@ class Snitch_fp_ss(cpu.iss.riscv.RiscvCommon):
             misa = isa_instance.misa
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
-            fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True, 
+            fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True,
             prefetcher_size=32, timed=timed, custom_sources=True, htif=htif)
 
         self.add_c_flags([
