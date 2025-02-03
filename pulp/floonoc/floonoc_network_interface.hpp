@@ -17,6 +17,7 @@
 
 /*
  * Authors: Germain Haugou, ETH (germain.haugou@iis.ee.ethz.ch)
+            Jonas Martin, ETH (martinjo@student.ethz.ch)
  */
 
 #pragma once
@@ -63,8 +64,14 @@ private:
     // FSM event handler called when something happened and queues need to be checked to see
     // if a request should be handled.
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
-    void handle_forward_req(void);
-    void handle_backward_req(void);
+    // This gets called to handle a addr request
+    void handle_addr_req(void);
+    // This gets called to handle a data request
+    void handle_data_req(void);
+    // This gets called to remove the current pending burst and also remove all related information from the other queues
+    void remove_pending_burst(void);
+    // This gets called to add a new pending burst to the queue
+    void add_pending_burst(vp::IoReq *burst, bool isaddr, int64_t timestamp, std::tuple<int, int> origin_pos);
     // Pointer to top
     FlooNoc *noc;
     // X position of this network interface in the grid
@@ -72,7 +79,7 @@ private:
     // Y position of this network interface in the grid
     int y;
     // Maxinum number of pending input requests before the initiator is stalled
-    int max_input_req;
+    int ni_outstanding_reqs;
     // Input IO interface where wide incoming bursts are injected into the network
     vp::IoSlave wide_input_itf;
     // Input IO interface where narrow incoming bursts are injected into the network
@@ -81,15 +88,15 @@ private:
     vp::Trace trace;
     // Queue of pending incoming bursts. Any received burst is pushed there and they are processed
     // one by one sequentially by the network interface.
-    std::queue<vp::IoReq *> pending_bursts_src;
+    std::queue<vp::IoReq *> pending_bursts;
+    // Also store if the burst is an address burst or a data burst. This is used to know if the
+    // burst must be processed by the address handler or the data handler
+    std::queue<bool> pending_burst_isaddr;
     // Also a maintain a queue of timestamps at which the corresponding burst can start to take
     // into account the burst latency.
-    std::queue<int64_t> pending_bursts_src_timestamp;
-    // Queue of pending bursts for which the forward path has been completed. Processed sequentially by the network interface, by sending back the data to the initiator
-    std::queue<vp::IoReq *> pending_bursts_dst;
+    std::queue<int64_t> pending_bursts_timestamp;
     // Also store the origin position of the burst to know where to send the response requests
     std::queue<std::tuple<int, int>> pending_bursts_origin_pos;
-    std::queue<bool> pending_burst_is_forward; // Store if the burst is a forward burst or a backward burst
     // Current base address of the burst currently being processed. It is used to update the address
     // of the internal requests send to the routers to process the burst
     uint64_t pending_burst_base;
@@ -102,15 +109,9 @@ private:
     // be done
     vp::ClockEvent fsm_event;
 
-    // List of available internal requests used to process a burst. The network interface will send
-    // requests out of the burst until there is no more available, and will continue when one
-    // becomes free
-    std::queue<vp::IoReq *> free_reqs;
     // True when the output queue is stalled because a router denied a request. The network
     // interface can not send any request until it gets unstalled
     bool stalled;
-    // Number of pending input req. Used to stall the initiator when the max number is reached
-    int nb_pending_input_req;
     // When initiator is stalled because max number of input pending req has been reached,
     // this give the input request which has been stalled and must be granted.
     vp::IoReq *denied_req;
