@@ -17,6 +17,7 @@
 
 /*
  * Authors: Germain Haugou, ETH (germain.haugou@iis.ee.ethz.ch)
+ *          Jonas Martin, ETH (martinjo@student.ethz.ch)
  */
 
 #pragma once
@@ -40,6 +41,8 @@ public:
 
     // This gets called by other routers or a network interface to move a request to this router
     bool handle_request(vp::IoReq *req, int from_x, int from_y);
+    // Called by other routers to unstall an output queue after an input queue became available
+    void unstall_queue(int from_x, int from_y);
     // This gets called by the top noc to grant a a request denied by a target
     void grant(vp::IoReq *req);
 
@@ -56,8 +59,7 @@ private:
     // Return the source or destination position which corresponds to a source or destination
     // queue index
     void get_pos_from_queue(int queue, int &pos_x, int &pos_y);
-    // Called by other routers to unstall an output queue after an input queue became available
-    void unstall_queue(int from_x, int from_y);
+
     // Unstalls the router or network interface corresponding to the in_queue_index
     void unstall_previous(vp::IoReq *req, int in_queue_index);
 
