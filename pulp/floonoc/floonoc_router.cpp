@@ -17,6 +17,7 @@
 
 /*
  * Authors: Germain Haugou, ETH (germain.haugou@iis.ee.ethz.ch)
+ *          Jonas Martin, ETH (martinjo@student.ethz.ch)
  */
 
 #include <vp/vp.hpp>
@@ -284,7 +285,7 @@ void Router::unstall_queue(int from_x, int from_y)
     // This gets called when an output queue gets unstalled because the denied request gets granted.
     // Just unstall the queue and trigger the fsm, in case we can now send a new request
     int queue = this->get_req_queue(from_x, from_y);
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Unstalling queue (position: (%d, %d), queue: %d)\n", from_x, from_y, queue);
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Unstalling queue (position: (%d, %d), queue: %d)\n", from_x, from_y, queue);
     this->stalled_queues[queue] = false;
     // And check in next cycle if another request can be sent
     this->fsm_event.enqueue();

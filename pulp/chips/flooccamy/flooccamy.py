@@ -158,7 +158,7 @@ class SocFlooccamy(gvsoc.systree.Component):
         narrow_axi = router.Router(self, 'narrow_axi', bandwidth=0, synchronous=True)
 
         narrow_wide_noc = pulp.floonoc.floonoc.FlooNocClusterGridNarrowWide(self, 'narrow_wide_noc', wide_width=512/8, narrow_width=64/8,
-            nb_x_clusters=arch.nb_x_tiles, nb_y_clusters=arch.nb_y_tiles, ni_outstanding_reqs=64, router_input_queue_size=4) 
+            nb_x_clusters=arch.nb_x_tiles, nb_y_clusters=arch.nb_y_tiles, ni_outstanding_reqs=32, router_input_queue_size=4) 
 
         
         # Add routers on left and right edges of the Narrow Noc
@@ -228,6 +228,7 @@ class SocFlooccamy(gvsoc.systree.Component):
         # loader.o_OUT(narrow_axi.i_INPUT())
         for id in range(0, arch.nb_cluster):
             loader.o_START(clusters[id].i_FETCHEN())
+            
 
     def i_HBM(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'hbm', signature='io')

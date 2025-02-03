@@ -17,6 +17,7 @@
 
 /*
  * Authors: Germain Haugou, ETH (germain.haugou@iis.ee.ethz.ch)
+ *          Jonas Martin, ETH (martinjo@student.ethz.ch)
  */
 
 #pragma once
