@@ -22,19 +22,32 @@ import gvsoc.systree
 import os
 
 
-def add_latencies(isa):
+def add_latencies(isa, is_fast=False):
+
+
+    if is_fast:
+        isa.get_insn('flb').set_exec_label('flb_snitch')
+        isa.get_insn('fsb').set_exec_label('fsb_snitch')
+        isa.get_insn('flh').set_exec_label('flh_snitch')
+        isa.get_insn('fsh').set_exec_label('fsh_snitch')
+        isa.get_insn('flw').set_exec_label('flw_snitch')
+        isa.get_insn('fsw').set_exec_label('fsw_snitch')
+        isa.get_insn('fld').set_exec_label('fld_snitch')
+        isa.get_insn('fsd').set_exec_label('fsd_snitch')
 
     # To model the fact that alt fp16 and fp18 instructions are dynamically enabled through a
     # CSR, we insert a stub which call the proper handler depending on the CSR value
     xf16_isa = isa.get_isa('f16')
     for insn in xf16_isa.get_insns():
-        insn.exec_func = insn.exec_func + '_switch'
-        insn.exec_func_fast = insn.exec_func_fast + '_switch'
+        if insn.name not in ['flh', 'fsh']:
+            insn.exec_func = insn.exec_func + '_switch'
+            insn.exec_func_fast = insn.exec_func_fast + '_switch'
 
     xf8_isa = isa.get_isa('f8')
     for insn in xf8_isa.get_insns():
-        insn.exec_func = insn.exec_func + '_switch'
-        insn.exec_func_fast = insn.exec_func_fast + '_switch'
+        if insn.name not in ['flb', 'fsb']:
+            insn.exec_func = insn.exec_func + '_switch'
+            insn.exec_func_fast = insn.exec_func_fast + '_switch'
 
     xfvec_isa = isa.get_isa('fvec')
     for insn in xfvec_isa.get_insns():
@@ -172,7 +185,7 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
         if isa_instances.get(isa) is None:
             isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
                 extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ] )
-            add_latencies(isa_instance)
+            add_latencies(isa_instance, is_fast=True)
             isa_instances[isa] = isa_instance
 
         if misa is None:
