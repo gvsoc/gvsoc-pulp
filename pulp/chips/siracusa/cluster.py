@@ -15,7 +15,7 @@
 #
 
 import gvsoc.systree as st
-from cpu.iss.iss import Iss
+import pulp.cpu.iss.pulp_cores as iss
 from cache.hierarchical_cache import Hierarchical_cache
 from pulp.chips.siracusa.l1_subsystem import L1_subsystem
 from pulp.chips.siracusa.wmem_subsystem import Wmem_subsystem
@@ -94,7 +94,7 @@ class Cluster(st.Component):
         # Cores
         pes = []
         for i in range(0, nb_pe):
-            pes.append(Iss(self, 'pe%d' % i, **self.get_property('iss_config'), cluster_id=cid, core_id=i))
+            pes.append(iss.ClusterCore(self, 'pe%d' % i, cluster_id=cid, core_id=i))
 
         # Icache
         icache = Hierarchical_cache(self, 'icache', self.get_property('icache/config'))
@@ -211,13 +211,6 @@ class Cluster(st.Component):
 
         periph_ico.add_mapping('neureka', **self._reloc_mapping(self.get_property('peripherals/neureka/mapping')))
         self.bind(periph_ico, 'neureka', neureka, 'input')
-
-        size = int(self.get_property('peripherals/dbg_unit/size'), 0)
-        base = int(self.get_property('peripherals/dbg_unit/base'), 0)
-        for i in range(0, nb_pe):
-            pe_base = base + cid*cluster_size + size * i
-            periph_ico.add_mapping('dbg_unit_%d' % i, base=pe_base, size=size, remove_offset=pe_base)
-            self.bind(periph_ico, 'dbg_unit_%d' % i, pes[i], 'dbg_unit')
 
         # MCHAN
         self.bind(mchan, 'ext_irq_itf', self, 'dma_irq')
