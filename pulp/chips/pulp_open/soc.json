@@ -191,7 +191,7 @@
         },
 
         "udma": {
-            "content"      : "chips/gap9_v2/udma.json"
+            "content"      : "chips/pulp_open/udma.json"
         },
 
         "apb_soc_ctrl": {
