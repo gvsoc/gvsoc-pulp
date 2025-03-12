@@ -16,7 +16,7 @@
 
 import os
 import gvsoc.systree as st
-import cpu.iss.iss as iss
+import pulp.cpu.iss.pulp_cores as iss
 import memory.memory as memory
 import interco.router as router
 import cache.cache as cache
@@ -37,11 +37,12 @@ from interco.bus_watchpoint import Bus_watchpoint
 from pulp.adv_dbg_unit.pulp_tap import Pulp_tap
 from pulp.adv_dbg_unit.riscv_tap import Riscv_tap
 from gdbserver.gdbserver import Gdbserver
+import utils.loader.loader
 
 
 class Soc(st.Component):
 
-    def __init__(self, parent, name, config_file, chip, cluster):
+    def __init__(self, parent, name, parser, config_file, chip, cluster):
         super(Soc, self).__init__(parent, name)
 
         #
@@ -62,11 +63,13 @@ class Soc(st.Component):
         # Components
         #
 
-        # ROM
-        rom = memory.Memory(self, 'rom',
-            size=self.get_property('apb_ico/mappings/rom/size'),
-            stim_file=self.get_file_path('pulp/chips/pulp/rom.bin')
-        )
+        # Loader
+        binary = None
+        if parser is not None:
+            [args, otherArgs] = parser.parse_known_args()
+            binary = args.binary
+
+        loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 
         # Debug ROM
         debug_rom = memory.Memory(self, 'debug_rom',
@@ -80,7 +83,7 @@ class Soc(st.Component):
         fll_cluster = Fll(self, 'fll_cluster')
 
         # FC
-        fc = iss.Iss(self, 'fc', **self.get_property('fc/iss_config'))
+        fc = iss.FcCore(self, 'fc')
 
         # FC ITC
         fc_itc = itc.Itc_v1(self, 'fc_itc')
@@ -152,7 +155,7 @@ class Soc(st.Component):
 
         # RISCV TAP
         harts = []
-        harts.append([(self.get_property('fc/iss_config/cluster_id') << 5) | (self.get_property('fc/iss_config/core_id') << 0), 'fc'])
+        harts.append([(0 << 5) | (31 << 0), 'fc'])
 
         for cid in range(0, nb_cluster):
             for pe in range(0, nb_pe):
@@ -172,8 +175,13 @@ class Soc(st.Component):
         # Bindings
         #
 
+        # Loader
+        self.bind(loader, 'out', axi_ico, 'input')
+        self.bind(loader, 'start', fc, 'fetchen')
+        self.bind(loader, 'entry', fc, 'bootaddr')
+
         # FLL
-        self.bind(fll_soc, 'clock_out', self, 'fll_soc_clock')
+        #self.bind(fll_soc, 'clock_out', self, 'fll_soc_clock')
 
         for cid in range(0, nb_cluster):
             self.bind(fll_cluster, 'clock_out', self, get_cluster_name(cid) + '_fll')
@@ -234,14 +242,12 @@ class Soc(st.Component):
         self.bind(apb_ico, 'fc_itc', fc_itc, 'input')
         self.bind(apb_ico, 'fc_dbg_unit', riscv_tap, 'input')
         self.bind(apb_ico, 'pmu', self, 'pmu_input')
-        self.bind(apb_ico, 'rom', rom, 'input')
         self.bind(apb_ico, 'debug_rom', debug_rom, 'input')
         self.bind(apb_ico, 'fll_soc', fll_soc, 'input')
         self.bind(apb_ico, 'fll_periph', fll_periph, 'input')
         self.bind(apb_ico, 'fll_cluster', fll_cluster, 'input')
         self.bind(apb_ico, 'fc_timer', timer, 'input')
         self.bind(apb_ico, 'fc_timer_1', timer_1, 'input')
-        self.bind(apb_ico, 'debug_rom', debug_rom, 'input')
 
         # Soc interconnect 
         self.bind(soc_ico, 'apb', apb_ico, 'input')
