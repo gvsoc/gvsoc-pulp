@@ -99,7 +99,7 @@ class SnitchClusterTcdm(gvsoc.systree.Component):
 
 class SnitchCluster(gvsoc.systree.Component):
 
-    def __init__(self, parent, name, parser, arch, entry=0, auto_fetch=True, binaries=None):
+    def __init__(self, parent, name, arch, parser=None, entry=0, auto_fetch=True, binaries=None):
         super().__init__(parent, name)
 
         #
@@ -131,15 +131,16 @@ class SnitchCluster(gvsoc.systree.Component):
         if xfrep:
             fpu_sequencers = []
 
-        [args, __] = parser.parse_known_args()
-
         binary = None
         binaries = []
         if parser is not None:
-            [args, otherArgs] = parser.parse_known_args()
-            binary = args.binary
-            if binary is not None:
-                binaries = [binary]
+            [args, __] = parser.parse_known_args()
+
+            if parser is not None:
+                [args, otherArgs] = parser.parse_known_args()
+                binary = args.binary
+                if binary is not None:
+                    binaries = [binary]
 
         for core_id in range(0, arch.nb_core):
 

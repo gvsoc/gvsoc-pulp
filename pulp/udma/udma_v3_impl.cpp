@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* 
+/*
  * Authors: Germain Haugou, GreenWaves Technologies (germain.haugou@greenwaves-technologies.com)
  */
 
@@ -463,14 +463,14 @@ udma::udma(vp::ComponentConf &config)
   new_slave_port("periph_clock", &this->periph_clock_itf);
 
   nb_periphs = get_js_config()->get_child_int("nb_periphs");
-  periphs.reserve(nb_periphs);
+  periphs.resize(nb_periphs);
 
   l2_read_fifo_size = get_js_config()->get_child_int("properties/l2_read_fifo_size");
 
   l2_itf.set_resp_meth(&udma::l2_response);
   l2_itf.set_grant_meth(&udma::l2_grant);
   new_master_port("l2_itf", &l2_itf);
- 
+
   new_master_port("event_itf", &event_itf);
 
   event = event_new(udma::event_handler);
@@ -657,7 +657,7 @@ udma::udma(vp::ComponentConf &config)
       }
     }
   }
-  
+
 }
 
 
@@ -915,4 +915,3 @@ extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new udma(config);
 }
-
