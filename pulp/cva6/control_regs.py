@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2020 GreenWaves Technologies, SAS, ETH Zurich and University of Bologna
+# Copyright (C) 2ETH Zurich and University of Bologna
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,16 +16,14 @@
 
 import gvsoc.systree
 
-class Stdout(gvsoc.systree.Component):
+class ControlRegs(gvsoc.systree.Component):
+    def __init__(self, parent: gvsoc.systree.Component, name: str, dram_end=0x0, latency: int=0):
+        super(ControlRegs, self).__init__(parent, name)
 
-    def __init__(self, parent, name):
+        self.add_sources(['pulp/cva6/control_regs.cpp'])
 
-        super(Stdout, self).__init__(parent, name)
-
-        self.set_component('pulp.stdout.stdout_v3_impl')
         self.add_properties({
-            'max_cluster': 33,
-            'max_core_per_cluster': 16
+            'dram_end': dram_end
         })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
