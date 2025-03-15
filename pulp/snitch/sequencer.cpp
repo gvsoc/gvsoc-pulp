@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-/* 
+/*
  * Authors: Germain Haugou, GreenWaves Technologies (germain.haugou@greenwaves-technologies.com)
  *          Kexin Li, ETH Zurich (likexi@ethz.ch)
  */
 
 // Temporary workaround to let this component include ISS headers
-#include <../../../../isa_snitch_rv32imfdvca.hpp>
+#include <../../../../isa_snitch_rv32imfdca.hpp>
 
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
@@ -55,21 +55,21 @@ public:
 class FrepConfig
 {
 public:
-    
+
     // Inner/outer loop
-    bool is_outer = false;      
-    // Number of iterations             
+    bool is_outer = false;
+    // Number of iterations
     int max_rpt = -1;
     // Number of instructions
     int max_inst = -1;
     // Stagger register index
     int stagger_max = 0;
-    unsigned int stagger_mask = 0x0; 
+    unsigned int stagger_mask = 0x0;
 };
 
 
 // Define a data structure for every entry in ring buffer.
-class BufferEntry 
+class BufferEntry
 {
     friend class FrepConfig;
 
@@ -79,27 +79,27 @@ public:
     BufferEntry(OffloadReq req, bool is_outer, int max_inst, int max_rpt, int stagger_max, unsigned int stagger_mask, int base_entry, int next_entry, FrepConfig config);
 
     // Main content of the entry
-    OffloadReq req;      
+    OffloadReq req;
     // Whether the instruction is in frep sequence
     bool isn_sequence = true;
     // Inner/outer loop
-    bool is_outer = false;      
+    bool is_outer = false;
     // Number of instructions in this configuration
     int max_inst = -1;
-    // Number of iterations, max_rpt=0 means it's an invalid entry.  
+    // Number of iterations, max_rpt=0 means it's an invalid entry.
     int max_rpt = -1;
     // Stagger register index
     int stagger_max = 0;
-    unsigned int stagger_mask = 0x0; 
+    unsigned int stagger_mask = 0x0;
     // Index of base instruction in this configuration
     int base_entry = -1;
     // Index of the next instruction
-    int next_entry = -1;  
+    int next_entry = -1;
     // The corresponding frep configuration
     FrepConfig config;
 };
 
-BufferEntry::BufferEntry(OffloadReq req, bool is_outer, int max_inst, int max_rpt, int stagger_max, unsigned int stagger_mask, int base_entry, int next_entry, FrepConfig config) : 
+BufferEntry::BufferEntry(OffloadReq req, bool is_outer, int max_inst, int max_rpt, int stagger_max, unsigned int stagger_mask, int base_entry, int next_entry, FrepConfig config) :
 req(req), is_outer(is_outer), max_inst(max_inst), max_rpt(max_rpt), stagger_max(stagger_max), stagger_mask(stagger_mask), base_entry(base_entry), next_entry(next_entry), config(config) {}
 
 
@@ -299,7 +299,7 @@ inline void sequencer::stalled_inc()
 void sequencer::req(vp::Block *__this, OffloadReq *req)
 {
     sequencer *_this = (sequencer *)__this;
-    
+
     // Input handshaking, between integer core and sequencer
     // Obtain arguments from request.
     iss_reg_t pc = req->pc;
@@ -327,7 +327,7 @@ void sequencer::req(vp::Block *__this, OffloadReq *req)
         _this->frep_config.stagger_max = insn.uim[1];
         _this->frep_config.stagger_mask = insn.uim[0];
 
-        _this->trace.msg("Frep Config (is_outer: %d, max_inst: %d, max_rpt: %d, stagger_max: %d, stagger_mask: 0x%llx)\n", 
+        _this->trace.msg("Frep Config (is_outer: %d, max_inst: %d, max_rpt: %d, stagger_max: %d, stagger_mask: 0x%llx)\n",
             insn.is_outer, insn.uim[2], insn.max_rpt, insn.uim[1], insn.uim[0]);
 
         // Assign value of base_id, current write_id is the new base_id when new configuration comes.
@@ -350,7 +350,7 @@ void sequencer::req(vp::Block *__this, OffloadReq *req)
             _this->out.sync(req);
         }
     }
-    
+
 
     // 2. Instructions are sequenced from the FPU sequence buffer. Write a new entry into the buffer.
     BufferEntry new_entry;
@@ -367,7 +367,7 @@ void sequencer::req(vp::Block *__this, OffloadReq *req)
             _this->stalled_dec();
         }
     }
-    
+
 }
 
 
@@ -417,7 +417,7 @@ vp::IoReqStatus sequencer::rsp_state(vp::Block *__this, vp::IoReq *req)
 
     if (acc_req_ready)
     {
-       return vp::IO_REQ_OK; 
+       return vp::IO_REQ_OK;
     }
     else
     {
@@ -458,7 +458,7 @@ BufferEntry sequencer::gen_entry(OffloadReq *req, FrepConfig *config)
     {
         sequence = false;
     }
-    this->trace.msg(vp::Trace::LEVEL_TRACE, "Entry arguments write_id: %d, base_id: %d, config->max_inst: %d, size:%d, sequence: %d\n", 
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Entry arguments write_id: %d, base_id: %d, config->max_inst: %d, size:%d, sequence: %d\n",
             this->write_id, this->base_id, config->max_inst, this->size, sequence);
 
     if (!sequence)
@@ -476,9 +476,9 @@ BufferEntry sequencer::gen_entry(OffloadReq *req, FrepConfig *config)
     else
     {
         // 2. Sequenceable instructions, and are sequenced from the FPU sequence buffer under frep.
-        // FREP.I and FREP.O repeat the max_inst + 1 instructions following the FREP instruction for max_rpt + 1 times. 
-        // The FREP.I instruction (I stands for inner) repeats every instruction the specified number of times and moves on to executing and repeating the next. 
-        // The FREP.O instruction (O stands for outer) repeats the whole sequence of instructions max_rpt + 1 times. 
+        // FREP.I and FREP.O repeat the max_inst + 1 instructions following the FREP instruction for max_rpt + 1 times.
+        // The FREP.I instruction (I stands for inner) repeats every instruction the specified number of times and moves on to executing and repeating the next.
+        // The FREP.O instruction (O stands for outer) repeats the whole sequence of instructions max_rpt + 1 times.
         // Register staggering can be enabled and configured via the stagger_mask and stagger_max immediates.
         new_entry.req = *req;
         new_entry.isn_sequence = false;
@@ -504,13 +504,13 @@ BufferEntry sequencer::gen_entry(OffloadReq *req, FrepConfig *config)
             rpt_last = true;
         }
 
-        // Find the index of next instruction 
+        // Find the index of next instruction
         if (config->is_outer)
         {
             if (!insn_last)
             {
                 // There is still instruction following in this configuration.
-                new_entry.next_entry = (this->write_id + 1) % this->size; 
+                new_entry.next_entry = (this->write_id + 1) % this->size;
             }
             else
             {
@@ -518,22 +518,22 @@ BufferEntry sequencer::gen_entry(OffloadReq *req, FrepConfig *config)
                 if (!rpt_last)
                 {
                     // If there's still iteration left, go back to the initial instruction index.
-                    new_entry.next_entry = this->base_id; 
+                    new_entry.next_entry = this->base_id;
                 }
                 else
                 {
                     // No iteration, move to the following entry in buffer.
-                    new_entry.next_entry = (this->write_id + 1) % this->size; 
+                    new_entry.next_entry = (this->write_id + 1) % this->size;
                 }
             }
         }
-        else 
+        else
         {
             // inner loop
             if(rpt_last)
             {
                 // No iteration, move to the following entry in buffer.
-                new_entry.next_entry = (this->write_id + 1) % this->size; 
+                new_entry.next_entry = (this->write_id + 1) % this->size;
             }
             else
             {
@@ -541,11 +541,11 @@ BufferEntry sequencer::gen_entry(OffloadReq *req, FrepConfig *config)
                 new_entry.next_entry = this->write_id;
             }
         }
-        this->trace.msg(vp::Trace::LEVEL_TRACE, "Generate sequenceable IO req in buffer index %d (opcode: 0x%llx, pc: 0x%llx, base_id: %d, next_id: %d)\n", 
+        this->trace.msg(vp::Trace::LEVEL_TRACE, "Generate sequenceable IO req in buffer index %d (opcode: 0x%llx, pc: 0x%llx, base_id: %d, next_id: %d)\n",
             this->write_id, new_entry.req.insn.opcode, new_entry.req.pc, new_entry.base_entry, new_entry.next_entry);
-        this->trace.msg(vp::Trace::LEVEL_TRACE, "Sequence frep configuration in buffer index %d (is_outer: %d, max_inst: %d, max_rpt: %d, stagger_max: %d, stagger_mask: 0x%llx)\n", 
+        this->trace.msg(vp::Trace::LEVEL_TRACE, "Sequence frep configuration in buffer index %d (is_outer: %d, max_inst: %d, max_rpt: %d, stagger_max: %d, stagger_mask: 0x%llx)\n",
             this->write_id, new_entry.config.is_outer, new_entry.config.max_inst, new_entry.config.max_rpt, new_entry.config.stagger_max, new_entry.config.stagger_mask);
-        
+
         // Reset frep config if this sequence is over
         if (this->write_id == ((this->base_id + config->max_inst) % this->size))
         {
@@ -563,7 +563,7 @@ BufferEntry sequencer::gen_entry(OffloadReq *req, FrepConfig *config)
 // Get called when there is a new entry that needs to be written into the buffer.
 void sequencer::write_entry(BufferEntry entry)
 {
-    if (this->isFull()) 
+    if (this->isFull())
     {
         this->acc_req_ready = false;
         this->trace.msg("Sequence buffer is full and no longer accepts new instructions\n");
@@ -584,7 +584,7 @@ void sequencer::write_entry(BufferEntry entry)
 // Get called when we read out an entry from the buffer.
 BufferEntry sequencer::read_entry(int index)
 {
-    if (this->isEmpty()) 
+    if (this->isEmpty())
     {
         this->trace.msg("Sequence buffer is empty and no instruction can be read\n");
         // Todo: write a return here to avoid accident happening.
@@ -652,13 +652,13 @@ void sequencer::update_entry(int index)
             rpt_last = true;
         }
 
-        // Find the index of next instruction 
+        // Find the index of next instruction
         if (entry->config.is_outer)
         {
             if (!insn_last)
             {
                 // There is still instruction following in this configuration.
-                entry->next_entry = (index + 1) % this->size; 
+                entry->next_entry = (index + 1) % this->size;
             }
             else
             {
@@ -666,22 +666,22 @@ void sequencer::update_entry(int index)
                 if (!rpt_last)
                 {
                     // If there's still iteration left, go back to the initial instruction index.
-                    entry->next_entry = entry->base_entry; 
+                    entry->next_entry = entry->base_entry;
                 }
                 else
                 {
                     // No iteration, move to the following entry in buffer.
-                    entry->next_entry = (index + 1) % this->size; 
+                    entry->next_entry = (index + 1) % this->size;
                 }
             }
         }
-        else 
+        else
         {
             // inner loop
             if(rpt_last)
             {
                 // No iteration, move to the following entry in buffer.
-                entry->next_entry = (index + 1) % this->size; 
+                entry->next_entry = (index + 1) % this->size;
             }
             else
             {
@@ -695,7 +695,7 @@ void sequencer::update_entry(int index)
         int temp_in1 = entry->req.insn.in_regs[0] + entry->stagger_max;
         int temp_in2 = entry->req.insn.in_regs[1] + entry->stagger_max;
         int temp_in3 = entry->req.insn.in_regs[2] + entry->stagger_max;
-    
+
         entry->stagger_max --;
         int stagger_cnt = entry->stagger_max;
 
@@ -755,7 +755,7 @@ void sequencer::update_entry(int index)
             this->trace.msg(vp::Trace::LEVEL_TRACE, "Update rs3 to %d (stagger_mask: 0x%llx)\n", entry->req.insn.in_regs[2], entry->stagger_mask);
         }
 
-        this->trace.msg(vp::Trace::LEVEL_TRACE, "Update sequence frep configuration in buffer index %d (is_outer: %d, max_inst: %d, max_rpt: %d, stagger_max: %d, stagger_mask: 0x%llx, base_id: %d, next_id: %d)\n", 
+        this->trace.msg(vp::Trace::LEVEL_TRACE, "Update sequence frep configuration in buffer index %d (is_outer: %d, max_inst: %d, max_rpt: %d, stagger_max: %d, stagger_mask: 0x%llx, base_id: %d, next_id: %d)\n",
             index, entry->is_outer, entry->max_inst, entry->max_rpt, entry->stagger_max, entry->stagger_mask, entry->base_entry, entry->next_entry);
     }
 
@@ -796,4 +796,3 @@ extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new sequencer(config);
 }
-
