@@ -317,6 +317,7 @@ class Snitch_fp_ss(cpu.iss.riscv.RiscvCommon):
             "cpu/iss/src/pmp.cpp",
             "cpu/iss/src/gdbserver.cpp",
             "cpu/iss/src/dbg_unit.cpp",
+            "cpu/iss/src/vector.cpp",
             "cpu/iss/flexfloat/flexfloat.c",
         ])
 
@@ -360,4 +361,5 @@ class Spatz(cpu.iss.riscv.RiscvCommon):
 
         self.add_sources([
             "cpu/iss/src/spatz.cpp",
+            "cpu/iss/src/vector.cpp",
         ])
