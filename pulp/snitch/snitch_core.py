@@ -317,7 +317,6 @@ class Snitch_fp_ss(cpu.iss.riscv.RiscvCommon):
             "cpu/iss/src/pmp.cpp",
             "cpu/iss/src/gdbserver.cpp",
             "cpu/iss/src/dbg_unit.cpp",
-            "cpu/iss/src/vector.cpp",
             "cpu/iss/flexfloat/flexfloat.c",
         ])
 
