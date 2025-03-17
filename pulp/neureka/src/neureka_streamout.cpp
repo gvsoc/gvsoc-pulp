@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-/* 
+/*
  * Authors: Francesco Conti, University of Bologna & GreenWaves Technologies (f.conti@unibo.it)
  *          Arpan Suravi Prasad, ETH Zurich (prasadar@iis.ee.ethz.ch)
  */
@@ -27,7 +27,7 @@ void Neureka::streamout_setup() {
 
   auto outfeat_hom_iter = this->H_SIZE * this->outfeat_d2_stride;
   auto outfeat_wom_iter = this->W_SIZE * this->outfeat_d1_stride;
- 
+
   auto base_addr_y = this->outfeat_ptr + this->i_major*outfeat_hom_iter + this->j_major*outfeat_wom_iter + this->k_out_major*tp*this->quantization_bits/8;
 
   auto streamout_k_out_lim = !this->depthwise ? this->mv_k_out_lim : (this->k_out_major == this->subtile_nb_ko-1 && this->subtile_rem_ko != this->TP_IN_S && this->subtile_rem_ko != 0) ? this->subtile_rem_ko : this->TP_IN;
@@ -36,7 +36,7 @@ void Neureka::streamout_setup() {
                                                                              (streamout_k_out_lim <= 16) ? 2*this->NR_COLUMN :
                                                                              (streamout_k_out_lim <= 24) ? 3*this->NR_COLUMN : 4*this->NR_COLUMN;
 
-  
+
   this->col_enable = xt::zeros<int32_t>({this->H_SIZE,this->W_SIZE});
   for(auto i=0; i<this->h_size_out; i++) {
     for(auto j=0; j<this->w_size_out; j++) {
@@ -72,12 +72,7 @@ void Neureka::streamout_setup() {
   // relu is here because of easier modeling
   if(this->quantization_bits == 8 & (this->output_quant)) {
     if(this->use_relu) {
-      if(!this->signed_activation){
         xt::view(this->accum, xt::all()) = xt::clip(this->accum, 0, 255);
-      }
-      else {
-        xt::view(this->accum, xt::all()) = xt::clip(this->accum, 0, 127);
-      }
     }
     else {
       xt::view(this->accum, xt::all()) = xt::clip(this->accum, -128, 127);
@@ -102,13 +97,13 @@ void Neureka::streamout_setup() {
   }
 }
 
-int Neureka::streamout_cycle() { 
+int Neureka::streamout_cycle() {
   int64_t cycles = 0;
   auto tp = this->depthwise ? this->TP_IN_S : this->TP_OUT;
   auto ko = ((this->subtile_nb_ko-1)*tp + this->subtile_rem_ko);
   auto ko_rem = (this->subtile_nb_ko==1) ? this->subtile_rem_ko : ((ko%tp)==0)? tp : ko%tp ;
   auto ko_rem_index = (this->subtile_nb_ko==1) ? ko_rem : (this->k_out_major==this->subtile_nb_ko-1)?ko_rem : tp;
-  
+
   xt::xarray<uint8_t> xx = xt::zeros<uint8_t>({32});
   if(this->quantization_bits == 32) {
     this->trace.msg(vp::Trace::LEVEL_DEBUG, "  Before streamout_k_out_lim=%d\n", this->streamout_k_out_lim);
@@ -159,7 +154,7 @@ bool Neureka::streamout_exit_idx() {
 void Neureka::streamout_update_idx() {
   if(this->streamout_k_out_iter < this->streamout_k_out_lim-1) {
     this->streamout_k_out_iter++;
-  } 
+  }
   else if(this->streamout_j_out_iter < this->W_SIZE-1) {
     this->streamout_k_out_iter = 0;
     this->streamout_j_out_iter++;
