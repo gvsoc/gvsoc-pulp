@@ -37,7 +37,9 @@ class CVA6(cpu.iss.riscv.RiscvCommon):
             fetch_enable: bool=False,
             boot_addr: int=0,
             core_id: int=0,
-            htif: bool=False):
+            htif: bool=False,
+            has_vector: bool=False,
+            vlen: int=512):
 
 
         isa_instance = isa_instances.get(isa)
@@ -85,3 +87,11 @@ class CVA6(cpu.iss.riscv.RiscvCommon):
             "cpu/iss/src/cva6/cva6.cpp",
             "cpu/iss/src/ara/ara.cpp",
         ])
+
+        if has_vector:
+            self.add_c_flags([
+                "-DCONFIG_ISS_HAS_VECTOR=1", f'-DCONFIG_ISS_VLEN={int(vlen)}'
+            ])
+            self.add_sources([
+                "cpu/iss/src/vector.cpp",
+            ])

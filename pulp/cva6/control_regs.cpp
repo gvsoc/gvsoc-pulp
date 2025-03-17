@@ -57,8 +57,10 @@ vp::IoReqStatus ControlRegs::req(vp::Block *__this, vp::IoReq *req)
 
     if (offset == 0)
     {
-        _this->trace.force_warning("Unhandled soc address register access\n");
-        return vp::IO_REQ_INVALID;
+        if (is_write && size == 8)
+        {
+            _this->time.get_engine()->quit(*(uint64_t *)data);
+        }
     }
     else if (offset == 0x8)
     {
