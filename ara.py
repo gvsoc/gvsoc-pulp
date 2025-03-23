@@ -56,7 +56,7 @@ class Soc(st.Component):
         ico.o_MAP(regs.i_INPUT(), name='control_regs', base=0xD0000000, size=0x10000000)
 
         host = pulp.cva6.cva6.CVA6(self, 'host', isa='rv64imafdvc', boot_addr=0x80000000,
-            has_vector=True, vlen=256)
+            has_vector=True, vlen=4096)
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 
