@@ -39,9 +39,9 @@ class Soc(st.Component):
             [args, otherArgs] = parser.parse_known_args()
             binary = args.binary
 
-        dram = memory.Memory(self, 'dram', size=0x10000000, atomics=True)
+        dram = memory.Memory(self, 'dram', size=0x10000000, atomics=True, width_log2=-1)
 
-        mem = memory.Memory(self, 'mem', size=0x80000000, atomics=True)
+        mem = memory.Memory(self, 'mem', size=0x80000000, atomics=True, width_log2=-1)
         regs = pulp.cva6.control_regs.ControlRegs(self, 'control_regs', dram_end=0xc0000000)
 
         stdout = Stdout(self, 'stdout')
@@ -55,7 +55,8 @@ class Soc(st.Component):
         ico.o_MAP(dram.i_INPUT(), name='dram', base=0xB0000000, size=0x10000000)
         ico.o_MAP(regs.i_INPUT(), name='control_regs', base=0xD0000000, size=0x10000000)
 
-        host = pulp.cva6.cva6.CVA6(self, 'host', isa='rv64imafdvc', boot_addr=0x80000000, has_vector=True)
+        host = pulp.cva6.cva6.CVA6(self, 'host', isa='rv64imafdvc', boot_addr=0x80000000,
+            has_vector=True, vlen=256)
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 
