@@ -57,14 +57,15 @@ class CVA6(cpu.iss.riscv.RiscvCommon):
                 # Assign tags to instructions so that we can handle them with different blocks
 
                 # For now only load/stores are assigned to vlsu
-                pattern = re.compile(r'^(vle\d+\.v)$')
+                vle_pattern = re.compile(r'^(vle\d+\.v)$')
+                vse_pattern = re.compile(r'^(vse\d+\.v)$')
                 for insn in isa_instance.get_isa('v').get_insns():
-                    if pattern.match(insn.label) is not None:
+                    if vle_pattern.match(insn.label) is not None:
                         insn.add_tag('vload')
-                pattern = re.compile(r'^(vse\d+\.v)$')
-                for insn in isa_instance.get_isa('v').get_insns():
-                    if pattern.match(insn.label) is not None:
+                    elif vse_pattern.match(insn.label) is not None:
                         insn.add_tag('vstore')
+                    else:
+                        insn.add_tag('valu')
 
         if misa is None:
             misa = isa_instance.misa
@@ -104,6 +105,7 @@ class CVA6(cpu.iss.riscv.RiscvCommon):
             "cpu/iss/src/cva6/cva6.cpp",
             "cpu/iss/src/ara/ara.cpp",
             "cpu/iss/src/ara/ara_vlsu.cpp",
+            "cpu/iss/src/ara/ara_valu.cpp",
         ])
 
         if has_vector:
@@ -131,6 +133,12 @@ class CVA6(cpu.iss.riscv.RiscvCommon):
             vlsu = gvsoc.gui.Signal(self, ara, name='vlsu', path='ara/vlsu/active_box', groups=['regmap'], display=gvsoc.gui.DisplayLogicBox('ACTIVE'))
 
             gvsoc.gui.Signal(self, vlsu, name="active", path="ara/vlsu/active", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+            gvsoc.gui.Signal(self, vlsu, name="pc", path="ara/vlsu/pc", groups=['regmap'])
             gvsoc.gui.Signal(self, vlsu, name="addr", path="ara/vlsu/addr", groups=['regmap'])
             gvsoc.gui.Signal(self, vlsu, name="size", path="ara/vlsu/size", groups=['regmap'])
             gvsoc.gui.Signal(self, vlsu, name="is_write", path="ara/vlsu/is_write", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+
+            valu = gvsoc.gui.Signal(self, ara, name='valu', path='ara/valu/active_box', groups=['regmap'], display=gvsoc.gui.DisplayLogicBox('ACTIVE'))
+
+            gvsoc.gui.Signal(self, valu, name="active", path="ara/valu/active", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+            gvsoc.gui.Signal(self, valu, name="pc", path="ara/valu/pc", groups=['regmap'])
