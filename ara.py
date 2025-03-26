@@ -65,10 +65,7 @@ class Soc(st.Component):
         self.bind(loader, 'out', ico, 'input')
         self.bind(loader, 'start', host, 'fetchen')
 
-        self.bind(host, 'vlsu_0', ico, 'input')
-        self.bind(host, 'vlsu_1', ico, 'input')
-        self.bind(host, 'vlsu_2', ico, 'input')
-        self.bind(host, 'vlsu_3', ico, 'input')
+        host.o_VLSU(ico.i_INPUT())
 
 
 class AraChip(st.Component):
