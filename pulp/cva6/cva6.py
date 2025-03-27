@@ -20,6 +20,8 @@ from cpu.iss.isa_gen.isa_rvv import *
 from cpu.iss.isa_gen.isa_smallfloats import *
 import gvsoc.systree
 import os
+import gvsoc.gui
+import re
 
 
 
@@ -44,10 +46,32 @@ class CVA6(cpu.iss.riscv.RiscvCommon):
 
         isa_instance = isa_instances.get(isa)
 
+        self.has_vector = has_vector
+
         if isa_instances.get(isa) is None:
             isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("cva6_" + isa, isa,
                 extensions=[ ] )
             isa_instances[isa] = isa_instance
+
+            if has_vector:
+                # Assign tags to instructions so that we can handle them with different blocks
+
+                # For now only load/stores are assigned to vlsu
+                vle_pattern = re.compile(r'^(vle\d+\.v)$')
+                vse_pattern = re.compile(r'^(vse\d+\.v)$')
+                vslide_pattern = re.compile(r'.*slide.*|.*vmv.*')
+                vsetvli_pattern = re.compile(r'.*vset.*')
+                for insn in isa_instance.get_isa('v').get_insns():
+                    if vle_pattern.match(insn.label) is not None:
+                        insn.add_tag('vload')
+                    elif vse_pattern.match(insn.label) is not None:
+                        insn.add_tag('vstore')
+                    elif vslide_pattern.match(insn.label) is not None:
+                        insn.add_tag('vslide')
+                    elif vsetvli_pattern.match(insn.label) is not None:
+                        insn.add_tag('vsetvli')
+                    else:
+                        insn.add_tag('vothers')
 
         if misa is None:
             misa = isa_instance.misa
@@ -86,6 +110,8 @@ class CVA6(cpu.iss.riscv.RiscvCommon):
             "cpu/iss/src/vector.cpp",
             "cpu/iss/src/cva6/cva6.cpp",
             "cpu/iss/src/ara/ara.cpp",
+            "cpu/iss/src/ara/ara_vlsu.cpp",
+            "cpu/iss/src/ara/ara_vcompute.cpp",
         ])
 
         if has_vector:
@@ -95,3 +121,53 @@ class CVA6(cpu.iss.riscv.RiscvCommon):
             self.add_sources([
                 "cpu/iss/src/vector.cpp",
             ])
+            self.add_property('ara/nb_lanes', 4)
+
+    def gen_gui(self, parent_signal):
+        active = super().gen_gui(parent_signal)
+
+        if self.has_vector:
+            ara = gvsoc.gui.Signal(self, active, name='ara', path='ara/label', groups=['regmap'], display=gvsoc.gui.DisplayStringBox())
+
+            gvsoc.gui.Signal(self, ara, name="queue", path="ara/queue", groups=['regmap'])
+            gvsoc.gui.Signal(self, ara, name="pc", path="ara/pc", groups=['regmap'])
+            gvsoc.gui.Signal(self, ara, name="active", path="ara/active",
+                display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+            gvsoc.gui.Signal(self, ara, name="queue_full", path="ara/queue_full",
+                display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+            gvsoc.gui.Signal(self, ara, name="pending_insn", path="ara/nb_pending_insn", groups=['regmap'])
+            gvsoc.gui.Signal(self, ara, name="waiting_insn", path="ara/nb_waiting_insn", groups=['regmap'])
+
+            vlsu = gvsoc.gui.Signal(self, ara, name='vlsu', path='ara/vlsu/label', groups=['regmap'], display=gvsoc.gui.DisplayStringBox())
+            gvsoc.gui.Signal(self, vlsu, name="active", path="ara/vlsu/active", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+            gvsoc.gui.Signal(self, vlsu, name="queue", path="ara/vlsu/queue", groups=['regmap'])
+            gvsoc.gui.Signal(self, vlsu, name="pc", path="ara/vlsu/pc", groups=['regmap'])
+            gvsoc.gui.Signal(self, vlsu, name="pending_insn", path="ara/vlsu/nb_pending_insn", groups=['regmap'])
+            gvsoc.gui.Signal(self, vlsu, name="addr", path="ara/vlsu/addr", groups=['regmap'])
+            gvsoc.gui.Signal(self, vlsu, name="size", path="ara/vlsu/size", groups=['regmap'])
+            gvsoc.gui.Signal(self, vlsu, name="is_write", path="ara/vlsu/is_write", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+
+            vfpu = gvsoc.gui.Signal(self, ara, name='vfpu', path='ara/vfpu/label', groups=['regmap'], display=gvsoc.gui.DisplayStringBox())
+            gvsoc.gui.Signal(self, vfpu, name="active", path="ara/vfpu/active", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+            gvsoc.gui.Signal(self, vfpu, name="pc", path="ara/vfpu/pc", groups=['regmap'])
+
+            vslide = gvsoc.gui.Signal(self, ara, name='vslide', path='ara/vslide/label', groups=['regmap'], display=gvsoc.gui.DisplayStringBox())
+            gvsoc.gui.Signal(self, vslide, name="active", path="ara/vslide/active", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+            gvsoc.gui.Signal(self, vslide, name="pc", path="ara/vslide/pc", groups=['regmap'])
+
+    def o_VLSU(self, itf: gvsoc.systree.SlaveItf):
+            """Binds the vector data port.
+
+            This port is used for issuing data accesses to the memory for vector loads and stores.\n
+            It instantiates a port of type vp::IoMaster.\n
+            It is mandatory to bind it.\n
+
+            Parameters
+            ----------
+            slave: gvsoc.systree.SlaveItf
+                Slave interface
+            """
+            if self.has_vector:
+                self.itf_bind('vlsu', itf, signature='io')
+            else:
+                raise RuntimeError('Vector data interface is not available')

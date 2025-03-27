@@ -39,23 +39,24 @@ class Soc(st.Component):
             [args, otherArgs] = parser.parse_known_args()
             binary = args.binary
 
-        dram = memory.Memory(self, 'dram', size=0x10000000, atomics=True)
+        dram = memory.Memory(self, 'dram', size=0x10000000, atomics=True, width_log2=-1)
 
-        mem = memory.Memory(self, 'mem', size=0x80000000, atomics=True)
+        mem = memory.Memory(self, 'mem', size=0x80000000, atomics=True, width_log2=-1)
         regs = pulp.cva6.control_regs.ControlRegs(self, 'control_regs', dram_end=0xc0000000)
 
         stdout = Stdout(self, 'stdout')
 
         ico = router.Router(self, 'ico')
 
-        ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x80000000)
+        ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x80000000, latency=5)
         self.bind(ico, 'mem', mem, 'input')
 
         ico.o_MAP(stdout.i_INPUT(), name='stdout', base=0xC0000000, size=0x10000000)
-        ico.o_MAP(dram.i_INPUT(), name='dram', base=0xB0000000, size=0x10000000)
+        ico.o_MAP(dram.i_INPUT(), name='dram', base=0xB0000000, size=0x10000000, latency=5)
         ico.o_MAP(regs.i_INPUT(), name='control_regs', base=0xD0000000, size=0x10000000)
 
-        host = pulp.cva6.cva6.CVA6(self, 'host', isa='rv64imafdvc', boot_addr=0x80000000, has_vector=True)
+        host = pulp.cva6.cva6.CVA6(self, 'host', isa='rv64imafdvc', boot_addr=0x80000000,
+            has_vector=True, vlen=4096)
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 
@@ -64,10 +65,7 @@ class Soc(st.Component):
         self.bind(loader, 'out', ico, 'input')
         self.bind(loader, 'start', host, 'fetchen')
 
-        self.bind(host, 'vlsu_0', ico, 'input')
-        self.bind(host, 'vlsu_1', ico, 'input')
-        self.bind(host, 'vlsu_2', ico, 'input')
-        self.bind(host, 'vlsu_3', ico, 'input')
+        host.o_VLSU(ico.i_INPUT())
 
 
 class AraChip(st.Component):
