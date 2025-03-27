@@ -60,6 +60,7 @@ class CVA6(cpu.iss.riscv.RiscvCommon):
                 vle_pattern = re.compile(r'^(vle\d+\.v)$')
                 vse_pattern = re.compile(r'^(vse\d+\.v)$')
                 vslide_pattern = re.compile(r'.*slide.*|.*vmv.*')
+                vsetvli_pattern = re.compile(r'.*vset.*')
                 for insn in isa_instance.get_isa('v').get_insns():
                     if vle_pattern.match(insn.label) is not None:
                         insn.add_tag('vload')
@@ -67,6 +68,8 @@ class CVA6(cpu.iss.riscv.RiscvCommon):
                         insn.add_tag('vstore')
                     elif vslide_pattern.match(insn.label) is not None:
                         insn.add_tag('vslide')
+                    elif vsetvli_pattern.match(insn.label) is not None:
+                        insn.add_tag('vsetvli')
                     else:
                         insn.add_tag('vothers')
 
@@ -126,16 +129,20 @@ class CVA6(cpu.iss.riscv.RiscvCommon):
         if self.has_vector:
             ara = gvsoc.gui.Signal(self, active, name='ara', path='ara/label', groups=['regmap'], display=gvsoc.gui.DisplayStringBox())
 
+            gvsoc.gui.Signal(self, ara, name="queue", path="ara/queue", groups=['regmap'])
+            gvsoc.gui.Signal(self, ara, name="pc", path="ara/pc", groups=['regmap'])
             gvsoc.gui.Signal(self, ara, name="active", path="ara/active",
                 display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
             gvsoc.gui.Signal(self, ara, name="queue_full", path="ara/queue_full",
                 display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
-            gvsoc.gui.Signal(self, ara, name="pending_insn", path="ara/nb_pending_insn",
-                groups=['regmap'])
+            gvsoc.gui.Signal(self, ara, name="pending_insn", path="ara/nb_pending_insn", groups=['regmap'])
+            gvsoc.gui.Signal(self, ara, name="waiting_insn", path="ara/nb_waiting_insn", groups=['regmap'])
 
             vlsu = gvsoc.gui.Signal(self, ara, name='vlsu', path='ara/vlsu/label', groups=['regmap'], display=gvsoc.gui.DisplayStringBox())
             gvsoc.gui.Signal(self, vlsu, name="active", path="ara/vlsu/active", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+            gvsoc.gui.Signal(self, vlsu, name="queue", path="ara/vlsu/queue", groups=['regmap'])
             gvsoc.gui.Signal(self, vlsu, name="pc", path="ara/vlsu/pc", groups=['regmap'])
+            gvsoc.gui.Signal(self, vlsu, name="pending_insn", path="ara/vlsu/nb_pending_insn", groups=['regmap'])
             gvsoc.gui.Signal(self, vlsu, name="addr", path="ara/vlsu/addr", groups=['regmap'])
             gvsoc.gui.Signal(self, vlsu, name="size", path="ara/vlsu/size", groups=['regmap'])
             gvsoc.gui.Signal(self, vlsu, name="is_write", path="ara/vlsu/is_write", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
