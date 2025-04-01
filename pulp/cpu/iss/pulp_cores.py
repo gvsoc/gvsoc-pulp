@@ -22,7 +22,15 @@ from cpu.iss.isa_gen.isa_smallfloats import *
 from cpu.iss.isa_gen.isa_pulpv2 import *
 
 
-def __build_isa(name):
+def __build_fc_isa(name):
+
+    extensions = [ PulpV2(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ]
+
+    isa = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa(name, 'rv32imc', extensions=extensions)
+
+    return isa
+
+def __build_cluster_isa(name):
 
     extensions = [ PulpV2(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ]
 
@@ -34,9 +42,9 @@ def __build_isa(name):
 
 
 
-_cluster_isa = __build_isa('pulp_cluster')
+_cluster_isa = __build_cluster_isa('pulp_cluster')
 
-_fc_isa = __build_isa('pulp_fc')
+_fc_isa = __build_fc_isa('pulp_fc')
 
 
 
@@ -57,7 +65,7 @@ class PulpCore(cpu.iss.riscv.RiscvCommon):
         self.add_c_flags([
             "-DPIPELINE_STALL_THRESHOLD=1",
             "-DCONFIG_ISS_CORE=ri5cy",
-            '-DISS_SINGLE_REGFILE',
+            '-DCONFIG_GVSOC_ISS_NO_MSTATUS_FS=1'
         ])
 
 
