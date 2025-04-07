@@ -41,7 +41,7 @@ def get_cluster_name(cid: int):
     -------
     string
         The cluster name
-    
+
     """
 
     if cid == 0:
@@ -58,7 +58,7 @@ class Cluster(st.Component):
     ----------
     cid : int
         Cluster ID
-    
+
     """
 
     def __init__(self, parent, name, config_file, cid: int=0):
@@ -128,7 +128,7 @@ class Cluster(st.Component):
 
         # Wmem
         wmem = Wmem_subsystem(self, 'wmem', self)
-    
+
 
         #
         # Bindings
@@ -176,7 +176,8 @@ class Cluster(st.Component):
         cluster_ico.add_mapping('l1', **self._reloc_mapping(self.get_property('l1/mapping')))
         self.bind(cluster_ico, 'l1', l1, 'ext2loc')
 
-        cluster_ico.add_mapping('wmem_soc', base=self.get_property('wmem/base'), size=self.get_property('wmem/size'))
+        cluster_ico.add_mapping('wmem_soc', base=self.get_property('wmem/base'),
+            size=self.get_property('wmem/size'))
         self.bind(cluster_ico, 'wmem_soc', wmem, 'input')
 
         cluster_ico.add_mapping('l1_ts', **self._reloc_mapping(self.get_property('l1/ts_mapping')))
@@ -223,7 +224,7 @@ class Cluster(st.Component):
             self.bind(mchan, 'event_itf_%d' % i, event_unit, 'in_event_%d_pe_%d' % (dma_irq_0, i))
             self.bind(mchan, 'irq_itf_%d' % i, event_unit, 'in_event_%d_pe_%d' % (dma_irq_1, i))
             self.bind(mchan, 'ext_irq_itf', event_unit, 'in_event_%d_pe_%d' % (dma_irq_ext, i))
-    
+
         # Timer
         self.bind(self, 'ref_clock', timer, 'ref_clock')
         for i in range(0, nb_pe):
@@ -273,7 +274,7 @@ class Cluster(st.Component):
 
         if mapping.get('remove_offset') is not None:
             mapping['remove_offset'] = '0x%x' % (int(mapping['remove_offset'], 0) + self.cluster_offset)
-            
+
         if mapping.get('add_offset') is not None:
             mapping['add_offset'] = '0x%x' % (int(mapping['add_offset'], 0) + self.cluster_offset)
 
@@ -300,7 +301,7 @@ class Cluster(st.Component):
 
         if mapping.get('remove_offset') is not None:
             mapping['remove_offset'] = '0x%x' % (int(mapping['remove_offset'], 0) - self.cluster_base + self.cluster_alias)
-            
+
         if mapping.get('add_offset') is not None:
             mapping['add_offset'] = '0x%x' % (int(mapping['add_offset'], 0) - self.cluster_base + self.cluster_alias)
 
