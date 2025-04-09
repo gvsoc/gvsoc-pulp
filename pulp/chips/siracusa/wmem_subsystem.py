@@ -17,8 +17,7 @@
 import gvsoc.systree as st
 from memory.memory import Memory
 from interco.router import Router
-from interco.converter import Converter
-from pulp.wmem.wmem_interleaver import Wmem_interleaver
+from interco.interleaver import Interleaver
 import math
 
 
@@ -41,7 +40,7 @@ class Wmem_subsystem(st.Component):
         #
 
         ico = Router(self, 'ico', latency=2)
-        interleaver = Wmem_interleaver(self, 'interleaver', nb_masters=1, nb_slaves=nb_wmem_banks, stage_bits=0)
+        interleaver = Interleaver(self, 'interleaver',  interleaving_bits=2, nb_masters=1, nb_slaves=nb_wmem_banks, stage_bits=0)
 
         wmem_banks = []
         for i in range(0, nb_wmem_banks):
