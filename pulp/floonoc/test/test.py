@@ -62,22 +62,22 @@ class Testbench(gvsoc.systree.Component):
         cluster_base = 0x80000000
         cluster_size = 0x01000000
 
-        noc = pulp.floonoc.floonoc.FlooNocClusterGrid(self, 'noc', 8, nb_cluster_x, nb_cluster_y)
+        noc = pulp.floonoc.floonoc.FlooNocClusterGridNarrowWide(self, 'noc', 8, 8, nb_cluster_x, nb_cluster_y)
 
         test = FloonocTest(self, 'test', nb_cluster_x, nb_cluster_y, cluster_base, cluster_size)
 
         for x in range(0, nb_cluster_x):
             for y in range(0, nb_cluster_y):
                 generator = interco.traffic.generator.Generator(self, f'generator_{x}_{y}')
-                generator.o_OUTPUT(noc.i_CLUSTER_INPUT(x, y))
+                generator.o_OUTPUT(noc.i_CLUSTER_WIDE_INPUT(x, y))
 
                 receiver = interco.traffic.receiver.Receiver(self, f'receiver_{x}_{y}')
 
-                test.o_NOC_NI(x, y, noc.i_CLUSTER_INPUT(x, y))
+                test.o_NOC_NI(x, y, noc.i_CLUSTER_WIDE_INPUT(x, y))
                 test.o_GENERATOR_CONTROL(x, y, generator.i_CONTROL())
                 test.o_RECEIVER_CONTROL(x, y, receiver.i_CONTROL())
 
-                noc.o_MAP(
+                noc.o_WIDE_MAP(
                     receiver.i_INPUT(),
                     cluster_base + cluster_size * (y * nb_cluster_x + x),
                     cluster_size, x+1, y+1,
@@ -105,4 +105,3 @@ class Target(gvsoc.runner.Target):
     def __init__(self, parser, options):
         super(Target, self).__init__(parser, options,
             model=Chip, description="RV64 virtual board")
-

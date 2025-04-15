@@ -33,7 +33,7 @@ NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y)
     this->noc = noc;
     this->x = x;
     this->y = y;
-    int ni_outstanding_reqs = this->noc->get_js_config()->get("ni_outstanding_reqs")->get_int();
+    this->ni_outstanding_reqs = this->noc->get_js_config()->get("ni_outstanding_reqs")->get_int();
 
     traces.new_trace("trace", &trace, vp::DEBUG);
 
@@ -148,7 +148,7 @@ vp::IoReqStatus NetworkInterface::req_from_router(vp::IoReq *req, int pos_x, int
                         target->get_name().c_str(), req, req->get_addr(), req->get_size(), pos_x, pos_y);
         // This does the actual operation(read, write or atomic operation) on the target
         // Note: Memory is read/written already here. The backward path is only used to get the delay of the network.
-        vp::IoReqStatus result = target->req(req); 
+        vp::IoReqStatus result = target->req(req);
 
         if(!burst->get_is_write()){
             // If the burst is a read burst, we need to send the data back to the origin
@@ -158,13 +158,12 @@ vp::IoReqStatus NetworkInterface::req_from_router(vp::IoReq *req, int pos_x, int
             this->fsm_event.enqueue();
         }
 
-
         // Check if the next would be denied and already notify the router. Note this is a bit hacky and misuses the vp::Req::Status but for now it should work
         if(this->pending_burst_isaddr.size() >= this->ni_outstanding_reqs){
             this->trace.msg(vp::Trace::LEVEL_DEBUG, "Request denied because of too many pending requests\n");
             return vp::IO_REQ_DENIED;
         }
-        
+
         return result;
     }
     else
@@ -236,7 +235,7 @@ void NetworkInterface::add_pending_burst(vp::IoReq *burst, bool isaddr, int64_t 
 }
 
 void NetworkInterface::handle_addr_req(void){
-    
+
     if(this->pending_bursts_timestamp.front() <= this->clock.get_cycles()){
         vp::IoReq *burst = this->pending_bursts.front();
         // Get the current burst to be processed
@@ -353,7 +352,7 @@ void NetworkInterface::handle_data_req(void){
     uint64_t size = std::min(width, this->pending_burst_size);
 
 
-    // Create a new request to send    
+    // Create a new request to send
     vp::IoReq *req = new vp::IoReq();
     req->init();
     req->arg_alloc(FlooNoc::REQ_NB_ARGS);
@@ -433,4 +432,3 @@ void NetworkInterface::handle_response(vp::IoReq *req)
     // Trigger the FSM since something may need to be done now that a new request is available
     this->fsm_event.enqueue();
 }
-

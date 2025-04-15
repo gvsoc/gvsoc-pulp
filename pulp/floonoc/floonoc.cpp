@@ -191,7 +191,6 @@ void FlooNoc::response(vp::Block *__this, vp::IoReq *req)
 // This gets called after a request sent to a target was denied, and it is now granted
 void FlooNoc::grant(vp::Block *__this, vp::IoReq *req)
 {
-    printf("FlooNoc::grant\n");
     // When the request sent by the router to the target was denied, the router was stored in
     // the request to notify it when the request is granted.
     // Get back the router and forward the grant

@@ -272,7 +272,6 @@ void Router::get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_
 
 void Router::grant(vp::IoReq *req)
 {
-    printf("Router::grant\n");
     // Now that the stalled request has been granted, we need to unstall the queue
     int queue = *(int *)req->arg_get(FlooNoc::REQ_QUEUE);
     this->trace.msg(vp::Trace::LEVEL_DEBUG, "Unstalling queue! (position: (%d, %d), queue: %d)\n",
