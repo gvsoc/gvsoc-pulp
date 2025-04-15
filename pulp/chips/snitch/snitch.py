@@ -299,7 +299,7 @@ class SocFlooNoc(gvsoc.systree.Component):
 
 class Snitch(gvsoc.systree.Component):
 
-    def __init__(self, parent, name:str, arch:SnitchArch.Chip, binary, debug_binaries):
+    def __init__(self, parent, name:str, parser, arch:SnitchArch.Chip, binary, debug_binaries):
         super(Snitch, self).__init__(parent, name)
 
         if arch.soc.floonoc:
