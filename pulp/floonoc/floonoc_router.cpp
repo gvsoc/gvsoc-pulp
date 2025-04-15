@@ -41,7 +41,9 @@ Router::Router(FlooNoc *noc, std::string name, int x, int y, int queue_size)
     for (int i = 0; i < 5; i++)
     {
         this->input_queues[i] = new vp::Queue(this, "input_queue_" + std::to_string(i),
-                                              &this->fsm_event);
+            &this->fsm_event);
+
+        this->stalled_queues[i] = false;
     }
 }
 
@@ -347,5 +349,4 @@ void Router::reset(bool active)
             this->stalled_queues[i] = false;
         }
     }
-
 }

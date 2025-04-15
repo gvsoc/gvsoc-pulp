@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2020 GreenWaves Technologies, SAS, ETH Zurich and University of Bologna
+# Copyright (C) 2ETH Zurich and University of Bologna
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,18 +14,17 @@
 # limitations under the License.
 #
 
-import gvsoc.systree as st
+import gvsoc.systree
 
-class Wmem_interleaver(st.Component):
+class ControlRegs(gvsoc.systree.Component):
+    def __init__(self, parent: gvsoc.systree.Component, name: str, dram_end=0x0, latency: int=0):
+        super(ControlRegs, self).__init__(parent, name)
 
-    def __init__(self, parent, name, nb_slaves: int, nb_masters: int, stage_bits: int=0):
-
-        super(Wmem_interleaver, self).__init__(parent, name)
-
-        self.set_component('pulp.wmem.wmem_impl')
+        self.add_sources(['pulp/cva6/control_regs.cpp'])
 
         self.add_properties({
-            'nb_slaves': nb_slaves,
-            'nb_masters': nb_masters,
-            'stage_bits': stage_bits
+            'dram_end': dram_end
         })
+
+    def i_INPUT(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'input', signature='io')

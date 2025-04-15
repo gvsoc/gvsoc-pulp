@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-/* 
+/*
  * Authors: Francesco Conti, University of Bologna & GreenWaves Technologies (f.conti@unibo.it)
  *          Arpan Suravi Prasad, ETH Zurich (prasadar@iis.ee.ethz.ch)
  */
@@ -95,7 +95,7 @@ void Neureka::regfile_cxt() {
     switch(addr) {
 
       case NEUREKA_REG_WEIGHTS_PTR:
-        this->weights_ptr = value;
+        this->weights_ptr = value + 0x10400000;
         break;
 
       case NEUREKA_REG_INFEAT_PTR:
@@ -211,7 +211,7 @@ void Neureka::regfile_cxt() {
 /*
  cfg[NE16_REG_CONFIG0]           = bits(0, 31, 31) |
                                     bits(8, 27, 30) |
-                                    bits(this->signed_activation ? 1:0, 26, 26) | 
+                                    bits(this->signed_activation ? 1:0, 26, 26) |
                                     bits(this->norm_option_bias ? 1 : 0, 25, 25) |
                                     bits(this->norm_option_shift ? 1 : 0, 24, 24) |
                                     bits(this->use_relu ? 0 : 1, 23, 23) |
@@ -232,7 +232,7 @@ void Neureka::regfile_cxt() {
 
 */
       case NEUREKA_REG_CONFIG0:
-        // [26] signed_activation 
+        // [26] signed_activation
         this->signed_activation = ((value >> 26) & 0x1) ? true : false;
 //         std::cout<<"SIGNED ACTIVATION="<<this->signed_activation<<"\n";
         // [25] norm option bias (0=do not load bias; 1=load bias)
@@ -252,9 +252,9 @@ void Neureka::regfile_cxt() {
         // [13:12] normalization bits (00=8-bits, 01=16-bits, 10=32-bits)
         this->normalization_bits = 8 << ((value >> 12) & 0x3);
         // [10] activation_prefetch -> if set to 1, activation is prefetched for the next tile.
-        this->activation_prefetch = ((value >> 10) & 0x1) ? true : false; 
+        this->activation_prefetch = ((value >> 10) & 0x1) ? true : false;
         // [9] weight_demux -> if set to 1, weight is fetched from the wmem else it is fetched from L1
-        this->weight_demux       = ((value >> 9) & 0x1) ? true : false; 
+        this->weight_demux       = ((value >> 9) & 0x1) ? true : false;
         // [8] strided 2x2 mode (0=normal operation, 1=strided mode)
         this->strided2x2 = ((value >> 8) & 0x1) ? true : false; // Check the config regs
         // [7] linear mode (0=normal operation, 1=linear mode)

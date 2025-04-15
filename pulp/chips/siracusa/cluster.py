@@ -15,7 +15,7 @@
 #
 
 import gvsoc.systree as st
-from cpu.iss.iss import Iss
+import pulp.cpu.iss.pulp_cores as iss
 from cache.hierarchical_cache import Hierarchical_cache
 from pulp.chips.siracusa.l1_subsystem import L1_subsystem
 from pulp.chips.siracusa.wmem_subsystem import Wmem_subsystem
@@ -41,7 +41,7 @@ def get_cluster_name(cid: int):
     -------
     string
         The cluster name
-    
+
     """
 
     if cid == 0:
@@ -58,7 +58,7 @@ class Cluster(st.Component):
     ----------
     cid : int
         Cluster ID
-    
+
     """
 
     def __init__(self, parent, name, config_file, cid: int=0):
@@ -94,7 +94,7 @@ class Cluster(st.Component):
         # Cores
         pes = []
         for i in range(0, nb_pe):
-            pes.append(Iss(self, 'pe%d' % i, **self.get_property('iss_config'), cluster_id=cid, core_id=i))
+            pes.append(iss.ClusterCore(self, 'pe%d' % i, cluster_id=cid, core_id=i))
 
         # Icache
         icache = Hierarchical_cache(self, 'icache', self.get_property('icache/config'))
@@ -128,7 +128,7 @@ class Cluster(st.Component):
 
         # Wmem
         wmem = Wmem_subsystem(self, 'wmem', self)
-    
+
 
         #
         # Bindings
@@ -176,7 +176,8 @@ class Cluster(st.Component):
         cluster_ico.add_mapping('l1', **self._reloc_mapping(self.get_property('l1/mapping')))
         self.bind(cluster_ico, 'l1', l1, 'ext2loc')
 
-        cluster_ico.add_mapping('wmem_soc', base=self.get_property('wmem/base'), size=self.get_property('wmem/size'))
+        cluster_ico.add_mapping('wmem_soc', base=self.get_property('wmem/base'),
+            size=self.get_property('wmem/size'))
         self.bind(cluster_ico, 'wmem_soc', wmem, 'input')
 
         cluster_ico.add_mapping('l1_ts', **self._reloc_mapping(self.get_property('l1/ts_mapping')))
@@ -212,13 +213,6 @@ class Cluster(st.Component):
         periph_ico.add_mapping('neureka', **self._reloc_mapping(self.get_property('peripherals/neureka/mapping')))
         self.bind(periph_ico, 'neureka', neureka, 'input')
 
-        size = int(self.get_property('peripherals/dbg_unit/size'), 0)
-        base = int(self.get_property('peripherals/dbg_unit/base'), 0)
-        for i in range(0, nb_pe):
-            pe_base = base + cid*cluster_size + size * i
-            periph_ico.add_mapping('dbg_unit_%d' % i, base=pe_base, size=size, remove_offset=pe_base)
-            self.bind(periph_ico, 'dbg_unit_%d' % i, pes[i], 'dbg_unit')
-
         # MCHAN
         self.bind(mchan, 'ext_irq_itf', self, 'dma_irq')
         self.bind(mchan, 'ext_itf', cluster_ico, 'input')
@@ -230,7 +224,7 @@ class Cluster(st.Component):
             self.bind(mchan, 'event_itf_%d' % i, event_unit, 'in_event_%d_pe_%d' % (dma_irq_0, i))
             self.bind(mchan, 'irq_itf_%d' % i, event_unit, 'in_event_%d_pe_%d' % (dma_irq_1, i))
             self.bind(mchan, 'ext_irq_itf', event_unit, 'in_event_%d_pe_%d' % (dma_irq_ext, i))
-    
+
         # Timer
         self.bind(self, 'ref_clock', timer, 'ref_clock')
         for i in range(0, nb_pe):
@@ -280,7 +274,7 @@ class Cluster(st.Component):
 
         if mapping.get('remove_offset') is not None:
             mapping['remove_offset'] = '0x%x' % (int(mapping['remove_offset'], 0) + self.cluster_offset)
-            
+
         if mapping.get('add_offset') is not None:
             mapping['add_offset'] = '0x%x' % (int(mapping['add_offset'], 0) + self.cluster_offset)
 
@@ -307,7 +301,7 @@ class Cluster(st.Component):
 
         if mapping.get('remove_offset') is not None:
             mapping['remove_offset'] = '0x%x' % (int(mapping['remove_offset'], 0) - self.cluster_base + self.cluster_alias)
-            
+
         if mapping.get('add_offset') is not None:
             mapping['add_offset'] = '0x%x' % (int(mapping['add_offset'], 0) - self.cluster_base + self.cluster_alias)
 

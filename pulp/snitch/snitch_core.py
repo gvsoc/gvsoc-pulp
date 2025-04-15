@@ -19,26 +19,40 @@ from pulp.snitch.snitch_isa import *
 from cpu.iss.isa_gen.isa_rvv import *
 from cpu.iss.isa_gen.isa_smallfloats import *
 import gvsoc.systree
+import os
 
 
-def add_latencies(isa):
+def add_latencies(isa, is_fast=False):
+
+
+    if is_fast:
+        isa.get_insn('flb').set_exec_label('flb_snitch')
+        isa.get_insn('fsb').set_exec_label('fsb_snitch')
+        isa.get_insn('flh').set_exec_label('flh_snitch')
+        isa.get_insn('fsh').set_exec_label('fsh_snitch')
+        isa.get_insn('flw').set_exec_label('flw_snitch')
+        isa.get_insn('fsw').set_exec_label('fsw_snitch')
+        isa.get_insn('fld').set_exec_label('fld_snitch')
+        isa.get_insn('fsd').set_exec_label('fsd_snitch')
 
     # To model the fact that alt fp16 and fp18 instructions are dynamically enabled through a
     # CSR, we insert a stub which call the proper handler depending on the CSR value
     xf16_isa = isa.get_isa('f16')
     for insn in xf16_isa.get_insns():
-        insn.exec_func = insn.exec_func + '_switch'
-        insn.exec_func_fast = insn.exec_func_fast + '_switch'
+        if insn.name not in ['flh', 'fsh']:
+            insn.exec_func = insn.exec_func + '_switch'
+            insn.exec_func_fast = insn.exec_func_fast + '_switch'
 
     xf8_isa = isa.get_isa('f8')
     for insn in xf8_isa.get_insns():
-        insn.exec_func = insn.exec_func + '_switch'
-        insn.exec_func_fast = insn.exec_func_fast + '_switch'
+        if insn.name not in ['flb', 'fsb']:
+            insn.exec_func = insn.exec_func + '_switch'
+            insn.exec_func_fast = insn.exec_func_fast + '_switch'
 
     xfvec_isa = isa.get_isa('fvec')
     for insn in xfvec_isa.get_insns():
-        if 'f16vec' in insn.isa_tags or 'f16vecd' in insn.isa_tags or 'f8vec' in insn.isa_tags \
-                 or 'f8vecf' in insn.isa_tags or 'f8vecd' in insn.isa_tags:
+        if ('f16vec' in insn.isa_tags or 'f16vecd' in insn.isa_tags or 'f8vec' in insn.isa_tags \
+                 or 'f8vecf' in insn.isa_tags or 'f8vecd' in insn.isa_tags) and not 'noalt' in insn.isa_tags:
             insn.exec_func = insn.exec_func + '_switch'
             insn.exec_func_fast = insn.exec_func_fast + '_switch'
 
@@ -99,7 +113,7 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
 
         if isa_instances.get(isa) is None:
             isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
-                extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ] )
+                extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ] )
             add_latencies(isa_instance)
             isa_instances[isa] = isa_instance
 
@@ -107,8 +121,8 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
             misa = isa_instance.misa
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
-            fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True, 
-            prefetcher_size=32, custom_sources=True, htif=htif)
+            fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True,
+            prefetcher_size=32, custom_sources=True, htif=htif, binaries=binaries)
 
         self.add_c_flags([
             "-DPIPELINE_STAGES=1",
@@ -162,33 +176,46 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             fetch_enable: bool=False,
             boot_addr: int=0,
             inc_spatz: bool=False,
-            core_id: int=0):
+            core_id: int=0,
+            htif: bool=False):
 
 
         isa_instance = isa_instances.get(isa)
 
         if isa_instances.get(isa) is None:
             isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
-                extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ] )
-            # add_latencies(isa_instance)
+                extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ] )
+            add_latencies(isa_instance, is_fast=True)
             isa_instances[isa] = isa_instance
 
         if misa is None:
             misa = isa_instance.misa
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
-            fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True, 
-            prefetcher_size=32)
+            fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True,
+            prefetcher_size=32, htif=htif, binaries=binaries)
 
         self.add_c_flags([
             "-DPIPELINE_STAGES=1",
             "-DCONFIG_ISS_CORE=snitch_fast",
+            "-DCONFIG_GVSOC_ISS_SNITCH_FAST",
         ])
 
         self.add_sources([
             "cpu/iss/src/snitch_fast/snitch.cpp",
-            "cpu/iss/src/snitch/ssr.cpp",
+            "cpu/iss/src/snitch_fast/ssr.cpp",
+            "cpu/iss/src/snitch_fast/sequencer.cpp",
         ])
+
+        path = os.path.dirname(__file__)
+        self.add_properties({
+            'regmap': {
+                'name': 'ssr',
+                'spec': f'{path}/archi/ssr.md',
+                'header_prefix':  f'{path}/archi/ssr',
+                'headers': [ 'gvsoc', 'regfields' ]
+            }
+        })
 
 
     def o_BARRIER_REQ(self, itf: gvsoc.systree.SlaveItf):
@@ -252,7 +279,7 @@ class Snitch_fp_ss(cpu.iss.riscv.RiscvCommon):
 
 
         isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_fp_ss_" + isa, isa,
-            extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ] )
+            extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ] )
 
         add_latencies(isa_instance)
 
@@ -260,7 +287,7 @@ class Snitch_fp_ss(cpu.iss.riscv.RiscvCommon):
             misa = isa_instance.misa
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
-            fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True, 
+            fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True,
             prefetcher_size=32, timed=timed, custom_sources=True, htif=htif)
 
         self.add_c_flags([
@@ -333,4 +360,5 @@ class Spatz(cpu.iss.riscv.RiscvCommon):
 
         self.add_sources([
             "cpu/iss/src/spatz.cpp",
+            "cpu/iss/src/vector.cpp",
         ])

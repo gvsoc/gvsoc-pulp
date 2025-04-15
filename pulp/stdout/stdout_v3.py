@@ -14,9 +14,9 @@
 # limitations under the License.
 #
 
-import gvsoc.systree as st
+import gvsoc.systree
 
-class Stdout(st.Component):
+class Stdout(gvsoc.systree.Component):
 
     def __init__(self, parent, name):
 
@@ -27,3 +27,6 @@ class Stdout(st.Component):
             'max_cluster': 33,
             'max_core_per_cluster': 16
         })
+
+    def i_INPUT(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'input', signature='io')

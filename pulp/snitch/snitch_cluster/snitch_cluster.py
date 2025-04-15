@@ -99,7 +99,7 @@ class SnitchClusterTcdm(gvsoc.systree.Component):
 
 class SnitchCluster(gvsoc.systree.Component):
 
-    def __init__(self, parent, name, arch, entry=0, auto_fetch=True):
+    def __init__(self, parent, name, arch, parser=None, entry=0, auto_fetch=True, binaries=None):
         super().__init__(parent, name)
 
         #
@@ -131,21 +131,32 @@ class SnitchCluster(gvsoc.systree.Component):
         if xfrep:
             fpu_sequencers = []
 
+        binary = None
+        binaries = []
+        if parser is not None:
+            [args, __] = parser.parse_known_args()
+
+            if parser is not None:
+                [args, otherArgs] = parser.parse_known_args()
+                binary = args.binary
+                if binary is not None:
+                    binaries = [binary]
+
         for core_id in range(0, arch.nb_core):
 
             if arch.core_type == 'fast':
-                cores.append(iss.SnitchFast(self, f'pe{core_id}', isa='rv32imfdvca',
+                cores.append(iss.SnitchFast(self, f'pe{core_id}', isa='rv32imfdca',
                     fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
-                    core_id=arch.first_hartid + core_id))
+                    core_id=arch.first_hartid + core_id, htif=True, binaries=binaries))
 
             else:
-                cores.append(iss.Snitch(self, f'pe{core_id}', isa='rv32imfdvca',
+                cores.append(iss.Snitch(self, f'pe{core_id}', isa='rv32imfdca',
                     fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
-                    core_id=arch.first_hartid + core_id, htif=False))
+                    core_id=arch.first_hartid + core_id, htif=True, binaries=binaries))
 
-                fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa='rv32imfdvca',
+                fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa='rv32imfdca',
                     fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
-                    core_id=arch.first_hartid + core_id, htif=False))
+                    core_id=arch.first_hartid + core_id, htif=True, binaries=binaries))
                 if xfrep:
                     fpu_sequencers.append(Sequencer(self, f'fpu_sequencer{core_id}', latency=0))
 
@@ -197,6 +208,11 @@ class SnitchCluster(gvsoc.systree.Component):
             cores_ico[core_id].o_MAP(narrow_axi.i_INPUT())
             cores[core_id].o_FETCH(icache.i_INPUT(core_id))
 
+            # Icache
+            cores[core_id].o_FLUSH_CACHE(icache.i_FLUSH())
+            icache.o_FLUSH_ACK(cores[core_id].i_FLUSH_CACHE_ACK())
+
+
         for core_id in range(0, arch.nb_core):
             if arch.core_type == 'accurate':
                 fp_cores[core_id].o_DATA( cores_ico[core_id].i_INPUT() )
@@ -220,6 +236,12 @@ class SnitchCluster(gvsoc.systree.Component):
                     self.bind(cores[core_id], 'acc_req_ready', fp_cores[core_id], 'acc_req_ready')
 
                 self.bind(fp_cores[core_id], 'acc_rsp', cores[core_id], 'acc_rsp')
+
+            else:
+                self.bind(cores[core_id], 'ssr_dm0', cores_ico[core_id], 'input')
+                self.bind(cores[core_id], 'ssr_dm1', cores_ico[core_id], 'input')
+                self.bind(cores[core_id], 'ssr_dm2', cores_ico[core_id], 'input')
+
 
         # Cluster peripherals
         narrow_axi.o_MAP(cluster_registers.i_INPUT(), base=arch.peripheral.base,

@@ -930,7 +930,7 @@ void mchan::check_ext_write_handler(vp::Block *__this, vp::ClockEvent *event)
 
 void mchan::handle_cmd_termination(Mchan_cmd *cmd)
 {
-  this->cmd_events[cmd->counter_id].event(NULL);
+  this->cmd_events[cmd->counter_id].event_highz();
   free_command(cmd);
 }
 
@@ -1192,7 +1192,7 @@ void mchan::reset(bool active)
     ext_is_stalled = false;
     for (int i=0; i<MCHAN_NB_COUNTERS; i++)
     {
-      this->cmd_events[i].event(NULL);
+      this->cmd_events[i].event_highz();
     }
   }
   else

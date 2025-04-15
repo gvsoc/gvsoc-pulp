@@ -52,7 +52,7 @@ class Soc(st.Component):
         if Xfrep:
             fpu_sequencers = []
 
-        parser.add_argument("--isa", dest="isa", type=str, default="rv32imfdvca",
+        parser.add_argument("--isa", dest="isa", type=str, default="rv32imfdca",
             help="RISCV-V ISA string (default: %(default)s)")
 
         [args, __] = parser.parse_known_args()
@@ -86,9 +86,9 @@ class Soc(st.Component):
 
         # Core Complex
         for core_id in range(0, nb_cores):
-            int_cores.append(iss.Snitch(self, f'pe{core_id}', isa='rv32imfdvca', fetch_enable=False,
+            int_cores.append(iss.Snitch(self, f'pe{core_id}', isa='rv32imfdca', fetch_enable=False,
                                         boot_addr=0x0000_1000, core_id=core_id))
-            fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa='rv32imfdvca', fetch_enable=False,
+            fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa='rv32imfdca', fetch_enable=False,
                                         boot_addr=0x0000_1000, core_id=core_id))
             if Xfrep:
                 fpu_sequencers.append(Sequencer(self, f'fpu_sequencer{core_id}', latency=0))

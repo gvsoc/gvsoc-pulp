@@ -55,7 +55,7 @@
         "size"  : "0x00800000",
         "remove_offset": "0x10400000"
     },
-        
+
     "icache": {
         "config": {
             "has_cc": true,
@@ -75,7 +75,7 @@
                 "line_size_bits": 4,
                 "refill_latency": 2
             },
-            
+
             "l1": {
                 "nb_sets_bits": 5,
                 "nb_ways_bits": 2,

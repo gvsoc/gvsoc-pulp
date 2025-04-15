@@ -129,7 +129,7 @@ class SnitchArch:
 
 class Soc(gvsoc.systree.Component):
 
-    def __init__(self, parent, name, arch, binary, debug_binaries):
+    def __init__(self, parent, name, parser, arch, binary, debug_binaries):
         super().__init__(parent, name)
 
         entry = 0
@@ -155,7 +155,8 @@ class Soc(gvsoc.systree.Component):
         # Clusters
         clusters = []
         for id in range(0, arch.nb_cluster):
-            clusters.append(SnitchCluster(self, f'cluster_{id}', arch.get_cluster(id), entry=entry))
+            clusters.append(SnitchCluster(self, f'cluster_{id}', arch.get_cluster(id), parser, entry=entry,
+                binaries=debug_binaries))
 
         # NoC
         if arch.floonoc:
@@ -266,7 +267,7 @@ class SocFlooNoc(gvsoc.systree.Component):
             noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
                 x=0, y=i)
             current_bank_base += arch.bank_size
-        for i in range(1, arch.nb_y_tiles+1):
+        for i in range(1, arch.nb_y_tiles):
             bank = memory.memory.Memory(self, f'bank_{arch.nb_x_tiles+1}_{i}', size=arch.bank_size)
             noc.o_MAP(bank.i_INPUT(), base=current_bank_base, size=arch.bank_size,
                 x=arch.nb_x_tiles+1, y=i)
@@ -274,6 +275,7 @@ class SocFlooNoc(gvsoc.systree.Component):
 
         # ROM
         narrow_axi.o_MAP ( rom.i_INPUT     (), base=arch.bootrom.base, size=arch.bootrom.size, rm_base=True  )
+        noc.o_MAP ( narrow_axi.i_INPUT     (), base=0, size=arch.bootrom.size, x=arch.nb_x_tiles+1, y=arch.nb_y_tiles  )
 
         # Clusters
         for id in range(0, arch.nb_cluster):
@@ -303,7 +305,7 @@ class Snitch(gvsoc.systree.Component):
         if arch.soc.floonoc:
             soc = SocFlooNoc(self, 'soc', arch.soc, binary, debug_binaries)
         else:
-            soc = Soc(self, 'soc', arch.soc, binary, debug_binaries)
+            soc = Soc(self, 'soc', parser, arch.soc, binary, debug_binaries)
 
         soc.o_HBM(self.i_HBM())
 
@@ -326,7 +328,7 @@ class SnitchBoard(gvsoc.systree.Component):
 
         arch = SnitchArch(self)
 
-        chip = Snitch(self, 'chip', arch.chip, args.binary, debug_binaries)
+        chip = Snitch(self, 'chip', parser, arch.chip, args.binary, debug_binaries)
 
         if arch.hbm.type == 'dramsys':
             mem = memory.dramsys.Dramsys(self, 'ddr')
