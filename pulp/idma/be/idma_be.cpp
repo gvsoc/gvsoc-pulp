@@ -59,7 +59,7 @@ IdmaBeConsumer *IDmaBe::get_be_consumer(uint64_t base, uint64_t size, bool is_re
 // no active transfer
 void IDmaBe::enqueue_transfer(IdmaTransfer *transfer)
 {
-    this->trace.msg(vp::Trace::LEVEL_TRACE, "Queueing burst (burst: %p, src: 0x%x, dst: 0x%x, size: 0x%x)\n",
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Queueing burst (burst: %p, src: 0x%llx, dst: 0x%llx, size: 0x%x)\n",
         transfer, transfer->src, transfer->dst, transfer->size);
 
     // Push the transfer into the queue, we will need it later when the bursts are coming back
@@ -85,6 +85,22 @@ bool IDmaBe::can_accept_transfer()
     return this->current_transfer_size == 0;
 }
 
+#ifdef ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
+uint64_t IDmaBe::get_collective_type()
+{
+    return this->current_transfer->parent->collective_type;
+}
+
+uint16_t IDmaBe::get_collective_row_mask()
+{
+    return this->current_transfer->parent->collective_row_mask;
+}
+
+uint16_t IDmaBe::get_collective_col_mask()
+{
+    return this->current_transfer->parent->collective_col_mask;
+}
+#endif //ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
 
 
 void IDmaBe::fsm_handler(vp::Block *__this, vp::ClockEvent *event)

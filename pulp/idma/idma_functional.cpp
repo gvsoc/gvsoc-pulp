@@ -181,7 +181,7 @@ vp::IoReqStatus IDma::req(vp::Block *__this, vp::IoReq *req)
     uint8_t *data = req->get_data();
     uint64_t size = req->get_size();
 
-    _this->trace.msg("IDma access (offset: 0x%x, size: 0x%x, is_write: %d)\n", offset, size, req->get_is_write());
+    _this->trace.msg("IDma access (offset: 0x%llx, size: 0x%x, is_write: %d)\n", offset, size, req->get_is_write());
 
     if (!req->get_is_write() && size == 8)
     {

@@ -36,6 +36,14 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
     this->dim_x = get_js_config()->get_int("dim_x");
     this->dim_y = get_js_config()->get_int("dim_y");
     this->router_input_queue_size = get_js_config()->get_int("router_input_queue_size");
+    this->atomics = get_js_config()->get_int("atomics");
+    this->collective = get_js_config()->get_int("collective");
+    this->interleave_enable = get_js_config()->get_int("interleave_enable");
+    this->interleave_region_base = get_js_config()->get_int("interleave_region_base");
+    this->interleave_region_size = get_js_config()->get_int("interleave_region_size");
+    this->interleave_granularity = get_js_config()->get_int("interleave_granularity");
+    this->interleave_bit_start = get_js_config()->get_int("interleave_bit_start");
+    this->interleave_bit_width = get_js_config()->get_int("interleave_bit_width");
 
     // Reserve the array for the target. We may have one target at each node.
     this->targets.resize(this->dim_x * this->dim_y);
@@ -71,7 +79,7 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
             // this array indexed by the position
             this->targets[this->entries[id].y * this->dim_x + this->entries[id].x] = itf;
 
-            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding target (name: %s, base: 0x%x, size: 0x%x, x: %d, y: %d)\n",
+            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding target (name: %s, base: 0x%llx, size: 0x%llx, x: %d, y: %d)\n",
                 mapping.first.c_str(), this->entries[id].base, this->entries[id].size, this->entries[id].x, this->entries[id].y);
 
             id++;

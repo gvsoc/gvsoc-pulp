@@ -47,7 +47,8 @@ class FlooNoc2dMesh(gvsoc.systree.Component):
         before the source output queue is stalled.
     """
     def __init__(self, parent: gvsoc.systree.Component, name, width: int,
-            dim_x: int, dim_y:int, ni_outstanding_reqs: int=8, router_input_queue_size: int=2):
+            dim_x: int, dim_y:int, ni_outstanding_reqs: int=8, router_input_queue_size: int=2, atomics: int=0, collective: int=0,
+            interleave_enable: int=0, interleave_region_base: int=0, interleave_region_size: int=0, interleave_granularity: int=0, interleave_bit_start: int=0, interleave_bit_width: int=0):
         super(FlooNoc2dMesh, self).__init__(parent, name)
 
         self.add_sources([
@@ -64,6 +65,14 @@ class FlooNoc2dMesh(gvsoc.systree.Component):
         self.add_property('dim_x', dim_x)
         self.add_property('dim_y', dim_y)
         self.add_property('router_input_queue_size', router_input_queue_size)
+        self.add_property('atomics', atomics)
+        self.add_property('collective', collective)
+        self.add_property('interleave_enable', interleave_enable)
+        self.add_property('interleave_region_base', interleave_region_base)
+        self.add_property('interleave_region_size', interleave_region_size)
+        self.add_property('interleave_granularity', interleave_granularity)
+        self.add_property('interleave_bit_start', interleave_bit_start)
+        self.add_property('interleave_bit_width', interleave_bit_width)
 
     def __add_mapping(self, name: str, base: int, size: int, x: int, y: int):
         self.get_property('mappings')[name] =  {'base': base, 'size': size, 'x': x, 'y': y}
