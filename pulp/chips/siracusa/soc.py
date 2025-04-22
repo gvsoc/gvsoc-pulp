@@ -58,7 +58,7 @@ class Soc(st.Component):
         udma_conf = self.load_property_file(udma_conf_path)
         fc_events = self.get_property('peripherals/fc_itc/irq')
 
-    
+
         #
         # Components
         #
@@ -87,13 +87,14 @@ class Soc(st.Component):
 
         # FC ITC
         fc_itc = itc.Itc_v1(self, 'fc_itc')
-    
+
         # FC icache
-        fc_icache = cache.Cache(self, 'fc_icache', **self.get_property('peripherals/fc_icache/config'))
-    
+        fc_icache = cache.Cache(self, 'fc_icache', **self.get_property('peripherals/fc_icache/config'),
+            enabled=True)
+
         # FC icache controller
         fc_icache_ctrl = Icache_ctrl(self, 'fc_icache_ctrl')
-    
+
         # APB soc controller
         soc_ctrl = apb_soc_ctrl.Apb_soc_ctrl(self, 'apb_soc_ctrl', self)
 
@@ -122,7 +123,7 @@ class Soc(st.Component):
         l2_priv1 = memory.Memory(self, 'l2_priv1', size=self.get_property('l2/priv1/mapping/size'))
 
         l2_shared_size = self.get_property('l2/shared/mapping/size', int)
-    
+
         l2_shared_nb_banks = self.get_property('l2/shared/nb_banks', int)
         l2_shared_nb_regions = self.get_property('l2/shared/nb_regions', int)
         cut_size = int(l2_shared_size / l2_shared_nb_regions / l2_shared_nb_banks)
@@ -160,7 +161,7 @@ class Soc(st.Component):
         for cid in range(0, nb_cluster):
             for pe in range(0, nb_pe):
                 hart_id = (cid << 5) | pe
-    
+
                 name = 'cluster%d_pe%d' % (cid, pe)
                 harts.append([hart_id, name])
 
@@ -249,7 +250,7 @@ class Soc(st.Component):
         self.bind(apb_ico, 'fc_timer', timer, 'input')
         self.bind(apb_ico, 'fc_timer_1', timer_1, 'input')
 
-        # Soc interconnect 
+        # Soc interconnect
         self.bind(soc_ico, 'apb', apb_ico, 'input')
         self.bind(soc_ico, 'l2_priv0', l2_priv0, 'input')
         self.bind(soc_ico, 'l2_priv1', l2_priv1, 'input')
@@ -287,7 +288,7 @@ class Soc(st.Component):
             is_dual = itf_conf.get('is_dual')
             for channel in range(0, nb_channels):
                 itf_name = itf + str(channel)
-    
+
                 if is_master:
                     self.bind(udma, itf_name, self, itf_name)
                 if is_slave:
@@ -297,7 +298,7 @@ class Soc(st.Component):
                     else:
                         self.bind(self, itf_name, udma, itf_name)
 
-              
+
         # Riscv bus watchpoint
         if self.get_property('fc/riscv_fesvr_tohost_addr') is not None:
             self.bind(bus_watchpoint, 'output', soc_ico, 'fc_data')
