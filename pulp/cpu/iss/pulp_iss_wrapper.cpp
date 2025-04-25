@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-/* 
+/*
  * Authors: Germain Haugou, GreenWaves Technologies (germain.haugou@greenwaves-technologies.com)
  */
 
@@ -39,7 +39,7 @@ pulp_iss_wrapper::pulp_iss_wrapper(vp::ComponentConf &config)
     this->iss.csr.declare_pcer(CSR_PCER_TAKEN_BRANCH, "taken_branch", "Number of taken branch instructions seen, i.e. bf, bnf");
     this->iss.csr.declare_pcer(CSR_PCER_RVC, "rvc", "Number of compressed instructions");
     this->iss.csr.declare_pcer(CSR_PCER_ELW, "elw", "Cycles wasted due to ELW instruction");
-    
+
 #if defined(CONFIG_GVSOC_ISS_EXTERNAL_PCCR)
     this->iss.csr.declare_pcer(CSR_PCER_LD_EXT, "ld_ext", "Number of memory loads to EXT executed. Misaligned accesses are counted twice. Every non-TCDM access is considered external");
     this->iss.csr.declare_pcer(CSR_PCER_ST_EXT, "st_ext", "Number of memory stores to EXT executed. Misaligned accesses are counted twice. Every non-TCDM access is considered external");
@@ -83,17 +83,6 @@ pulp_iss_wrapper::pulp_iss_wrapper(vp::ComponentConf &config)
     {
         __iss_isa_set.initialized = true;
 
-        if (is_fc)
-        {
-            iss_resource_declare(&this->iss, fpu_base, 1);
-            iss_resource_declare(&this->iss, fpu_div, 1);
-        }
-        else
-        {
-            iss_resource_declare(&this->iss, fpu_base, 4);
-            iss_resource_declare(&this->iss, fpu_div, 1);
-        }
-
         iss_resource_attach_from_tag(&this->iss, "fadd", fpu_base, 1, 1);
         iss_resource_attach_from_tag(&this->iss, "fmadd", fpu_base, 1, 1);
         iss_resource_attach_from_tag(&this->iss, "fmul", fpu_base, 1, 1);
@@ -123,13 +112,26 @@ pulp_iss_wrapper::pulp_iss_wrapper(vp::ComponentConf &config)
 
     if (is_fc)
     {
-        iss_resource_assign_instance(&this->iss, fpu_base, 0);
-        iss_resource_assign_instance(&this->iss, fpu_div, 0);
     }
     else
     {
-        iss_resource_assign_instance(&this->iss, fpu_base, core_id % 4);
-        iss_resource_assign_instance(&this->iss, fpu_div, 0);
+    }
+
+    if (is_fc)
+    {
+        std::string path = this->get_path();
+        iss_resource_declare(&this->iss, path, fpu_base, 1);
+        iss_resource_declare(&this->iss, path, fpu_div, 1);
+        iss_resource_assign_instance(&this->iss, path, fpu_base, 0);
+        iss_resource_assign_instance(&this->iss, path, fpu_div, 0);
+    }
+    else
+    {
+        std::string path = this->get_path();
+        iss_resource_declare(&this->iss, path, fpu_base, 4);
+        iss_resource_declare(&this->iss, path, fpu_div, 1);
+        iss_resource_assign_instance(&this->iss, path, fpu_base, core_id % 4);
+        iss_resource_assign_instance(&this->iss, path, fpu_div, 0);
     }
 }
 
