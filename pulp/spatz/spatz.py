@@ -32,7 +32,7 @@ class Soc(st.Component):
     def __init__(self, parent, name, parser):
         super().__init__(parent, name)
 
-        parser.add_argument("--isa", dest="isa", type=str, default="rv32imfdvc",
+        parser.add_argument("--isa", dest="isa", type=str, default="rv32imfdc",
             help="RISCV-V ISA string (default: %(default)s)")
 
         [args, __] = parser.parse_known_args()
@@ -119,4 +119,3 @@ class Target(gvsoc.Target):
     def __init__(self, parser, options):
         super(Target, self).__init__(parser, options,
             model=Spatz)
-

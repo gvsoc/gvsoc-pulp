@@ -30,13 +30,15 @@ import math
 
 class SnitchArchProperties:
 
-    def __init__(self):
+    def __init__(self, spatz=False):
         self.nb_cluster              = 1
-        self.nb_core_per_cluster     = 9
+        self.nb_core_per_cluster     = 1 if spatz else 9
         self.hbm_size                = 0x8000_0000
         self.hbm_type                = 'simple'
         self.noc_type                = 'simple'
-        self.core_type                = 'accurate'
+        self.core_type               = 'accurate'
+        self.use_spatz               = spatz
+        self.isa                     = 'rv32imfdcav' if spatz else 'rv32imfdca'
 
 
     def declare_target_properties(self, target):
@@ -69,10 +71,10 @@ class SnitchArchProperties:
 
 class SnitchArch:
 
-    def __init__(self, target, properties=None):
+    def __init__(self, target, properties=None, spatz=False):
 
         if properties is None:
-            properties = SnitchArchProperties()
+            properties = SnitchArchProperties(spatz=spatz)
 
         properties.declare_target_properties(target)
 
@@ -97,11 +99,16 @@ class SnitchArch:
                 current_hartid = 0
 
                 self.bootrom      = Area( 0x0000_1000,       0x0001_0000)
-                self.hbm          = Area( 0x8000_0000,       0x4000_0000)
+                self.hbm          = Area( 0x8000_0000,       0x8000_0000)
                 self.floonoc      = properties.noc_type == 'floonoc'
+                self.use_spatz    = properties.use_spatz
 
                 self.nb_cluster = properties.nb_cluster
-                self.cluster  = Area(0x1000_0000, 0x0004_0000)
+
+                if properties.use_spatz:
+                    self.cluster  = Area(0x0010_0000, 0x0004_0000)
+                else:
+                    self.cluster  = Area(0x1000_0000, 0x0004_0000)
 
 
                 self.clusters = []
@@ -143,8 +150,12 @@ class Soc(gvsoc.systree.Component):
         #
 
         # Bootrom
+        romfile = 'pulp/snitch/bootrom.bin'
+        if arch.use_spatz:
+            romfile = 'pulp/snitch/bootrom_spatz.bin'
+
         rom = memory.memory.Memory(self, 'rom', size=arch.bootrom.size,
-            stim_file=self.get_file_path('pulp/snitch/bootrom.bin'))
+            stim_file=self.get_file_path(romfile))
 
         # Narrow 64bits router
         narrow_axi = router.Router(self, 'narrow_axi', bandwidth=8)
@@ -164,7 +175,11 @@ class Soc(gvsoc.systree.Component):
 
 
         # Extra component for binary loading
-        loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry_addr=arch.bootrom.base + 0x20)
+        if arch.use_spatz:
+            entry_addr = arch.get_cluster(0).peripheral.base + 0x58
+        else:
+            entry_addr = arch.bootrom.base + 0x20
+        loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry_addr=entry_addr)
 
         #
         # Bindings
@@ -183,13 +198,16 @@ class Soc(gvsoc.systree.Component):
             clusters[id].o_NARROW_SOC(narrow_axi.i_INPUT())
             clusters[id].o_WIDE_SOC(wide_axi.i_INPUT())
             narrow_axi.o_MAP ( clusters[id].i_NARROW_INPUT (), base=arch.get_cluster_base(id),
-                size=arch.cluster.size, rm_base=True  )
+                size=arch.cluster.size, rm_base=False  )
 
         # Binary loader
         loader.o_OUT(narrow_axi.i_INPUT())
         for id in range(0, arch.nb_cluster):
             if id == 0:
                 loader.o_START(clusters[id].i_FETCHEN())
+                if arch.use_spatz:
+                    for core in range(0, arch.get_cluster(id).nb_core):
+                        loader.o_START(clusters[id].i_MEIP(core))
 
 
     def i_HBM(self) -> gvsoc.systree.SlaveItf:
@@ -316,7 +334,7 @@ class Snitch(gvsoc.systree.Component):
 
 class SnitchBoard(gvsoc.systree.Component):
 
-    def __init__(self, parent, name:str, parser, options):
+    def __init__(self, parent, name:str, parser, options, spatz=False):
         super().__init__(parent, name, options=options)
 
         [args, otherArgs] = parser.parse_known_args()
@@ -326,7 +344,7 @@ class SnitchBoard(gvsoc.systree.Component):
 
         clock = Clock_domain(self, 'clock', frequency=10000000)
 
-        arch = SnitchArch(self)
+        arch = SnitchArch(self, spatz=spatz)
 
         chip = Snitch(self, 'chip', parser, arch.chip, args.binary, debug_binaries)
 
@@ -338,3 +356,9 @@ class SnitchBoard(gvsoc.systree.Component):
         self.bind(clock, 'out', chip, 'clock')
         self.bind(clock, 'out', mem, 'clock')
         self.bind(chip, 'hbm', mem, 'input')
+
+
+class SpatzBoard(SnitchBoard):
+
+    def __init__(self, parent, name:str, parser, options):
+        super().__init__(parent, name, parser, options, spatz=True)

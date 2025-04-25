@@ -16,10 +16,12 @@
 
 import cpu.iss.riscv
 from pulp.snitch.snitch_isa import *
-from cpu.iss.isa_gen.isa_rvv import *
+import cpu.iss.isa_gen.isa_rvv
+import cpu.iss.isa_gen.isa_rvv_timed
 from cpu.iss.isa_gen.isa_smallfloats import *
 import gvsoc.systree
 import os
+import pulp.ara.ara
 
 
 def add_latencies(isa, is_fast=False):
@@ -177,7 +179,7 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             boot_addr: int=0,
             inc_spatz: bool=False,
             core_id: int=0,
-            htif: bool=False):
+            htif: bool=False, vlen: int=512):
 
 
         isa_instance = isa_instances.get(isa)
@@ -188,12 +190,15 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             add_latencies(isa_instance, is_fast=True)
             isa_instances[isa] = isa_instance
 
+            if inc_spatz:
+                pulp.ara.ara.extend_isa(isa_instance)
+
         if misa is None:
             misa = isa_instance.misa
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
             fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True,
-            prefetcher_size=32, htif=htif, binaries=binaries)
+            prefetcher_size=32, htif=htif, binaries=binaries, handle_misaligned=True, custom_sources=True)
 
         self.add_c_flags([
             "-DPIPELINE_STAGES=1",
@@ -201,10 +206,38 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             "-DCONFIG_GVSOC_ISS_SNITCH_FAST",
         ])
 
+        if inc_spatz:
+            pulp.ara.ara.attach(self, vlen)
+
+            self.add_c_flags([
+                "-DCONFIG_GVSOC_ISS_USE_SPATZ",
+            ])
+
         self.add_sources([
             "cpu/iss/src/snitch_fast/snitch.cpp",
             "cpu/iss/src/snitch_fast/ssr.cpp",
             "cpu/iss/src/snitch_fast/sequencer.cpp",
+            "cpu/iss/src/snitch_fast/fpu_lsu.cpp",
+            "cpu/iss/src/prefetch/prefetch_single_line.cpp",
+            "cpu/iss/src/csr.cpp",
+            "cpu/iss/src/exec/exec_inorder.cpp",
+            "cpu/iss/src/decode.cpp",
+            "cpu/iss/src/lsu.cpp",
+            "cpu/iss/src/timing.cpp",
+            "cpu/iss/src/insn_cache.cpp",
+            "cpu/iss/src/core.cpp",
+            "cpu/iss/src/exception.cpp",
+            "cpu/iss/src/regfile.cpp",
+            "cpu/iss/src/resource.cpp",
+            "cpu/iss/src/trace.cpp",
+            "cpu/iss/src/syscalls.cpp",
+            "cpu/iss/src/htif.cpp",
+            "cpu/iss/src/memcheck.cpp",
+            "cpu/iss/src/mmu.cpp",
+            "cpu/iss/src/pmp.cpp",
+            "cpu/iss/src/gdbserver.cpp",
+            "cpu/iss/src/dbg_unit.cpp",
+            "cpu/iss/flexfloat/flexfloat.c",
         ])
 
         path = os.path.dirname(__file__)
@@ -344,7 +377,7 @@ class Spatz(cpu.iss.riscv.RiscvCommon):
             use_rv32v=False):
 
 
-        extensions = [ Rv32v() ]
+        extensions = [ cpu.iss.isa_gen.isa_rvv.Rv32v() ]
 
         isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("spatz_" + isa, isa, extensions=extensions)
 
@@ -360,5 +393,4 @@ class Spatz(cpu.iss.riscv.RiscvCommon):
 
         self.add_sources([
             "cpu/iss/src/spatz.cpp",
-            "cpu/iss/src/vector.cpp",
         ])

@@ -19,13 +19,15 @@ from pulp.snitch.snitch_cluster.snitch_cluster import ClusterArch, Area
 
 class OccamyArchProperties:
 
-    def __init__(self):
+    def __init__(self, spatz=False):
         self.nb_quadrant             = 6
         self.nb_cluster_per_quadrant = 4
         self.nb_core_per_cluster     = 9
         self.hbm_size                = 0x80000000
         self.hbm_type                = 'simple'
-        self.core_type                = 'accurate'
+        self.core_type               = 'accurate'
+        self.use_spatz               = spatz
+        self.isa                     = 'rv32imfdcav' if spatz else 'rv32imfdca'
 
 
     def declare_target_properties(self, target):
