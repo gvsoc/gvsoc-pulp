@@ -15,13 +15,13 @@
 #
 
 import cpu.iss.riscv
+import pulp.ara.ara
 from pulp.snitch.snitch_isa import *
 from cpu.iss.isa_gen.isa_rvv import *
 from cpu.iss.isa_gen.isa_smallfloats import *
 import gvsoc.systree
 import os
 import gvsoc.gui
-import re
 
 
 
@@ -54,24 +54,7 @@ class CVA6(cpu.iss.riscv.RiscvCommon):
             isa_instances[isa] = isa_instance
 
             if has_vector:
-                # Assign tags to instructions so that we can handle them with different blocks
-
-                # For now only load/stores are assigned to vlsu
-                vle_pattern = re.compile(r'^(vle\d+\.v)$')
-                vse_pattern = re.compile(r'^(vse\d+\.v)$')
-                vslide_pattern = re.compile(r'.*slide.*|.*vmv.*')
-                vsetvli_pattern = re.compile(r'.*vset.*')
-                for insn in isa_instance.get_isa('v').get_insns():
-                    if vle_pattern.match(insn.label) is not None:
-                        insn.add_tag('vload')
-                    elif vse_pattern.match(insn.label) is not None:
-                        insn.add_tag('vstore')
-                    elif vslide_pattern.match(insn.label) is not None:
-                        insn.add_tag('vslide')
-                    elif vsetvli_pattern.match(insn.label) is not None:
-                        insn.add_tag('vsetvli')
-                    else:
-                        insn.add_tag('vothers')
+                pulp.ara.ara.extend_isa(isa_instance)
 
         if misa is None:
             misa = isa_instance.misa
@@ -107,21 +90,11 @@ class CVA6(cpu.iss.riscv.RiscvCommon):
             "cpu/iss/src/gdbserver.cpp",
             "cpu/iss/src/dbg_unit.cpp",
             "cpu/iss/flexfloat/flexfloat.c",
-            "cpu/iss/src/vector.cpp",
             "cpu/iss/src/cva6/cva6.cpp",
-            "cpu/iss/src/ara/ara.cpp",
-            "cpu/iss/src/ara/ara_vlsu.cpp",
-            "cpu/iss/src/ara/ara_vcompute.cpp",
         ])
 
         if has_vector:
-            self.add_c_flags([
-                "-DCONFIG_ISS_HAS_VECTOR=1", f'-DCONFIG_ISS_VLEN={int(vlen)}'
-            ])
-            self.add_sources([
-                "cpu/iss/src/vector.cpp",
-            ])
-            self.add_property('ara/nb_lanes', 4)
+            pulp.ara.ara.attach(self, vlen)
 
     def gen_gui(self, parent_signal):
         active = super().gen_gui(parent_signal)

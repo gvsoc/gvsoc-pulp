@@ -19,7 +19,8 @@ import pulp.snitch.snitch_core as iss
 import memory.memory as memory
 import interco.router as router
 import gvsoc.systree
-from pulp.snitch.snitch_cluster.cluster_registers import ClusterRegisters
+import pulp.snitch.snitch_cluster.cluster_registers
+import pulp.snitch.snitch_cluster.spatz.cluster_registers
 from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 from pulp.snitch.zero_mem import ZeroMem
 from elftools.elf.elffile import *
@@ -53,6 +54,8 @@ class ClusterArch:
         self.peripheral    = Area( base + 0x0002_0000, 0x0001_0000)
         self.zero_mem      = Area( base + 0x0003_0000, 0x0001_0000)
         self.core_type = properties.core_type
+        self.use_spatz = properties.use_spatz
+        self.isa = properties.isa
 
     class Tcdm:
         def __init__(self, base, nb_masters):
@@ -144,17 +147,19 @@ class SnitchCluster(gvsoc.systree.Component):
 
         for core_id in range(0, arch.nb_core):
 
-            if arch.core_type == 'fast':
-                cores.append(iss.SnitchFast(self, f'pe{core_id}', isa='rv32imfdca',
+            if arch.core_type == 'fast' or arch.use_spatz:
+                cores.append(iss.SnitchFast(self, f'pe{core_id}', isa=arch.isa,
                     fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
-                    core_id=arch.first_hartid + core_id, htif=True, binaries=binaries))
+                    core_id=arch.first_hartid + core_id, htif=True, binaries=binaries,
+                    inc_spatz=arch.use_spatz
+                ))
 
             else:
-                cores.append(iss.Snitch(self, f'pe{core_id}', isa='rv32imfdca',
+                cores.append(iss.Snitch(self, f'pe{core_id}', isa=arch.isa,
                     fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
                     core_id=arch.first_hartid + core_id, htif=True, binaries=binaries))
 
-                fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa='rv32imfdca',
+                fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa=arch.isa,
                     fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
                     core_id=arch.first_hartid + core_id, htif=True, binaries=binaries))
                 if xfrep:
@@ -163,8 +168,12 @@ class SnitchCluster(gvsoc.systree.Component):
             cores_ico.append(router.Router(self, f'pe{core_id}_ico', bandwidth=arch.tcdm.bank_width))
 
         # Cluster peripherals
-        cluster_registers = ClusterRegisters(self, 'cluster_registers', nb_cores=arch.nb_core,
-            boot_addr=entry)
+        if arch.use_spatz:
+            cluster_registers = pulp.snitch.snitch_cluster.spatz.cluster_registers.ClusterRegisters(
+                self, 'cluster_registers', nb_cores=arch.nb_core, boot_addr=entry)
+        else:
+            cluster_registers = pulp.snitch.snitch_cluster.cluster_registers.ClusterRegisters(
+                self, 'cluster_registers', nb_cores=arch.nb_core, boot_addr=entry)
 
         # Cluster DMA
         idma = SnitchDma(self, 'idma', loc_base=arch.tcdm.area.base, loc_size=arch.tcdm.area.size,
@@ -214,7 +223,7 @@ class SnitchCluster(gvsoc.systree.Component):
 
 
         for core_id in range(0, arch.nb_core):
-            if arch.core_type == 'accurate':
+            if arch.core_type == 'accurate' and not arch.use_spatz:
                 fp_cores[core_id].o_DATA( cores_ico[core_id].i_INPUT() )
                 self.__o_FETCHEN( fp_cores[core_id].i_FETCHEN() )
 
