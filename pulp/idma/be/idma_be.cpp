@@ -55,19 +55,17 @@ IdmaBeConsumer *IDmaBe::get_be_consumer(uint64_t base, uint64_t size, bool is_re
 }
 
 
-// This is called by middle to push a new transfer. This is called only when the backend has
-// no active transfer
+// This is called by middle to push a new transfer. This can called only once no transfer is active
+// but before they are fully handled by backend protocols so that transfer can be fully pipelined.
 void IDmaBe::enqueue_transfer(IdmaTransfer *transfer)
 {
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Queueing burst (burst: %p, src: 0x%x, dst: 0x%x, size: 0x%x)\n",
         transfer, transfer->src, transfer->dst, transfer->size);
 
-    // Push the transfer into the queue, we will need it later when the bursts are coming back
-    // from memory. We will remove it from the queue when the transfer is fully done
-    this->transfer_queue.push(transfer);
-
-    // Extract information abouth the transfer
+    // Remember the transfer as it has to be provided when burst are sent to backend protocols
     this->current_transfer = transfer;
+
+    // Extract information abouth the transfer. This will be used to split it into smaller bursts
     this->current_transfer_size = transfer->size;
     transfer->ack_size = transfer->size;
     this->current_transfer_src = transfer->src;
@@ -75,13 +73,16 @@ void IDmaBe::enqueue_transfer(IdmaTransfer *transfer)
     this->current_transfer_src_be = this->get_be_consumer(transfer->src, transfer->size, true);
     this->current_transfer_dst_be = this->get_be_consumer(transfer->dst, transfer->size, false);
 
+    // Trigger FSM
     this->fsm_event.enqueue();
 }
 
 
 bool IDmaBe::can_accept_transfer()
 {
-    // Only accept a new transfer if no transfer is on-going.
+    // Only accept a new transfer if no transfer is being processed. Note that the back-end can
+    // start a new transfer as soon as it has been fully forwarded to source and destination
+    // back-ends.
     return this->current_transfer_size == 0;
 }
 
@@ -116,10 +117,10 @@ void IDmaBe::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
         // Enqueue the read burst. This will make the source backend start sending read requests
         // to the memory
-        _this->current_transfer_src_be->read_burst(src, burst_size);
+        _this->current_transfer_src_be->read_burst(_this->current_transfer, src, burst_size);
         // Also enqueue the write burst which will be used only when the source is pushing data,
         // to know where to write it
-        _this->current_transfer_dst_be->write_burst(dst, burst_size);
+        _this->current_transfer_dst_be->write_burst(_this->current_transfer, dst, burst_size);
 
         // Updated current transfer by removing the burst we just processed
         _this->current_transfer_size -= burst_size;
@@ -148,20 +149,17 @@ void IDmaBe::update()
 
 
 // Called by source backend protocol to know if it can send data to be written
-bool IDmaBe::is_ready_to_accept_data()
+bool IDmaBe::is_ready_to_accept_data(IdmaTransfer *transfer)
 {
     // Check if the destination backend of the first transfer is ready to accept them
-    IdmaTransfer *transfer = this->transfer_queue.front();
     IdmaBeConsumer *dst_be = this->get_be_consumer(transfer->dst, transfer->size, false);
     return dst_be->can_accept_data();
 }
 
 
 // This is called by the source backend protocol to push a data chunk to the destination
-void IDmaBe::write_data(uint8_t *data, uint64_t size)
+void IDmaBe::write_data(IdmaTransfer *transfer, uint8_t *data, uint64_t size)
 {
-    // Get back the first transfer from the queue to know where to send the data
-    IdmaTransfer *transfer = this->transfer_queue.front();
     // Get destination backend
     IdmaBeConsumer *dst_be = this->get_be_consumer(transfer->dst, transfer->size, false);
 
@@ -172,16 +170,15 @@ void IDmaBe::write_data(uint8_t *data, uint64_t size)
     // And forward data.
     // Note that the source backend already checked that the destination was ready by calling
     // our is_ready_to_accept_data method
-    dst_be->write_data(data, size);
+    dst_be->write_data(transfer, data, size);
 }
 
 
 
 // This is called by the destination backend protocol to acknowledged written data
-void IDmaBe::ack_data(uint8_t *data, int size)
+void IDmaBe::ack_data(IdmaTransfer *transfer, uint8_t *data, int size)
 {
     // Get the source backend protocol for the first transfer
-    IdmaTransfer *transfer = this->transfer_queue.front();
     IdmaBeConsumer *src_be = this->get_be_consumer(transfer->src, transfer->size, true);
 
     // And acknowledge the data to it so that the data can be freed
@@ -198,8 +195,7 @@ void IDmaBe::ack_data(uint8_t *data, int size)
     {
         this->trace.msg(vp::Trace::LEVEL_TRACE, "Finished burst (transfer: %p)\n", transfer);
 
-        // And if so, remove it and notify the middle end
-        this->transfer_queue.pop();
+        // And if so, notify the middle end
         this->me->ack_transfer(transfer);
     }
 }

@@ -46,9 +46,9 @@ public:
     void reset(bool active) override;
 
     void update();
-    void read_burst(uint64_t base, uint64_t size) override;
-    void write_burst(uint64_t base, uint64_t size) override;
-    void write_data(uint8_t *data, uint64_t size) override;
+    void read_burst(IdmaTransfer *transfer, uint64_t base, uint64_t size) override;
+    void write_burst(IdmaTransfer *transfer, uint64_t base, uint64_t size) override;
+    void write_data(IdmaTransfer *transfer, uint8_t *data, uint64_t size) override;
     void write_data_ack(uint8_t *data) override;
     uint64_t get_burst_size(uint64_t base, uint64_t size) override;
     bool can_accept_burst() override;
@@ -72,7 +72,7 @@ private:
     // Extract first pending information to let FSM start writing and reading lines from it
     void activate_burst();
     // Enqueue a new burst to the queue of pending bursts
-    void enqueue_burst(uint64_t base, uint64_t size, bool is_write);
+    void enqueue_burst(uint64_t base, uint64_t size, bool is_write, IdmaTransfer *transfer);
 
     // Pointer to back-end, used for data synchronization
     IdmaBeProducer *be;
@@ -99,6 +99,8 @@ private:
     std::queue<uint64_t> burst_queue_size;
     // Queue of pending bursts telling if burst is read or write
     std::queue<bool> burst_queue_is_write;
+    // Queue of transfers associated to queue of bursts
+    std::queue<IdmaTransfer *> burst_queue_transfer;
 
     // Base address of currently active burst, the one from which lines are read or written
     uint64_t current_burst_base;
@@ -137,4 +139,6 @@ private:
     // Timestamp in cycles of the last time a line was read or written. Used to make sure we send
     // only one line per cycle
     int64_t last_line_timestamp;
+    // Current transfer for which data to be written are push
+    IdmaTransfer *write_current_transfer;
 };
