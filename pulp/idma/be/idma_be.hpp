@@ -76,10 +76,11 @@ public:
      * Once a burst is being processed, it should call the method write_data on the backend
      * to push a chunk of data which has been read.
      *
+     * @param transfer DMA transfer for which the burst is enqueued
      * @param base Base address of the burst
      * @param size Size of the burst
      */
-    virtual void read_burst(uint64_t base, uint64_t size) = 0;
+    virtual void read_burst(IdmaTransfer *transfer, uint64_t base, uint64_t size) = 0;
 
     /**
      * @brief Acknowledge written data
@@ -88,6 +89,7 @@ public:
      * the fact that the data pushed through the method write_data has been written and
      * can be freed.
      *
+     * @param transfer DMA transfer for which data is acknowledged
      * @param data Pointer to the data being acknowledged
      */
     virtual void write_data_ack(uint8_t *data) = 0;
@@ -102,10 +104,11 @@ public:
      * As soon as all the data has been written, the current burst should be released and the
      * next one should be marked as the active one.
      *
+     * @param transfer DMA transfer for which the burst is enqueued
      * @param base Base address of the burst
      * @param size Size of the burst
      */
-    virtual void write_burst(uint64_t base, uint64_t size) = 0;
+    virtual void write_burst(IdmaTransfer *transfer, uint64_t base, uint64_t size) = 0;
 
     /**
      * @brief Write data
@@ -116,10 +119,11 @@ public:
      * handle the router latency.
      * The provided data pointer can be kept until the data has been acknowledged.
      *
+     * @param transfer DMA transfer for which the data is written
      * @param data Pointer to the data to be written
      * @param size Size of the burst
      */
-    virtual void write_data(uint8_t *data, uint64_t size) = 0;
+    virtual void write_data(IdmaTransfer *transfer, uint8_t *data, uint64_t size) = 0;
 
     /**
      * @brief Get the legal burst size
@@ -163,8 +167,10 @@ public:
      * A backend protocol must push data to be written to backend only if the backend is ready.
      * This function can be called to know if it is ready.
      * Only one chunk of data can then be written and this function must be called again.
+     *
+     * @param transfer Transfer for which the back-end wants to write data
      */
-    virtual bool is_ready_to_accept_data() = 0;
+    virtual bool is_ready_to_accept_data(IdmaTransfer *transfer) = 0;
 
     /**
      * @brief Write data to destination backend protocol
@@ -172,10 +178,11 @@ public:
      * The data should be a chunk of the active burst. The method is_ready_to_accept_data must
      * be called first to verify that the backend is ready to accept data.
      *
+     * @param transfer Transfer for which the data is being written
      * @param data Pointer to the data to be written
      * @param size Size of the burst
      */
-    virtual void write_data(uint8_t *data, uint64_t size) = 0;
+    virtual void write_data(IdmaTransfer *transfer, uint8_t *data, uint64_t size) = 0;
 
     /**
      * @brief Acknowledge write data
@@ -183,8 +190,12 @@ public:
      * The data received through the method write_data on backend protocol side must be acknowledge
      * as soon as it is written to the destination pointer and the data pointer can be released
      * by the source backend protocol.
+     *
+     * @param transfer Transfer for which written data is being acknowledge
+     * @param data Written data being acknowledged
+     * @param size Size of the written data being acknowledged
      */
-    virtual void ack_data(uint8_t *data, int size) = 0;
+    virtual void ack_data(IdmaTransfer *transfer, uint8_t *data, int size) = 0;
 };
 
 
@@ -218,9 +229,9 @@ public:
     bool can_accept_transfer() override;
     void enqueue_transfer(IdmaTransfer *transfer) override;
     void update() override;
-    bool is_ready_to_accept_data() override;
-    void write_data(uint8_t *data, uint64_t size) override;
-    void ack_data(uint8_t *data, int size) override;
+    bool is_ready_to_accept_data(IdmaTransfer *transfer) override;
+    void write_data(IdmaTransfer *transfer, uint8_t *data, uint64_t size) override;
+    void ack_data(IdmaTransfer *transfer, uint8_t *data, int size) override;
 
 private:
     // FSM handler, called to check if any action should be taken after something was updated
@@ -251,9 +262,6 @@ private:
     IdmaBeConsumer *current_transfer_src_be;
     // Destination backend protocol of the current transfer
     IdmaBeConsumer *current_transfer_dst_be;
-    // Queue of pending transfers, whose bursts have already been sent. They need to be kept
-    // since we need transfer information when bursts are back from memory
-    std::queue<IdmaTransfer *> transfer_queue;
     // Backend for local area
     IdmaBeConsumer *loc_be_read;
     IdmaBeConsumer *loc_be_write;

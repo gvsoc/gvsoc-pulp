@@ -97,6 +97,9 @@ void IDmaBeAxi::reset(bool active)
         // And put back them all as free
         for (vp::IoReq &req: this->bursts)
         {
+            // Reserve one argument in each request, we'll use it to store the associated
+            // transfer to properly report the request termination
+            req.arg_alloc();
             this->free_bursts.push(&req);
         }
 
@@ -126,7 +129,7 @@ uint64_t IDmaBeAxi::get_burst_size(uint64_t base, uint64_t size)
 
 
 
-void IDmaBeAxi::enqueue_burst(uint64_t base, uint64_t size, bool is_write)
+void IDmaBeAxi::enqueue_burst(uint64_t base, uint64_t size, bool is_write, IdmaTransfer *transfer)
 {
     // Get a free burst, this method is called only if at least one is free
     vp::IoReq *req = this->free_bursts.front();
@@ -140,6 +143,7 @@ void IDmaBeAxi::enqueue_burst(uint64_t base, uint64_t size, bool is_write)
     req->set_is_write(is_write);
     req->set_addr(base);
     req->set_size(size);
+    *req->arg_get(0) = (void *)transfer;
 
     this->pending_bursts.push(req);
 
@@ -156,9 +160,9 @@ void IDmaBeAxi::enqueue_burst(uint64_t base, uint64_t size, bool is_write)
 
 
 
-void IDmaBeAxi::read_burst(uint64_t base, uint64_t size)
+void IDmaBeAxi::read_burst(IdmaTransfer *transfer, uint64_t base, uint64_t size)
 {
-    this->enqueue_burst(base, size, false);
+    this->enqueue_burst(base, size, false, transfer);
 }
 
 
@@ -250,14 +254,14 @@ void IDmaBeAxi::axi_response(vp::Block *__this, vp::IoReq *req)
 
 
 
-void IDmaBeAxi::write_burst(uint64_t base, uint64_t size)
+void IDmaBeAxi::write_burst(IdmaTransfer *transfer, uint64_t base, uint64_t size)
 {
-    this->enqueue_burst(base, size, true);
+    this->enqueue_burst(base, size, true, transfer);
 }
 
 
 
-void IDmaBeAxi::write_data(uint8_t *data, uint64_t size)
+void IDmaBeAxi::write_data(IdmaTransfer *transfer, uint8_t *data, uint64_t size)
 {
     // Each chunk is directly sent to AXI to avoid sending whole burst at the end.
     // Allocate a request and send it. The burst limitation is modeled with another request
@@ -274,6 +278,7 @@ void IDmaBeAxi::write_data(uint8_t *data, uint64_t size)
     req->set_addr(base);
     req->set_size(size);
     req->set_data(data);
+    *req->arg_get(0) = (void *)transfer;
 
     vp::IoReqStatus status = this->ico_itf.req(req);
     if (status == vp::IoReqStatus::IO_REQ_OK)
@@ -300,7 +305,7 @@ void IDmaBeAxi::write_handle_req_end(vp::IoReq *req)
 
     // Acknowledge now the data since they are gone, to let the other backend protocol sending the
     // rest of the burst immediately
-    this->be->ack_data(req->get_data(), req->get_size());
+    this->be->ack_data((IdmaTransfer *)*req->arg_get(0), req->get_data(), req->get_size());
 
     // Account this chunk on the first pending burst
     vp::IoReq *burst = this->pending_bursts.front();
@@ -358,7 +363,8 @@ void IDmaBeAxi::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
     // In case we have pending read bursts waiting for pushing data, only do it if the backend
     // is ready to accept the data in case the destination is not ready
-    if (_this->read_waiting_bursts.size() != 0 && _this->be->is_ready_to_accept_data())
+    if (_this->read_waiting_bursts.size() != 0 &&
+        _this->be->is_ready_to_accept_data((IdmaTransfer *)*_this->read_waiting_bursts.front()->arg_get(0)))
     {
         vp::IoReq *req = _this->read_waiting_bursts.front();
 
@@ -372,7 +378,7 @@ void IDmaBeAxi::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             _this->read_bursts_waiting_ack.push(req);
 
             // Send the data
-            _this->be->write_data(req->get_data(), req->get_size());
+            _this->be->write_data((IdmaTransfer *)*req->arg_get(0), req->get_data(), req->get_size());
 
             // Trigger again the FSM since we may continue with another transfer
             _this->fsm_event.enqueue();
