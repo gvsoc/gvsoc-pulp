@@ -28,5 +28,5 @@ vp_model_compile_definitions(
     )
 
 if(DEFINED ENV{XTENSOR_INCLUDE_DIR})
-    vp_model_compile_options(NAME pulp.neureka.neureka OPTIONS -I$ENV{XTENSOR_INCLUDE_DIR})
+    vp_model_compile_options(NAME pulp.neureka.neureka OPTIONS -I$ENV{XTENSOR_INCLUDE_DIR} -I$ENV{XTL_INCLUDE_DIR} -I$ENV{XSIMD_INCLUDE_DIR})
 endif()
