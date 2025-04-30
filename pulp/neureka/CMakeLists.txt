@@ -26,7 +26,7 @@ vp_model_compile_definitions(
     DEFINITIONS
     -DXTENSOR_USE_XSIMD
     )
-
-if(DEFINED ENV{XTENSOR_INCLUDE_DIR})
-    vp_model_compile_options(NAME pulp.neureka.neureka OPTIONS -M -I$ENV{XTENSOR_INCLUDE_DIR} -I$ENV{XTL_INCLUDE_DIR} -I$ENV{XSIMD_INCLUDE_DIR})
+    
+if(DEFINED ENV{XTENSOR_INSTALL_DIR})
+    vp_model_compile_options(NAME pulp.neureka.neureka OPTIONS -M -I$ENV{XTENSOR_INSTALL_DIR} -I$ENV{XTL_INSTALL_DIR} -I$ENV{XSIMD_INSTALL_DIR})
 endif()
