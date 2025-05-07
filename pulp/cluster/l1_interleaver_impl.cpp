@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* 
+/*
  * Authors: Germain Haugou, GreenWaves Technologies (germain.haugou@greenwaves-technologies.com)
  */
 
@@ -50,6 +50,7 @@ private:
   uint64_t bank_mask;
   vp::IoReq ts_req;
   int interleaving_bits;
+  uint64_t offset_mask;
 };
 
 interleaver::interleaver(vp::ComponentConf &config)
@@ -63,6 +64,7 @@ interleaver::interleaver(vp::ComponentConf &config)
   nb_slaves = get_js_config()->get_child_int("nb_slaves");
   nb_masters = get_js_config()->get_child_int("nb_masters");
   stage_bits = get_js_config()->get_child_int("stage_bits");
+  offset_mask = get_js_config()->get_child_int("offset_mask");
   interleaving_bits = get_js_config()->get_child_int("interleaving_bits");
 
   if (stage_bits == 0)
@@ -71,6 +73,11 @@ interleaver::interleaver(vp::ComponentConf &config)
   }
 
   bank_mask = (1<<stage_bits) - 1;
+
+  if (offset_mask == 0)
+  {
+      offset_mask = -1;
+  }
 
   out = new vp::IoMaster *[nb_slaves];
   for (int i=0; i<nb_slaves; i++)
@@ -104,9 +111,12 @@ vp::IoReqStatus interleaver::req(vp::Block *__this, vp::IoReq *req)
   uint8_t *data = req->get_data();
 
   _this->trace.msg("Received IO req (offset: 0x%llx, size: 0x%llx, is_write: %d)\n", offset, size, is_write);
- 
+
   int bank_id = (offset >> _this->interleaving_bits) & _this->bank_mask;
+  offset &= _this->offset_mask;
   uint64_t bank_offset = ((offset >> (_this->stage_bits + _this->interleaving_bits)) << _this->interleaving_bits) + (offset & ((1<<_this->interleaving_bits)-1));
+
+  _this->trace.msg("Forwarding interleaved packet (port: %d, offset: 0x%x, size: 0x%x)\n", bank_id, bank_offset, size);
 
   req->set_addr(bank_offset);
   return _this->out[bank_id]->req_forward(req);
@@ -121,7 +131,7 @@ vp::IoReqStatus interleaver::req_ts(vp::Block *__this, vp::IoReq *req)
   uint8_t *data = req->get_data();
 
   _this->trace.msg("Received TS IO req (offset: 0x%llx, size: 0x%llx, is_write: %d)\n", offset, size, is_write);
- 
+
   int bank_id = (offset >> _this->interleaving_bits) & _this->bank_mask;
   uint64_t bank_offset = ((offset >> (_this->stage_bits + 2)) << 2) + (offset & 0x3);
 
@@ -149,5 +159,3 @@ extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new interleaver(config);
 }
-
-

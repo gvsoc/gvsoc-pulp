@@ -36,13 +36,21 @@ def extend_isa(isa_instance):
         else:
             insn.add_tag('vothers')
 
-def attach(component, vlen):
+def attach(component, vlen, nb_lanes, use_spatz=False, spatz_nb_ports=None):
     component.add_sources([
         "cpu/iss/src/ara/ara.cpp",
-        "cpu/iss/src/ara/ara_vlsu.cpp",
         "cpu/iss/src/ara/ara_vcompute.cpp",
         "cpu/iss/src/vector.cpp",
     ])
+
+    if use_spatz:
+        component.add_sources([
+            "cpu/iss/src/ara/spatz_vlsu.cpp",
+        ])
+    else:
+        component.add_sources([
+            "cpu/iss/src/ara/ara_vlsu.cpp",
+        ])
 
     component.add_c_flags([
         "-DCONFIG_ISS_HAS_VECTOR=1", f'-DCONFIG_ISS_VLEN={int(vlen)}'
@@ -50,4 +58,8 @@ def attach(component, vlen):
     component.add_sources([
         "cpu/iss/src/vector.cpp",
     ])
-    component.add_property('ara/nb_lanes', 4)
+
+    component.add_property('ara/nb_lanes', nb_lanes)
+    if use_spatz:
+        component.add_property('ara/nb_ports', nb_lanes if spatz_nb_ports is None else spatz_nb_ports)
+        component.add_property('ara/nb_outstanding_reqs', 8)

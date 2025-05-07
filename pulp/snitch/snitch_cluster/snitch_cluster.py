@@ -50,11 +50,16 @@ class ClusterArch:
         self.boot_addr = boot_addr
         self.auto_fetch = auto_fetch
         self.barrier_irq = 19
-        self.tcdm          = ClusterArch.Tcdm(base, self.nb_core)
+
+        nb_masters = self.nb_core
+        if properties.use_spatz:
+            nb_masters += self.nb_core * properties.spatz_nb_lanes
+        self.tcdm          = ClusterArch.Tcdm(base, nb_masters)
         self.peripheral    = Area( base + 0x0002_0000, 0x0001_0000)
         self.zero_mem      = Area( base + 0x0003_0000, 0x0001_0000)
         self.core_type = properties.core_type
         self.use_spatz = properties.use_spatz
+        self.spatz_nb_lanes = properties.spatz_nb_lanes
         self.isa = properties.isa
 
     class Tcdm:
@@ -79,9 +84,10 @@ class SnitchClusterTcdm(gvsoc.systree.Component):
                 width_log2=int(math.log2(arch.bank_width)), latency=0))
 
         interleaver = L1_interleaver(self, 'interleaver', nb_slaves=nb_banks,
-            nb_masters=arch.nb_masters, interleaving_bits=int(math.log2(arch.bank_width)))
+            nb_masters=arch.nb_masters, interleaving_bits=int(math.log2(arch.bank_width)),
+            offset_mask=arch.area.size - 1)
 
-        dma_interleaver = DmaInterleaver(self, 'dma_interleaver', arch.nb_masters,
+        dma_interleaver = DmaInterleaver(self, 'dma_interleaver', 1,
             nb_banks, arch.bank_width)
 
         for i in range(0, nb_banks):
@@ -104,6 +110,8 @@ class SnitchCluster(gvsoc.systree.Component):
 
     def __init__(self, parent, name, arch, parser=None, entry=0, auto_fetch=True, binaries=None):
         super().__init__(parent, name)
+
+        dma_core = 0 if arch.use_spatz else arch.nb_core-1
 
         #
         # Components
@@ -151,7 +159,7 @@ class SnitchCluster(gvsoc.systree.Component):
                 cores.append(iss.SnitchFast(self, f'pe{core_id}', isa=arch.isa,
                     fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
                     core_id=arch.first_hartid + core_id, htif=True, binaries=binaries,
-                    inc_spatz=arch.use_spatz
+                    inc_spatz=arch.use_spatz, spatz_nb_lanes=arch.spatz_nb_lanes
                 ))
 
             else:
@@ -201,8 +209,8 @@ class SnitchCluster(gvsoc.systree.Component):
         wide_axi.o_MAP(tcdm.i_DMA_INPUT(), base=arch.tcdm.area.base, size=arch.tcdm.area.size, rm_base=True)
 
         # Cores
-        cores[arch.nb_core-1].o_OFFLOAD(idma.i_OFFLOAD())
-        idma.o_OFFLOAD_GRANT(cores[arch.nb_core-1].i_OFFLOAD_GRANT())
+        cores[dma_core].o_OFFLOAD(idma.i_OFFLOAD())
+        idma.o_OFFLOAD_GRANT(cores[dma_core].i_OFFLOAD_GRANT())
 
         # Cores
         for core_id in range(0, arch.nb_core):
@@ -210,10 +218,19 @@ class SnitchCluster(gvsoc.systree.Component):
 
         for core_id in range(0, arch.nb_core):
             cores[core_id].o_BARRIER_REQ(cluster_registers.i_BARRIER_ACK(core_id))
+
+        tcdm_port = 0
         for core_id in range(0, arch.nb_core):
             cores[core_id].o_DATA(cores_ico[core_id].i_INPUT())
-            cores_ico[core_id].o_MAP(tcdm.i_INPUT(core_id), base=arch.tcdm.area.base,
+            cores_ico[core_id].o_MAP(tcdm.i_INPUT(tcdm_port), base=arch.tcdm.area.base,
                 size=arch.tcdm.area.size, rm_base=True)
+            tcdm_port += 1
+
+            if arch.use_spatz:
+                for port in range(0, arch.spatz_nb_lanes):
+                    cores[core_id].o_VLSU(port, tcdm.i_INPUT(tcdm_port))
+                    tcdm_port += 1
+
             cores_ico[core_id].o_MAP(narrow_axi.i_INPUT())
             cores[core_id].o_FETCH(icache.i_INPUT(core_id))
 
@@ -251,7 +268,6 @@ class SnitchCluster(gvsoc.systree.Component):
                 self.bind(cores[core_id], 'ssr_dm1', cores_ico[core_id], 'input')
                 self.bind(cores[core_id], 'ssr_dm2', cores_ico[core_id], 'input')
 
-
         # Cluster peripherals
         narrow_axi.o_MAP(cluster_registers.i_INPUT(), base=arch.peripheral.base,
             size=arch.peripheral.size, rm_base=True)
@@ -262,6 +278,11 @@ class SnitchCluster(gvsoc.systree.Component):
             self.__o_MSIP(core_id, cores[core_id].i_IRQ(3))
             self.__o_MTIP(core_id, cores[core_id].i_IRQ(7))
             self.__o_MEIP(core_id, cores[core_id].i_IRQ(11))
+
+        if arch.use_spatz:
+            for core_id in range(0, arch.nb_core):
+                cores_ico[core_id].o_MAP(cluster_registers.i_CORE_INPUT(core_id), base=arch.peripheral.base,
+                    size=arch.peripheral.size, rm_base=True)
 
         # Cluster DMA
         idma.o_AXI(wide_axi.i_INPUT())

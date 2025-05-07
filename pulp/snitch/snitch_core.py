@@ -24,10 +24,10 @@ import os
 import pulp.ara.ara
 
 
-def add_latencies(isa, is_fast=False):
+def add_latencies(isa, is_fast=False, use_spatz=False):
 
 
-    if is_fast:
+    if is_fast and not use_spatz:
         isa.get_insn('flb').set_exec_label('flb_snitch')
         isa.get_insn('fsb').set_exec_label('fsb_snitch')
         isa.get_insn('flh').set_exec_label('flh_snitch')
@@ -179,15 +179,21 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             boot_addr: int=0,
             inc_spatz: bool=False,
             core_id: int=0,
-            htif: bool=False, vlen: int=512):
+            htif: bool=False, vlen: int=1024, spatz_nb_lanes=4):
 
 
         isa_instance = isa_instances.get(isa)
 
         if isa_instances.get(isa) is None:
+
+            extensions = [Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux()]
+
+            if not inc_spatz:
+                extensions += [Rv32ssr(), Rv32frep()]
+
             isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
-                extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ] )
-            add_latencies(isa_instance, is_fast=True)
+                extensions=extensions)
+            add_latencies(isa_instance, is_fast=True, use_spatz=inc_spatz)
             isa_instances[isa] = isa_instance
 
             if inc_spatz:
@@ -200,6 +206,8 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True,
             prefetcher_size=32, htif=htif, binaries=binaries, handle_misaligned=True, custom_sources=True)
 
+        self.inc_spatz = inc_spatz
+
         self.add_c_flags([
             "-DPIPELINE_STAGES=1",
             "-DCONFIG_ISS_CORE=snitch_fast",
@@ -207,16 +215,23 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
         ])
 
         if inc_spatz:
-            pulp.ara.ara.attach(self, vlen)
+            pulp.ara.ara.attach(self, vlen, nb_lanes=spatz_nb_lanes, use_spatz=True)
 
             self.add_c_flags([
                 "-DCONFIG_GVSOC_ISS_USE_SPATZ",
             ])
 
+            self.add_sources([
+                "cpu/iss/src/spatz/fpu_sequencer.cpp",
+            ])
+        else:
+            self.add_sources([
+                "cpu/iss/src/snitch_fast/sequencer.cpp",
+            ])
+
         self.add_sources([
             "cpu/iss/src/snitch_fast/snitch.cpp",
             "cpu/iss/src/snitch_fast/ssr.cpp",
-            "cpu/iss/src/snitch_fast/sequencer.cpp",
             "cpu/iss/src/snitch_fast/fpu_lsu.cpp",
             "cpu/iss/src/prefetch/prefetch_single_line.cpp",
             "cpu/iss/src/csr.cpp",
@@ -253,6 +268,24 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
 
     def o_BARRIER_REQ(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('barrier_req', itf, signature='wire<bool>')
+
+    def o_VLSU(self, port: int, itf: gvsoc.systree.SlaveItf):
+        """Binds the vector data port.
+
+        This port is used for issuing data accesses to the memory for vector loads and stores.\n
+        It instantiates a port of type vp::IoMaster.\n
+        It is mandatory to bind it.\n
+
+        Parameters
+        ----------
+        slave: gvsoc.systree.SlaveItf
+            Slave interface
+        """
+        if self.inc_spatz:
+            self.itf_bind(f'vlsu_{port}', itf, signature='io')
+        else:
+            raise RuntimeError('Vector data interface is not available')
+
 
 class SnitchBare(cpu.iss.riscv.RiscvCommon):
 

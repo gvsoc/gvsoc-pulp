@@ -32,12 +32,13 @@ class SnitchArchProperties:
 
     def __init__(self, spatz=False):
         self.nb_cluster              = 1
-        self.nb_core_per_cluster     = 1 if spatz else 9
+        self.nb_core_per_cluster     = 2 if spatz else 9
         self.hbm_size                = 0x8000_0000
         self.hbm_type                = 'simple'
         self.noc_type                = 'simple'
         self.core_type               = 'accurate'
         self.use_spatz               = spatz
+        self.spatz_nb_lanes          = 4
         self.isa                     = 'rv32imfdcav' if spatz else 'rv32imfdca'
 
 

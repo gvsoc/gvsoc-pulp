@@ -45,6 +45,9 @@ class ClusterRegisters(gvsoc.systree.Component):
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')
 
+    def i_CORE_INPUT(self, core) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'input_{core}', signature='io')
+
     def i_BARRIER_ACK(self, core: int) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'barrier_req_{core}', signature='wire<bool>')
 

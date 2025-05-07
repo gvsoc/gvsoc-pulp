@@ -27,6 +27,7 @@ class OccamyArchProperties:
         self.hbm_type                = 'simple'
         self.core_type               = 'accurate'
         self.use_spatz               = spatz
+        self.spatz_nb_lanes          = 4
         self.isa                     = 'rv32imfdcav' if spatz else 'rv32imfdca'
 
 

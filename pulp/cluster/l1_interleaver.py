@@ -18,7 +18,8 @@ import gvsoc.systree as st
 
 class L1_interleaver(st.Component):
 
-    def __init__(self, parent, slave, nb_slaves=0, nb_masters=0, stage_bits=0, interleaving_bits=2):
+    def __init__(self, parent, slave, nb_slaves=0, nb_masters=0, stage_bits=0, interleaving_bits=2,
+            offset_mask=0):
 
         super(L1_interleaver, self).__init__(parent, slave)
 
@@ -28,5 +29,6 @@ class L1_interleaver(st.Component):
             'nb_slaves': nb_slaves,
             'nb_masters': nb_masters,
             'stage_bits': stage_bits,
-            'interleaving_bits': interleaving_bits
+            'interleaving_bits': interleaving_bits,
+            'offset_mask': offset_mask,
         })

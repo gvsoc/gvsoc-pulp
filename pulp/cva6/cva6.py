@@ -94,7 +94,7 @@ class CVA6(cpu.iss.riscv.RiscvCommon):
         ])
 
         if has_vector:
-            pulp.ara.ara.attach(self, vlen)
+            pulp.ara.ara.attach(self, vlen, nb_lanes=4)
 
     def gen_gui(self, parent_signal):
         active = super().gen_gui(parent_signal)
