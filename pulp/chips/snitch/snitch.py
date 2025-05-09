@@ -146,6 +146,9 @@ class Soc(gvsoc.systree.Component):
                 elffile = ELFFile(file)
                 entry = elffile['e_entry']
 
+        # Spatz RTL benchmarks do HBM accesses with zero latency memory
+        hbm_latency = 0 if arch.use_spatz else 100
+
         #
         # Components
         #
@@ -187,7 +190,7 @@ class Soc(gvsoc.systree.Component):
         #
 
         # HBM
-        wide_axi.o_MAP ( self.i_HBM(), base=arch.hbm.base, size=arch.hbm.size, rm_base=True, latency=100 )
+        wide_axi.o_MAP ( self.i_HBM(), base=arch.hbm.base, size=arch.hbm.size, rm_base=True, latency=hbm_latency )
         narrow_axi.o_MAP ( wide_axi.i_INPUT(), base=arch.hbm.base, size=arch.hbm.size, rm_base=False )
 
         # ROM
