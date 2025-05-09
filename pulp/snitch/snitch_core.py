@@ -179,7 +179,7 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             boot_addr: int=0,
             inc_spatz: bool=False,
             core_id: int=0,
-            htif: bool=False, vlen: int=1024, spatz_nb_lanes=4):
+            htif: bool=False, vlen: int=512, spatz_nb_lanes=4):
 
 
         isa_instance = isa_instances.get(isa)
