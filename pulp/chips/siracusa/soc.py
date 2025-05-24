@@ -16,7 +16,7 @@
 
 import os
 import gvsoc.systree as st
-import pulp.cpu.iss.pulp_cores as iss
+import pulp.chips.siracusa.pulp_cores as iss
 import memory.memory as memory
 import interco.router as router
 import cache.cache as cache

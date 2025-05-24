@@ -26,7 +26,7 @@ def __build_fc_isa(name):
 
     extensions = [ PulpV2(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ]
 
-    isa = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa(name, 'rv32imfc', extensions=extensions)
+    isa = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa(name, 'rv32imc', extensions=extensions)
 
     return isa
 
@@ -65,7 +65,6 @@ class PulpCore(cpu.iss.riscv.RiscvCommon):
         self.add_c_flags([
             "-DPIPELINE_STALL_THRESHOLD=1",
             "-DCONFIG_ISS_CORE=ri5cy",
-            '-DISS_SINGLE_REGFILE=1',
             '-DCONFIG_GVSOC_ISS_NO_MSTATUS_FS=1'
         ])
 
