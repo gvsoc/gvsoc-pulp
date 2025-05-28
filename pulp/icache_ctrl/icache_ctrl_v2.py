@@ -15,6 +15,7 @@
 #
 
 import gvsoc.systree as st
+import gvsoc.systree
 
 class Icache_ctrl(st.Component):
 
@@ -23,3 +24,6 @@ class Icache_ctrl(st.Component):
         super(Icache_ctrl, self).__init__(parent, name)
 
         self.set_component('pulp.icache_ctrl.icache_ctrl_v2_impl')
+
+    def i_INPUT(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'input', signature='io')
