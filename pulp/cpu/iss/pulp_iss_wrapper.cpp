@@ -112,13 +112,6 @@ pulp_iss_wrapper::pulp_iss_wrapper(vp::ComponentConf &config)
 
     if (is_fc)
     {
-    }
-    else
-    {
-    }
-
-    if (is_fc)
-    {
         std::string path = this->get_path();
         iss_resource_declare(&this->iss, path, fpu_base, 1);
         iss_resource_declare(&this->iss, path, fpu_div, 1);
@@ -127,7 +120,8 @@ pulp_iss_wrapper::pulp_iss_wrapper(vp::ComponentConf &config)
     }
     else
     {
-        std::string path = this->get_path();
+        // Share the FPU instances at the cluster level
+        std::string path = this->get_parent()->get_path();
         iss_resource_declare(&this->iss, path, fpu_base, 4);
         iss_resource_declare(&this->iss, path, fpu_div, 1);
         iss_resource_assign_instance(&this->iss, path, fpu_base, core_id % 4);
