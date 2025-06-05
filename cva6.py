@@ -55,8 +55,7 @@ class Soc(st.Component):
         ico.o_MAP(dram.i_INPUT(), name='dram', base=0xB0000000, size=0x10000000, latency=5)
         ico.o_MAP(regs.i_INPUT(), name='control_regs', base=0xD0000000, size=0x10000000)
 
-        host = pulp.cva6.cva6.CVA6(self, 'host', isa='rv64imafdvc', boot_addr=0x80000000,
-            has_vector=True, vlen=4096)
+        host = pulp.cva6.cva6.CVA6(self, 'host', isa='rv64imafdc', boot_addr=0x80000000)
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 
@@ -65,14 +64,13 @@ class Soc(st.Component):
         self.bind(loader, 'out', ico, 'input')
         self.bind(loader, 'start', host, 'fetchen')
 
-        host.o_VLSU(ico.i_INPUT())
 
 
-class AraChip(st.Component):
+class Cva6Chip(st.Component):
 
     def __init__(self, parent, name, parser, options):
 
-        super(AraChip, self).__init__(parent, name, options=options)
+        super(Cva6Chip, self).__init__(parent, name, options=options)
 
         clock = Clock_domain(self, 'clock', frequency=10000000)
 
@@ -83,8 +81,8 @@ class AraChip(st.Component):
 
 class Target(gvsoc.Target):
 
-    gapy_description="Ara virtual board"
+    gapy_description="CVA6 virtual board"
 
     def __init__(self, parser, options):
         super(Target, self).__init__(parser, options,
-            model=AraChip)
+            model=Cva6Chip)
