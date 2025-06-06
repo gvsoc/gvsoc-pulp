@@ -174,6 +174,7 @@ void ClusterRegisters::reset(bool active)
     if (!active)
     {
         this->waiting_cores = 0;
+        this->stall_core = false;
     }
 }
 
