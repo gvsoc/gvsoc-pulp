@@ -14,14 +14,21 @@
 # limitations under the License.
 #
 
-from pulp.chips.carfield.carfield_board import Carfield_board
-import gvsoc.runner as gvsoc
+import gvsoc.systree as st
+from vp.clock_domain import Clock_domain
+from pulp.chips.cheshire.soc import Soc
 
+class Cheshire_board(st.Component):
 
-class Target(gvsoc.Target):
+    def __init__(self, parent, name, parser, options):
+        super(Cheshire_board, self).__init__(parent, name, options=options)
 
-    gapy_description="Carfield virtual board"
+        # Soc clock domain
+        soc_clock = Clock_domain(self, 'soc_clock_domain', frequency=10000000)
 
-    def __init__(self, parser, options):
-        super(Target, self).__init__(parser, options,
-            model=Carfield_board)
+        # SoC
+        soc = Soc(self, 'soc', parser, chip=self)
+
+        # Bindings
+        self.bind(soc_clock, 'out', soc, 'clock')
+        
