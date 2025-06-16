@@ -104,9 +104,9 @@
         },
 
         stdout: {
-            base          : 0x1A10F000,
+            base          : 0x03004000,
             size          : 0x00001000,
-            remove_offset : 0x1A10F000
+            remove_offset : 0x03004000
         }
     },
 
