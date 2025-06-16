@@ -56,7 +56,7 @@ class Soc(st.Component):
         mem = memory.Memory(self, 'mem', size=0x80000000, atomics=True, width_log2=-1)
         
         # Peripherals
-        uart = ns16550.Ns16550(self, 'uart') # FIXME: replace with TI uart
+        uart = ns16550.Ns16550(self, 'uart', offset_shift=2)
         clint = cpu.clint.Clint(self, 'clint')
         plic = cpu.plic.Plic(self, 'plic', ndev=1)
 
