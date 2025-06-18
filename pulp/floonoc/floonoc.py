@@ -234,10 +234,10 @@ class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
         # The total grid contains 1 more node on each direction for the targets
         super().__init__(parent, name, wide_width=wide_width, narrow_width=narrow_width, dim_x=nb_x_clusters+2, dim_y=nb_y_clusters+2, router_input_queue_size=router_input_queue_size, ni_outstanding_reqs=ni_outstanding_reqs)
 
-        for tile_x in range(0, nb_x_clusters):
-            for tile_y in range(0, nb_y_clusters):
+        for tile_x in range(0, nb_x_clusters+2):
+            for tile_y in range(0, nb_y_clusters+2):
                 # Add 1 as clusters, routers and network_interfaces are in the central part
-                self.add_router(tile_x+1, tile_y+1) # Add a router at each cluster
+                self.add_router(tile_x, tile_y) # Add a router at each cluster
         for tile_x in range(0, nb_x_clusters+2):
             for tile_y in range(0, nb_y_clusters+2):
                 # Add a NI at each node, excluding the corners, because it also (once finished) acts as an output to the targets

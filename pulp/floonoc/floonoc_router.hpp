@@ -46,6 +46,10 @@ public:
     // This gets called by the top noc to grant a a request denied by a target
     void grant(vp::IoReq *req);
 
+    // State of the output queues, true if it is stalled and nothing can be sent to it anymore
+    // until it is unstalled.
+    bool stalled_queues[5];
+
 private:
     // FSM event handler called when something happened and queues need to be checked to see
     // if a request should be handled.
@@ -81,7 +85,4 @@ private:
     vp::ClockEvent fsm_event;
     // Current queue where next request will be taken from, used for round-robin
     int current_queue;
-    // State of the output queues, true if it is stalled and nothing can be sent to it anymore
-    // until it is unstalled.
-    bool stalled_queues[5];
 };
