@@ -25,7 +25,10 @@ import pulp.chips.cheshire.cva6.cva6 as cva6
 import pulp.chips.cheshire.soc_regs as soc_regs
 from pulp.stdout.stdout_v3 import Stdout
 from pulp.idma.idma import IDma
-
+import cache.cache as cache
+from pulp.icache_ctrl.icache_ctrl_v2 import Icache_ctrl
+import pulp.gpio.gpio_v3 as gpio_module
+from elftools.elf.elffile import ELFFile
 
 class Soc(st.Component):
 
@@ -50,50 +53,73 @@ class Soc(st.Component):
             binary = args.binary
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
+        
+        entry = 0
+        if binary is not None:
+            # Extract entry point when simulating
+            with open(args.binary, 'rb') as file_desc:
+                elffile = ELFFile(file_desc)
+                entry = elffile['e_entry']
+
+        # Debug ROM
+        debug_rom = memory.Memory(self, 'debug_rom', size=0x00040000, 
+                                  stim_file=self.get_file_path('pulp/chips/pulp/debug_rom.bin'))
 
         # Memory
-        dram = memory.Memory(self, 'dram', size=0x10000000, atomics=True, width_log2=-1)
-        mem = memory.Memory(self, 'mem', size=0x80000000, atomics=True, width_log2=-1)
+        spm = memory.Memory(self, 'spm', size=0x10000000, atomics=True, width_log2=-1)
+        dram = memory.Memory(self, 'dram', size=0x80000000, atomics=True, width_log2=-1)
+        
+        # Last Level Cache (LLC)
+        # TODO: change LLC parameters
+        llc = cache.Cache(self, 'llc', enabled=True, nb_sets_bits=5, nb_ways_bits=2, line_size_bits=6)
+        llc_ctrl = Icache_ctrl(self, 'llc_ctrl')
         
         # Peripherals
         uart = ns16550.Ns16550(self, 'uart', offset_shift=2)
         clint = cpu.clint.Clint(self, 'clint')
         plic = cpu.plic.Plic(self, 'plic', ndev=1)
 
+        # GPIO
+        # TODO: change numbers and connect this
+        # gpio = gpio_module.Gpio(self, 'gpio', nb_gpio=65, soc_event=33)
+
         # SoC Registers
         regs = soc_regs.ControlRegs(self, 'control_regs')
 
         # CVA6 Host
-        host = cva6.CVA6(self, 'host', isa="rv64imafdc", boot_addr=0x80000000)
-
-        # Standard output
-        stdout = Stdout(self, 'stdout')
+        host = cva6.CVA6(self, 'host', isa="rv64imafdc", boot_addr=entry)
 
         # System DMA
-        idma = IDma(self, 'sys_dma')
+        idma = IDma(self, 'idma')
 
         # Narrow 64bits router
-        narrow_axi = router.Router(self, 'narrow_axi', bandwidth=8)
+        narrow_axi = router.Router(self, 'narrow_axi', bandwidth=8, latency=5)
 
         #
         # Bindings
         #
-        
-        # Main components
-        narrow_axi.o_MAP(mem.i_INPUT(), name='mem', base=0x80000000, size=0x80000000, latency=5)        
-        narrow_axi.o_MAP(dram.i_INPUT(), name='dram', base=0xB0000000, size=0x10000000, latency=5)
-        narrow_axi.o_MAP(regs.i_INPUT(), name='control_regs', base=0x03000000, size=0x10000000)
-        narrow_axi.o_MAP(clint.i_INPUT(), name='clint', base=0x02040000, size=0x0010000)
-        narrow_axi.o_MAP(uart.i_INPUT(), name='uart', base=0x03002000, size=0x10000000)
-        narrow_axi.o_MAP(idma.i_INPUT(), name='idma', base=0x01000000, size=0x00010000)
-        narrow_axi.o_MAP(plic.i_INPUT(), name='plic', base=0x04000000, size=0x01000000)
-        # narrow_axi.o_MAP(stdout.i_INPUT(), name='stdout', base=0x03002000, size=0x10000000)
-        
 
+        # Main components
+        narrow_axi.o_MAP(debug_rom.i_INPUT(), name='debug_rom', base=0x00000000, size=0x00040000)
+        narrow_axi.o_MAP(idma.i_INPUT(), name='idma', base=0x01000000, size=0x00010000)
+        narrow_axi.o_MAP(clint.i_INPUT(), name='clint', base=0x02040000, size=0x00400000)
+        narrow_axi.o_MAP(regs.i_INPUT(), name='control_regs', base=0x03000000, size=0x00001000)
+        narrow_axi.o_MAP(llc_ctrl.i_INPUT(), name='llc_ctrl', base=0x03001000, size=0x00001000)
+        narrow_axi.o_MAP(uart.i_INPUT(), name='uart', base=0x03002000, size=0x00001000)
+        narrow_axi.o_MAP(plic.i_INPUT(), name='plic', base=0x04000000, size=0x08000000)
+        narrow_axi.o_MAP(spm.i_INPUT(), name='spm', base=0x10000000, size=0x10000000, latency=5)
+        narrow_axi.o_MAP(dram.i_INPUT(), name='dram', base=0x80000000, size=0x80000000, latency=5)
+        
+        # TODO: LLC bindings quickfix
+        if entry == 0x10000000:
+            # LLC in SPM mode, bypass cache
+            self.bind(host, 'fetch', narrow_axi, 'input')
+        else:
+            # LLC in iCache mode, use cache
+            self.bind(host, 'fetch', llc, 'input')
+            
         # Other binds
         self.bind(host, 'data', narrow_axi, 'input')
-        self.bind(host, 'meminfo', dram, 'meminfo')
-        self.bind(host, 'fetch', narrow_axi, 'input')
         self.bind(loader, 'out', narrow_axi, 'input')
         self.bind(loader, 'start', host, 'fetchen')
         self.bind(host, 'time', clint, 'time')
@@ -102,4 +128,11 @@ class Soc(st.Component):
         self.bind(uart, 'irq', plic, 'irq1')
         self.bind(plic, 's_irq_0', host, 'sei')
         self.bind(plic, 'm_irq_0', host, 'mei')
-        
+        self.bind(host, 'flush_cache_req', llc, 'flush')
+        self.bind(llc, 'flush_ack', host, 'flush_cache_ack')
+        self.bind(llc, 'refill', narrow_axi, 'input')
+        self.bind(llc_ctrl, 'enable', llc, 'enable')
+        self.bind(llc_ctrl, 'flush', llc, 'flush')
+        self.bind(llc_ctrl, 'flush', host, 'flush_cache')
+        self.bind(llc_ctrl, 'flush_line', llc, 'flush_line')
+        self.bind(llc_ctrl, 'flush_line_addr', llc, 'flush_line_addr')
