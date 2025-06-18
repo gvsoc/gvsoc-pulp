@@ -23,6 +23,7 @@
 #pragma once
 
 #include <vp/vp.hpp>
+#include <list>
 
 class FlooNoc;
 

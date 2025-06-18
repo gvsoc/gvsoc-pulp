@@ -85,6 +85,7 @@ vp::IoReqStatus NetworkInterface::narrow_req(vp::Block *__this, vp::IoReq *req)
 {
     NetworkInterface *_this = (NetworkInterface *)__this;
     *req->arg_get(FlooNoc::REQ_WIDE) = (void *)0;
+    *req->arg_get(FlooNoc::REQ_IS_ADDRESS) = (void *)0;
     vp::IoReqStatus result = _this->req(_this, req);
     return result;
 }
@@ -93,6 +94,7 @@ vp::IoReqStatus NetworkInterface::wide_req(vp::Block *__this, vp::IoReq *req)
 {
     NetworkInterface *_this = (NetworkInterface *)__this;
     *req->arg_get(FlooNoc::REQ_WIDE) = (void *)1;
+    *req->arg_get(FlooNoc::REQ_IS_ADDRESS) = (void *)0;
     vp::IoReqStatus result = _this->req(_this, req);
     return result;
 }
@@ -150,6 +152,13 @@ vp::IoReqStatus NetworkInterface::req_from_router(vp::IoReq *req, int pos_x, int
         // Note: Memory is read/written already here. The backward path is only used to get the delay of the network.
         vp::IoReqStatus result = target->req(req);
 
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "-----------------[Addr Req I Got %d]\n", result);
+        if (result == vp::IO_REQ_OK)
+        {
+            NetworkInterface *ni = *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);
+            ni->handle_response(req);
+        }
+
         if(!burst->get_is_write()){
             // If the burst is a read burst, we need to send the data back to the origin
             // For a write nothing needs to be done. The sending NI will take care of it
@@ -181,7 +190,7 @@ vp::IoReqStatus NetworkInterface::req_from_router(vp::IoReq *req, int pos_x, int
 void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 {
     NetworkInterface *_this = (NetworkInterface *)__this;
-    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "fsm handler invoked\n");
+    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "fsm handler invoked | status: pending_bursts_size = %d \n", _this->pending_bursts.size());
     if (!_this->stalled){
         // Check if there is a pending burst to process
         if(_this->pending_bursts.size() > 0){
@@ -191,6 +200,7 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             }
             else {
                 _this->handle_data_req();
+                _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Check Point 5\n");
             }
         }
         else {
@@ -209,10 +219,28 @@ void NetworkInterface::remove_pending_burst(void){
     this->pending_bursts_timestamp.pop();
     this->pending_bursts_origin_pos.pop();
 
-    if (this->pending_bursts.size() == this->ni_outstanding_reqs - 1){
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "NI remove_pending_burst |  status: pending_bursts_size = %d (max = %d)\n", this->pending_bursts.size(), this->ni_outstanding_reqs);
+
+    if (this->pending_bursts.size() <= this->ni_outstanding_reqs - 1){
         // If we removed a pending burst and the number of pending bursts was the maximum, notify the local router that it can send another request
-        Router *lrouter = this->noc->get_req_router(this->x, this->y);
-        lrouter->unstall_queue(this->x, this->y);
+        Router *req_router = this->noc->get_req_router(this->x, this->y);
+        Router *wide_router = this->noc->get_wide_router(this->x, this->y);
+        Router *rsp_router = this->noc->get_wide_router(this->x, this->y);
+        if (req_router->stalled_queues[4])
+        {
+            this->trace.msg(vp::Trace::LEVEL_TRACE, "NI Unstalling Req Router (%d, %d)\n", this->x, this->y);
+            req_router->unstall_queue(this->x, this->y);
+        } else
+        if (wide_router->stalled_queues[4])
+        {
+            this->trace.msg(vp::Trace::LEVEL_TRACE, "NI Unstalling Wide Router (%d, %d)\n", this->x, this->y);
+            wide_router->unstall_queue(this->x, this->y);
+        } else
+        if (rsp_router->stalled_queues[4])
+        {
+            this->trace.msg(vp::Trace::LEVEL_TRACE, "NI Unstalling Rsp Router (%d, %d)\n", this->x, this->y);
+            rsp_router->unstall_queue(this->x, this->y);
+        }
     }
 
     // We also have to check if another burst has been denied that can now be granted
@@ -390,9 +418,16 @@ void NetworkInterface::handle_data_req(void){
     // Note that the router may not grant the request if its input queue is full.
     // In this case we must stall the network interface
 
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Check Point 1. get router (int x=%d, int y=%d, bool is_wide=%d, bool is_write=%d, bool is_address=%d)\n",
+        this->x, this->y, wide, req->get_is_write(), 0);
+
     Router *router = this->noc->get_router(this->x, this->y, wide, req->get_is_write(), false);
 
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Check Point 2, router: 0x%lx, req: 0x%lx\n",router, req);
+
     this->stalled = router->handle_request(req, this->x, this->y);
+
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Check Point 3\n");
     if (this->stalled)
     {
         this->trace.msg(vp::Trace::LEVEL_TRACE, "Stalling network interface (position: (%d, %d))\n", this->x, this->y);
@@ -400,6 +435,7 @@ void NetworkInterface::handle_data_req(void){
 
     // Check in next cycle if there is something to do
     this->fsm_event.enqueue();
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Check Point 4\n");
 }
 
 
@@ -417,16 +453,36 @@ void NetworkInterface::handle_response(vp::IoReq *req)
         burst->status = vp::IO_REQ_INVALID;
     }
 
-    this->trace.msg(vp::Trace::LEVEL_TRACE, "Reducing remaining size of burst (burst: %p, size: %d, req: %p, size %d)\n",
-                    burst, *(int *)burst->arg_get_last(), req, req->get_size());
-    // Account the received response on the burst
-    *(int *)burst->arg_get_last() -= req->get_size();
-    // And respond to it if all responses have been received
-    if (*(int *)burst->arg_get_last() == 0)
+    if (req->get_int(FlooNoc::REQ_IS_ADDRESS))
     {
-        this->trace.msg(vp::Trace::LEVEL_DEBUG, "Finished %s burst (burst: %p, latency: %d)\n", burst->get_int(FlooNoc::REQ_WIDE) ? "wide" : "narrow", burst, burst->get_latency());
-        burst->get_resp_port()->resp(burst);
+        burst->set_int(FlooNoc::REQ_IS_ADDRESS, burst->get_int(FlooNoc::REQ_IS_ADDRESS) + 1);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "-------------------------[Addr Phase Completed] ------------------------\n");
+        if (burst->get_int(FlooNoc::REQ_IS_ADDRESS) == 2)
+        {
+            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Finished %s burst (burst: %p, latency: %d, phase: %d)\n", burst->get_int(FlooNoc::REQ_WIDE) ? "wide" : "narrow", burst, burst->get_latency(), burst->get_int(FlooNoc::REQ_IS_ADDRESS));
+            burst->get_resp_port()->resp(burst);
+        }
     }
+    else
+    {
+        this->trace.msg(vp::Trace::LEVEL_TRACE, "Reducing remaining size of burst (burst: %p, size: %d, req: %p, size %d)\n",
+                        burst, *(int *)burst->arg_get_last(), req, req->get_size());
+        // Account the received response on the burst
+        *(int *)burst->arg_get_last() -= req->get_size();
+        // And respond to it if all responses have been received
+        if (*(int *)burst->arg_get_last() == 0)
+        {
+            burst->set_int(FlooNoc::REQ_IS_ADDRESS, burst->get_int(FlooNoc::REQ_IS_ADDRESS) + 1);
+            this->trace.msg(vp::Trace::LEVEL_DEBUG, "-------------------------[Data Phase Completed] ------------------------\n");
+            if (burst->get_int(FlooNoc::REQ_IS_ADDRESS) == 2)
+            {
+                this->trace.msg(vp::Trace::LEVEL_DEBUG, "Finished %s burst (burst: %p, phase: %d)\n", burst->get_int(FlooNoc::REQ_WIDE) ? "wide" : "narrow", burst, burst->get_int(FlooNoc::REQ_IS_ADDRESS));
+                burst->get_resp_port()->resp(burst);
+            }
+        }
+    }
+
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "-------------------------[Delete Req] ------------------------\n");
     // Delete the request since we don't need it anymore
     delete req;
     // Trigger the FSM since something may need to be done now that a new request is available
