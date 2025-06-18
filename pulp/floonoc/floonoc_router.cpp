@@ -49,8 +49,9 @@ Router::Router(FlooNoc *noc, std::string name, int x, int y, int queue_size)
 
 bool Router::handle_request(vp::IoReq *req, int from_x, int from_y)
 {
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Check Point a1\n");
     this->trace.msg(vp::Trace::LEVEL_DEBUG, "Handle request (req: %p, base: 0x%x, size: 0x%x, from: (%d, %d)\n", req, req->get_addr(), req->get_size(), from_x, from_y);
-
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Check Point a2\n");
     // Each direction has its own input queue to properly implement the round-robin
     // Get the one for the router or network interface which sent this request
     int queue_index = this->get_req_queue(from_x, from_y);
@@ -64,6 +65,7 @@ bool Router::handle_request(vp::IoReq *req, int from_x, int from_y)
     // We let the source enqueue one more request than what is possible to model the fact the fact
     // the request is stalled. This will then stall the source which will not send any request there
     // anymore until we unstall it
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Check Point a3\n");
     return queue->size() > this->queue_size;
 }
 
@@ -190,7 +192,10 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         }
         else
         {
-            queue->trigger_next(); // This might actually not do anything because the queue is empty
+            if (queue->size())
+            {
+               _this->fsm_event.enqueue();
+            }
         }
 
         // Go to next input queue
@@ -200,6 +205,9 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             in_queue_index = 0;
         }
     }
+
+
+    _this->trace.msg(vp::Trace::LEVEL_TRACE, "fsm_handler exit \n");
 }
 
 void Router::unstall_previous(vp::IoReq *req, int in_queue_index)

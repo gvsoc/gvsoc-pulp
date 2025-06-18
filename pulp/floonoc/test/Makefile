@@ -4,7 +4,7 @@ clean:
 	make -C ../../../.. TARGETS=test MODULES=$(CURDIR) clean
 
 build:
-	make -C ../../../.. TARGETS=test MODULES=$(CURDIR) build
+	make -C ../../../.. TARGETS=test MODULES=$(CURDIR) build DEBUG=1
 
 all: build
 
