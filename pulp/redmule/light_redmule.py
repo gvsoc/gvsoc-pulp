@@ -50,8 +50,34 @@ class LightRedmule(gvsoc.systree.Component):
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')
 
-    def i_CORE_ACC(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'core_acc', signature='io')
+    def i_OFFLOAD(self) -> gvsoc.systree.SlaveItf:
+        """Returns the offload port.
+
+        This is used by the core to offload instructions.\n
+
+        Returns
+        ----------
+        gvsoc.systree.SlaveItf
+            The slave interface
+        """
+        return gvsoc.systree.SlaveItf(self, 'offload', signature='wire<IssOffloadInsn<uint32_t>*>')
+
+    def o_OFFLOAD_GRANT(self, itf: gvsoc.systree.SlaveItf):
+        """Binds the offload grant port.
+
+        This port is used for granting instruction which was previously blocked because
+        the queue was full.\n
+
+        Parameters
+        ----------
+        slave: gvsoc.systree.SlaveItf
+            Slave interface
+        """
+        self.itf_bind('offload_grant', itf, signature='wire<IssOffloadInsnGrant<uint32_t>*>')
+
+
+    # def i_CORE_ACC(self) -> gvsoc.systree.SlaveItf:
+    #     return gvsoc.systree.SlaveItf(self, 'core_acc', signature='io')
 
     def o_TCDM(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('tcdm', itf, signature='io')

@@ -81,7 +81,8 @@ class MagiaTile(gvsoc.systree.Component):
 
         # Redmule
         redmule_nb_banks = MagiaArch.N_MEM_BANKS
-        redmule_bank_size = MagiaArch.N_WORDS_BANK * MagiaArch.BYTES_PER_WORD
+        #redmule_bank_size = MagiaArch.N_WORDS_BANK * MagiaArch.BYTES_PER_WORD
+        redmule_bank_size = MagiaArch.BYTES_PER_WORD
         #these parameters are taken from flex_cluster...
         redmule_ce_height       = 128
         redmule_ce_width        = 32
@@ -139,11 +140,13 @@ class MagiaTile(gvsoc.systree.Component):
         self.__o_FETCHEN(core_cv32.i_FETCHEN())
 
         # Bind: redmule
-        redmule.o_TCDM(l1_tcdm.i_INPUT(1))
+        redmule.o_TCDM(l1_tcdm.i_INPUT(0))
+        core_cv32.o_OFFLOAD(redmule.i_OFFLOAD())
+        redmule.o_OFFLOAD_GRANT(core_cv32.i_OFFLOAD_GRANT())
 
         # Bind: idma
-        core_cv32.o_OFFLOAD(idma.i_OFFLOAD())
-        idma.o_OFFLOAD_GRANT(core_cv32.i_OFFLOAD_GRANT())
+        # core_cv32.o_OFFLOAD(idma.i_OFFLOAD())
+        # idma.o_OFFLOAD_GRANT(core_cv32.i_OFFLOAD_GRANT())
         idma.o_AXI(tile_xbar.i_INPUT())
         idma.o_TCDM(l1_tcdm.i_INPUT(2))
 

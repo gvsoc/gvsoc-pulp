@@ -35,6 +35,8 @@
 #include <stdio.h>
 #include <math.h>
 
+#include <cpu/iss/include/offload.hpp>
+
 /****************************************************
 *                   Type Definition                 *
 ****************************************************/
@@ -91,9 +93,12 @@ class LightRedmule : public vp::Component
 public:
     LightRedmule(vp::ComponentConf &config);
 
-// private:
+// private: ? why not private?????
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
-    static vp::IoReqStatus core_acc_req(vp::Block *__this, vp::IoReq *req);
+    //static vp::IoReqStatus core_acc_req(vp::Block *__this, vp::IoReq *req);
+    // Method for offload interface, called when the core is offloading an instruction
+    static void offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *insn);
+    //static void offload_grant(vp::Block *__this, IssOffloadInsnGrant<iss_reg_t> *result);
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
 
     vp::IoReqStatus send_tcdm_req();
@@ -113,7 +118,13 @@ public:
 
     vp::Trace           trace;
     vp::IoSlave         input_itf;
-    vp::IoSlave         core_acc_itf;
+    //vp::IoSlave         core_acc_itf;
+    // Interface from which the instructions are received from the core
+    vp::WireSlave<IssOffloadInsn<uint32_t> *> offload_itf;
+    // Interface for granting previously stalled redmule offload
+    vp::WireMaster<IssOffloadInsnGrant<uint32_t> *> offload_grant_itf;
+    bool offload_stalled;
+
     vp::IoMaster        tcdm_itf;
 
     //redmule fsm
@@ -208,10 +219,19 @@ LightRedmule::LightRedmule(vp::ComponentConf &config)
     //Initialize interface
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
     this->input_itf.set_req_meth(&LightRedmule::req);
-    this->core_acc_itf.set_req_meth(&LightRedmule::core_acc_req);
+    //this->core_acc_itf.set_req_meth(&LightRedmule::core_acc_req);
     this->new_slave_port("input", &this->input_itf);
-    this->new_slave_port("core_acc", &this->core_acc_itf);
+    //this->new_slave_port("core_acc", &this->core_acc_itf);
     this->new_master_port("tcdm", &this->tcdm_itf);
+
+    // Declare offload slave interface where instructions will be offloaded
+    this->offload_itf.set_sync_meth(&LightRedmule::offload_sync);
+    this->new_slave_port("offload", &this->offload_itf, this);
+
+    // Declare offload master interface for granting blocked transfers
+    //this->offload_grant_itf.set_sync_meth(&LightRedmule::offload_grant);
+    this->new_master_port("offload_grant", &this->offload_grant_itf, this);
+    this->offload_stalled=false;
     
     
     //Initialize configuration
@@ -759,65 +779,137 @@ uint32_t LightRedmule::get_redmule_array_runtime(){
     return runtime_pices * runtime_unit;
 }
 
-vp::IoReqStatus LightRedmule::core_acc_req(vp::Block *__this, vp::IoReq *req)
+// vp::IoReqStatus LightRedmule::core_acc_req(vp::Block *__this, vp::IoReq *req)
+// {
+//     LightRedmule *_this = (LightRedmule *)__this;
+
+//     uint64_t offset = req->get_addr();
+//     uint64_t size = req->get_size();
+//     bool is_write = req->get_is_write();
+
+//     if (offset == 0) //MNK configuraion
+//     {
+//         if (_this->state.get() == IDLE)
+//         {
+//             uint16_t * mnk_list_array = (uint16_t *)req->get_data();
+//             _this->m_size = mnk_list_array[0];
+//             _this->n_size = mnk_list_array[1];
+//             _this->k_size = mnk_list_array[2];
+//             _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set MNK addr: %d, %d, %d)\n", _this->m_size, _this->n_size, _this->k_size);
+//         }
+//     } else
+//     if (offset == 4) //XWY configuration and trigger
+//     {
+//         if (_this->state.get() == IDLE)
+//         {
+//              uint32_t * xwy_list_array = (uint32_t *)req->get_data();
+//             _this->x_addr = xwy_list_array[0];
+//             _this->w_addr = xwy_list_array[1];
+//             _this->y_addr = xwy_list_array[2];
+//             _this->z_addr = _this->y_addr;
+//             _this->compute_able = xwy_list_array[3];
+//             _this->elem_size = (_this->compute_able < 4)? 2:1;
+//             _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set XWY addr: %d, %d, %d)\n", _this->x_addr, _this->w_addr, _this->y_addr);
+
+//             /*************************
+//             *  Asynchronize Trigger  *
+//             *************************/
+//             //Sanity Check
+//             _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] redmule configuration (M-N-K): %d, %d, %d\n", _this->m_size, _this->n_size, _this->k_size);
+//             if ((_this->m_size == 0)||(_this->n_size == 0)||(_this->k_size == 0))
+//             {
+//                 _this->trace.fatal("[LightRedmule] INVALID redmule configuration (M-N-K): %d, %d, %d\n", _this->m_size, _this->n_size, _this->k_size);
+//                 return vp::IO_REQ_OK;
+//             }
+
+//             //Initilaize redmule meta data
+//             _this->init_redmule_meta_data();
+
+//             //Trigger FSM
+//             _this->state.set(PRELOAD);
+//             _this->tcdm_block_total = _this->get_preload_access_block_number();
+//             _this->fsm_counter      = 0;
+//             _this->fsm_timestamp    = 0;
+//             _this->timer_start      = _this->time.get_time();
+//             _this->cycle_start      = _this->clock.get_cycles();
+//             _this->event_enqueue(_this->fsm_event, 1);
+//         }
+
+//     }
+
+//     return vp::IO_REQ_OK;
+// }
+
+void LightRedmule::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *insn)
 {
     LightRedmule *_this = (LightRedmule *)__this;
+    uint32_t opc = insn->opcode & 0x7F;
 
-    uint64_t offset = req->get_addr();
-    uint64_t size = req->get_size();
-    bool is_write = req->get_is_write();
-
-    if (offset == 0) //MNK configuraion
+    switch (opc)
     {
-        if (_this->state.get() == IDLE)
+        case 0b1110011: //CSRRS
         {
-            uint16_t * mnk_list_array = (uint16_t *)req->get_data();
-            _this->m_size = mnk_list_array[0];
-            _this->n_size = mnk_list_array[1];
-            _this->k_size = mnk_list_array[2];
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set MNK addr: %d, %d, %d)\n", _this->m_size, _this->n_size, _this->k_size);
+
         }
-    } else
-    if (offset == 4) //XWY configuration and trigger
-    {
-        if (_this->state.get() == IDLE)
+        case 0b0001011:
         {
-             uint32_t * xwy_list_array = (uint32_t *)req->get_data();
-            _this->x_addr = xwy_list_array[0];
-            _this->w_addr = xwy_list_array[1];
-            _this->y_addr = xwy_list_array[2];
-            _this->z_addr = _this->y_addr;
-            _this->compute_able = xwy_list_array[3];
-            _this->elem_size = (_this->compute_able < 4)? 2:1;
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set XWY addr: %d, %d, %d)\n", _this->x_addr, _this->w_addr, _this->y_addr);
-
-            /*************************
-            *  Asynchronize Trigger  *
-            *************************/
-            //Sanity Check
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] redmule configuration (M-N-K): %d, %d, %d\n", _this->m_size, _this->n_size, _this->k_size);
-            if ((_this->m_size == 0)||(_this->n_size == 0)||(_this->k_size == 0))
-            {
-                _this->trace.fatal("[LightRedmule] INVALID redmule configuration (M-N-K): %d, %d, %d\n", _this->m_size, _this->n_size, _this->k_size);
-                return vp::IO_REQ_OK;
+            if (_this->state.get() == IDLE) {
+                insn->granted = true;
+                _this->m_size = insn->arg_a & 0xFFFF;
+                _this->n_size = insn->arg_b;
+                _this->k_size = (insn->arg_a) >> 16;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set MNK size: %d, %d, %d\n", _this->m_size, _this->n_size, _this->k_size);
             }
-
-            //Initilaize redmule meta data
-            _this->init_redmule_meta_data();
-
-            //Trigger FSM
-            _this->state.set(PRELOAD);
-            _this->tcdm_block_total = _this->get_preload_access_block_number();
-            _this->fsm_counter      = 0;
-            _this->fsm_timestamp    = 0;
-            _this->timer_start      = _this->time.get_time();
-            _this->cycle_start      = _this->clock.get_cycles();
-            _this->event_enqueue(_this->fsm_event, 1);
+            else {
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] GRANT DEASSERTED\n");
+                insn->granted = false;
+                _this->offload_stalled=true;
+            }
+            break;
         }
+        case 0b0101011:
+        {
+            if (_this->state.get() == IDLE)
+            {
+                insn->granted = true;
+                _this->x_addr = insn->arg_a;
+                _this->w_addr = insn->arg_b;
+                _this->y_addr = insn->arg_c;
+                _this->z_addr = _this->y_addr;
+                _this->compute_able = insn->arg_d;
+                _this->elem_size = (_this->compute_able < 4)? 2:1;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set XWY addr: %d, %d, %d\n", _this->x_addr, _this->w_addr, _this->y_addr);
 
+                /*************************
+                *  Asynchronize Trigger  *
+                *************************/
+                //Sanity Check
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] redmule configuration (M-N-K): %d, %d, %d\n", _this->m_size, _this->n_size, _this->k_size);
+                if ((_this->m_size == 0)||(_this->n_size == 0)||(_this->k_size == 0))
+                {
+                    _this->trace.fatal("[LightRedmule] INVALID redmule configuration (M-N-K): %d, %d, %d\n", _this->m_size, _this->n_size, _this->k_size);
+                }
+
+                //Initilaize redmule meta data
+                _this->init_redmule_meta_data();
+
+                //Trigger FSM
+                _this->state.set(PRELOAD);
+                _this->tcdm_block_total = _this->get_preload_access_block_number();
+                _this->fsm_counter      = 0;
+                _this->fsm_timestamp    = 0;
+                _this->timer_start      = _this->time.get_time();
+                _this->cycle_start      = _this->clock.get_cycles();
+                _this->event_enqueue(_this->fsm_event, 1);
+            }
+            else {
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] GRANT DEASSERTED\n");
+                insn->granted = false; 
+                _this->offload_stalled=true;
+            }
+            break;
+        }
     }
-
-    return vp::IO_REQ_OK;
 }
 
 vp::IoReqStatus LightRedmule::req(vp::Block *__this, vp::IoReq *req)
@@ -1179,8 +1271,19 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             //Reply Stalled Query
             if (_this->redmule_query == NULL)
             {
-                _this->state.set(FINISHED);
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][FINISHED] Waiting for query!\n");
+                //_this->state.set(FINISHED); //ZL-MOD
+                _this->state.set(IDLE);
+                if (_this->offload_stalled) {
+                    _this->offload_stalled = false;
+                    IssOffloadInsnGrant<uint32_t> offload_grant = {
+                        .result=0x1
+                    };
+                    _this->offload_grant_itf.sync(&offload_grant);
+                    _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][FINISHED] GRANT core and Wait for query!\n");
+                }
+                else {
+                    _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][FINISHED] Waiting for query!\n");
+                }
             } else {
                 _this->state.set(ACKNOWLEDGE);
             }
