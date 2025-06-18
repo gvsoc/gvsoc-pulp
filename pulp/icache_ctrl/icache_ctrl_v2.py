@@ -14,10 +14,9 @@
 # limitations under the License.
 #
 
-import gvsoc.systree as st
 import gvsoc.systree
 
-class Icache_ctrl(st.Component):
+class Icache_ctrl(gvsoc.systree.Component):
 
     def __init__(self, parent, name):
 
