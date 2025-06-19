@@ -27,3 +27,7 @@ class MagiaArch:
     # Extra
     BYTES_PER_WORD      = 4
     TILE_CLK_FREQ       = 50 * (10 ** 6)
+
+    N_TILES_X           = 2
+    N_TILES_Y           = 2
+    NB_CLUSTERS         = N_TILES_X*N_TILES_Y

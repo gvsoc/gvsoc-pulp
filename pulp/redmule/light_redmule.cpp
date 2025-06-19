@@ -847,10 +847,6 @@ void LightRedmule::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
 
     switch (opc)
     {
-        case 0b1110011: //CSRRS
-        {
-
-        }
         case 0b0001011:
         {
             if (_this->state.get() == IDLE) {
@@ -867,7 +863,7 @@ void LightRedmule::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
             }
             break;
         }
-        case 0b0101011:
+        case 0b1101011:
         {
             if (_this->state.get() == IDLE)
             {
@@ -878,7 +874,7 @@ void LightRedmule::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
                 _this->z_addr = _this->y_addr;
                 _this->compute_able = insn->arg_d;
                 _this->elem_size = (_this->compute_able < 4)? 2:1;
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set XWY addr: %d, %d, %d\n", _this->x_addr, _this->w_addr, _this->y_addr);
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set XWY addr: 0x%08x, 0x%08x, 0x%08x\n", _this->x_addr, _this->w_addr, _this->y_addr);
 
                 /*************************
                 *  Asynchronize Trigger  *

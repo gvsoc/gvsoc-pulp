@@ -26,7 +26,8 @@ class MagiaSoc(gvsoc.systree.Component):
     def __init__(self, parent, name, parser, binary):
         super().__init__(parent, name)
 
-        loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
+        loader_t0 = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
+        #loader_t1 = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 
         # Single clock domain
         clock = vp.clock_domain.Clock_domain(self, 'tile-clock',
@@ -37,11 +38,17 @@ class MagiaSoc(gvsoc.systree.Component):
         l2_mem = memory.memory.Memory(self, 'test-mem', size=MagiaArch.L2_SIZE)
 
         # Single tile
-        tile = MagiaTile(self, 'magia-tile', parser, tid=0)
+        t0 = MagiaTile(self, 'magia-tile-0', parser, tid=0)
+        #t1 = MagiaTile(self, 'magia-tile-1', parser, tid=1)
 
         # Bindings
-        tile.o_XBAR(l2_mem.i_INPUT())
+        t0.o_XBAR(l2_mem.i_INPUT())
+        #t1.o_XBAR(l2_mem.i_INPUT())
 
-        loader.o_OUT(tile.i_LOADER())
-        loader.o_START(tile.i_FETCHEN())
-        loader.o_ENTRY(tile.i_ENTRY())
+        loader_t0.o_OUT(t0.i_LOADER())
+        loader_t0.o_START(t0.i_FETCHEN())
+        loader_t0.o_ENTRY(t0.i_ENTRY())
+
+        #loader_t1.o_OUT(t1.i_LOADER())
+        #loader_t1.o_START(t1.i_FETCHEN())
+        #loader_t1.o_ENTRY(t1.i_ENTRY())

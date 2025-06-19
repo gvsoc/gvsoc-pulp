@@ -27,6 +27,7 @@ from pulp.chips.magia_base.magia_arch import MagiaArch
 from pulp.chips.magia_base.magia_core import CV32CoreTest
 from pulp.redmule.light_redmule import LightRedmule
 from pulp.idma.snitch_dma import SnitchDma
+from pulp.xif_decoder.xif_decoder import XifDecoder
 
 
 # adapted from snitch cluster model
@@ -79,6 +80,9 @@ class MagiaTile(gvsoc.systree.Component):
         tile_xbar = router.Router(self, f'tile-{tid}-tile-xbar')
         obi_xbar = router.Router(self, f'tile-{tid}-obi-xbar')
 
+        # IDMA
+        idma = SnitchDma(self,f'tile-{tid}-idma',loc_base=MagiaArch.L1_ADDR_START+(MagiaArch.L1_TILE_OFFSET*tid),loc_size=MagiaArch.L1_SIZE,tcdm_width=4)
+
         # Redmule
         redmule_nb_banks = MagiaArch.N_MEM_BANKS
         #redmule_bank_size = MagiaArch.N_WORDS_BANK * MagiaArch.BYTES_PER_WORD
@@ -98,8 +102,8 @@ class MagiaTile(gvsoc.systree.Component):
                                     ce_pipe             = redmule_ce_pipe,
                                     queue_depth         = redmule_queue_depth)
         
-        # IDMA
-        idma = SnitchDma(self,f'tile-{tid}-idma',loc_base=MagiaArch.L1_ADDR_START,loc_size=MagiaArch.L1_SIZE,tcdm_width=4)
+        # Xif decoder
+        xifdec = XifDecoder(self,f'tile-{tid}-xifdec')
 
         # Bind: cv32 core data -> obi interconnect
         core_cv32.o_DATA(obi_xbar.i_INPUT())
@@ -118,13 +122,13 @@ class MagiaTile(gvsoc.systree.Component):
 
         # Bind: obi interconnect -> L1 TCDM, L2 off-tile (through tile_xbar)
         obi_xbar.o_MAP(l1_tcdm.i_INPUT(0), name="reserved",
-                       base=MagiaArch.RESERVED_ADDR_START,
+                       base=MagiaArch.RESERVED_ADDR_START+(MagiaArch.L1_TILE_OFFSET*tid),
                        size=MagiaArch.RESERVED_SIZE, rm_base=False)
         obi_xbar.o_MAP(l1_tcdm.i_INPUT(0), name="stack",
-                       base=MagiaArch.STACK_ADDR_START,
+                       base=MagiaArch.STACK_ADDR_START+(MagiaArch.L1_TILE_OFFSET*tid),
                        size=MagiaArch.STACK_SIZE, rm_base=False)
         obi_xbar.o_MAP(l1_tcdm.i_INPUT(0), name="local-scratchpad",
-                       base=MagiaArch.L1_ADDR_START,
+                       base=MagiaArch.L1_ADDR_START+(MagiaArch.L1_TILE_OFFSET*tid),
                        size=MagiaArch.L1_SIZE, rm_base=False)
         obi_xbar.o_MAP(tile_xbar.i_INPUT(), name="off-tile-mem",
                        base=MagiaArch.L2_ADDR_START,
@@ -139,16 +143,20 @@ class MagiaTile(gvsoc.systree.Component):
         self.__o_ENTRY(core_cv32.i_ENTRY())
         self.__o_FETCHEN(core_cv32.i_FETCHEN())
 
-        # Bind: redmule
-        redmule.o_TCDM(l1_tcdm.i_INPUT(0))
-        core_cv32.o_OFFLOAD(redmule.i_OFFLOAD())
-        redmule.o_OFFLOAD_GRANT(core_cv32.i_OFFLOAD_GRANT())
+        # Bind: xif decoder
+        core_cv32.o_OFFLOAD(xifdec.i_OFFLOAD_M())
+        xifdec.o_OFFLOAD_GRANT_M(core_cv32.i_OFFLOAD_GRANT())
 
         # Bind: idma
-        # core_cv32.o_OFFLOAD(idma.i_OFFLOAD())
-        # idma.o_OFFLOAD_GRANT(core_cv32.i_OFFLOAD_GRANT())
         idma.o_AXI(tile_xbar.i_INPUT())
-        idma.o_TCDM(l1_tcdm.i_INPUT(2))
+        idma.o_TCDM(l1_tcdm.i_INPUT(0))
+        xifdec.o_OFFLOAD_S1(idma.i_OFFLOAD())
+        idma.o_OFFLOAD_GRANT(xifdec.i_OFFLOAD_GRANT_S1())
+
+        # Bind: redmule
+        redmule.o_TCDM(l1_tcdm.i_INPUT(0))
+        xifdec.o_OFFLOAD_S2(redmule.i_OFFLOAD())
+        redmule.o_OFFLOAD_GRANT(xifdec.i_OFFLOAD_GRANT_S2())
 
         # Enable debug
         gdbserver.gdbserver.Gdbserver(self, 'gdbserver')

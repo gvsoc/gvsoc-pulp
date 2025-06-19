@@ -46,5 +46,5 @@ class Rv32redmule(IsaSubset):
     def __init__(self):
         super().__init__(name='redmule', instrs=[
             Instr('mcnfig',    Format_R     ,'0000000 ----- ----- 000 00000 0001011'),
-            Instr('marith',    Format_MARITH,'-----00 ----- ----- --- ----- 0101011'),
+            Instr('marith',    Format_MARITH,'-----00 ----- ----- --- ----- 1101011'),
         ])
