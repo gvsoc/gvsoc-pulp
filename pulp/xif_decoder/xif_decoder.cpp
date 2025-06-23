@@ -84,6 +84,8 @@ void XifDecoder::grant_sync_s1(vp::Block *__this, IssOffloadInsnGrant<uint32_t> 
 
     XifDecoder *_this = (XifDecoder *)__this;
 
+    _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received GRANT from iDMA\n");
+
     _this->offload_grant_itf_m.sync(result);
 }
 

@@ -68,7 +68,7 @@ class MagiaTile(gvsoc.systree.Component):
         super().__init__(parent, name)
 
         # Core model from pulp cores
-        core_cv32 = CV32CoreTest(self, f'tile-{tid}-cv32-core')
+        core_cv32 = CV32CoreTest(self, f'tile-{tid}-cv32-core',core_id=tid)
 
         # Instruction cache (from snitch cluster model)
         i_cache = Hierarchical_cache(self, f'tile-{tid}-icache', nb_cores=1, has_cc=0)
@@ -81,7 +81,7 @@ class MagiaTile(gvsoc.systree.Component):
         obi_xbar = router.Router(self, f'tile-{tid}-obi-xbar')
 
         # IDMA
-        idma = SnitchDma(self,f'tile-{tid}-idma',loc_base=MagiaArch.L1_ADDR_START+(MagiaArch.L1_TILE_OFFSET*tid),loc_size=MagiaArch.L1_SIZE,tcdm_width=4)
+        idma = SnitchDma(self,f'tile-{tid}-idma',loc_base=MagiaArch.L1_ADDR_START,loc_size=MagiaArch.L1_SIZE,tcdm_width=4)
 
         # Redmule
         redmule_nb_banks = MagiaArch.N_MEM_BANKS
@@ -122,13 +122,13 @@ class MagiaTile(gvsoc.systree.Component):
 
         # Bind: obi interconnect -> L1 TCDM, L2 off-tile (through tile_xbar)
         obi_xbar.o_MAP(l1_tcdm.i_INPUT(0), name="reserved",
-                       base=MagiaArch.RESERVED_ADDR_START+(MagiaArch.L1_TILE_OFFSET*tid),
+                       base=MagiaArch.RESERVED_ADDR_START,
                        size=MagiaArch.RESERVED_SIZE, rm_base=False)
         obi_xbar.o_MAP(l1_tcdm.i_INPUT(0), name="stack",
-                       base=MagiaArch.STACK_ADDR_START+(MagiaArch.L1_TILE_OFFSET*tid),
+                       base=MagiaArch.STACK_ADDR_START,
                        size=MagiaArch.STACK_SIZE, rm_base=False)
         obi_xbar.o_MAP(l1_tcdm.i_INPUT(0), name="local-scratchpad",
-                       base=MagiaArch.L1_ADDR_START+(MagiaArch.L1_TILE_OFFSET*tid),
+                       base=MagiaArch.L1_ADDR_START,
                        size=MagiaArch.L1_SIZE, rm_base=False)
         obi_xbar.o_MAP(tile_xbar.i_INPUT(), name="off-tile-mem",
                        base=MagiaArch.L2_ADDR_START,
