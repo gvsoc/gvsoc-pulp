@@ -135,9 +135,11 @@ class MagiaTile(gvsoc.systree.Component):
                        size=MagiaArch.L2_SIZE, rm_base=False)
 
         # Bind (with address relocation): tile interconnect -> L2 off-tile
-        tile_xbar.o_MAP(self.__i_XBAR(), name="off-tile-mem",
+        tile_xbar.o_MAP(self.__i_NARROW_OUTPUT(), name="off-tile-mem",
                         base=MagiaArch.L2_ADDR_START,
                         size=MagiaArch.L2_SIZE, rm_base=True)
+        
+        #self.__o_NARROW_INPUT(tile_xbar.i_INPUT()) #lets disable the ports to other clusters for now..
 
         # Bind: cv32 core enable ports -> matching composite ports
         self.__o_ENTRY(core_cv32.i_ENTRY())
@@ -162,11 +164,18 @@ class MagiaTile(gvsoc.systree.Component):
         gdbserver.gdbserver.Gdbserver(self, 'gdbserver')
 
     # Output (master) port to off-tile L2 memory
-    def o_XBAR(self, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind('xbar', itf, signature='io')
+    def o_NARROW_OUTPUT(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('narrow_output', itf, signature='io')
 
-    def __i_XBAR(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'xbar', signature='io')
+    def __i_NARROW_OUTPUT(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'narrow_output', signature='io')
+    
+    # Narrow router for cores data accesses
+    # def i_NARROW_INPUT(self) -> gvsoc.systree.SlaveItf:
+    #     return gvsoc.systree.SlaveItf(self, 'narrow_input', signature='io')
+
+    # def __o_NARROW_INPUT(self, itf: gvsoc.systree.SlaveItf):
+    #     self.itf_bind('narrow_input', itf, signature='io', composite_bind=True)
 
     # Input port for the loader
     def i_LOADER(self) -> gvsoc.systree.SlaveItf:
