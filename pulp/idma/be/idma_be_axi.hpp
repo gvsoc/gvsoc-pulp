@@ -21,10 +21,16 @@
 #pragma once
 
 #include <vector>
+#include <list>
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 #include "../idma.hpp"
 #include "idma_be.hpp"
+
+typedef struct IDmaBeAxiWriteBurstInfo {
+    uint64_t base;
+    uint64_t size;
+} IDmaBeAxiWriteBurstInfo;
 
 /**
  * @brief AXI backend
@@ -105,7 +111,14 @@ private:
     // processed.
     std::queue<vp::IoReq *> pending_bursts;
 
+    // Queue of pending bursts for write axi transactions. This only contains write bursts. This is decoupled from pending_bursts
+    std::queue<IDmaBeAxiWriteBurstInfo> write_axi_sending_bursts;
+
     // Current base of the first transfer. This is when a chunk of data to be written is received
     // to know the base where it should be written.
     uint64_t current_burst_base;
+
+    // Track the orders of DMA issued requests, for dealing with OoO responses
+    std::queue<vp::IoReq *> issued_axi_burst_order_list;
+    std::list<vp::IoReq *> OoO_responses_waiting_list;
 };

@@ -23,6 +23,8 @@
 #include <vector>
 #include <vp/vp.hpp>
 
+#define ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
+
 
 
 /**
@@ -47,6 +49,12 @@ public:
     uint64_t reps;
     // Transfer config
     uint64_t config;
+#ifdef ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
+    // Transfer collective type
+    uint64_t collective_type;
+    uint16_t collective_row_mask;
+    uint16_t collective_col_mask;
+#endif //ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
 
     // Free rom for additional information
     std::vector<uint64_t> data;
