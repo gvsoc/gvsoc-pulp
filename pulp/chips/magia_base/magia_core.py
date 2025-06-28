@@ -59,7 +59,7 @@ class CV32CoreTest(cpu.iss.riscv.RiscvCommon):
         riscv_exceptions = True
 
         # Instantiates the ISA from the string.
-        isa = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa('cv32-base', isa_str, extensions=[Xdma(), Rv32redmule()])
+        isa = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa('cv32-base', isa_str, extensions=[Xdma(), Rv32redmule(), FSync()])
 
         super().__init__(parent, name, isa=isa, misa=misa, core_id=core_id,
                          debug_handler=debug_handler, fetch_enable=fetch_enable,

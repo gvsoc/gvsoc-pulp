@@ -30,5 +30,5 @@ class MagiaArch:
 
     ENABLE_NOC          = False
     N_TILES_X           = 2
-    N_TILES_Y           = 2
+    N_TILES_Y           = 1
     NB_CLUSTERS         = N_TILES_X*N_TILES_Y

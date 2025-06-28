@@ -28,3 +28,11 @@ class XifDecoder(gvsoc.systree.Component):
     def i_OFFLOAD_GRANT_S2(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'offload_grant_s2', signature='wire<IssOffloadInsnGrant<uint32_t>*>')
     
+    def o_XIF_2_FRACTAL(self, itf: gvsoc.systree.SlaveItf):
+        #master port
+        self.itf_bind('fractal_input_port', itf, signature='wire<SlvPortInput<uint32_t>*>')
+
+    def i_FRACTAL_2_XIF(self) -> gvsoc.systree.SlaveItf:
+        #slave port
+        return gvsoc.systree.SlaveItf(self, 'fractal_output_port', signature='wire<SlvPortOutput<uint32_t>*>')
+    

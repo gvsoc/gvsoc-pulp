@@ -160,8 +160,28 @@ class MagiaTile(gvsoc.systree.Component):
         xifdec.o_OFFLOAD_S2(redmule.i_OFFLOAD())
         redmule.o_OFFLOAD_GRANT(xifdec.i_OFFLOAD_GRANT_S2())
 
+        # Bind fractal sync ports
+        xifdec.o_XIF_2_FRACTAL(self.__o_SLAVE_FRACTAL())
+        self.__i_SLAVE_FRACTAL(xifdec.i_FRACTAL_2_XIF())
+
         # Enable debug
         gdbserver.gdbserver.Gdbserver(self, 'gdbserver')
+
+    
+    # Output (master) port to off-tile L2 memory
+
+    def __o_SLAVE_FRACTAL(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'xif_2_fractal', signature='wire<SlvPortInput<uint32_t>*>')
+
+    def o_SLAVE_FRACTAL(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('xif_2_fractal', itf, signature='wire<SlvPortInput<uint32_t>*>')
+
+    def __i_SLAVE_FRACTAL(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('fractal_2_xif', itf, signature='wire<SlvPortOutput<uint32_t>*>',composite_bind=True)
+
+    def i_SLAVE_FRACTAL(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'fractal_2_xif', signature='wire<SlvPortOutput<uint32_t>*>')
+    
 
     # Output (master) port to off-tile L2 memory
     def o_NARROW_OUTPUT(self, itf: gvsoc.systree.SlaveItf):

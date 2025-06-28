@@ -7,6 +7,7 @@ import interco.router as router
 from pulp.chips.magia_base.magia_tile import MagiaTile
 from pulp.chips.magia_base.magia_arch import MagiaArch
 from pulp.floonoc.floonoc import *
+from pulp.fractal_sync.fractal_sync import *
 from typing import List
 
 class MagiaSoc(gvsoc.systree.Component):
@@ -28,6 +29,8 @@ class MagiaSoc(gvsoc.systree.Component):
         for id in range(0,MagiaArch.NB_CLUSTERS):
             cluster.append(MagiaTile(self, f'magia-tile-{id}', parser, id))
 
+        # Create fractal sync
+        fsync = FractalSync(self,'fsync',level=1)
 
         if (MagiaArch.ENABLE_NOC):
             noc = FlooNoc2dMeshNarrowWide(self,
@@ -76,6 +79,12 @@ class MagiaSoc(gvsoc.systree.Component):
                 cluster[id].o_NARROW_OUTPUT(soc_xbar.i_INPUT())
 
             soc_xbar.o_MAP(l2_mem.i_INPUT(),"l2_mem",base=0,size=MagiaArch.L2_SIZE,rm_base=True)
+
+            cluster[0].o_SLAVE_FRACTAL(fsync.i_SLAVE_WEST())
+            fsync.o_SLAVE_WEST(cluster[0].i_SLAVE_FRACTAL())
+
+            cluster[1].o_SLAVE_FRACTAL(fsync.i_SLAVE_EAST())
+            fsync.o_SLAVE_EAST(cluster[1].i_SLAVE_FRACTAL())
 
         # Bind loader
         for id in range(0,MagiaArch.NB_CLUSTERS):

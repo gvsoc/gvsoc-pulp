@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include <cpu/iss/include/offload.hpp>
+#include "../fractal_sync/fractal_sync.hpp"
 
 /*****************************************************
 *                   Class Definition                 *
@@ -35,6 +36,11 @@ protected:
     vp::WireMaster<IssOffloadInsn<uint32_t> *> offload_itf_s2;
     static void grant_sync_s2(vp::Block *__this, IssOffloadInsnGrant<uint32_t> *result);
     vp::WireSlave<IssOffloadInsnGrant<uint32_t> *> offload_grant_itf_s2;
+
+
+    static void fractal_output_method(vp::Block *__this, SlvPortOutput<uint32_t> *req);
+    vp::WireMaster<SlvPortInput<uint32_t> *> fractal_input_port;
+    vp::WireSlave<SlvPortOutput<uint32_t> *> fractal_output_port;
 
     //static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
 
@@ -70,6 +76,10 @@ XifDecoder::XifDecoder(vp::ComponentConf &config)
     this->offload_grant_itf_s2.set_sync_meth(&XifDecoder::grant_sync_s2);
     this->new_slave_port("offload_grant_s2", &this->offload_grant_itf_s2, this);
 
+    this->fractal_output_port.set_sync_meth(&XifDecoder::fractal_output_method);
+    this->new_master_port("fractal_input_port", &this->fractal_input_port, this);
+    this->new_slave_port("fractal_output_port", &this->fractal_output_port, this);
+
 
     this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] Instantiated\n");
 
@@ -98,13 +108,28 @@ void XifDecoder::grant_sync_s2(vp::Block *__this, IssOffloadInsnGrant<uint32_t> 
     _this->offload_grant_itf_m.sync(result);
 }
 
+void XifDecoder::fractal_output_method(vp::Block *__this, SlvPortOutput<uint32_t> *req) {
+    XifDecoder *_this = (XifDecoder *)__this;
+
+    if ((req->wake) && (!req->error)) {
+        _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received wake response from Fractal\n");
+        IssOffloadInsnGrant<uint32_t> offload_grant = {
+            .result=0x1
+        };
+        _this->offload_grant_itf_m.sync(&offload_grant);
+    }
+    else if (req->error){
+        _this->trace.fatal("[XifDecoder] received error response from Fractal\n");
+    }
+}
+
 
 void XifDecoder::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t> *insn)
 {
     XifDecoder *_this = (XifDecoder *)__this;
     uint32_t opc = insn->opcode & 0x7F;
 
-    switch (opc)
+    switch (opc) //here in RTL the mapping is: port 0 Redmule, port 1 iDMA, port 2, Fractal
     {
         case 0b0101011: //these are all the opcodes associated with the IDMA
         {
@@ -122,6 +147,17 @@ void XifDecoder::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
             //_this->current_Insn=insn;
             //_this->event_enqueue(_this->fsm_event, 1);
             break;
+        }
+        case 0b1011011: //this is fractal sync case please update the opcode
+        {
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received opcode for FractalSync (id=%d - aggr=%d)\n",insn->arg_b,insn->arg_a);
+            insn->granted = false; //immeditaly stall the core
+            SlvPortInput<uint32_t> req = {
+                .sync=true,
+                .aggr=insn->arg_a,
+                .id_req=insn->arg_b
+            };
+            _this->fractal_input_port.sync(&req);
         }
     }
 }
