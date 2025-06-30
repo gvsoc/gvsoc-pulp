@@ -171,16 +171,16 @@ class MagiaTile(gvsoc.systree.Component):
     # Output (master) port to off-tile L2 memory
 
     def __o_SLAVE_FRACTAL(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'xif_2_fractal', signature='wire<SlvPortInput<uint32_t>*>')
+        return gvsoc.systree.SlaveItf(self, 'xif_2_fractal', signature='wire<PortReq<uint32_t>*>')
 
     def o_SLAVE_FRACTAL(self, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind('xif_2_fractal', itf, signature='wire<SlvPortInput<uint32_t>*>')
+        self.itf_bind('xif_2_fractal', itf, signature='wire<PortReq<uint32_t>*>')
 
     def __i_SLAVE_FRACTAL(self, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind('fractal_2_xif', itf, signature='wire<SlvPortOutput<uint32_t>*>',composite_bind=True)
+        self.itf_bind('fractal_2_xif', itf, signature='wire<PortResp<uint32_t>*>',composite_bind=True)
 
     def i_SLAVE_FRACTAL(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'fractal_2_xif', signature='wire<SlvPortOutput<uint32_t>*>')
+        return gvsoc.systree.SlaveItf(self, 'fractal_2_xif', signature='wire<PortResp<uint32_t>*>')
     
 
     # Output (master) port to off-tile L2 memory

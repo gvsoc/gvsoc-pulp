@@ -30,7 +30,9 @@ class MagiaSoc(gvsoc.systree.Component):
             cluster.append(MagiaTile(self, f'magia-tile-{id}', parser, id))
 
         # Create fractal sync
-        fsync = FractalSync(self,'fsync',level=1)
+        fsync_top = FractalSync(self,'fsync_top',level=1)
+        fsync_center = FractalSync(self,'fsync_center',level=2)
+        fsync_bottom = FractalSync(self,'fsync_bottom',level=1)
 
         if (MagiaArch.ENABLE_NOC):
             noc = FlooNoc2dMeshNarrowWide(self,
@@ -80,11 +82,23 @@ class MagiaSoc(gvsoc.systree.Component):
 
             soc_xbar.o_MAP(l2_mem.i_INPUT(),"l2_mem",base=0,size=MagiaArch.L2_SIZE,rm_base=True)
 
-            cluster[0].o_SLAVE_FRACTAL(fsync.i_SLAVE_WEST())
-            fsync.o_SLAVE_WEST(cluster[0].i_SLAVE_FRACTAL())
+            cluster[0].o_SLAVE_FRACTAL(fsync_top.i_SLAVE_WEST())
+            fsync_top.o_SLAVE_WEST(cluster[0].i_SLAVE_FRACTAL())
 
-            cluster[1].o_SLAVE_FRACTAL(fsync.i_SLAVE_EAST())
-            fsync.o_SLAVE_EAST(cluster[1].i_SLAVE_FRACTAL())
+            cluster[1].o_SLAVE_FRACTAL(fsync_top.i_SLAVE_EAST())
+            fsync_top.o_SLAVE_EAST(cluster[1].i_SLAVE_FRACTAL())
+
+            cluster[2].o_SLAVE_FRACTAL(fsync_bottom.i_SLAVE_WEST())
+            fsync_bottom.o_SLAVE_WEST(cluster[2].i_SLAVE_FRACTAL())
+
+            cluster[3].o_SLAVE_FRACTAL(fsync_bottom.i_SLAVE_EAST())
+            fsync_bottom.o_SLAVE_EAST(cluster[3].i_SLAVE_FRACTAL())
+
+            fsync_top.o_MASTER_N(fsync_center.i_SLAVE_EAST())
+            fsync_center.o_SLAVE_EAST(fsync_top.i_MASTER_N())
+
+            fsync_bottom.o_MASTER_N(fsync_center.i_SLAVE_WEST())
+            fsync_center.o_SLAVE_WEST(fsync_bottom.i_MASTER_N())
 
         # Bind loader
         for id in range(0,MagiaArch.NB_CLUSTERS):

@@ -25,11 +25,17 @@ public:
 
 protected:
 
-    static void master_output_method(vp::Block *__this, MstPortOutput<uint32_t> *req);
-    static void slave_input_method(vp::Block *__this, SlvPortInput<uint32_t> *req);
+    //static void master_input_method(vp::Block *__this, MstPortInput<uint32_t> *req);
+    
+    static void master_input_method(vp::Block *__this, PortResp<uint32_t> *req);
+    static void slave_input_method(vp::Block *__this, PortReq<uint32_t> *req);
 
-    vp::WireSlave<MstPortInput<uint32_t> *> master_n_input_port;
-    vp::WireMaster<MstPortOutput<uint32_t> *> master_n_output_port;
+    //vp::WireSlave<MstPortInput<uint32_t> *> master_n_input_port;
+    //vp::WireMaster<MstPortOutput<uint32_t> *> master_n_output_port;
+
+    vp::WireSlave<PortResp<uint32_t> *> master_n_input_port;
+    vp::WireMaster<PortReq<uint32_t> *> master_n_output_port;
+
 
     // vp::WireSlave<MstPortInput<uint32_t> *> master_s_input_port;
     // vp::WireMaster<MstPortOutput<uint32_t> *> master_s_output_port;
@@ -40,11 +46,11 @@ protected:
     // vp::WireSlave<SlvPortInput<uint32_t> *> slave_sud_input_port;
     // vp::WireMaster<SlvPortOutput<uint32_t> *> slave_sud_output_port;
 
-    vp::WireSlave<SlvPortInput<uint32_t> *> slave_east_input_port;
-    vp::WireMaster<SlvPortOutput<uint32_t> *> slave_east_output_port;
+    vp::WireSlave<PortReq<uint32_t> *> slave_east_input_port;
+    vp::WireMaster<PortResp<uint32_t> *> slave_east_output_port;
 
-    vp::WireSlave<SlvPortInput<uint32_t> *> slave_west_input_port;
-    vp::WireMaster<SlvPortOutput<uint32_t> *> slave_west_output_port;
+    vp::WireSlave<PortReq<uint32_t> *> slave_west_input_port;
+    vp::WireMaster<PortResp<uint32_t> *> slave_west_output_port;
 
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
 
@@ -53,8 +59,9 @@ protected:
 
     int syncro_val;
 
-    int level;
-    int current_level;
+    int level; //internal level set when fractal sync is instantiated
+    uint32_t current_level; //level sent by the fsync request
+    uint32_t current_id_req; //id sent by the fsync request
 
     vp::Trace trace;
 
@@ -72,7 +79,7 @@ FractalSync::FractalSync(vp::ComponentConf &config)
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
 
-    this->master_n_output_port.set_sync_meth(&FractalSync::master_output_method);
+    this->master_n_input_port.set_sync_meth(&FractalSync::master_input_method);
     this->new_slave_port("master_n_input_port", &this->master_n_input_port, this);
     this->new_master_port("master_n_output_port", &this->master_n_output_port, this);
 
@@ -106,6 +113,7 @@ FractalSync::FractalSync(vp::ComponentConf &config)
 
     this->level   = get_js_config()->get("level")->get_int(); //>=1
     this->current_level = 0; //uninitialized
+    this->current_id_req = 0;
 
     this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] Instantiated\n");
 }
@@ -124,18 +132,32 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
             break;      
         case WAIT_SYNCRO: //here I think we should check if the level is the same for the two requests
             if (_this->syncro_val==2) {
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] syncro completed\n");
-                _this->syncro_val=0; //reset syncro val
-                _this->state.set(IDLE); //go to idle when syncro is completed
-                SlvPortOutput<uint32_t> resp = {
-                        .wake=true,
-                        .lvl=0x0,
-                        .id_rsp=0x0,
-                        .error=false
-                };
-                //broadcast response
-                _this->slave_west_output_port.sync(&resp);
-                _this->slave_east_output_port.sync(&resp);
+                if (_this->current_level==_this->level) {
+                    _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] level syncro completed - ENDING\n");
+                    _this->syncro_val=0; //reset syncro val
+                    _this->state.set(IDLE); //go to idle when syncro is completed
+                    PortResp<uint32_t> resp = {
+                            .wake=true,
+                            .lvl=0x0,
+                            .id_rsp=0x0,
+                            .error=false
+                    };
+                    //broadcast response
+                    _this->slave_west_output_port.sync(&resp);
+                    _this->slave_east_output_port.sync(&resp);
+                }
+                else {
+                    _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] level syncro completed - LEVEL UP\n");
+                    _this->syncro_val=0; //reset syncro val
+                    _this->state.set(IDLE); //go to idle when syncro is completed
+                    //MstPortOutput<uint32_t> req = {
+                    PortReq<uint32_t> req = {
+                        .sync=true,
+                        .aggr=_this->current_level,
+                        .id_req=_this->current_id_req
+                    };
+                    _this->master_n_output_port.sync(&req);
+                }
             }
             else {
                 _this->state.set(IDLE); //go to idle until sincronization is completed 
@@ -147,15 +169,17 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
     }
 }
 
-void FractalSync::slave_input_method(vp::Block *__this, SlvPortInput<uint32_t> *req){
+void FractalSync::slave_input_method(vp::Block *__this, PortReq<uint32_t> *req){
 
     FractalSync *_this = (FractalSync *)__this;
-    SlvPortOutput<uint32_t> resp;
+    PortResp<uint32_t> resp;
+
 
     _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] received request from SLAVE\n");
     if ((req->sync) && (req->aggr!=0)) { //check if the sync signal is true and the required level (aggr) is !=0
         if (_this->current_level==0) { // OK case. Opportunistic set. The firt tile that arrives here sets the value
             _this->current_level=req->aggr;
+            _this->current_id_req=0x1; //TODO: fix this... Need to understand what it is used for
         }
         else {
             if (req->aggr!=_this->current_level) { //ERROR CASE
@@ -186,8 +210,19 @@ void FractalSync::slave_input_method(vp::Block *__this, SlvPortInput<uint32_t> *
     }
 }
 
-void FractalSync::master_output_method(vp::Block *__this, MstPortOutput<uint32_t> *req) {
+//void FractalSync::master_input_method(vp::Block *__this, MstPortInput<uint32_t> *req) {
+
+void FractalSync::master_input_method(vp::Block *__this, PortResp<uint32_t> *req) {
     
     FractalSync *_this = (FractalSync *)__this;
-    _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] sending request to next level fractal sync\n");
+    _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] Received response from above level\n");
+    PortResp<uint32_t> resp = {
+            .wake=true,
+            .lvl=0x0,
+            .id_rsp=0x0,
+            .error=false
+    };
+    //broadcast response
+    _this->slave_west_output_port.sync(&resp);
+    _this->slave_east_output_port.sync(&resp);
 }

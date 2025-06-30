@@ -38,9 +38,9 @@ protected:
     vp::WireSlave<IssOffloadInsnGrant<uint32_t> *> offload_grant_itf_s2;
 
 
-    static void fractal_output_method(vp::Block *__this, SlvPortOutput<uint32_t> *req);
-    vp::WireMaster<SlvPortInput<uint32_t> *> fractal_input_port;
-    vp::WireSlave<SlvPortOutput<uint32_t> *> fractal_output_port;
+    static void fractal_output_method(vp::Block *__this, PortResp<uint32_t> *req);
+    vp::WireMaster<PortReq<uint32_t> *> fractal_input_port;
+    vp::WireSlave<PortResp<uint32_t> *> fractal_output_port;
 
     //static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
 
@@ -108,7 +108,7 @@ void XifDecoder::grant_sync_s2(vp::Block *__this, IssOffloadInsnGrant<uint32_t> 
     _this->offload_grant_itf_m.sync(result);
 }
 
-void XifDecoder::fractal_output_method(vp::Block *__this, SlvPortOutput<uint32_t> *req) {
+void XifDecoder::fractal_output_method(vp::Block *__this, PortResp<uint32_t> *req) {
     XifDecoder *_this = (XifDecoder *)__this;
 
     if ((req->wake) && (!req->error)) {
@@ -152,7 +152,7 @@ void XifDecoder::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
         {
             _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received opcode for FractalSync (id=%d - aggr=%d)\n",insn->arg_b,insn->arg_a);
             insn->granted = false; //immeditaly stall the core
-            SlvPortInput<uint32_t> req = {
+            PortReq<uint32_t> req = {
                 .sync=true,
                 .aggr=insn->arg_a,
                 .id_req=insn->arg_b
