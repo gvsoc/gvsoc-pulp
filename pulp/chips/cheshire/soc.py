@@ -29,6 +29,7 @@ import cache.cache as cache
 from pulp.icache_ctrl.icache_ctrl_v2 import Icache_ctrl
 import pulp.gpio.gpio_v3 as gpio_module
 from elftools.elf.elffile import ELFFile
+import gdbserver.gdbserver as GdbServer
 
 class Soc(st.Component):
 
@@ -94,6 +95,9 @@ class Soc(st.Component):
 
         # Narrow 64bits router
         narrow_axi = router.Router(self, 'narrow_axi', bandwidth=8, latency=5)
+        
+        # GDB Server
+        gdb = GdbServer.Gdbserver(self, 'gdbserver')
 
         #
         # Bindings
