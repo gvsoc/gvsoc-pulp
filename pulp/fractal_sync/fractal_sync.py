@@ -16,30 +16,30 @@ class FractalSync(gvsoc.systree.Component):
         self.add_sources(['pulp/fractal_sync/fractal_sync.cpp'])
 
 #we have 2 master ports
-    def o_MASTER_N(self, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind('master_n_output_port', itf, signature='wire<PortReq<uint32_t>*>')
+    def o_MASTER_EAST_WEST(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('master_ew_output_port', itf, signature='wire<PortReq<uint32_t>*>')
 
-    def i_MASTER_N(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'master_n_input_port', signature='wire<PortResp<uint32_t>*>')
+    def i_MASTER_EAST_WEST(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'master_ew_input_port', signature='wire<PortResp<uint32_t>*>')
 
-    # def o_MASTER_S(self, itf: gvsoc.systree.SlaveItf):
-    #     self.itf_bind('master_s_output_port', itf, signature='wire<MstPortOutput<uint32_t>*>')
+    def o_MASTER_NORD_SUD(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('master_ns_output_port', itf, signature='wire<PortReq<uint32_t>*>')
 
-    # def i_MASTER_S(self) -> gvsoc.systree.SlaveItf:
-    #     return gvsoc.systree.SlaveItf(self, 'master_s_input_port', signature='wire<MstPortInput<uint32_t>*>')
+    def i_MASTER_NORD_SUD(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'master_ns_input_port', signature='wire<PortResp<uint32_t>*>')
 
 #we have 4 slave ports
-    # def i_SLAVE_NORD(self) -> gvsoc.systree.SlaveItf:
-    #     return gvsoc.systree.SlaveItf(self, 'slave_n_input_port', signature='wire<SlvPortInput<uint32_t>*>')
+    def i_SLAVE_NORD(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'slave_n_input_port', signature='wire<PortReq<uint32_t>*>')
 
-    # def o_SLAVE_NORD(self, itf: gvsoc.systree.SlaveItf):
-    #     self.itf_bind('slave_n_output_port', itf, signature='wire<SlvPortOutput<uint32_t>*>')
+    def o_SLAVE_NORD(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('slave_n_output_port', itf, signature='wire<PortResp<uint32_t>*>')
 
-    # def i_SLAVE_SUD(self) -> gvsoc.systree.SlaveItf:
-    #     return gvsoc.systree.SlaveItf(self, 'slave_s_input_port', signature='wire<SlvPortInput<uint32_t>*>')
+    def i_SLAVE_SUD(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'slave_s_input_port', signature='wire<PortReq<uint32_t>*>')
 
-    # def o_SLAVE_SUD(self, itf: gvsoc.systree.SlaveItf):
-    #     self.itf_bind('slave_s_output_port', itf, signature='wire<SlvPortOutput<uint32_t>*>')
+    def o_SLAVE_SUD(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('slave_s_output_port', itf, signature='wire<PortResp<uint32_t>*>')
 
     def i_SLAVE_EAST(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'slave_e_input_port', signature='wire<PortReq<uint32_t>*>')

@@ -28,11 +28,21 @@ class XifDecoder(gvsoc.systree.Component):
     def i_OFFLOAD_GRANT_S2(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'offload_grant_s2', signature='wire<IssOffloadInsnGrant<uint32_t>*>')
     
-    def o_XIF_2_FRACTAL(self, itf: gvsoc.systree.SlaveItf):
+    # Fractal ports
+    
+    def o_XIF_2_FRACTAL_EAST_WEST(self, itf: gvsoc.systree.SlaveItf):
         #master port
-        self.itf_bind('fractal_input_port', itf, signature='wire<PortReq<uint32_t>*>')
+        self.itf_bind('fractal_ew_input_port', itf, signature='wire<PortReq<uint32_t>*>')
 
-    def i_FRACTAL_2_XIF(self) -> gvsoc.systree.SlaveItf:
+    def i_FRACTAL_2_XIF_EAST_WEST(self) -> gvsoc.systree.SlaveItf:
         #slave port
-        return gvsoc.systree.SlaveItf(self, 'fractal_output_port', signature='wire<PortResp<uint32_t>*>')
+        return gvsoc.systree.SlaveItf(self, 'fractal_ew_output_port', signature='wire<PortResp<uint32_t>*>')
+    
+    def o_XIF_2_FRACTAL_NORD_SUD(self, itf: gvsoc.systree.SlaveItf):
+        #master port
+        self.itf_bind('fractal_ns_input_port', itf, signature='wire<PortReq<uint32_t>*>')
+
+    def i_FRACTAL_2_XIF_NORD_SUD(self) -> gvsoc.systree.SlaveItf:
+        #slave port
+        return gvsoc.systree.SlaveItf(self, 'fractal_ns_output_port', signature='wire<PortResp<uint32_t>*>')
     

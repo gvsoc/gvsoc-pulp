@@ -11,6 +11,11 @@
 #include <cpu/iss/include/offload.hpp>
 #include "../fractal_sync/fractal_sync.hpp"
 
+enum fractal_directions {
+    EAST_WEST, //horizontal = 0
+    NORD_SUD   //vertical = 1
+};
+
 /*****************************************************
 *                   Class Definition                 *
 *****************************************************/
@@ -38,9 +43,14 @@ protected:
     vp::WireSlave<IssOffloadInsnGrant<uint32_t> *> offload_grant_itf_s2;
 
 
-    static void fractal_output_method(vp::Block *__this, PortResp<uint32_t> *req);
-    vp::WireMaster<PortReq<uint32_t> *> fractal_input_port;
-    vp::WireSlave<PortResp<uint32_t> *> fractal_output_port;
+    static void fractal_output_method(vp::Block *__this, PortResp<uint32_t> *req, int id);
+
+    vp::WireMaster<PortReq<uint32_t> *> fractal_ew_input_port;
+    vp::WireSlave<PortResp<uint32_t> *> fractal_ew_output_port;
+
+    vp::WireMaster<PortReq<uint32_t> *> fractal_ns_input_port;
+    vp::WireSlave<PortResp<uint32_t> *> fractal_ns_output_port;
+
 
     //static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
 
@@ -76,9 +86,13 @@ XifDecoder::XifDecoder(vp::ComponentConf &config)
     this->offload_grant_itf_s2.set_sync_meth(&XifDecoder::grant_sync_s2);
     this->new_slave_port("offload_grant_s2", &this->offload_grant_itf_s2, this);
 
-    this->fractal_output_port.set_sync_meth(&XifDecoder::fractal_output_method);
-    this->new_master_port("fractal_input_port", &this->fractal_input_port, this);
-    this->new_slave_port("fractal_output_port", &this->fractal_output_port, this);
+    this->fractal_ew_output_port.set_sync_meth_muxed(&XifDecoder::fractal_output_method,fractal_directions::EAST_WEST);
+    this->fractal_ns_output_port.set_sync_meth_muxed(&XifDecoder::fractal_output_method,fractal_directions::NORD_SUD);
+    this->new_slave_port("fractal_ew_output_port", &this->fractal_ew_output_port, this);
+    this->new_slave_port("fractal_ns_output_port", &this->fractal_ns_output_port, this);
+
+    this->new_master_port("fractal_ew_input_port", &this->fractal_ew_input_port, this);
+    this->new_master_port("fractal_ns_input_port", &this->fractal_ns_input_port, this);
 
 
     this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] Instantiated\n");
@@ -108,11 +122,16 @@ void XifDecoder::grant_sync_s2(vp::Block *__this, IssOffloadInsnGrant<uint32_t> 
     _this->offload_grant_itf_m.sync(result);
 }
 
-void XifDecoder::fractal_output_method(vp::Block *__this, PortResp<uint32_t> *req) {
+void XifDecoder::fractal_output_method(vp::Block *__this, PortResp<uint32_t> *req, int id) {
     XifDecoder *_this = (XifDecoder *)__this;
 
     if ((req->wake) && (!req->error)) {
-        _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received wake response from Fractal\n");
+        if (id==fractal_directions::EAST_WEST)
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received wake response from EAST-WEST Fractal\n");
+        else if (id==fractal_directions::NORD_SUD)
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received wake response from NORD-SUD Fractal\n");
+        else
+            _this->trace.fatal("[XifDecoder] wrong direction\n");
         IssOffloadInsnGrant<uint32_t> offload_grant = {
             .result=0x1
         };
@@ -157,7 +176,21 @@ void XifDecoder::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
                 .aggr=insn->arg_a,
                 .id_req=insn->arg_b
             };
-            _this->fractal_input_port.sync(&req);
+            switch (insn->arg_b)
+            {
+            case fractal_directions::EAST_WEST:
+                //_this->fractal_ew_input_port.sync(&req);
+                _this->fractal_ns_input_port.sync(&req);
+                break;
+            case fractal_directions::NORD_SUD:
+                //_this->fractal_ns_input_port.sync(&req);
+                
+                _this->fractal_ew_input_port.sync(&req);
+                break;
+            default:
+                _this->trace.fatal("[XifDecoder] wrong direction\n");
+                break;
+            }        
         }
     }
 }

@@ -161,27 +161,41 @@ class MagiaTile(gvsoc.systree.Component):
         redmule.o_OFFLOAD_GRANT(xifdec.i_OFFLOAD_GRANT_S2())
 
         # Bind fractal sync ports
-        xifdec.o_XIF_2_FRACTAL(self.__o_SLAVE_FRACTAL())
-        self.__i_SLAVE_FRACTAL(xifdec.i_FRACTAL_2_XIF())
+        xifdec.o_XIF_2_FRACTAL_EAST_WEST(self.__o_SLAVE_EAST_WEST_FRACTAL())
+        self.__i_SLAVE_EAST_WEST_FRACTAL(xifdec.i_FRACTAL_2_XIF_EAST_WEST())
+
+        xifdec.o_XIF_2_FRACTAL_NORD_SUD(self.__o_SLAVE_NORD_SUD_FRACTAL())
+        self.__i_SLAVE_NORD_SUD_FRACTAL(xifdec.i_FRACTAL_2_XIF_NORD_SUD())
 
         # Enable debug
         gdbserver.gdbserver.Gdbserver(self, 'gdbserver')
 
     
-    # Output (master) port to off-tile L2 memory
+    # Ports to fractalsync
 
-    def __o_SLAVE_FRACTAL(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'xif_2_fractal', signature='wire<PortReq<uint32_t>*>')
+    def __o_SLAVE_EAST_WEST_FRACTAL(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'xif_2_east_west_fractal', signature='wire<PortReq<uint32_t>*>')
 
-    def o_SLAVE_FRACTAL(self, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind('xif_2_fractal', itf, signature='wire<PortReq<uint32_t>*>')
+    def o_SLAVE_EAST_WEST_FRACTAL(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('xif_2_east_west_fractal', itf, signature='wire<PortReq<uint32_t>*>')
 
-    def __i_SLAVE_FRACTAL(self, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind('fractal_2_xif', itf, signature='wire<PortResp<uint32_t>*>',composite_bind=True)
+    def __i_SLAVE_EAST_WEST_FRACTAL(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('east_west_fractal_2_xif', itf, signature='wire<PortResp<uint32_t>*>',composite_bind=True)
 
-    def i_SLAVE_FRACTAL(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'fractal_2_xif', signature='wire<PortResp<uint32_t>*>')
-    
+    def i_SLAVE_EAST_WEST_FRACTAL(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'east_west_fractal_2_xif', signature='wire<PortResp<uint32_t>*>')
+
+    def __o_SLAVE_NORD_SUD_FRACTAL(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'xif_2_nord_sud_fractal', signature='wire<PortReq<uint32_t>*>')
+
+    def o_SLAVE_NORD_SUD_FRACTAL(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('xif_2_nord_sud_fractal', itf, signature='wire<PortReq<uint32_t>*>')
+
+    def __i_SLAVE_NORD_SUD_FRACTAL(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('nord_sud_fractal_2_xif', itf, signature='wire<PortResp<uint32_t>*>',composite_bind=True)
+
+    def i_SLAVE_NORD_SUD_FRACTAL(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'nord_sud_fractal_2_xif', signature='wire<PortResp<uint32_t>*>')
 
     # Output (master) port to off-tile L2 memory
     def o_NARROW_OUTPUT(self, itf: gvsoc.systree.SlaveItf):
