@@ -24,7 +24,7 @@ import utils.loader.loader
 import pulp.chips.cheshire.cva6.cva6 as cva6
 import pulp.chips.cheshire.soc_regs as soc_regs
 from pulp.stdout.stdout_v3 import Stdout
-from pulp.idma.idma import IDma
+from pulp.idma.cheshire_dma import CheshireDma
 import cache.cache as cache
 from pulp.icache_ctrl.icache_ctrl_v2 import Icache_ctrl
 import pulp.gpio.gpio_v3 as gpio_module
@@ -91,8 +91,12 @@ class Soc(st.Component):
         host = cva6.CVA6(self, 'host', isa="rv64imafdc", boot_addr=entry)
 
         # System DMA
-        idma = IDma(self, 'idma')
-
+        idma = CheshireDma(self, 'idma', 
+                           transfer_queue_size=8, 
+                           burst_queue_size=8, 
+                           loc_base=0x01000000, 
+                           loc_size=0x00010000)
+        
         # Narrow 64bits router
         narrow_axi = router.Router(self, 'narrow_axi', bandwidth=8, latency=5)
         
@@ -123,6 +127,7 @@ class Soc(st.Component):
             self.bind(host, 'fetch', llc, 'input')
             
         # Other binds
+        idma.o_AXI(narrow_axi.i_INPUT())
         self.bind(host, 'data', narrow_axi, 'input')
         self.bind(loader, 'out', narrow_axi, 'input')
         self.bind(loader, 'start', host, 'fetchen')
