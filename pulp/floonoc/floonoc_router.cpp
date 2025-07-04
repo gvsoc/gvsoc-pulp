@@ -28,7 +28,14 @@
 
 Router::Router(FlooNoc *noc, std::string name, int x, int y, int queue_size)
     : vp::Block(noc, name + std::to_string(x) + "_" + std::to_string(y)),
-      fsm_event(this, &Router::fsm_handler)
+      fsm_event(this, &Router::fsm_handler), signal_req(*this, "req", 64),
+      stalled_queues{{
+        vp::Signal<bool>(*this, "stalled_queue_right", 1),
+        vp::Signal<bool>(*this, "stalled_queue_left", 1),
+        vp::Signal<bool>(*this, "stalled_queue_up", 1),
+        vp::Signal<bool>(*this, "stalled_queue_down", 1),
+        vp::Signal<bool>(*this, "stalled_queue_local", 1)
+      }}
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
 
@@ -49,9 +56,10 @@ Router::Router(FlooNoc *noc, std::string name, int x, int y, int queue_size)
 
 bool Router::handle_request(vp::IoReq *req, int from_x, int from_y)
 {
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Check Point a1\n");
     this->trace.msg(vp::Trace::LEVEL_DEBUG, "Handle request (req: %p, base: 0x%x, size: 0x%x, from: (%d, %d)\n", req, req->get_addr(), req->get_size(), from_x, from_y);
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Check Point a2\n");
+
+    this->signal_req = req->get_addr();
+
     // Each direction has its own input queue to properly implement the round-robin
     // Get the one for the router or network interface which sent this request
     int queue_index = this->get_req_queue(from_x, from_y);
@@ -65,7 +73,6 @@ bool Router::handle_request(vp::IoReq *req, int from_x, int from_y)
     // We let the source enqueue one more request than what is possible to model the fact the fact
     // the request is stalled. This will then stall the source which will not send any request there
     // anymore until we unstall it
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Check Point a3\n");
     return queue->size() > this->queue_size;
 }
 
@@ -110,6 +117,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             // Get output queue ID from next position
             int out_queue_id = _this->get_req_queue(next_x, next_y);
 
+            _this->trace.msg(vp::Trace::LEVEL_TRACE, "Check stalled 1. out queue: %d %d\n", out_queue_id, _this->stalled_queues[out_queue_id].get());
             // Only send one request per cycle to the same output
             if (output_full[out_queue_id])
             {
@@ -126,6 +134,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
             // In case the request goes to a queue which is stalled, skip it
             // we'll retry later
+            _this->trace.msg(vp::Trace::LEVEL_TRACE, "Check stalled. out queue: %d %d\n", out_queue_id, _this->stalled_queues[out_queue_id].get());
             if (_this->stalled_queues[out_queue_id])
             {
                 _this->trace.msg(vp::Trace::LEVEL_TRACE, "Output queue is stalled. Skipping. out queue: %d\n", out_queue_id);
@@ -165,7 +174,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 {
                     // It is possible that we don't have any router at the destination if it is on
                     // the edge. In this case just forward it to the ni of the target
-                    _this->send_to_target_ni(req, next_x, next_y);
+                    _this->send_to_target_ni(req, _this->x, _this->y);
                 }
                 else
                 {
@@ -238,23 +247,7 @@ void Router::send_to_target_ni(vp::IoReq *req, int pos_x, int pos_y)
                     req, pos_x, pos_y);
     NetworkInterface *ni = this->noc->get_network_interface(pos_x, pos_y);
 
-    vp::IoReqStatus result = ni->req_from_router(req, pos_x, pos_y);
-
-    if (result == vp::IO_REQ_DENIED)
-    {
-        int queue = this->get_req_queue(pos_x, pos_y);
-        this->trace.msg(vp::Trace::LEVEL_DEBUG, "Ni denied request, stalling queue\n");
-
-        // In case it is denied, the request has been queued in the target, we just need to make
-        // sure we don't send any other request there until we reveive the grant callback
-        this->stalled_queues[queue] = true;
-
-        // Store the router in the request. Since the grant is received by top noc,
-        // it will use this argument to notify the router about the grant
-        *(Router **)req->arg_get(FlooNoc::REQ_ROUTER) = this;
-        // Also store the queue, the router will use it to know which queue to unstall
-        *(int *)req->arg_get(FlooNoc::REQ_QUEUE) = queue;
-    }
+    ni->req_from_router(req, pos_x, pos_y);
 }
 
 // This is determining the routes the requests will take in the network
@@ -278,17 +271,6 @@ void Router::get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_
     }
 }
 
-void Router::grant(vp::IoReq *req)
-{
-    // Now that the stalled request has been granted, we need to unstall the queue
-    int queue = *(int *)req->arg_get(FlooNoc::REQ_QUEUE);
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Unstalling queue! (position: (%d, %d), queue: %d)\n",
-                    *(int *)req->arg_get(FlooNoc::REQ_DEST_X), *(int *)req->arg_get(FlooNoc::REQ_DEST_Y), queue);
-    this->stalled_queues[queue] = false;
-    // And check in next cycle if another request can be sent
-    this->fsm_event.enqueue();
-}
-
 void Router::unstall_queue(int from_x, int from_y)
 {
     // This gets called when an output queue gets unstalled because the denied request gets granted.
@@ -298,6 +280,13 @@ void Router::unstall_queue(int from_x, int from_y)
     this->stalled_queues[queue] = false;
     // And check in next cycle if another request can be sent
     this->fsm_event.enqueue();
+}
+
+void Router::stall_queue(int from_x, int from_y)
+{
+    int queue = this->get_req_queue(from_x, from_y);
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Stalling queue (position: (%d, %d), queue: %d)\n", from_x, from_y, queue);
+    this->stalled_queues[queue] = true;
 }
 
 void Router::get_pos_from_queue(int queue, int &pos_x, int &pos_y)
