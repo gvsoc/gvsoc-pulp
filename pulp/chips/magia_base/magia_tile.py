@@ -18,6 +18,7 @@ import gvsoc.systree
 import memory.memory as memory
 import interco.router as router
 import gdbserver.gdbserver
+from pulp.stdout.stdout_v3 import Stdout
 
 import pulp.cpu.iss.pulp_cores as iss
 from pulp.cluster.l1_interleaver import L1_interleaver
@@ -105,6 +106,9 @@ class MagiaTile(gvsoc.systree.Component):
         # Xif decoder
         xifdec = XifDecoder(self,f'tile-{tid}-xifdec')
 
+        # UART
+        stdout = Stdout(self, 'tile-{tid}-stdout')
+
         # Bind: cv32 core data -> obi interconnect
         core_cv32.o_DATA(obi_xbar.i_INPUT())
         core_cv32.o_DATA_DEBUG(obi_xbar.i_INPUT())
@@ -128,8 +132,12 @@ class MagiaTile(gvsoc.systree.Component):
                        base=MagiaArch.STACK_ADDR_START,
                        size=MagiaArch.STACK_SIZE, rm_base=False)
         obi_xbar.o_MAP(l1_tcdm.i_INPUT(0), name="local-scratchpad",
-                       base=MagiaArch.L1_ADDR_START,
-                       size=MagiaArch.L1_SIZE, rm_base=False)
+                       base=MagiaArch.L1_ADDR_START+(tid*MagiaArch.L1_TILE_OFFSET),
+                       size=MagiaArch.L1_SIZE, rm_base=False, remove_offset=(tid*MagiaArch.L1_TILE_OFFSET))
+        obi_xbar.o_MAP(stdout.i_INPUT(), name="uart-mem",
+                       base=MagiaArch.STDOUT_START,
+                       size=MagiaArch.STDOUT_SIZE, rm_base=False)
+
         obi_xbar.o_MAP(tile_xbar.i_INPUT(), name="off-tile-mem",
                        base=MagiaArch.L2_ADDR_START,
                        size=MagiaArch.L2_SIZE, rm_base=False)
@@ -168,7 +176,7 @@ class MagiaTile(gvsoc.systree.Component):
         self.__i_SLAVE_NORD_SUD_FRACTAL(xifdec.i_FRACTAL_2_XIF_NORD_SUD())
 
         # Enable debug
-        gdbserver.gdbserver.Gdbserver(self, 'gdbserver')
+        gdbserver.gdbserver.Gdbserver(self, 'gdbserver')        
 
     
     # Ports to fractalsync

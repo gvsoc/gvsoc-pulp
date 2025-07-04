@@ -109,11 +109,6 @@ class MagiaSoc(gvsoc.systree.Component):
             cluster[3].o_SLAVE_EAST_WEST_FRACTAL(fsync_sud.i_SLAVE_EAST())
             fsync_sud.o_SLAVE_EAST(cluster[3].i_SLAVE_EAST_WEST_FRACTAL())
 
-            # fsync_nord.o_MASTER_NORD_SUD(fsync_center.i_SLAVE_EAST())
-            # fsync_west.o_MASTER_EAST_WEST(fsync_center.i_SLAVE_NORD())
-            # fsync_sud.o_MASTER_NORD_SUD(fsync_center.i_SLAVE_WEST())
-            # fsync_east.o_MASTER_EAST_WEST(fsync_center.i_SLAVE_SUD())
-
             fsync_nord.o_MASTER_NORD_SUD(fsync_center.i_SLAVE_NORD())
             fsync_center.o_SLAVE_NORD(fsync_nord.i_MASTER_NORD_SUD())
 
@@ -125,19 +120,6 @@ class MagiaSoc(gvsoc.systree.Component):
 
             fsync_east.o_MASTER_EAST_WEST(fsync_center.i_SLAVE_EAST())
             fsync_center.o_SLAVE_EAST(fsync_east.i_MASTER_EAST_WEST())
-
-
-            # cluster[2].o_SLAVE_FRACTAL(fsync_bottom.i_SLAVE_WEST())
-            # fsync_bottom.o_SLAVE_WEST(cluster[2].i_SLAVE_FRACTAL())
-
-            # cluster[3].o_SLAVE_FRACTAL(fsync_bottom.i_SLAVE_EAST())
-            # fsync_bottom.o_SLAVE_EAST(cluster[3].i_SLAVE_FRACTAL())
-
-            # fsync_top.o_MASTER_EAST_WEST(fsync_center.i_SLAVE_EAST())
-            # fsync_center.o_SLAVE_EAST(fsync_top.i_MASTER_EAST_WEST())
-
-            # fsync_bottom.o_MASTER_EAST_WEST(fsync_center.i_SLAVE_WEST())
-            # fsync_center.o_SLAVE_WEST(fsync_bottom.i_MASTER_EAST_WEST())
 
         # Bind loader
         for id in range(0,MagiaArch.NB_CLUSTERS):

@@ -285,14 +285,8 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
                 .aggr=_this->nord_sud_current_aggr, //here the aggregate associated with the level coming from nord port shoud be the same of the one coming from the sud port
                 .id_req=_this->nord_sud_current_id_req //here... I think that 1 is enought... bho
             };
-            if (_this->nord_sud_current_id_req==fractalsync_output_directions::NORD_SUD) {
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] sending NORD-SUD req for level up [id=%d]\n",_this->nord_sud_current_id_req);
-                _this->master_ns_output_port.sync(&OutReq);
-            }
-            else if (_this->nord_sud_current_id_req==fractalsync_output_directions::EAST_WEST) {
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] sending EAST-WEST req for level up [id=%d]\n",_this->nord_sud_current_id_req);
-                _this->master_ew_output_port.sync(&OutReq); 
-            }
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] sending EAST-WEST req for level up [id=%d]\n",_this->nord_sud_current_id_req);
+            _this->master_ew_output_port.sync(&OutReq); 
             _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
             _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
             break;
@@ -317,6 +311,8 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
             //broadcast response
             _this->slave_nord_output_port.sync(&nord_resp);
             _this->slave_sud_output_port.sync(&sud_resp);
+            _this->nord_current_aggr=0xFFFFFFFF;
+            _this->sud_current_aggr=0xFFFFFFFF;
             _this->state.set(IDLE);
             _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
             break;
@@ -328,14 +324,9 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
                 .aggr=_this->east_west_current_aggr, //here the aggregate associated with the level coming from east port shoud be the same of the one coming from the west port
                 .id_req=_this->east_west_current_id_req //here... I think that 0 is enought... bho
             };
-            if (_this->east_west_current_id_req==fractalsync_output_directions::NORD_SUD) {
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] sending NORD-SUD req for level up [id=%d]\n",_this->east_west_current_id_req);
-                _this->master_ns_output_port.sync(&OutReq);
-            }
-            else if (_this->east_west_current_id_req==fractalsync_output_directions::EAST_WEST) {
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] sending EAST-WEST req for level up [id=%d]\n",_this->east_west_current_id_req);
-                _this->master_ew_output_port.sync(&OutReq); 
-            }
+            
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] sending NORD-SUD req for level up [id=%d]\n",_this->east_west_current_id_req);
+            _this->master_ns_output_port.sync(&OutReq);
             _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
             _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
             break;
@@ -360,6 +351,8 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
             //broadcast response
             _this->slave_west_output_port.sync(&west_resp);
             _this->slave_east_output_port.sync(&east_resp);
+            _this->west_current_aggr=0xFFFFFFFF;
+            _this->east_current_aggr=0xFFFFFFFF;
             _this->state.set(IDLE);
             _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
             break;
@@ -412,9 +405,26 @@ void FractalSync::slave_input_method(vp::Block *__this, PortReq<uint32_t> *req, 
                 .aggr=req->aggr,
                 .id_req=req->id_req
             };
-            if ((id==fractalsync_input_directions::NORD) || (id=fractalsync_input_directions::SUD)) 
+            switch (id) {
+                case fractalsync_input_directions::NORD: //NORD
+                    _this->nord_current_aggr=req->aggr;
+                    break;
+                case fractalsync_input_directions::SUD: //SUD
+                    _this->sud_current_aggr=req->aggr;
+                    break;
+                case fractalsync_input_directions::EAST: //EAST
+                    _this->east_current_aggr=req->aggr;
+                    break;
+                case fractalsync_input_directions::WEST: //WEST
+                    _this->west_current_aggr=req->aggr;
+                    break;
+                default:
+                   _this->trace.fatal("[FractalSync] wrong direction\n");
+                   break;
+            }
+            if (req->id_req==fractalsync_output_directions::EAST_WEST)
                 _this->master_ns_output_port.sync(&OutReq);
-            else if ((id==fractalsync_input_directions::EAST) || (id=fractalsync_input_directions::WEST)) 
+            else if (req->id_req==fractalsync_output_directions::NORD_SUD)
                 _this->master_ew_output_port.sync(&OutReq);
             else
                 _this->trace.fatal("[FractalSync] wrong direction\n");
@@ -478,19 +488,31 @@ void FractalSync::master_input_method(vp::Block *__this, PortResp<uint32_t> *req
     
     FractalSync *_this = (FractalSync *)__this;
     if (id==fractalsync_output_directions::EAST_WEST) {
-        _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] Received EAST-WEST response from above level. Sending a NORD-SUD request\n");
         PortResp<uint32_t> resp = {
                 .wake=true,
                 .lvl=_this->level,
                 .id_rsp=0x0,
                 .error=false
         };
-        //broadcast response. OK but please note that the ports that have to broadcast the response depend on the aggragate... MAYBE???? IDK...
-        _this->slave_nord_output_port.sync(&resp);
-        _this->slave_sud_output_port.sync(&resp);
+        if ((_this->nord_current_aggr!=0xFFFFFFFF) && (_this->sud_current_aggr==0xFFFFFFFF)) {
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] Received EAST-WEST response from above level. Sending a NORD request\n");
+            _this->slave_nord_output_port.sync(&resp);
+            _this->nord_current_aggr=0xFFFFFFFF;
+        }
+        else if ((_this->nord_current_aggr==0xFFFFFFFF) && (_this->sud_current_aggr!=0xFFFFFFFF)) {
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] Received EAST-WEST response from above level. Sending a SUD request\n");
+            _this->slave_sud_output_port.sync(&resp);
+            _this->sud_current_aggr=0xFFFFFFFF;
+        }
+        else if ((_this->nord_current_aggr!=0xFFFFFFFF) && (_this->sud_current_aggr!=0xFFFFFFFF)) {
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] Received EAST-WEST response from above level. Sending a NORD-SUD request\n");
+            _this->slave_nord_output_port.sync(&resp);
+            _this->slave_sud_output_port.sync(&resp);
+            _this->nord_current_aggr=0xFFFFFFFF;
+            _this->sud_current_aggr=0xFFFFFFFF;
+        }
     }
     else if (id==fractalsync_output_directions::NORD_SUD) {
-        _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] Received NORD-SUD response from above level. Sending a EAST-WEST request\n");
         PortResp<uint32_t> resp = {
                 .wake=true,
                 .lvl=_this->level,
@@ -498,8 +520,23 @@ void FractalSync::master_input_method(vp::Block *__this, PortResp<uint32_t> *req
                 .error=false
         };
         //broadcast response
-        _this->slave_west_output_port.sync(&resp);
-        _this->slave_east_output_port.sync(&resp);
+        if ((_this->east_current_aggr!=0xFFFFFFFF) && (_this->west_current_aggr==0xFFFFFFFF)) {
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] Received NORD-SUD response from above level. Sending a EAST request\n");
+            _this->slave_east_output_port.sync(&resp);
+            _this->east_current_aggr=0xFFFFFFFF;
+        }
+        else if ((_this->east_current_aggr==0xFFFFFFFF) && (_this->west_current_aggr!=0xFFFFFFFF)) {
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] Received NORD-SUD response from above level. Sending a WEST request\n");
+            _this->slave_west_output_port.sync(&resp);
+            _this->west_current_aggr=0xFFFFFFFF;
+        }
+        else if ((_this->east_current_aggr!=0xFFFFFFFF) && (_this->west_current_aggr!=0xFFFFFFFF)) {
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] Received NORD-SUD response from above level. Sending a EAST-WEST request\n");
+            _this->slave_west_output_port.sync(&resp);
+            _this->slave_east_output_port.sync(&resp);
+            _this->east_current_aggr=0xFFFFFFFF;
+            _this->west_current_aggr=0xFFFFFFFF;
+        }        
     }
 
 }
