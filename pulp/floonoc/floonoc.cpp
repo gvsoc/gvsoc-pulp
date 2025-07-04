@@ -97,9 +97,9 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
     }
 
     // Create the array of routers
-    this->req_routers.resize((this->dim_x + 1) * (this->dim_y + 1));
-    this->rsp_routers.resize((this->dim_x + 1) * (this->dim_y + 1));
-    this->wide_routers.resize((this->dim_x + 1) * (this->dim_y + 1));
+    this->req_routers.resize(this->dim_x * this->dim_y);
+    this->rsp_routers.resize(this->dim_x * this->dim_y);
+    this->wide_routers.resize(this->dim_x * this->dim_y);
 
 
     js::Config *routers = get_js_config()->get("routers");
@@ -191,12 +191,12 @@ void FlooNoc::response(vp::Block *__this, vp::IoReq *req)
 // This gets called after a request sent to a target was denied, and it is now granted
 void FlooNoc::grant(vp::Block *__this, vp::IoReq *req)
 {
-    // When the request sent by the router to the target was denied, the router was stored in
+    // When the request sent by the NI to the target was denied, the NI was stored in
     // the request to notify it when the request is granted.
-    // Get back the router and forward the grant
+    // Get back the NI and forward the grant
     FlooNoc *_this = (FlooNoc *)__this;
-    Router *router = *(Router **)req->arg_get(FlooNoc::REQ_ROUTER);
-    router->grant(req);
+    NetworkInterface *ni = *(NetworkInterface **)req->arg_get(FlooNoc::REQ_NI);
+    ni->grant(req);
 }
 
 
