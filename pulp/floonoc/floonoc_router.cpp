@@ -117,11 +117,10 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             // Get output queue ID from next position
             int out_queue_id = _this->get_req_queue(next_x, next_y);
 
-            _this->trace.msg(vp::Trace::LEVEL_TRACE, "Check stalled 1. out queue: %d %d\n", out_queue_id, _this->stalled_queues[out_queue_id].get());
             // Only send one request per cycle to the same output
             if (output_full[out_queue_id])
             {
-                _this->trace.msg(vp::Trace::LEVEL_TRACE, "Output queue is full. Skipping. out queue: %d\n", out_queue_id);
+                _this->trace.msg(vp::Trace::LEVEL_TRACE, "Output queue is full, skipping (out queue: %d)\n", out_queue_id);
                 _this->fsm_event.enqueue(); // Check again in next cycle
                 in_queue_index += 1;
                 if (in_queue_index == 5)
@@ -134,10 +133,9 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
             // In case the request goes to a queue which is stalled, skip it
             // we'll retry later
-            _this->trace.msg(vp::Trace::LEVEL_TRACE, "Check stalled. out queue: %d %d\n", out_queue_id, _this->stalled_queues[out_queue_id].get());
             if (_this->stalled_queues[out_queue_id])
             {
-                _this->trace.msg(vp::Trace::LEVEL_TRACE, "Output queue is stalled. Skipping. out queue: %d\n", out_queue_id);
+                _this->trace.msg(vp::Trace::LEVEL_TRACE, "Output queue is stalled, skipping (out queue: %d)\n", out_queue_id);
                 // Don't enque here because the stalled router will notifiy once it is unstalled
                 in_queue_index += 1;
                 if (in_queue_index == 5)
@@ -214,9 +212,6 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             in_queue_index = 0;
         }
     }
-
-
-    _this->trace.msg(vp::Trace::LEVEL_TRACE, "fsm_handler exit \n");
 }
 
 void Router::unstall_previous(vp::IoReq *req, int in_queue_index)
