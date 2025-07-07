@@ -82,8 +82,9 @@ class MagiaSoc(gvsoc.systree.Component):
             
             for id in range(0,MagiaArch.NB_CLUSTERS):
                 cluster[id].o_NARROW_OUTPUT(soc_xbar.i_INPUT())
+                soc_xbar.o_MAP(cluster[id].i_NARROW_INPUT(),f'tile-{id}-l1-mem',base=MagiaArch.L1_ADDR_START+(id*MagiaArch.L1_TILE_OFFSET),size=MagiaArch.L1_SIZE,rm_base=False)
 
-            soc_xbar.o_MAP(l2_mem.i_INPUT(),"l2_mem",base=0,size=MagiaArch.L2_SIZE,rm_base=True)
+            soc_xbar.o_MAP(l2_mem.i_INPUT(),"l2_mem",base=MagiaArch.L2_ADDR_START,size=MagiaArch.L2_SIZE,rm_base=True)
 
             cluster[0].o_SLAVE_EAST_WEST_FRACTAL(fsync_nord.i_SLAVE_WEST())
             fsync_nord.o_SLAVE_WEST(cluster[0].i_SLAVE_EAST_WEST_FRACTAL())

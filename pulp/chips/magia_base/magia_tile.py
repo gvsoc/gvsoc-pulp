@@ -125,29 +125,47 @@ class MagiaTile(gvsoc.systree.Component):
         i_cache.o_REFILL(tile_xbar.i_INPUT())
 
         # Bind: obi interconnect -> L1 TCDM, L2 off-tile (through tile_xbar)
-        obi_xbar.o_MAP(l1_tcdm.i_INPUT(0), name="reserved",
+        obi_xbar.o_MAP(l1_tcdm.i_INPUT(0), name="local-reserved",
                        base=MagiaArch.RESERVED_ADDR_START,
                        size=MagiaArch.RESERVED_SIZE, rm_base=False)
-        obi_xbar.o_MAP(l1_tcdm.i_INPUT(0), name="stack",
+        obi_xbar.o_MAP(l1_tcdm.i_INPUT(0), name="local-stack",
                        base=MagiaArch.STACK_ADDR_START,
                        size=MagiaArch.STACK_SIZE, rm_base=False)
-        obi_xbar.o_MAP(l1_tcdm.i_INPUT(0), name="local-scratchpad",
+        obi_xbar.o_MAP(l1_tcdm.i_INPUT(0), name="local-l1-mem",
                        base=MagiaArch.L1_ADDR_START+(tid*MagiaArch.L1_TILE_OFFSET),
                        size=MagiaArch.L1_SIZE, rm_base=False, remove_offset=(tid*MagiaArch.L1_TILE_OFFSET))
-        obi_xbar.o_MAP(stdout.i_INPUT(), name="uart-mem",
+        obi_xbar.o_MAP(stdout.i_INPUT(), name="local-uart-mem",
                        base=MagiaArch.STDOUT_START,
                        size=MagiaArch.STDOUT_SIZE, rm_base=False)
 
-        obi_xbar.o_MAP(tile_xbar.i_INPUT(), name="off-tile-mem",
+        # Mapping used by obi xbar to communicate with tile xbar
+        obi_xbar.o_MAP(tile_xbar.i_INPUT(), name="obi-to-axi-off-tile-l2-mem",
                        base=MagiaArch.L2_ADDR_START,
                        size=MagiaArch.L2_SIZE, rm_base=False)
+        for tile_id in range(0,MagiaArch.NB_CLUSTERS):
+            if (tile_id!=tid):
+                obi_xbar.o_MAP(tile_xbar.i_INPUT(), name=f'obi-to-axi-off-tile-{tile_id}-l1-mem',
+                        base=MagiaArch.L1_ADDR_START+(tile_id*MagiaArch.L1_TILE_OFFSET),
+                        size=MagiaArch.L1_SIZE, rm_base=False)
 
         # Bind (with address relocation): tile interconnect -> L2 off-tile
-        tile_xbar.o_MAP(self.__i_NARROW_OUTPUT(), name="off-tile-mem",
+        # Bind tile xbar so that it can write l2 mem
+        tile_xbar.o_MAP(self.__i_NARROW_OUTPUT(), name="axi-off-tile-l2-mem",
                         base=MagiaArch.L2_ADDR_START,
-                        size=MagiaArch.L2_SIZE, rm_base=True)
+                        size=MagiaArch.L2_SIZE, rm_base=False)
+        # Bind tile xbar so that it can communicate with other tiles l1 mem
+        for tile_id in range(0,MagiaArch.NB_CLUSTERS):
+            if (tile_id!=tid):
+                tile_xbar.o_MAP(self.__i_NARROW_OUTPUT(), name=f'axi-off-tile-{tile_id}-l1-mem',
+                        base=MagiaArch.L1_ADDR_START+(tile_id*MagiaArch.L1_TILE_OFFSET),
+                        size=MagiaArch.L1_SIZE, rm_base=False)
+        # Bind tile xbar so that it can coomunicate with obi xbar
+        tile_xbar.o_MAP(obi_xbar.i_INPUT(), name="axi-to-obi-l1-mem",
+                        base=MagiaArch.L1_ADDR_START+(tid*MagiaArch.L1_TILE_OFFSET),
+                        size=MagiaArch.L1_SIZE, rm_base=False, remove_offset=(tid*MagiaArch.L1_TILE_OFFSET))
         
-        #self.__o_NARROW_INPUT(tile_xbar.i_INPUT()) #lets disable the ports to other clusters for now..
+        
+        self.__o_NARROW_INPUT(tile_xbar.i_INPUT()) #lets disable the ports to other clusters for now..
 
         # Bind: cv32 core enable ports -> matching composite ports
         self.__o_ENTRY(core_cv32.i_ENTRY())
@@ -212,12 +230,12 @@ class MagiaTile(gvsoc.systree.Component):
     def __i_NARROW_OUTPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'narrow_output', signature='io')
     
-    # Narrow router for cores data accesses
-    # def i_NARROW_INPUT(self) -> gvsoc.systree.SlaveItf:
-    #     return gvsoc.systree.SlaveItf(self, 'narrow_input', signature='io')
+    # Input port to L1 mem
+    def i_NARROW_INPUT(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'narrow_input', signature='io')
 
-    # def __o_NARROW_INPUT(self, itf: gvsoc.systree.SlaveItf):
-    #     self.itf_bind('narrow_input', itf, signature='io', composite_bind=True)
+    def __o_NARROW_INPUT(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('narrow_input', itf, signature='io', composite_bind=True)
 
     # Input port for the loader
     def i_LOADER(self) -> gvsoc.systree.SlaveItf:
