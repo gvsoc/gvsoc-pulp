@@ -23,6 +23,7 @@ from pulp.snitch.hierarchical_cache import Hierarchical_cache
 from vp.clock_domain import Clock_domain
 import pulp.mempool.l1_subsystem as l1_subsystem
 import interco.router as router
+import devices.uart.ns16550 as ns16550
 import utils.loader.loader
 import gvsoc.systree as st
 from pulp.mempool.mempool_tile_submodule.dma_interleaver import DmaInterleaver
@@ -66,6 +67,9 @@ class System(st.Component):
 
         # CSR
         csr = CtrlRegisters(self, 'ctrl_registers')
+        
+        uart = ns16550.Ns16550(self, 'uart')
+        # uart = memory.Memory(self, 'uart', size=0x100, width_log2=3, atomics=True)
 
         # Binary Loader
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x80000000)
@@ -84,6 +88,10 @@ class System(st.Component):
         # CSR Router
         csr_router = router.Router(self, 'csr_router', bandwidth=32, latency=1)
         csr_router.add_mapping('output')
+        
+        # UART Router
+        uart_router = router.Router(self, 'uart_router', bandwidth=8, latency=1)
+        uart_router.add_mapping('output')
 
         # Dummy Memory Router
         dummy_mem_router = router.Router(self, 'dummy_mem_router', bandwidth=32, latency=1)
@@ -111,6 +119,11 @@ class System(st.Component):
         for i in range(0, nb_groups):
             self.bind(mempool_cluster, 'csr_%d' % i, csr_router, 'input')
         self.bind(csr_router,'output',csr, 'input')
+        
+        #uart router
+        for i in range(0, nb_groups):
+            self.bind(mempool_cluster, 'uart_%d' % i, uart_router, 'input')
+        self.bind(uart_router,'output',uart, 'input')
 
         #dummy_mem router
         for i in range(0, nb_groups):
