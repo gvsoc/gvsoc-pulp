@@ -159,6 +159,10 @@ class Tile(st.Component):
         axi_ico.add_mapping('csr', base=0x40000000, remove_offset=0x40000000, size=0x10000)
         self.bind(axi_ico, 'csr', self, 'csr')
 
+        # AXI -> UART ports
+        axi_ico.add_mapping('uart', base=0xc0000000, remove_offset=0xc0000000, size=0x100)
+        self.bind(axi_ico, 'uart', self, 'uart')
+
         # AXI -> Dummy Memory ports
         axi_ico.add_mapping('dummy')
         self.bind(axi_ico, 'dummy', self, 'dummy_mem')
