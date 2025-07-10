@@ -162,7 +162,7 @@ class MagiaTile(gvsoc.systree.Component):
         # Bind tile xbar so that it can coomunicate with obi xbar
         tile_xbar.o_MAP(obi_xbar.i_INPUT(), name="axi-to-obi-l1-mem",
                         base=MagiaArch.L1_ADDR_START+(tid*MagiaArch.L1_TILE_OFFSET),
-                        size=MagiaArch.L1_SIZE, rm_base=False, remove_offset=(tid*MagiaArch.L1_TILE_OFFSET))
+                        size=MagiaArch.L1_SIZE, rm_base=False)
         
         
         self.__o_NARROW_INPUT(tile_xbar.i_INPUT()) #lets disable the ports to other clusters for now..
@@ -230,7 +230,6 @@ class MagiaTile(gvsoc.systree.Component):
     def __i_NARROW_OUTPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'narrow_output', signature='io')
     
-    # Input port to L1 mem
     def i_NARROW_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'narrow_input', signature='io')
 
