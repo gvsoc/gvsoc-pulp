@@ -82,6 +82,7 @@ class Cluster(st.Component):
             self.bind(self.group_list[i], 'rom', self, 'rom_%d' % i)
             self.bind(self.group_list[i], 'L2_data', self, 'L2_data_%d' % i)
             self.bind(self.group_list[i], 'csr', self, 'csr_%d' % i)
+            self.bind(self.group_list[i], 'uart', self, 'uart_%d' % i)
             self.bind(self.group_list[i], 'dummy_mem', self, 'dummy_mem_%d' % i)
             self.bind(self, 'loader_start', self.group_list[i], 'loader_start')
             self.bind(self, 'loader_entry', self.group_list[i], 'loader_entry')

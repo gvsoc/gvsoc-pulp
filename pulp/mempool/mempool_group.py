@@ -79,6 +79,10 @@ class Group(st.Component):
         #csr router
         csr_router = router.Router(self, 'csr_router', bandwidth=32, latency=1)
         csr_router.add_mapping('output')
+        
+        #uart router
+        uart_router = router.Router(self, 'uart_router', bandwidth=8, latency=1)
+        uart_router.add_mapping('output')
 
         #dummy_mem router
         dummy_mem_router = router.Router(self, 'dummy_mem_router', bandwidth=32, latency=1)
@@ -112,6 +116,10 @@ class Group(st.Component):
         #Tile l2 data -> csr router
         for i in range(0, nb_tiles_per_group):
             self.bind(self.tile_list[i], 'csr', csr_router, 'input')
+            
+        #Tile uart -> uart router
+        for i in range(0, nb_tiles_per_group):
+            self.bind(self.tile_list[i], 'uart', uart_router, 'input')
         
         #Tile l2 data -> dummy_mem router
         for i in range(0, nb_tiles_per_group):
@@ -141,4 +149,5 @@ class Group(st.Component):
         self.bind(rom_router, 'output', self, 'rom')
         self.bind(l2_router, 'output', self, 'L2_data')
         self.bind(csr_router, 'output', self, 'csr')
+        self.bind(uart_router, 'output', self, 'uart')
         self.bind(dummy_mem_router, 'output', self, 'dummy_mem')
