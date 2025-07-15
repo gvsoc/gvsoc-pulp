@@ -185,23 +185,22 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
         case SLAVE_NORD_REQ:
         {
             _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] processed request from NORD port\n");
-            _this->syncro_val_nord_sud++; //vertical i.e., nord-sud
-            if (_this->syncro_val_nord_sud==2) { //if both the ports have been syncronized
-                msb_pos = (sizeof(_this->nord_current_aggr)*8)-1 - __builtin_clz(_this->nord_current_aggr); //then get the position of the msbit of the request
-                if (msb_pos == (uint32_t)(log2(_this->level))) { //and check if syncro ends here at this fractal
+            msb_pos = (sizeof(_this->nord_current_aggr)*8)-1 - __builtin_clz(_this->nord_current_aggr); //then get the position of the msbit of the request
+            if (msb_pos == (uint32_t)(log2(_this->level))) { //and check if target syncro ends here at this fractal
+                _this->syncro_val_nord_sud++; //vertical i.e., nord-sud
+                if (_this->syncro_val_nord_sud==2) { //if both the ports have been syncronized
                     _this->state.set(NORD_SUD_END_SYNCRO);
                     _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
-                else { //this happens when both tiles at current level are syncro but they ask for another syncro level (this event is triggered by one ot the two ports)
-                    //_this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] SLAVE-NORD triggered an uplevel request...\n");
-                    _this->nord_sud_current_aggr=_this->nord_current_aggr;
-                    _this->nord_sud_current_id_req=_this->nord_current_id_req;
-                    _this->state.set(NORD_SUD_UP_SYNCRO);
+                else {
+                    _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
                     _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
             }
-            else {
-                _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
+            else { //not for this fractal so propagate to the next
+                _this->nord_sud_current_aggr=_this->nord_current_aggr;
+                _this->nord_sud_current_id_req=_this->nord_current_id_req;
+                _this->state.set(NORD_SUD_UP_SYNCRO);
                 _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
             }
             break;
@@ -209,23 +208,22 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
         case SLAVE_SUD_REQ:
         {
             _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] processed request from SUD port\n");
-            _this->syncro_val_nord_sud++; //vertical i.e., nord-sud
-            if (_this->syncro_val_nord_sud==2) { //if both the ports have been syncronized
-                msb_pos = (sizeof(_this->sud_current_aggr)*8)-1 - __builtin_clz(_this->sud_current_aggr); //then get the position of the msbit of the request
-                if (msb_pos == (uint32_t)(log2(_this->level))) { //and check if syncro ends here at this fractal
+            msb_pos = (sizeof(_this->sud_current_aggr)*8)-1 - __builtin_clz(_this->sud_current_aggr); //then get the position of the msbit of the request
+            if (msb_pos == (uint32_t)(log2(_this->level))) { //and check if syncro ends here at this fractal
+                _this->syncro_val_nord_sud++; //vertical i.e., nord-sud
+                if (_this->syncro_val_nord_sud==2) { //if both the ports have been syncronized
                     _this->state.set(NORD_SUD_END_SYNCRO);
                     _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
-                else { //this happens when both tiles at current level are syncro but they ask for another syncro level (this event is triggered by one ot the two ports)
-                    //_this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] triggered an uplevel request to NORD-SUD master port\n");
-                    _this->nord_sud_current_aggr=_this->sud_current_aggr;
-                    _this->nord_sud_current_id_req=_this->sud_current_id_req;
-                    _this->state.set(NORD_SUD_UP_SYNCRO);
+                else {
+                    _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
                     _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
-                }
+                }   
             }
-            else {
-                _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
+            else { //not for this fractal so propagate to the next
+                _this->nord_sud_current_aggr=_this->sud_current_aggr;
+                _this->nord_sud_current_id_req=_this->sud_current_id_req;
+                _this->state.set(NORD_SUD_UP_SYNCRO);
                 _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
             }
             break;
@@ -233,23 +231,22 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
         case SLAVE_EAST_REQ:
         {
             _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] processed request from EAST port\n");
-            _this->syncro_val_east_west++; //horizontal i.e., east-west
-            if (_this->syncro_val_east_west==2) { //if both the ports have been syncronized
-                msb_pos = (sizeof(_this->east_current_aggr)*8)-1 - __builtin_clz(_this->east_current_aggr); //then get the position of the msbit of the request
-                if (msb_pos == (uint32_t)(log2(_this->level))) { //and check if syncro ends here at this fractal
+            msb_pos = (sizeof(_this->east_current_aggr)*8)-1 - __builtin_clz(_this->east_current_aggr); //then get the position of the msbit of the request
+            if (msb_pos == (uint32_t)(log2(_this->level))) { //and check if syncro ends here at this fractal
+                _this->syncro_val_east_west++; //horizontal i.e., east-west
+                if (_this->syncro_val_east_west==2) { //if both the ports have been syncronized
                     _this->state.set(EAST_WEST_END_SYNCRO);
                     _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
-                else { //this happens when both tils at current level are syncro but they ask for another syncro level (this event is triggered by one ot the two ports)
-                    //_this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] SLAVE-EST triggered an uplevel request...\n");
-                    _this->east_west_current_aggr=_this->east_current_aggr;
-                    _this->east_west_current_id_req=_this->east_current_id_req;
-                    _this->state.set(EAST_WEST_UP_SYNCRO);
+                else {
+                    _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
                     _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
             }
-            else {
-                _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
+            else { //not for this fractal so propagate to the next
+                _this->east_west_current_aggr=_this->east_current_aggr;
+                _this->east_west_current_id_req=_this->east_current_id_req;
+                _this->state.set(EAST_WEST_UP_SYNCRO);
                 _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
             }
             break;
@@ -257,23 +254,22 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
         case SLAVE_WEST_REQ:
         {
             _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] processed request from WEST port\n");
-            _this->syncro_val_east_west++; //horizontal i.e., east-west
-            if (_this->syncro_val_east_west==2) { //if both the ports have been syncronized
-                msb_pos = (sizeof(_this->west_current_aggr)*8)-1 - __builtin_clz(_this->west_current_aggr); //then get the position of the msbit of the request
-                if (msb_pos == (uint32_t)(log2(_this->level))) { //and check if syncro ends here at this fractal
+            msb_pos = (sizeof(_this->west_current_aggr)*8)-1 - __builtin_clz(_this->west_current_aggr); //then get the position of the msbit of the request
+            if (msb_pos == (uint32_t)(log2(_this->level))) { //and check if syncro ends here at this fractal
+                _this->syncro_val_east_west++; //horizontal i.e., east-west
+                if (_this->syncro_val_east_west==2) { //if both the ports have been syncronized
                     _this->state.set(EAST_WEST_END_SYNCRO);
                     _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
-                else { //this happens when both tiles at current level are syncro but they ask for another syncro level (this event is triggered by one ot the two ports)
-                    //_this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] SLAVE-WEST triggered an uplevel request...\n");
-                    _this->east_west_current_aggr=_this->west_current_aggr;
-                    _this->east_west_current_id_req=_this->west_current_id_req;
-                    _this->state.set(EAST_WEST_UP_SYNCRO);
+                else {
+                    _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
                     _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
             }
-            else {
-                _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
+            else { //not for this fractal so propagate to the next
+                _this->east_west_current_aggr=_this->west_current_aggr;
+                _this->east_west_current_id_req=_this->west_current_id_req;
+                _this->state.set(EAST_WEST_UP_SYNCRO);
                 _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
             }
             break;
@@ -287,6 +283,7 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
             };
             _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] sending EAST-WEST req for level up [id=%d]\n",_this->nord_sud_current_id_req);
             _this->master_ew_output_port.sync(&OutReq); 
+            _this->syncro_val_nord_sud=0;
             _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
             _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
             break;
@@ -327,6 +324,7 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
             
             _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] sending NORD-SUD req for level up [id=%d]\n",_this->east_west_current_id_req);
             _this->master_ns_output_port.sync(&OutReq);
+            _this->syncro_val_east_west=0;
             _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
             _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
             break;

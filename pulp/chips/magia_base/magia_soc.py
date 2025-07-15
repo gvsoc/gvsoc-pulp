@@ -8,7 +8,12 @@ from pulp.chips.magia_base.magia_tile import MagiaTile
 from pulp.chips.magia_base.magia_arch import MagiaArch
 from pulp.floonoc.floonoc import *
 from pulp.fractal_sync.fractal_sync import *
-from typing import List
+from typing import List, Dict
+import math
+
+def n_fract_per_lvl(param: int) -> list[int]:
+        max_power = int(math.log2(param))
+        return [2**i for i in reversed(range(max_power))]
 
 class MagiaSoc(gvsoc.systree.Component):
     def __init__(self, parent, name, parser, binary):
@@ -29,15 +34,68 @@ class MagiaSoc(gvsoc.systree.Component):
         for id in range(0,MagiaArch.NB_CLUSTERS):
             cluster.append(MagiaTile(self, f'magia-tile-{id}', parser, id))
 
+        # Create Tile matrix for IDs
+        # --------------> X direction
+        # | 0  1  2  3
+        # | 4  5  6  7
+        # | 8  9 10 11
+        # |12 13 14 15
+        # |
+        # V
+        # Y direction
+
+        # Init matrix:
+        tile_matrix: List[List[int]] = [[0 for _ in range(MagiaArch.N_TILES_X)] for _ in range(MagiaArch.N_TILES_Y)]
+        # Populate matrix
+        id=0
+        for y in range(0,MagiaArch.N_TILES_Y):
+            for x in range(0,MagiaArch.N_TILES_X):
+                tile_matrix[y][x] = id
+                id = id +1
+
+        for row in tile_matrix:
+            print(row)
+
         # Create fractal sync
-        fsync_nord = FractalSync(self,'fsync_nord',level=0)
-        fsync_sud  = FractalSync(self,'fsync_sud',level=0)
-        fsync_east = FractalSync(self,'fsync_east',level=0)  
-        fsync_west = FractalSync(self,'fsync_west',level=0)
-          
-        fsync_center = FractalSync(self,'fsync_center',level=1)
+        fsync_nord:List[FractalSync] = [] #used only at level 0
+        fsync_sud:List[FractalSync] = [] #used only at level 0
+        #fsync_center:List[List[FractalSync]] = []
+        fsync_center: Dict[int, List[FractalSync]] = {}
+
+        # fsync_east:List[List[FractalSync]] = []
+        # fsync_west:List[List[FractalSync]] = []
+
+        # Build horizontal tree. This tree builds also the root node
+        lvl=0
+        for n_fractal in n_fract_per_lvl(MagiaArch.NB_CLUSTERS):
+            print(f"Placing {n_fractal} fsync in level {lvl}")
+            if lvl == 0:
+                for n in range(0,int(n_fractal/2)):
+                    fsync_nord.append(FractalSync(self,f'fsync_nord_id_{n}',level=lvl))
+                    fsync_sud.append(FractalSync(self,f'fsync_sud_id_{n}',level=lvl))
+            else:
+                if n_fractal == 1:
+                    fsync_root = FractalSync(self,f'fsync_root',level=lvl)
+                else :
+                    fsync_center[lvl] = [None] * int(n_fractal)
+                    for n in range(0,n_fractal):
+                        fsync_center[lvl][n] = FractalSync(self,f'fsync_center_lvl_{lvl}_id_{n}',level=lvl)
+            lvl=lvl+1
+
+        # # Build vertical tree. 
+        # lvl=0
+        # for n_fractal in n_fract_per_lvl(MagiaArch.NB_CLUSTERS):
+        #     # allocate a list per level
+        #     fsync_east.append([None] * int(n_fractal / 2))
+        #     fsync_west.append([None] * int(n_fractal / 2))
+
+        #     for n in range(0,int(n_fractal/2)):
+        #         fsync_east[lvl][n] = FractalSync(self,f'fsync_east_g{n}_lvl{lvl}',level=lvl)
+        #         fsync_west[lvl][n] = FractalSync(self,f'fsync_west_g{n}_lvl{lvl}',level=lvl)
+        #     lvl=lvl+1        
 
         if (MagiaArch.ENABLE_NOC):
+            # this is WIP!!
             noc = FlooNoc2dMeshNarrowWide(self,
                                         name='magia-noc',
                                         narrow_width=4,
@@ -86,41 +144,104 @@ class MagiaSoc(gvsoc.systree.Component):
 
             soc_xbar.o_MAP(l2_mem.i_INPUT(),"l2_mem",base=MagiaArch.L2_ADDR_START,size=MagiaArch.L2_SIZE,rm_base=True)
 
-            cluster[0].o_SLAVE_EAST_WEST_FRACTAL(fsync_nord.i_SLAVE_WEST())
-            fsync_nord.o_SLAVE_WEST(cluster[0].i_SLAVE_EAST_WEST_FRACTAL())
+            # Horizontal tree routing
+            for lvl in range(0,int(math.log2(MagiaArch.NB_CLUSTERS))):
+                # level 0 is a special level connecting the tiles
+                if lvl == 0:
+                    print("Current level is ", lvl)
+                    # get the list of tiles connected to fractal nord west --> even rows and even cols of tile_matrix
+                    tiles_even_rows_cols = [item for row in tile_matrix[::2] for item in row[::2]]
+                    n=0
+                    for id in tiles_even_rows_cols:
+                        print(f"Connection tile-id {id} to fsync_nord_id_{n} WEST INPUT port")
+                        cluster[id].o_SLAVE_EAST_WEST_FRACTAL(fsync_nord[n].i_SLAVE_WEST())
+                        fsync_nord[n].o_SLAVE_WEST(cluster[id].i_SLAVE_EAST_WEST_FRACTAL())
+                        n=n+1
 
-            cluster[1].o_SLAVE_EAST_WEST_FRACTAL(fsync_nord.i_SLAVE_EAST())
-            fsync_nord.o_SLAVE_EAST(cluster[1].i_SLAVE_EAST_WEST_FRACTAL())
+                    # get the list of tiles connected to fractal sud west --> even rows and odd cols of tile_matrix
+                    tiles_even_rows_odd_cols = [item for row in tile_matrix[::2] for item in row[1::2]]
+                    n=0
+                    for id in tiles_even_rows_odd_cols:
+                        print(f"Connection tile-id {id} to fsync_nord_id_{n} EAST INPUT port")
+                        cluster[id].o_SLAVE_EAST_WEST_FRACTAL(fsync_nord[n].i_SLAVE_EAST())
+                        fsync_nord[n].o_SLAVE_EAST(cluster[id].i_SLAVE_EAST_WEST_FRACTAL())
+                        n=n+1
 
-            cluster[0].o_SLAVE_NORD_SUD_FRACTAL(fsync_west.i_SLAVE_NORD())
-            fsync_west.o_SLAVE_NORD(cluster[0].i_SLAVE_NORD_SUD_FRACTAL())
+                    # get the list of tiles connected to fractal nord east --> odd rows and even cols of tile_matrix
+                    tiles_odd_rows_even_cols = [item for row in tile_matrix[1::2] for item in row[::2]]
+                    n=0
+                    for id in tiles_odd_rows_even_cols:
+                        print(f"Connection tile-id {id} to fsync_sud_id_{n} WEST INPUT port")
+                        cluster[id].o_SLAVE_EAST_WEST_FRACTAL(fsync_sud[n].i_SLAVE_WEST())
+                        fsync_sud[n].o_SLAVE_WEST(cluster[id].i_SLAVE_EAST_WEST_FRACTAL())
+                        n=n+1
+                        
+                    # get the list of tiles connected to fractal sud east --> odd rows and odd cols of tile_matrix
+                    tiles_odd_rows_cols = [item for row in tile_matrix[1::2] for item in row[1::2]]
+                    n=0
+                    for id in tiles_odd_rows_cols:
+                        print(f"Connection tile-id {id} to fsync_sud_id_{n} EAST INPUT port")
+                        cluster[id].o_SLAVE_EAST_WEST_FRACTAL(fsync_sud[n].i_SLAVE_EAST())
+                        fsync_sud[n].o_SLAVE_EAST(cluster[id].i_SLAVE_EAST_WEST_FRACTAL())
+                        n=n+1
+      
+                elif (lvl == 1) and (lvl<(int(math.log2(MagiaArch.NB_CLUSTERS))-1)): #this is another special level as from now on we leave the nord-sud naming and we move to a more abstract form
+                    print("Current level is ", lvl)
+                    for n in range(0,len(fsync_center[lvl])):
+                        print(f"Connecting fsync_nord_id_{n} NORD_SUD OUTPUT port to fsync_center_lvl_{lvl}_id_{n} NORD INPUT port")
+                        fsync_nord[n].o_MASTER_NORD_SUD(fsync_center[lvl][n].i_SLAVE_NORD())
+                        fsync_center[lvl][n].o_SLAVE_NORD(fsync_nord[n].i_MASTER_NORD_SUD())
 
-            cluster[1].o_SLAVE_NORD_SUD_FRACTAL(fsync_east.i_SLAVE_NORD())
-            fsync_east.o_SLAVE_NORD(cluster[1].i_SLAVE_NORD_SUD_FRACTAL())
-   
-            cluster[2].o_SLAVE_NORD_SUD_FRACTAL(fsync_west.i_SLAVE_SUD())
-            fsync_west.o_SLAVE_SUD(cluster[2].i_SLAVE_NORD_SUD_FRACTAL())
+                        print(f"Connecting fsync_sud_id_{n} NORD_SUD OUTPUT port to fsync_center_lvl_{lvl}_id_{n} SUD INPUT port")
+                        fsync_sud[n].o_MASTER_NORD_SUD(fsync_center[lvl][n].i_SLAVE_SUD())
+                        fsync_center[lvl][n].o_SLAVE_SUD(fsync_sud[n].i_MASTER_NORD_SUD())
+                
+                elif (lvl > 1) and (lvl<(int(math.log2(MagiaArch.NB_CLUSTERS))-1)): # intermediate levels
+                    print("Current level is ", lvl)
+                    if lvl % 2 == 0: #fractal in even levels use EAST WEST ports
+                        n_prev=0
+                        for n in range(0,len(fsync_center[lvl])):
+                            print(f"Connecting fsync_center_lvl_{lvl-1}_id_{n_prev} EAST_WEST OUTPUT port to fsync_center_lvl_{lvl}_id_{n} WEST INPUT port")
+                            fsync_center[lvl-1][n_prev].o_MASTER_EAST_WEST(fsync_center[lvl][n].i_SLAVE_WEST())
+                            fsync_center[lvl][n].o_SLAVE_WEST(fsync_center[lvl-1][n_prev].i_MASTER_EAST_WEST())
+                            n_prev=n_prev+1
+                            print(f"Connecting fsync_center_lvl_{lvl-1}_id_{n_prev} EAST_WEST OUTPUT port to fsync_center_lvl_{lvl}_id_{n} EAST INPUT port")
+                            fsync_center[lvl-1][n_prev].o_MASTER_EAST_WEST(fsync_center[lvl][n].i_SLAVE_EAST())
+                            fsync_center[lvl][n].o_SLAVE_EAST(fsync_center[lvl-1][n_prev].i_MASTER_EAST_WEST())
+                            n_prev=n_prev+1
 
-            cluster[3].o_SLAVE_NORD_SUD_FRACTAL(fsync_east.i_SLAVE_SUD())
-            fsync_east.o_SLAVE_SUD(cluster[3].i_SLAVE_NORD_SUD_FRACTAL())
+                    else : #fractal in odd levels use NORD SUD ports
+                        n_prev=0
+                        for n in range(0,len(fsync_center[lvl])):
+                            print(f"Connecting fsync_center_lvl_{lvl-1}_id_{n_prev} NORD_SUD OUTPUT port to fsync_center_lvl_{lvl}_id_{n} NORD INPUT port")
+                            fsync_center[lvl-1][n_prev].o_MASTER_NORD_SUD(fsync_center[lvl][n].i_SLAVE_NORD())
+                            fsync_center[lvl][n].o_SLAVE_NORD(fsync_center[lvl-1][n_prev].i_MASTER_NORD_SUD())
+                            n_prev=n_prev+1
+                            print(f"Connecting fsync_center_lvl_{lvl-1}_id_{n_prev} NORD_SUD OUTPUT port to fsync_center_lvl_{lvl}_id_{n} SUD INPUT port")
+                            fsync_center[lvl-1][n_prev].o_MASTER_NORD_SUD(fsync_center[lvl][n].i_SLAVE_SUD())
+                            fsync_center[lvl][n].o_SLAVE_SUD(fsync_center[lvl-1][n_prev].i_MASTER_NORD_SUD())
+                            n_prev=n_prev+1
+                
+                else: #this is the root
+                    print("Current level is ", lvl, ". Connecting root node.")
+                    if lvl == 1: # this is a special case
+                        print(f"Connecting fsync_nord_id_{0} NORD_SUD OUTPUT port to fsync_root NORD INPUT port")
+                        fsync_nord[0].o_MASTER_NORD_SUD(fsync_root.i_SLAVE_NORD())
+                        fsync_root.o_SLAVE_NORD(fsync_nord[0].i_MASTER_NORD_SUD())
 
-            cluster[2].o_SLAVE_EAST_WEST_FRACTAL(fsync_sud.i_SLAVE_WEST())
-            fsync_sud.o_SLAVE_WEST(cluster[2].i_SLAVE_EAST_WEST_FRACTAL())
+                        print(f"Connecting fsync_sud_id_{0} NORD_SUD OUTPUT port to fsync_root SUD INPUT port")
+                        fsync_sud[0].o_MASTER_NORD_SUD(fsync_root.i_SLAVE_SUD())
+                        fsync_root.o_SLAVE_SUD(fsync_sud[0].i_MASTER_NORD_SUD())
 
-            cluster[3].o_SLAVE_EAST_WEST_FRACTAL(fsync_sud.i_SLAVE_EAST())
-            fsync_sud.o_SLAVE_EAST(cluster[3].i_SLAVE_EAST_WEST_FRACTAL())
+                    else :  
+                        #please note that last level, i.e., root level, is always even. Moreover the previous level has only one fractal NORD and one fractal SUD
+                        print(f"Connecting fsync_center_lvl_{lvl-1}_id_{0} NORD_SUD OUTPUT port to fsync_root NORD INPUT port")
+                        fsync_center[lvl-1][0].o_MASTER_NORD_SUD(fsync_root.i_SLAVE_NORD())
+                        fsync_root.o_SLAVE_NORD(fsync_center[lvl-1][0].i_MASTER_NORD_SUD())
 
-            fsync_nord.o_MASTER_NORD_SUD(fsync_center.i_SLAVE_NORD())
-            fsync_center.o_SLAVE_NORD(fsync_nord.i_MASTER_NORD_SUD())
-
-            fsync_west.o_MASTER_EAST_WEST(fsync_center.i_SLAVE_WEST())
-            fsync_center.o_SLAVE_WEST(fsync_west.i_MASTER_EAST_WEST())
-
-            fsync_sud.o_MASTER_NORD_SUD(fsync_center.i_SLAVE_SUD())
-            fsync_center.o_SLAVE_SUD(fsync_sud.i_MASTER_NORD_SUD())
-
-            fsync_east.o_MASTER_EAST_WEST(fsync_center.i_SLAVE_EAST())
-            fsync_center.o_SLAVE_EAST(fsync_east.i_MASTER_EAST_WEST())
+                        print(f"Connecting fsync_center_lvl_{lvl-1}_id_{1} NORD_SUD OUTPUT port to fsync_root SUD INPUT port")
+                        fsync_center[lvl-1][1].o_MASTER_NORD_SUD(fsync_root.i_SLAVE_SUD())
+                        fsync_root.o_SLAVE_SUD(fsync_center[lvl-1][1].i_MASTER_NORD_SUD())
 
         # Bind loader
         for id in range(0,MagiaArch.NB_CLUSTERS):
