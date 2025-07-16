@@ -75,7 +75,7 @@ class System(st.Component):
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x80000000)
 
         #Dummy Memory
-        dummy_mem = memory.Memory(self, 'dummy_mem', atomics=True, size=0x30000)
+        dummy_mem = memory.Memory(self, 'dummy_mem', atomics=True, size=0x100000)
 
         # Rom Router
         rom_router = router.Router(self, 'rom_router', bandwidth=64, latency=1)
@@ -134,7 +134,7 @@ class System(st.Component):
         self.bind(loader, 'start', mempool_cluster, 'loader_start')
         self.bind(loader, 'entry', mempool_cluster, 'loader_entry')
         self.bind(loader, 'out', loader_router, 'input')
-        loader_router.add_mapping('dummy', base=0x00000000, remove_offset=0x00000000, size=0x30000)
+        loader_router.add_mapping('dummy', base=0x00000000, remove_offset=0x00000000, size=0x100000)
         loader_router.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
         loader_router.add_mapping('rom', base=0xa0000000, remove_offset=0xa0000000, size=0x1000)
         loader_router.add_mapping('csr', base=0x40000000, remove_offset=0x40000000, size=0x10000)
