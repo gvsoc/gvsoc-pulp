@@ -15,6 +15,20 @@ def n_fract_per_lvl(param: int) -> list[int]:
         max_power = int(math.log2(param))
         return [2**i for i in reversed(range(max_power))]
 
+def calculate_north_south(n, tiling):
+    """
+    Calculates the north and south position of the fractals based on tiling parameter.
+    """
+    if n < tiling:
+        north = n
+    else:
+        row = n // tiling
+        column = n % tiling
+        north = row * 2 * tiling + column
+    
+    south = north + tiling
+    return north, south
+
 class MagiaSoc(gvsoc.systree.Component):
     def __init__(self, parent, name, parser, binary):
         super().__init__(parent, name)
@@ -213,14 +227,15 @@ class MagiaSoc(gvsoc.systree.Component):
                     else : #fractal in odd levels use NORD SUD ports
                         n_prev=0
                         for n in range(0,len(fsync_center[lvl])):
-                            print(f"Connecting fsync_center_lvl_{lvl-1}_id_{n_prev} NORD_SUD OUTPUT port to fsync_center_lvl_{lvl}_id_{n} NORD INPUT port")
-                            fsync_center[lvl-1][n_prev].o_MASTER_NORD_SUD(fsync_center[lvl][n].i_SLAVE_NORD())
-                            fsync_center[lvl][n].o_SLAVE_NORD(fsync_center[lvl-1][n_prev].i_MASTER_NORD_SUD())
-                            n_prev=n_prev+1
-                            print(f"Connecting fsync_center_lvl_{lvl-1}_id_{n_prev} NORD_SUD OUTPUT port to fsync_center_lvl_{lvl}_id_{n} SUD INPUT port")
-                            fsync_center[lvl-1][n_prev].o_MASTER_NORD_SUD(fsync_center[lvl][n].i_SLAVE_SUD())
-                            fsync_center[lvl][n].o_SLAVE_SUD(fsync_center[lvl-1][n_prev].i_MASTER_NORD_SUD())
-                            n_prev=n_prev+1
+                            nord_id,sud_id=calculate_north_south(n,math.isqrt(len(fsync_center[lvl])))
+                            print(f"Connecting fsync_center_lvl_{lvl-1}_id_{nord_id} NORD_SUD OUTPUT port to fsync_center_lvl_{lvl}_id_{n} NORD INPUT port")
+                            fsync_center[lvl-1][nord_id].o_MASTER_NORD_SUD(fsync_center[lvl][n].i_SLAVE_NORD())
+                            fsync_center[lvl][n].o_SLAVE_NORD(fsync_center[lvl-1][nord_id].i_MASTER_NORD_SUD())
+                    
+                            print(f"Connecting fsync_center_lvl_{lvl-1}_id_{sud_id} NORD_SUD OUTPUT port to fsync_center_lvl_{lvl}_id_{n} SUD INPUT port")
+                            fsync_center[lvl-1][sud_id].o_MASTER_NORD_SUD(fsync_center[lvl][n].i_SLAVE_SUD())
+                            fsync_center[lvl][n].o_SLAVE_SUD(fsync_center[lvl-1][sud_id].i_MASTER_NORD_SUD())
+                        
                 
                 else: #this is the root
                     print("Current level is ", lvl, ". Connecting root node.")
