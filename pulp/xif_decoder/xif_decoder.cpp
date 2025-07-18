@@ -175,19 +175,12 @@ void XifDecoder::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
                 .sync=true,
                 .aggr=insn->arg_a,
                 .id_req=insn->arg_b
+                //.id_req = (uint32_t)((insn->arg_b % 2 == 0) ? 0 : 1)
             };
-            switch (insn->arg_b)
-            {
-            case fractal_directions::EAST_WEST:
+            if (req.id_req % 2 == 0)
                 _this->fractal_ew_input_port.sync(&req);
-                break;
-            case fractal_directions::NORD_SUD:
-                _this->fractal_ns_input_port.sync(&req);
-                break;
-            default:
-                _this->trace.fatal("[XifDecoder] wrong direction\n");
-                break;
-            }        
+            else
+                _this->fractal_ns_input_port.sync(&req);      
         }
     }
 }

@@ -184,10 +184,11 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
         }
         case SLAVE_NORD_REQ:
         {
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] processed request from NORD port\n");
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] processed request %d from NORD port\n",_this->nord_current_id_req);
             msb_pos = (sizeof(_this->nord_current_aggr)*8)-1 - __builtin_clz(_this->nord_current_aggr); //then get the position of the msbit of the request
             if (msb_pos == (uint32_t)(log2(_this->level))) { //and check if target syncro ends here at this fractal
                 _this->syncro_val_nord_sud++; //vertical i.e., nord-sud
+                //_this->syncro_val_nord_sud[_this->nord_current_id_req]++; //vertical i.e., nord-sud FIXME!!!!!!!!!!
                 if (_this->syncro_val_nord_sud==2) { //if both the ports have been syncronized
                     _this->state.set(NORD_SUD_END_SYNCRO);
                     _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
@@ -221,7 +222,7 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
         }
         case SLAVE_SUD_REQ:
         {
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] processed request from SUD port\n");
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] processed request %d from SUD port\n",_this->sud_current_id_req);
             msb_pos = (sizeof(_this->sud_current_aggr)*8)-1 - __builtin_clz(_this->sud_current_aggr); //then get the position of the msbit of the request
             if (msb_pos == (uint32_t)(log2(_this->level))) { //and check if syncro ends here at this fractal
                 _this->syncro_val_nord_sud++; //vertical i.e., nord-sud
@@ -257,7 +258,7 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
         }
         case SLAVE_EAST_REQ:
         {
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] processed request from EAST port\n");
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] processed request %d from EAST port\n",_this->east_current_id_req);
             msb_pos = (sizeof(_this->east_current_aggr)*8)-1 - __builtin_clz(_this->east_current_aggr); //then get the position of the msbit of the request
             if (msb_pos == (uint32_t)(log2(_this->level))) { //and check if syncro ends here at this fractal
                 _this->syncro_val_east_west++; //horizontal i.e., east-west
@@ -293,7 +294,7 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
         }
         case SLAVE_WEST_REQ:
         {
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] processed request from WEST port\n");
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] processed request %d from WEST port\n",_this->west_current_id_req);
             msb_pos = (sizeof(_this->west_current_aggr)*8)-1 - __builtin_clz(_this->west_current_aggr); //then get the position of the msbit of the request
             if (msb_pos == (uint32_t)(log2(_this->level))) { //and check if syncro ends here at this fractal
                 _this->syncro_val_east_west++; //horizontal i.e., east-west
@@ -450,13 +451,13 @@ void FractalSync::slave_input_method(vp::Block *__this, PortReq<uint32_t> *req, 
             _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
         }
         else if (msb_pos > (uint32_t)(log2(_this->level))) { //then, if not, check if the position of the msbit is higher than the current level 
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] received request from %s - Target is next level fractal (aggr is 0x%08x)\n",_this->directions[id],req->aggr);
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] received request from %s - Target is next level fractal (aggr is 0x%08x - req_id is %d)\n",_this->directions[id],req->aggr,req->id_req);
             PortReq<uint32_t> OutReq = {
                 .sync=true,
                 .aggr=req->aggr,
                 .id_req=req->id_req
             };
-            switch (id) {
+            switch (id) { //keep track from which port we received the request so that when we get the response we know on which port the message has te be routed
                 case fractalsync_input_directions::NORD: //NORD
                     _this->nord_current_aggr=req->aggr;
                     break;
@@ -473,9 +474,11 @@ void FractalSync::slave_input_method(vp::Block *__this, PortReq<uint32_t> *req, 
                    _this->trace.fatal("[FractalSync] wrong direction\n");
                    break;
             }
-            if (req->id_req==fractalsync_output_directions::EAST_WEST)
+            //if (req->id_req==fractalsync_output_directions::EAST_WEST)
+            if ((id == fractalsync_input_directions::EAST) || (id == fractalsync_input_directions::WEST))
                 _this->master_ns_output_port.sync(&OutReq);
-            else if (req->id_req==fractalsync_output_directions::NORD_SUD)
+            //else if (req->id_req==fractalsync_output_directions::NORD_SUD)
+            else if ((id == fractalsync_input_directions::NORD) || (id == fractalsync_input_directions::SUD))
                 _this->master_ew_output_port.sync(&OutReq);
             else
                 _this->trace.fatal("[FractalSync] wrong direction\n");
