@@ -147,15 +147,39 @@ void XifDecoder::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
 {
     XifDecoder *_this = (XifDecoder *)__this;
     uint32_t opc = insn->opcode & 0x7F;
+    uint32_t func3 = (insn->opcode >> 12) & 0x7;
 
     switch (opc) //here in RTL the mapping is: port 0 Redmule, port 1 iDMA, port 2, Fractal
     {
-        case 0b0101011: //these are all the opcodes associated with the IDMA
+        case 0b1111011: //these are all the opcodes associated with the IDMA and fsync
         {
             _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received opcode for IDMA\n");
-            _this->offload_itf_s1.sync(insn);
+            _this->offload_itf_s1.sync(insn); //passthru the instruction to the magia xdma controller
             //_this->current_Insn=insn;
             //_this->event_enqueue(_this->fsm_event, 1);
+            break;
+        }
+        case 0b1011011:
+        {
+            if (func3==0b010) {
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received opcode for FractalSync (id=%d - aggr=%d)\n",insn->arg_b,insn->arg_a);
+                insn->granted = false; //immeditaly stall the core
+                PortReq<uint32_t> req = {
+                    .sync=true,
+                    .aggr=insn->arg_a,
+                    .id_req=insn->arg_b
+                };
+                if (req.id_req % 2 == 0)
+                    _this->fractal_ew_input_port.sync(&req);
+                else
+                    _this->fractal_ns_input_port.sync(&req);
+            }
+            else {
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received opcode for IDMA\n");
+                _this->offload_itf_s1.sync(insn); //passthru the instruction to the magia xdma controller
+                //_this->current_Insn=insn;
+                //_this->event_enqueue(_this->fsm_event, 1);
+            }
             break;
         }
         case 0b0001011: //these are all the opcodes associated with the RedMule
@@ -167,21 +191,9 @@ void XifDecoder::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
             //_this->event_enqueue(_this->fsm_event, 1);
             break;
         }
-        case 0b1011011: //this is fractal sync case please update the opcode
-        {
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received opcode for FractalSync (id=%d - aggr=%d)\n",insn->arg_b,insn->arg_a);
-            insn->granted = false; //immeditaly stall the core
-            PortReq<uint32_t> req = {
-                .sync=true,
-                .aggr=insn->arg_a,
-                .id_req=insn->arg_b
-                //.id_req = (uint32_t)((insn->arg_b % 2 == 0) ? 0 : 1)
-            };
-            if (req.id_req % 2 == 0)
-                _this->fractal_ew_input_port.sync(&req);
-            else
-                _this->fractal_ns_input_port.sync(&req);      
-        }
+        default:
+            _this->trace.fatal("[XifDecoder] Received wrong opcode\n");
+            break;
     }
 }
 

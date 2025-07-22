@@ -152,7 +152,7 @@ class MagiaSoc(gvsoc.systree.Component):
 
             soc_xbar.o_MAP(l2_mem.i_INPUT(),"l2_mem",base=MagiaArch.L2_ADDR_START,size=MagiaArch.L2_SIZE,rm_base=True)
 
-            # Horizontal tree routing
+            # Fractal tree routing
             for lvl in range(0,int(math.log2(MagiaArch.NB_CLUSTERS))):
                 # level 0 is a special level connecting the tiles
                 if lvl == 0:
@@ -161,10 +161,10 @@ class MagiaSoc(gvsoc.systree.Component):
                     tiles_even_rows_cols = [item for row in tile_matrix[::2] for item in row[::2]]
                     n=0
                     for id in tiles_even_rows_cols:
-                        print(f"Connection tile-id {id} to fsync_nord_id_{n} WEST INPUT port")
+                        #print(f"Connection tile-id {id} to fsync_nord_id_{n} WEST INPUT port")
                         cluster[id].o_SLAVE_EAST_WEST_FRACTAL(fsync_nord[n].i_SLAVE_WEST())
                         fsync_nord[n].o_SLAVE_WEST(cluster[id].i_SLAVE_EAST_WEST_FRACTAL())
-                        print(f"Connection tile-id {id} to fsync_west_id_{n} NORD INPUT port")
+                        #print(f"Connection tile-id {id} to fsync_west_id_{n} NORD INPUT port")
                         cluster[id].o_SLAVE_NORD_SUD_FRACTAL(fsync_west[n].i_SLAVE_NORD())
                         fsync_west[n].o_SLAVE_NORD(cluster[id].i_SLAVE_NORD_SUD_FRACTAL())
                         n=n+1
@@ -173,10 +173,10 @@ class MagiaSoc(gvsoc.systree.Component):
                     tiles_even_rows_odd_cols = [item for row in tile_matrix[::2] for item in row[1::2]]
                     n=0
                     for id in tiles_even_rows_odd_cols:
-                        print(f"Connection tile-id {id} to fsync_nord_id_{n} EAST INPUT port")
+                        #print(f"Connection tile-id {id} to fsync_nord_id_{n} EAST INPUT port")
                         cluster[id].o_SLAVE_EAST_WEST_FRACTAL(fsync_nord[n].i_SLAVE_EAST())
                         fsync_nord[n].o_SLAVE_EAST(cluster[id].i_SLAVE_EAST_WEST_FRACTAL())
-                        print(f"Connection tile-id {id} to fsync_east_id_{n} NORD INPUT port")
+                        #print(f"Connection tile-id {id} to fsync_east_id_{n} NORD INPUT port")
                         cluster[id].o_SLAVE_NORD_SUD_FRACTAL(fsync_east[n].i_SLAVE_NORD())
                         fsync_east[n].o_SLAVE_NORD(cluster[id].i_SLAVE_NORD_SUD_FRACTAL())
                         n=n+1
@@ -185,10 +185,10 @@ class MagiaSoc(gvsoc.systree.Component):
                     tiles_odd_rows_even_cols = [item for row in tile_matrix[1::2] for item in row[::2]]
                     n=0
                     for id in tiles_odd_rows_even_cols:
-                        print(f"Connection tile-id {id} to fsync_sud_id_{n} WEST INPUT port")
+                        #print(f"Connection tile-id {id} to fsync_sud_id_{n} WEST INPUT port")
                         cluster[id].o_SLAVE_EAST_WEST_FRACTAL(fsync_sud[n].i_SLAVE_WEST())
                         fsync_sud[n].o_SLAVE_WEST(cluster[id].i_SLAVE_EAST_WEST_FRACTAL())
-                        print(f"Connection tile-id {id} to fsync_west_id_{n} SUD INPUT port")
+                        #print(f"Connection tile-id {id} to fsync_west_id_{n} SUD INPUT port")
                         cluster[id].o_SLAVE_NORD_SUD_FRACTAL(fsync_west[n].i_SLAVE_SUD())
                         fsync_west[n].o_SLAVE_SUD(cluster[id].i_SLAVE_NORD_SUD_FRACTAL())
                         n=n+1
@@ -197,10 +197,10 @@ class MagiaSoc(gvsoc.systree.Component):
                     tiles_odd_rows_cols = [item for row in tile_matrix[1::2] for item in row[1::2]]
                     n=0
                     for id in tiles_odd_rows_cols:
-                        print(f"Connection tile-id {id} to fsync_sud_id_{n} EAST INPUT port")
+                        #print(f"Connection tile-id {id} to fsync_sud_id_{n} EAST INPUT port")
                         cluster[id].o_SLAVE_EAST_WEST_FRACTAL(fsync_sud[n].i_SLAVE_EAST())
                         fsync_sud[n].o_SLAVE_EAST(cluster[id].i_SLAVE_EAST_WEST_FRACTAL())
-                        print(f"Connection tile-id {id} to fsync_west_id_{n} SUD INPUT port")
+                        #print(f"Connection tile-id {id} to fsync_west_id_{n} SUD INPUT port")
                         cluster[id].o_SLAVE_NORD_SUD_FRACTAL(fsync_east[n].i_SLAVE_SUD())
                         fsync_east[n].o_SLAVE_SUD(cluster[id].i_SLAVE_NORD_SUD_FRACTAL())
                         n=n+1
@@ -209,19 +209,19 @@ class MagiaSoc(gvsoc.systree.Component):
                     print("Current level is ", lvl)
                     # note. Center fsync on odd levels host also the vertical tree
                     for n in range(0,len(fsync_center_hv[lvl])):
-                        print(f"Connecting fsync_nord_id_{n} NORD_SUD OUTPUT port to fsync_center_hv_lvl_{lvl}_id_{n} NORD INPUT port")
+                        #print(f"Connecting fsync_nord_id_{n} NORD_SUD OUTPUT port to fsync_center_hv_lvl_{lvl}_id_{n} NORD INPUT port")
                         fsync_nord[n].o_MASTER_NORD_SUD(fsync_center_hv[lvl][n].i_SLAVE_NORD())
                         fsync_center_hv[lvl][n].o_SLAVE_NORD(fsync_nord[n].i_MASTER_NORD_SUD())
 
-                        print(f"Connecting fsync_sud_id_{n} NORD_SUD OUTPUT port to fsync_center_hv_lvl_{lvl}_id_{n} SUD INPUT port")
+                        #print(f"Connecting fsync_sud_id_{n} NORD_SUD OUTPUT port to fsync_center_hv_lvl_{lvl}_id_{n} SUD INPUT port")
                         fsync_sud[n].o_MASTER_NORD_SUD(fsync_center_hv[lvl][n].i_SLAVE_SUD())
                         fsync_center_hv[lvl][n].o_SLAVE_SUD(fsync_sud[n].i_MASTER_NORD_SUD())
 
-                        print(f"Connecting fsync_west_id_{n} EAST_WEST OUTPUT port to fsync_center_hv_lvl_{lvl}_id_{n} WEST INPUT port")
+                        #print(f"Connecting fsync_west_id_{n} EAST_WEST OUTPUT port to fsync_center_hv_lvl_{lvl}_id_{n} WEST INPUT port")
                         fsync_west[n].o_MASTER_EAST_WEST(fsync_center_hv[lvl][n].i_SLAVE_WEST())
                         fsync_center_hv[lvl][n].o_SLAVE_WEST(fsync_west[n].i_MASTER_EAST_WEST())
 
-                        print(f"Connecting fsync_east_id_{n} EAST_WEST OUTPUT port to fsync_center_hv_lvl_{lvl}_id_{n} EAST INPUT port")
+                        #print(f"Connecting fsync_east_id_{n} EAST_WEST OUTPUT port to fsync_center_hv_lvl_{lvl}_id_{n} EAST INPUT port")
                         fsync_east[n].o_MASTER_EAST_WEST(fsync_center_hv[lvl][n].i_SLAVE_EAST())
                         fsync_center_hv[lvl][n].o_SLAVE_EAST(fsync_east[n].i_MASTER_EAST_WEST())
                 
@@ -230,22 +230,22 @@ class MagiaSoc(gvsoc.systree.Component):
                     if lvl % 2 == 0: #fractal in even levels are not shared between H-tree and V-tree and use EAST WEST ports (H-tree) and NORD SUD ports (V-tree)
                         n_prev=0
                         for n in range(0,len(fsync_center_hv[lvl])):
-                            print(f"Connecting fsync_center_hv_lvl_{lvl-1}_id_{n_prev} EAST_WEST OUTPUT port to fsync_center_hv_lvl_{lvl}_id_{n} WEST INPUT port")
+                            #print(f"Connecting fsync_center_hv_lvl_{lvl-1}_id_{n_prev} EAST_WEST OUTPUT port to fsync_center_hv_lvl_{lvl}_id_{n} WEST INPUT port")
                             fsync_center_hv[lvl-1][n_prev].o_MASTER_EAST_WEST(fsync_center_hv[lvl][n].i_SLAVE_WEST())
                             fsync_center_hv[lvl][n].o_SLAVE_WEST(fsync_center_hv[lvl-1][n_prev].i_MASTER_EAST_WEST())
                             n_prev=n_prev+1
-                            print(f"Connecting fsync_center_hv_lvl_{lvl-1}_id_{n_prev} EAST_WEST OUTPUT port to fsync_center_hv_lvl_{lvl}_id_{n} EAST INPUT port")
+                            #print(f"Connecting fsync_center_hv_lvl_{lvl-1}_id_{n_prev} EAST_WEST OUTPUT port to fsync_center_hv_lvl_{lvl}_id_{n} EAST INPUT port")
                             fsync_center_hv[lvl-1][n_prev].o_MASTER_EAST_WEST(fsync_center_hv[lvl][n].i_SLAVE_EAST())
                             fsync_center_hv[lvl][n].o_SLAVE_EAST(fsync_center_hv[lvl-1][n_prev].i_MASTER_EAST_WEST())
                             n_prev=n_prev+1
 
                         for n in range(0,len(fsync_center_v[lvl])):
                             nord_id,sud_id=calculate_north_south(n,math.isqrt(len(fsync_center_hv[lvl-1])))
-                            print(f"Connecting fsync_center_hv_lvl_{lvl-1}_id_{nord_id} NORD SUD OUTPUT port to fsync_center_v_lvl_{lvl}_id_{n} NORD INPUT port")
+                            #print(f"Connecting fsync_center_hv_lvl_{lvl-1}_id_{nord_id} NORD SUD OUTPUT port to fsync_center_v_lvl_{lvl}_id_{n} NORD INPUT port")
                             fsync_center_hv[lvl-1][nord_id].o_MASTER_NORD_SUD(fsync_center_v[lvl][n].i_SLAVE_NORD())
                             fsync_center_v[lvl][n].o_SLAVE_NORD(fsync_center_hv[lvl-1][nord_id].i_MASTER_NORD_SUD())
 
-                            print(f"Connecting fsync_center_hv_lvl_{lvl-1}_id_{sud_id} NORD SUD OUTPUT port to fsync_center_v_lvl_{lvl}_id_{n} SUD INPUT port")
+                            #print(f"Connecting fsync_center_hv_lvl_{lvl-1}_id_{sud_id} NORD SUD OUTPUT port to fsync_center_v_lvl_{lvl}_id_{n} SUD INPUT port")
                             fsync_center_hv[lvl-1][sud_id].o_MASTER_NORD_SUD(fsync_center_v[lvl][n].i_SLAVE_SUD())
                             fsync_center_v[lvl][n].o_SLAVE_SUD(fsync_center_hv[lvl-1][sud_id].i_MASTER_NORD_SUD())
 
@@ -253,21 +253,21 @@ class MagiaSoc(gvsoc.systree.Component):
                         # note. Center fsync on odd levels host also the vertical tree
                         for n in range(0,len(fsync_center_hv[lvl])):
                             nord_id,sud_id=calculate_north_south(n,math.isqrt(len(fsync_center_hv[lvl])))
-                            print(f"Connecting fsync_center_lvl_{lvl-1}_id_{nord_id} NORD_SUD OUTPUT port to fsync_center_lvl_{lvl}_id_{n} NORD INPUT port")
+                            #print(f"Connecting fsync_center_lvl_{lvl-1}_id_{nord_id} NORD_SUD OUTPUT port to fsync_center_lvl_{lvl}_id_{n} NORD INPUT port")
                             fsync_center_hv[lvl-1][nord_id].o_MASTER_NORD_SUD(fsync_center_hv[lvl][n].i_SLAVE_NORD())
                             fsync_center_hv[lvl][n].o_SLAVE_NORD(fsync_center_hv[lvl-1][nord_id].i_MASTER_NORD_SUD())
 
-                            print(f"Connecting fsync_center_hv_lvl_{lvl-1}_id_{sud_id} NORD_SUD OUTPUT port to fsync_center_hv_lvl_{lvl}_id_{n} SUD INPUT port")
+                            #print(f"Connecting fsync_center_hv_lvl_{lvl-1}_id_{sud_id} NORD_SUD OUTPUT port to fsync_center_hv_lvl_{lvl}_id_{n} SUD INPUT port")
                             fsync_center_hv[lvl-1][sud_id].o_MASTER_NORD_SUD(fsync_center_hv[lvl][n].i_SLAVE_SUD())
                             fsync_center_hv[lvl][n].o_SLAVE_SUD(fsync_center_hv[lvl-1][sud_id].i_MASTER_NORD_SUD())
                         
                         n_prev=0
                         for n in range(0,len(fsync_center_hv[lvl])):
-                            print(f"Connecting fsync_center_v_lvl_{lvl-1}_id_{n_prev} EAST_WEST OUTPUT port to fsync_center_hv_lvl_{lvl}_id_{n} WEST INPUT port")
+                            #print(f"Connecting fsync_center_v_lvl_{lvl-1}_id_{n_prev} EAST_WEST OUTPUT port to fsync_center_hv_lvl_{lvl}_id_{n} WEST INPUT port")
                             fsync_center_v[lvl-1][n_prev].o_MASTER_EAST_WEST(fsync_center_hv[lvl][n].i_SLAVE_WEST())
                             fsync_center_hv[lvl][n].o_SLAVE_WEST(fsync_center_v[lvl-1][n_prev].i_MASTER_EAST_WEST())
                             n_prev=n_prev+1
-                            print(f"Connecting fsync_center_v_lvl_{lvl-1}_id_{n_prev} EAST_WEST OUTPUT port to fsync_center_hv_lvl_{lvl}_id_{n} EAST INPUT port")
+                            #print(f"Connecting fsync_center_v_lvl_{lvl-1}_id_{n_prev} EAST_WEST OUTPUT port to fsync_center_hv_lvl_{lvl}_id_{n} EAST INPUT port")
                             fsync_center_v[lvl-1][n_prev].o_MASTER_EAST_WEST(fsync_center_hv[lvl][n].i_SLAVE_EAST())
                             fsync_center_hv[lvl][n].o_SLAVE_EAST(fsync_center_v[lvl-1][n_prev].i_MASTER_EAST_WEST())
                             n_prev=n_prev+1
@@ -275,37 +275,37 @@ class MagiaSoc(gvsoc.systree.Component):
                 else: #this is the root
                     print("Current level is ", lvl, ". Connecting root node.")
                     if lvl == 1: # this is a special case
-                        print(f"Connecting fsync_nord_id_{0} NORD_SUD OUTPUT port to fsync_root NORD INPUT port")
+                        #print(f"Connecting fsync_nord_id_{0} NORD_SUD OUTPUT port to fsync_root NORD INPUT port")
                         fsync_nord[0].o_MASTER_NORD_SUD(fsync_root.i_SLAVE_NORD())
                         fsync_root.o_SLAVE_NORD(fsync_nord[0].i_MASTER_NORD_SUD())
 
-                        print(f"Connecting fsync_west_id_{0} EAST_WEST OUTPUT port to fsync_root WEST INPUT port")
+                        #print(f"Connecting fsync_west_id_{0} EAST_WEST OUTPUT port to fsync_root WEST INPUT port")
                         fsync_west[0].o_MASTER_EAST_WEST(fsync_root.i_SLAVE_WEST())
                         fsync_root.o_SLAVE_WEST(fsync_west[0].i_MASTER_EAST_WEST())
 
-                        print(f"Connecting fsync_sud_id_{0} NORD_SUD OUTPUT port to fsync_root SUD INPUT port")
+                        #print(f"Connecting fsync_sud_id_{0} NORD_SUD OUTPUT port to fsync_root SUD INPUT port")
                         fsync_sud[0].o_MASTER_NORD_SUD(fsync_root.i_SLAVE_SUD())
                         fsync_root.o_SLAVE_SUD(fsync_sud[0].i_MASTER_NORD_SUD())
 
-                        print(f"Connecting fsync_east_id_{0} EAST_WEST OUTPUT port to fsync_root EAST INPUT port")
+                        #print(f"Connecting fsync_east_id_{0} EAST_WEST OUTPUT port to fsync_root EAST INPUT port")
                         fsync_east[0].o_MASTER_EAST_WEST(fsync_root.i_SLAVE_EAST())
                         fsync_root.o_SLAVE_EAST(fsync_east[0].i_MASTER_EAST_WEST())
 
                     else :  
                         #please note that last level, i.e., root level, is always even. Moreover the previous level has only one fractal NORD and one fractal SUD
-                        print(f"Connecting fsync_center_hv_lvl_{lvl-1}_id_{0} NORD_SUD OUTPUT port to fsync_root NORD INPUT port")
+                        #print(f"Connecting fsync_center_hv_lvl_{lvl-1}_id_{0} NORD_SUD OUTPUT port to fsync_root NORD INPUT port")
                         fsync_center_hv[lvl-1][0].o_MASTER_NORD_SUD(fsync_root.i_SLAVE_NORD())
                         fsync_root.o_SLAVE_NORD(fsync_center_hv[lvl-1][0].i_MASTER_NORD_SUD())
 
-                        print(f"Connecting fsync_center_v_lvl_{lvl-1}_id_{0} EAST_WEST OUTPUT port to fsync_root WEST INPUT port")
+                        #print(f"Connecting fsync_center_v_lvl_{lvl-1}_id_{0} EAST_WEST OUTPUT port to fsync_root WEST INPUT port")
                         fsync_center_v[lvl-1][0].o_MASTER_EAST_WEST(fsync_root.i_SLAVE_WEST())
                         fsync_root.o_SLAVE_WEST(fsync_center_v[lvl-1][0].i_MASTER_EAST_WEST())
 
-                        print(f"Connecting fsync_center_hv_lvl_{lvl-1}_id_{1} NORD_SUD OUTPUT port to fsync_root SUD INPUT port")
+                        #print(f"Connecting fsync_center_hv_lvl_{lvl-1}_id_{1} NORD_SUD OUTPUT port to fsync_root SUD INPUT port")
                         fsync_center_hv[lvl-1][1].o_MASTER_NORD_SUD(fsync_root.i_SLAVE_SUD())
                         fsync_root.o_SLAVE_SUD(fsync_center_hv[lvl-1][1].i_MASTER_NORD_SUD())
 
-                        print(f"Connecting fsync_center_v_lvl_{lvl-1}_id_{1} EAST_WEST OUTPUT port to fsync_root EAST INPUT port")
+                        #print(f"Connecting fsync_center_v_lvl_{lvl-1}_id_{1} EAST_WEST OUTPUT port to fsync_root EAST INPUT port")
                         fsync_center_v[lvl-1][1].o_MASTER_EAST_WEST(fsync_root.i_SLAVE_EAST())
                         fsync_root.o_SLAVE_EAST(fsync_center_v[lvl-1][1].i_MASTER_EAST_WEST())
 

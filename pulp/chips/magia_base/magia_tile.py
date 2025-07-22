@@ -29,6 +29,7 @@ from pulp.chips.magia_base.magia_core import CV32CoreTest
 from pulp.redmule.light_redmule import LightRedmule
 from pulp.idma.snitch_dma import SnitchDma
 from pulp.xif_decoder.xif_decoder import XifDecoder
+from pulp.magia_idma_ctrl.magia_idma_ctrl import Magia_iDMA_Ctrl
 
 
 # adapted from snitch cluster model
@@ -81,8 +82,12 @@ class MagiaTile(gvsoc.systree.Component):
         tile_xbar = router.Router(self, f'tile-{tid}-tile-xbar')
         obi_xbar = router.Router(self, f'tile-{tid}-obi-xbar')
 
+        # IDMA Controller
+        idma_ctrl= Magia_iDMA_Ctrl(self,f'tile-{tid}-idma-ctrl')
+
         # IDMA
-        idma = SnitchDma(self,f'tile-{tid}-idma',loc_base=MagiaArch.L1_ADDR_START,loc_size=MagiaArch.L1_SIZE,tcdm_width=4)
+        idma0 = SnitchDma(self,f'tile-{tid}-idma0',loc_base=MagiaArch.L1_ADDR_START,loc_size=MagiaArch.L1_SIZE,tcdm_width=4)
+        idma1 = SnitchDma(self,f'tile-{tid}-idma1',loc_base=MagiaArch.L1_ADDR_START,loc_size=MagiaArch.L1_SIZE,tcdm_width=4)
 
         # Redmule
         redmule_nb_banks = MagiaArch.N_MEM_BANKS
@@ -175,11 +180,23 @@ class MagiaTile(gvsoc.systree.Component):
         core_cv32.o_OFFLOAD(xifdec.i_OFFLOAD_M())
         xifdec.o_OFFLOAD_GRANT_M(core_cv32.i_OFFLOAD_GRANT())
 
-        # Bind: idma
-        idma.o_AXI(tile_xbar.i_INPUT())
-        idma.o_TCDM(l1_tcdm.i_INPUT(0))
-        xifdec.o_OFFLOAD_S1(idma.i_OFFLOAD())
-        idma.o_OFFLOAD_GRANT(xifdec.i_OFFLOAD_GRANT_S1())
+        # Bind: iDMA controller
+        xifdec.o_OFFLOAD_S1(idma_ctrl.i_OFFLOAD_M())
+        idma_ctrl.o_OFFLOAD_GRANT_M(xifdec.i_OFFLOAD_GRANT_S1())
+        idma_ctrl.o_IRQ_DMA0(core_cv32.i_IRQ(26))
+        idma_ctrl.o_IRQ_DMA1(core_cv32.i_IRQ(27))
+
+        # Bind: idma0
+        idma0.o_AXI(tile_xbar.i_INPUT())
+        idma0.o_TCDM(l1_tcdm.i_INPUT(0))
+        idma_ctrl.o_OFFLOAD_iDMA0_AXI2OBI(idma0.i_OFFLOAD())
+        idma0.o_OFFLOAD_GRANT(idma_ctrl.i_OFFLOAD_GRANT_iDMA0_AXI2OBI())
+
+        # Bind: idma1
+        idma1.o_AXI(tile_xbar.i_INPUT())
+        idma1.o_TCDM(l1_tcdm.i_INPUT(0))
+        idma_ctrl.o_OFFLOAD_iDMA1_OBI2AXI(idma1.i_OFFLOAD())
+        idma1.o_OFFLOAD_GRANT(idma_ctrl.i_OFFLOAD_GRANT_iDMA1_OBI2AXI())
 
         # Bind: redmule
         redmule.o_TCDM(l1_tcdm.i_INPUT(0))
