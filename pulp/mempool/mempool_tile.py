@@ -30,6 +30,7 @@ from pulp.idma.snitch_dma import SnitchDma
 from interco.bus_watchpoint import Bus_watchpoint
 from pulp.snitch.sequencer import Sequencer
 from pulp.spatz.cluster_registers import Cluster_registers
+from pulp.mempool.address_scrambler import AddressScrambler
 from elftools.elf.elffile import *
 import gvsoc.runner as gvsoc
 import math
@@ -81,6 +82,14 @@ class Tile(st.Component):
                                         size=mem_size, bandwidth=4,nb_banks_per_tile=nb_cores_per_tile*bank_factor)
         # Shared icache
         icache = Hierarchical_cache(self, 'shared_icache', nb_cores=nb_cores_per_tile, has_cc=0, l1_line_size_bits=7)
+        
+        # Address Scrambler
+        addr_scrambler_list = []
+        for i in range(0, nb_cores_per_tile):
+            addr_scrambler_list.append(AddressScrambler(self, f'addr_scrambler{i}', \
+                                                       bypass=False, num_tiles=nb_tiles_per_group, \
+                                                       seq_mem_size_per_tile=512, byte_offset=2, \
+                                                       num_banks_per_tile=nb_cores_per_tile*bank_factor))
 
         # Route
         ico_list=[]
@@ -178,17 +187,20 @@ class Tile(st.Component):
             self.bind(icache, 'flush_ack', self.int_cores[core_id], 'flush_cache_ack')
             
             # Snitch integer cores
-            self.bind(self.int_cores[core_id], 'data', ico_list[core_id], 'input')
+            self.bind(self.int_cores[core_id], 'data', addr_scrambler_list[core_id], 'input')
             self.bind(self.int_cores[core_id], 'fetch', icache, 'input_%d' % core_id)
             self.bind(self, 'loader_start', self.int_cores[core_id], 'fetchen')
             self.bind(self, 'loader_entry', self.int_cores[core_id], 'bootaddr')
             
             # Snitch fp subsystems
             # Pay attention to interactions and bandwidth between subsystem and tohost.
-            self.bind(self.fp_cores[core_id], 'data', ico_list[core_id], 'input')
+            self.bind(self.fp_cores[core_id], 'data', addr_scrambler_list[core_id], 'input')
             # FP subsystem doesn't fetch instructions from core->ico->memory, but from integer cores acc_req.
             self.bind(self, 'loader_start', self.fp_cores[core_id], 'fetchen')
             self.bind(self, 'loader_entry', self.fp_cores[core_id], 'bootaddr')
+            
+            # Scrambler
+            self.bind(addr_scrambler_list[core_id], 'output', ico_list[core_id], 'input')
             
             # Use WireMaster & WireSlave
             # Add fpu sequence buffer in between int core and fp core to issue instructions
