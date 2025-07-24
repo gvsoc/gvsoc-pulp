@@ -151,7 +151,7 @@ void XifDecoder::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
 
     switch (opc) //here in RTL the mapping is: port 0 Redmule, port 1 iDMA, port 2, Fractal
     {
-        case 0b1111011: //these are all the opcodes associated with the IDMA and fsync
+        case 0b1111011: //these are all the opcodes associated with the IDMA
         {
             _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received opcode for IDMA\n");
             _this->offload_itf_s1.sync(insn); //passthru the instruction to the magia xdma controller
