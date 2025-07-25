@@ -34,7 +34,7 @@ class LightRedmule(gvsoc.systree.Component):
 
         super().__init__(parent, name)
 
-        self.add_sources(['pulp/redmule/light_redmule.cpp'])
+        self.add_sources(['pulp/light_redmule/light_redmule.cpp'])
 
         self.add_properties({
             'tcdm_bank_width'   : tcdm_bank_width,
@@ -81,3 +81,6 @@ class LightRedmule(gvsoc.systree.Component):
 
     def o_TCDM(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('tcdm', itf, signature='io')
+
+    def o_IRQ(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('done_irq', itf, signature='wire<bool>')

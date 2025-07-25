@@ -26,7 +26,8 @@ from pulp.snitch.hierarchical_cache import Hierarchical_cache
 
 from pulp.chips.magia_base.magia_arch import MagiaArch
 from pulp.chips.magia_base.magia_core import CV32CoreTest
-from pulp.redmule.light_redmule import LightRedmule
+#from pulp.redmule.redmule import RedMule
+from pulp.light_redmule.light_redmule import LightRedmule
 from pulp.idma.snitch_dma import SnitchDma
 from pulp.xif_decoder.xif_decoder import XifDecoder
 from pulp.magia_idma_ctrl.magia_idma_ctrl import Magia_iDMA_Ctrl
@@ -108,11 +109,14 @@ class MagiaTile(gvsoc.systree.Component):
                                     ce_pipe             = redmule_ce_pipe,
                                     queue_depth         = redmule_queue_depth)
         
+
+        #new_rm=RedMule(self, 'new_redmule')
+        
         # Xif decoder
         xifdec = XifDecoder(self,f'tile-{tid}-xifdec')
 
         # UART
-        stdout = Stdout(self, 'tile-{tid}-stdout')
+        stdout = Stdout(self, f'tile-{tid}-stdout')
 
         # Bind: cv32 core data -> obi interconnect
         core_cv32.o_DATA(obi_xbar.i_INPUT())
@@ -202,6 +206,7 @@ class MagiaTile(gvsoc.systree.Component):
         redmule.o_TCDM(l1_tcdm.i_INPUT(0))
         xifdec.o_OFFLOAD_S2(redmule.i_OFFLOAD())
         redmule.o_OFFLOAD_GRANT(xifdec.i_OFFLOAD_GRANT_S2())
+        redmule.o_IRQ(core_cv32.i_IRQ(31))
 
         # Bind fractal sync ports
         xifdec.o_XIF_2_FRACTAL_EAST_WEST(self.__o_SLAVE_EAST_WEST_FRACTAL())

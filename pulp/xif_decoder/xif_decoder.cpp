@@ -183,7 +183,7 @@ void XifDecoder::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
             break;
         }
         case 0b0001011: //these are all the opcodes associated with the RedMule
-        case 0b1101011:
+        case 0b0101011:
         {
             _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received opcode for RedMule\n");
             _this->offload_itf_s2.sync(insn);

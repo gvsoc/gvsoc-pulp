@@ -128,6 +128,7 @@ void Magia_iDMA_Ctrl::fsm_handler_dma0(vp::Block *__this, vp::ClockEvent *event)
         case IDLE:
         {    
             _this->trace.msg(vp::Trace::LEVEL_TRACE,"[Magia iDMA Ctrl] DMA0 In IDLE\n");
+            _this->done_dma0.sync(false); //clear interrupt
             break;
         }
         case POLL_STS_REG:
@@ -159,6 +160,7 @@ void Magia_iDMA_Ctrl::fsm_handler_dma1(vp::Block *__this, vp::ClockEvent *event)
         case IDLE:
         {    
             _this->trace.msg(vp::Trace::LEVEL_TRACE,"[Magia iDMA Ctrl] DMA1 In IDLE\n");
+            _this->done_dma1.sync(false); //clear interrupt
             break;
         }
         case POLL_STS_REG:
@@ -260,11 +262,11 @@ void Magia_iDMA_Ctrl::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t>
                 {
                     case 0b000: //1d transfer
                     {
-                        _this->trace.msg(vp::Trace::LEVEL_TRACE,"[Magia iDMA Ctrl] received opcode dm1d2d3d for IDMA - 1D - DIR: %d\n",dir);
+                        _this->trace.msg(vp::Trace::LEVEL_TRACE,"[Magia iDMA Ctrl] received opcode dm1d2d3d for IDMA - 1D [SRC=0x%08x - DST=0x%08x - LEN=%d - DIR: %d]\n",insn->arg_b,insn->arg_c,insn->arg_a,dir);
                         insn->granted = true; //immeditaly grant back the core
                         (!dir) ? (_this->len_dma0 = insn->arg_a) : (_this->len_dma1 = insn->arg_a);
-                        src_addr=insn->arg_c;
-                        dst_addr=insn->arg_b;
+                        src_addr=insn->arg_b;
+                        dst_addr=insn->arg_c;
                         //set src addr
                         dmsrc.opcode=R_TYPE_ENCODE(DMSRC_FUNCT7, 13, 12, XDMA_FUNCT3, 0, OP_CUSTOM1);
                         dmsrc.arg_a=src_addr; //low addr
@@ -287,7 +289,7 @@ void Magia_iDMA_Ctrl::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t>
                     }
                     case 0b001: //2d transfer
                     {
-                        _this->trace.msg(vp::Trace::LEVEL_TRACE,"[Magia iDMA Ctrl] received opcode dm1d2d3d for IDMA - 2D - DIR: %d\n",dir);
+                        _this->trace.msg(vp::Trace::LEVEL_TRACE,"[Magia iDMA Ctrl] received opcode dm1d2d3d for IDMA - 2D - [SRC_STR=0x%08x - DST_STR=0x%08x - REP=%d - DIR: %d]\n",insn->arg_b,insn->arg_c,insn->arg_a,dir);
                         insn->granted = true; //immeditaly grant back the core
                         (!dir) ? (_this->reps2_dma0 = insn->arg_a) : (_this->reps2_dma1 = insn->arg_a);
                         src_stride=insn->arg_b;
