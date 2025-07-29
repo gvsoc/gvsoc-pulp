@@ -38,7 +38,7 @@ GAPY_TARGET = True
 
 class System(st.Component):
 
-    def __init__(self, parent, name, parser, nb_cores_per_tile: int=4, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4):
+    def __init__(self, parent, name, parser, nb_cores_per_tile: int=4, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64):
         super().__init__(parent, name)
 
         ################################################################
@@ -156,5 +156,17 @@ class MempoolSystem(st.Component):
         clock = Clock_domain(self, 'clock', frequency=500000000)
 
         soc = System(self, 'mempool_soc', parser)
+
+        self.bind(clock, 'out', soc, 'clock')
+
+class MinpoolSystem(st.Component):
+
+    def __init__(self, parent, name, parser, options):
+
+        super(MinpoolSystem, self).__init__(parent, name, options=options)
+
+        clock = Clock_domain(self, 'clock', frequency=500000000)
+
+        soc = System(self, 'mempool_soc', parser, nb_cores_per_tile=4, nb_groups=4, total_cores=16, bank_factor=4, axi_data_width=32)
 
         self.bind(clock, 'out', soc, 'clock')
