@@ -39,7 +39,7 @@ GAPY_TARGET = True
 
 class Tile(st.Component):
 
-    def __init__(self, parent, name, parser, tile_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4):
+    def __init__(self, parent, name, parser, tile_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64):
         super().__init__(parent, name)
 
         [args, __] = parser.parse_known_args()
@@ -96,7 +96,7 @@ class Tile(st.Component):
         for i in range(0, nb_cores_per_tile):
             ico_list.append(router.Router(self, 'ico%d' % i, bandwidth=4, latency=1))
         # stack_ico = router.Router(self, 'stack_ico', bandwidth=4, latency=1)
-        axi_ico = router.Router(self, 'axi_ico', bandwidth=64, latency=1)
+        axi_ico = router.Router(self, 'axi_ico', bandwidth=axi_data_width, latency=1)
 
         # Core Complex
         for core_id in range(0, nb_cores_per_tile):

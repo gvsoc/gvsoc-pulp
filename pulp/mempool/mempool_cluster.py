@@ -39,7 +39,7 @@ GAPY_TARGET = True
 
 class Cluster(st.Component):
 
-    def __init__(self, parent, name, parser, nb_cores_per_tile: int=4, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4):
+    def __init__(self, parent, name, parser, nb_cores_per_tile: int=4, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64):
         super().__init__(parent, name)
 
         ################################################################
@@ -56,7 +56,7 @@ class Cluster(st.Component):
         self.group_list = []
         for i in range(0, nb_groups):
             self.group_list.append(Group(self,f'group_{i}',parser=parser,group_id=i, nb_cores_per_tile=nb_cores_per_tile, 
-                nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor))
+                nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width))
         
         ################################################################
         ##########               Design Bindings              ##########

@@ -39,7 +39,7 @@ GAPY_TARGET = True
 
 class Group(st.Component):
 
-    def __init__(self, parent, name, parser, group_id: int=0, nb_cores_per_tile: int=4, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4):
+    def __init__(self, parent, name, parser, group_id: int=0, nb_cores_per_tile: int=4, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64):
         super().__init__(parent, name)
 
         ################################################################
@@ -69,11 +69,11 @@ class Group(st.Component):
 
 
         #rom router
-        rom_router = router.Router(self, 'rom_router', bandwidth=64, latency=1)
+        rom_router = router.Router(self, 'rom_router', bandwidth=axi_data_width, latency=1)
         rom_router.add_mapping('output')
 
         #l2 router
-        l2_router = router.Router(self, 'l2_router', bandwidth=64, latency=1)
+        l2_router = router.Router(self, 'l2_router', bandwidth=axi_data_width, latency=1)
         l2_router.add_mapping('output')
 
         #csr router
