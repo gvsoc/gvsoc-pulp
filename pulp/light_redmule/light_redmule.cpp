@@ -1048,13 +1048,14 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             if ((_this->fsm_counter < _this->tcdm_block_total) && (_this->pending_req_queue.size() <= _this->queue_depth))
             {
                 //Form request
+                uint32_t temp_addr=_this->next_addr();
                 _this->tcdm_req->init();
-                _this->tcdm_req->set_addr(_this->next_addr());
+                _this->tcdm_req->set_addr(temp_addr);
                 _this->tcdm_req->set_data(_this->access_buffer);
 
                 //Send request
                 vp::IoReqStatus err = _this->send_tcdm_req();
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][Preload] --- Send TCDM req #%d\n",_this->fsm_counter);
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][Preload] --- Send TCDM req #%d [addr=0x%08x]\n",_this->fsm_counter,temp_addr);
 
                 //Check error
                 if (err != vp::IO_REQ_OK) {
@@ -1079,8 +1080,13 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             }
 
             //Recieve Process
-            while((_this->pending_req_queue.size()!= 0) && (_this->pending_req_queue.front() <= _this->fsm_timestamp) ){
+            while((_this->pending_req_queue.size()!= 0) && (_this->pending_req_queue.front() <= _this->fsm_timestamp)){
                 _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][Preload] ---                           Receive TCDM resp\n");
+                // printf("[Preload]-");
+                // for (int i=0;i<128;i=i+2) {
+                //     printf("%02x%02x-",_this->access_buffer[i+1],_this->access_buffer[i]);
+                // }
+                // printf("\n");
                 _this->pending_req_queue.pop();
             }
 
@@ -1111,8 +1117,9 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             if ((_this->fsm_counter < _this->tcdm_block_total) && (_this->pending_req_queue.size() <= _this->queue_depth))
             {
                 //Form request
+                uint32_t temp_addr=_this->next_addr();
                 _this->tcdm_req->init();
-                _this->tcdm_req->set_addr(_this->next_addr());
+                _this->tcdm_req->set_addr(temp_addr);
                 _this->tcdm_req->set_data(_this->access_buffer);
 
                 //Process Data if Compute Enabled
@@ -1123,7 +1130,7 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
                 //Send request
                 vp::IoReqStatus err = _this->send_tcdm_req();
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][ROUTINE-ijk: %0d-%0d-%0d] --- Send TCDM req #%d\n", _this->iter_i, _this->iter_j, _this->iter_k, _this->fsm_counter);
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][ROUTINE-ijk: %0d-%0d-%0d] --- Send TCDM req #%d [addr=0x%08x]\n", _this->iter_i, _this->iter_j, _this->iter_k, _this->fsm_counter,temp_addr);
 
                 //Check error
                 if (err != vp::IO_REQ_OK) {
@@ -1150,6 +1157,11 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             //Recieve Process
             while((_this->pending_req_queue.size()!= 0) && (_this->pending_req_queue.front() <= _this->fsm_timestamp) ){
                 _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][ROUTINE-ijk: %0d-%0d-%0d] ---                           Receive TCDM resp\n", _this->iter_i, _this->iter_j, _this->iter_k);
+                // printf("[ROUTINE]-");
+                // for (int i=0;i<128;i=i+2) {
+                //     printf("%02x%02x-",_this->access_buffer[i+1],_this->access_buffer[i]);
+                // }
+                // printf("\n");
                 _this->pending_req_queue.pop();
             }
 
@@ -1204,8 +1216,9 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             if ((_this->fsm_counter < _this->tcdm_block_total) && (_this->pending_req_queue.size() <= _this->queue_depth))
             {
                 //Form request
+                uint32_t temp_addr=_this->next_addr();
                 _this->tcdm_req->init();
-                _this->tcdm_req->set_addr(_this->next_addr());
+                _this->tcdm_req->set_addr(temp_addr);
                 _this->tcdm_req->set_data(_this->access_buffer);
 
                 //Process Data if Compute Enabled
@@ -1216,7 +1229,7 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
                 //Send request
                 vp::IoReqStatus err = _this->send_tcdm_req();
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][Storing] --- Send TCDM req #%d\n",_this->fsm_counter);
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][Storing] --- Send TCDM req #%d [addr=0x%08x]\n",_this->fsm_counter,temp_addr);
 
                 //Check error
                 if (err != vp::IO_REQ_OK) {
@@ -1237,6 +1250,11 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             //Recieve Process
             while((_this->pending_req_queue.size()!= 0) && (_this->pending_req_queue.front() <= _this->fsm_timestamp) ){
                 _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][Storing] ---                           Receive TCDM resp\n");
+                // printf("[Storing]-");
+                // for (int i=0;i<128;i=i+2) {
+                //     printf("%02x%02x-",_this->access_buffer[i+1],_this->access_buffer[i]);
+                // }
+                // printf("\n");
                 _this->pending_req_queue.pop();
             }
 
@@ -1398,6 +1416,7 @@ void matmul_fp16(fp16 * z, fp16 * y, fp16 * x, fp16 * w, uint16_t m_size, uint16
             {
                 z[i * k_size + j] = fp16_fma(x[i * n_size + k], w[k * k_size + j], z[i * k_size + j]);
             }
+            //printf("[%d][%d] float-result=%f fp16-result=0x%02x\n",i,j,fp16_to_float(z[i * k_size + j]),z[i * k_size + j]);
         }
     }
 }

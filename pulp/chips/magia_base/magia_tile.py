@@ -22,6 +22,7 @@ from pulp.stdout.stdout_v3 import Stdout
 
 import pulp.cpu.iss.pulp_cores as iss
 from pulp.cluster.l1_interleaver import L1_interleaver
+from pulp.light_redmule.hwpe_interleaver import HWPEInterleaver
 from pulp.snitch.hierarchical_cache import Hierarchical_cache
 
 from pulp.chips.magia_base.magia_arch import MagiaArch
@@ -45,25 +46,31 @@ class MagiaTileTcdm(gvsoc.systree.Component):
         nb_masters = 1
 
         # interleaver for the whole TDCM
-        interleaver = L1_interleaver(self, 'interleaver', nb_slaves=nb_banks,
-                                     nb_masters=nb_masters,
-                                     interleaving_bits=2)
+        interleaver = L1_interleaver(self, 'interleaver', nb_slaves=nb_banks, nb_masters=nb_masters, interleaving_bits=2)
+        
+        hwpe_interleaver = HWPEInterleaver(self, 'hwpe_interleaver', nb_master_ports=nb_masters, nb_banks=nb_banks, bank_width=4)
+
         banks = []
         for i in range(nb_banks):
             # Instantiate a new memory bank
-            bank = memory.Memory(self, f'bank_{i}', atomics=True, size=bank_size)
+            bank = memory.Memory(self, f'bank_{i}', atomics=True, size=bank_size, latency=0)
             banks.append(bank)
 
             # Bind the new bank (slave) to the interleaver (master)
             self.bind(interleaver, f'out_{i}', bank, 'input')
+            self.bind(hwpe_interleaver, f'out_{i}', bank, 'input')
 
         # Bind external ports (input->[internal]output->interleaver)
         for i in range(nb_masters):
-            self.bind(self, f'input_{i}', interleaver, f'in_{i}')
+            self.bind(self, f'L1_input_{i}', interleaver, f'in_{i}')
+            self.bind(self, f'HWPW_input', hwpe_interleaver, f'input')
 
     # Input ports (port number as arguments)
     def i_INPUT(self, id: int) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, f'input_{id}', signature='io')
+        return gvsoc.systree.SlaveItf(self, f'L1_input_{id}', signature='io')
+    
+    def i_HWPE_INPUT(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'HWPW_input', signature='io')
 
 
 class MagiaTile(gvsoc.systree.Component):
@@ -80,15 +87,15 @@ class MagiaTile(gvsoc.systree.Component):
         l1_tcdm = MagiaTileTcdm(self, f'tile-{tid}-tcdm', parser)
 
         # Temporary test interconnects (use obi to access TCDM), to be refined later
-        tile_xbar = router.Router(self, f'tile-{tid}-tile-xbar')
-        obi_xbar = router.Router(self, f'tile-{tid}-obi-xbar')
+        tile_xbar = router.Router(self, f'tile-{tid}-tile-xbar',bandwidth=4)
+        obi_xbar = router.Router(self, f'tile-{tid}-obi-xbar',bandwidth=4)
 
         # IDMA Controller
         idma_ctrl= Magia_iDMA_Ctrl(self,f'tile-{tid}-idma-ctrl')
 
         # IDMA
-        idma0 = SnitchDma(self,f'tile-{tid}-idma0',loc_base=MagiaArch.L1_ADDR_START,loc_size=MagiaArch.L1_SIZE,tcdm_width=4)
-        idma1 = SnitchDma(self,f'tile-{tid}-idma1',loc_base=MagiaArch.L1_ADDR_START,loc_size=MagiaArch.L1_SIZE,tcdm_width=4)
+        idma0 = SnitchDma(self,f'tile-{tid}-idma0',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4)
+        idma1 = SnitchDma(self,f'tile-{tid}-idma1',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4)
 
         # Redmule
         redmule_nb_banks = MagiaArch.N_MEM_BANKS
@@ -97,7 +104,7 @@ class MagiaTile(gvsoc.systree.Component):
         #these parameters are taken from flex_cluster...
         redmule_ce_height       = 128
         redmule_ce_width        = 32
-        redmule_ce_pipe         = 3
+        redmule_ce_pipe         = 1
         redmule_elem_size       = 2
         redmule_queue_depth     = 1
         redmule = LightRedmule(self, f'tile-{tid}-redmule',
@@ -152,7 +159,7 @@ class MagiaTile(gvsoc.systree.Component):
                        base=MagiaArch.L2_ADDR_START,
                        size=MagiaArch.L2_SIZE, rm_base=False)
         for tile_id in range(0,MagiaArch.NB_CLUSTERS):
-            if (tile_id!=tid):
+            if (tile_id!=tid): #skip yourself
                 obi_xbar.o_MAP(tile_xbar.i_INPUT(), name=f'obi-to-axi-off-tile-{tile_id}-l1-mem',
                         base=MagiaArch.L1_ADDR_START+(tile_id*MagiaArch.L1_TILE_OFFSET),
                         size=MagiaArch.L1_SIZE, rm_base=False)
@@ -164,7 +171,7 @@ class MagiaTile(gvsoc.systree.Component):
                         size=MagiaArch.L2_SIZE, rm_base=False)
         # Bind tile xbar so that it can communicate with other tiles l1 mem
         for tile_id in range(0,MagiaArch.NB_CLUSTERS):
-            if (tile_id!=tid):
+            if (tile_id!=tid): #skip yourself
                 tile_xbar.o_MAP(self.__i_NARROW_OUTPUT(), name=f'axi-off-tile-{tile_id}-l1-mem',
                         base=MagiaArch.L1_ADDR_START+(tile_id*MagiaArch.L1_TILE_OFFSET),
                         size=MagiaArch.L1_SIZE, rm_base=False)
@@ -203,7 +210,7 @@ class MagiaTile(gvsoc.systree.Component):
         idma1.o_OFFLOAD_GRANT(idma_ctrl.i_OFFLOAD_GRANT_iDMA1_OBI2AXI())
 
         # Bind: redmule
-        redmule.o_TCDM(l1_tcdm.i_INPUT(0))
+        redmule.o_TCDM(l1_tcdm.i_HWPE_INPUT())
         xifdec.o_OFFLOAD_S2(redmule.i_OFFLOAD())
         redmule.o_OFFLOAD_GRANT(xifdec.i_OFFLOAD_GRANT_S2())
         redmule.o_IRQ(core_cv32.i_IRQ(31))
