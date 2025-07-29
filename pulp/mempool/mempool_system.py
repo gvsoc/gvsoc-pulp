@@ -60,7 +60,7 @@ class System(st.Component):
         mempool_cluster=Cluster(self,'mempool_cluster',parser=parser, nb_cores_per_tile=nb_cores_per_tile, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor)
 
         # Boot Rom
-        rom = memory.Memory(self, 'rom', size=0x1000, width_log2=6, stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
+        rom = memory.Memory(self, 'rom', size=0x1000, width_log2=(axi_data_width - 1).bit_length(), stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
 
         # L2 Memory
         l2_mem = memory.Memory(self, 'l2_mem', size=0x1000000, width_log2=-1, atomics=True)
@@ -78,7 +78,7 @@ class System(st.Component):
         dummy_mem = memory.Memory(self, 'dummy_mem', atomics=True, size=0x100000)
 
         # Rom Router
-        rom_router = router.Router(self, 'rom_router', bandwidth=64, latency=1)
+        rom_router = router.Router(self, 'rom_router', bandwidth=axi_data_width, latency=1)
         rom_router.add_mapping('output')
 
         # L2 Memory Router
