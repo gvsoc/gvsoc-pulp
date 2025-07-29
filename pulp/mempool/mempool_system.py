@@ -63,7 +63,7 @@ class System(st.Component):
         rom = memory.Memory(self, 'rom', size=0x1000, width_log2=6, stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
 
         # L2 Memory
-        l2_mem = memory.Memory(self, 'l2_mem', size=0x1000000, width_log2=6, atomics=True)
+        l2_mem = memory.Memory(self, 'l2_mem', size=0x1000000, width_log2=-1, atomics=True)
 
         # CSR
         csr = CtrlRegisters(self, 'ctrl_registers')
@@ -82,7 +82,7 @@ class System(st.Component):
         rom_router.add_mapping('output')
 
         # L2 Memory Router
-        l2_router = router.Router(self, 'l2_router', bandwidth=64, latency=1)
+        l2_router = router.Router(self, 'l2_router', bandwidth=0, latency=1)
         l2_router.add_mapping('output')
 
         # CSR Router
