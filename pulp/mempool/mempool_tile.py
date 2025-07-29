@@ -96,7 +96,7 @@ class Tile(st.Component):
         for i in range(0, nb_cores_per_tile):
             ico_list.append(router.Router(self, 'ico%d' % i, bandwidth=4, latency=1))
         # stack_ico = router.Router(self, 'stack_ico', bandwidth=4, latency=1)
-        axi_ico = router.Router(self, 'axi_ico', bandwidth=4, latency=1)
+        axi_ico = router.Router(self, 'axi_ico', bandwidth=64, latency=1)
 
         # Core Complex
         for core_id in range(0, nb_cores_per_tile):
