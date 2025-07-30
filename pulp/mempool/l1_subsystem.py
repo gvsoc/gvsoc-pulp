@@ -118,7 +118,7 @@ class L1_subsystem(gvsoc.systree.Component):
                 index_ref_grp_id = index_ref_grp_id + nb_groups
                 pass
             if (i >= start_bank_id and i < end_bank_id):
-                remove_offset = Interleaver(self, f'remove_offset_{i}', nb_slaves=1, nb_masters=1, interleaving_bits=2, enable_shift=10)
+                remove_offset = Interleaver(self, f'remove_offset_{i}', nb_slaves=1, nb_masters=1, interleaving_bits=2, enable_shift=(total_banks - 1).bit_length())
                 self.bind(interleaver, 'out_%d' % i, remove_offset, 'in_0')
                 self.bind(remove_offset, 'out_0', l1_banks[i - start_bank_id], 'input')
             else :
