@@ -53,7 +53,7 @@ class MagiaTileTcdm(gvsoc.systree.Component):
         banks = []
         for i in range(nb_banks):
             # Instantiate a new memory bank
-            bank = memory.Memory(self, f'bank_{i}', atomics=True, size=bank_size, latency=0)
+            bank = memory.Memory(self, f'bank_{i}', atomics=True, size=bank_size, latency=1)
             banks.append(bank)
 
             # Bind the new bank (slave) to the interleaver (master)
@@ -63,14 +63,14 @@ class MagiaTileTcdm(gvsoc.systree.Component):
         # Bind external ports (input->[internal]output->interleaver)
         for i in range(nb_masters):
             self.bind(self, f'L1_input_{i}', interleaver, f'in_{i}')
-            self.bind(self, f'HWPW_input', hwpe_interleaver, f'input')
+            self.bind(self, f'HWPE_input', hwpe_interleaver, f'input')
 
     # Input ports (port number as arguments)
     def i_INPUT(self, id: int) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'L1_input_{id}', signature='io')
     
     def i_HWPE_INPUT(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, f'HWPW_input', signature='io')
+        return gvsoc.systree.SlaveItf(self, f'HWPE_input', signature='io')
 
 
 class MagiaTile(gvsoc.systree.Component):
@@ -98,23 +98,15 @@ class MagiaTile(gvsoc.systree.Component):
         idma1 = SnitchDma(self,f'tile-{tid}-idma1',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4)
 
         # Redmule
-        redmule_nb_banks = MagiaArch.N_MEM_BANKS
-        #redmule_bank_size = MagiaArch.N_WORDS_BANK * MagiaArch.BYTES_PER_WORD
-        redmule_bank_size = MagiaArch.BYTES_PER_WORD
-        #these parameters are taken from flex_cluster...
-        redmule_ce_height       = 128
-        redmule_ce_width        = 32
-        redmule_ce_pipe         = 1
-        redmule_elem_size       = 2
-        redmule_queue_depth     = 1
         redmule = LightRedmule(self, f'tile-{tid}-redmule',
-                                    tcdm_bank_width     = redmule_bank_size,
-                                    tcdm_bank_number    = redmule_nb_banks,
-                                    elem_size           = redmule_elem_size,
-                                    ce_height           = redmule_ce_height,
-                                    ce_width            = redmule_ce_width,
-                                    ce_pipe             = redmule_ce_pipe,
-                                    queue_depth         = redmule_queue_depth)
+                                    tcdm_bank_width     = MagiaArch.BYTES_PER_WORD,
+                                    tcdm_bank_number    = MagiaArch.N_MEM_BANKS,
+                                    elem_size           = 2, #max number of bytes per element --> if FP16 then elem_size=2. This is the max number to accomodate any supported format which for now are 8bits and 16bits data types 
+                                    ce_height           = 128,
+                                    ce_width            = 32,
+                                    ce_pipe             = 3,
+                                    queue_depth         = 1,
+                                    loc_base            = tid*MagiaArch.L1_TILE_OFFSET)
         
 
         #new_rm=RedMule(self, 'new_redmule')

@@ -30,7 +30,8 @@ class LightRedmule(gvsoc.systree.Component):
                 ce_width: int,
                 ce_pipe: int,
                 queue_depth: int=128,
-                fold_tiles_mapping: int=0):
+                fold_tiles_mapping: int=0,
+                loc_base=0): #here we might add also local size to check that tcdm requests do not overflow...
 
         super().__init__(parent, name)
 
@@ -45,6 +46,7 @@ class LightRedmule(gvsoc.systree.Component):
             'ce_pipe'           : ce_pipe,
             'queue_depth'       : queue_depth,
             'fold_tiles_mapping': fold_tiles_mapping,
+            'loc_base'          : loc_base,
         })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:

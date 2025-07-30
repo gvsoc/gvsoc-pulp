@@ -101,6 +101,8 @@ public:
     //static void offload_grant(vp::Block *__this, IssOffloadInsnGrant<iss_reg_t> *result);
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
 
+    uint32_t op_foramt_parser(uint32_t op_format);
+
     vp::IoReqStatus send_tcdm_req();
     void init_redmule_meta_data();
     uint32_t tmp_next_addr();
@@ -152,6 +154,7 @@ public:
     uint32_t            queue_depth;
     uint32_t            bandwidth;
     uint32_t            fold_tiles_mapping;
+    uint64_t            loc_base;
     uint32_t            compute_able;
     uint32_t            LOCAL_BUFFER_H;
     uint32_t            LOCAL_BUFFER_N;
@@ -246,6 +249,7 @@ LightRedmule::LightRedmule(vp::ComponentConf &config)
     this->ce_pipe           = get_js_config()->get("ce_pipe")->get_int();
     this->queue_depth       = get_js_config()->get("queue_depth")->get_int();
     this->fold_tiles_mapping= get_js_config()->get("fold_tiles_mapping")->get_int();
+    this->loc_base          = get_js_config()->get("loc_base")->get_double();
     this->compute_able      = 0;
     this->bandwidth         = this->tcdm_bank_width * this->tcdm_bank_number;
     this->LOCAL_BUFFER_H    = this->ce_height;
@@ -843,6 +847,26 @@ uint32_t LightRedmule::get_redmule_array_runtime(){
 //     return vp::IO_REQ_OK;
 // }
 
+uint32_t LightRedmule::op_foramt_parser(uint32_t op_format) {
+    uint32_t data_format=op_format&0x7;
+    uint32_t operation=(op_format>>3)&0x7;
+    uint32_t compute_able=0;
+    //only GeMM is supported for now
+    //expected compute_able=1 --> matmul_uint16
+    //expected compute_able=2 --> matmul_int16
+    //expected compute_able=3 --> matmul_fp16
+    //expected compute_able=5 --> matmul_uint8
+    //expected compute_able=6 --> matmul_int8
+    //expected compute_able=7 --> matmul_fp8e4m3
+    if ((operation==1) && (data_format==1))
+        compute_able=3;
+    else if ((operation==1) && (data_format==0))
+        compute_able=7;
+    else 
+        this->trace.fatal("[LightRedmule] Selected wrong operation/format combination [op_format=%d-data_format=%d-operation=%d]",op_format,data_format,operation);
+    return compute_able;
+}
+
 void LightRedmule::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *insn)
 {
     LightRedmule *_this = (LightRedmule *)__this;
@@ -875,7 +899,7 @@ void LightRedmule::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
                 _this->w_addr = insn->arg_b;
                 _this->y_addr = insn->arg_c;
                 _this->z_addr = _this->y_addr;
-                _this->compute_able = insn->arg_d;
+                _this->compute_able = _this->op_foramt_parser(insn->arg_d);
                 _this->elem_size = (_this->compute_able < 4)? 2:1;
                 _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set XWY addr: 0x%08x, 0x%08x, 0x%08x\n", _this->x_addr, _this->w_addr, _this->y_addr);
 
@@ -1048,7 +1072,7 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             if ((_this->fsm_counter < _this->tcdm_block_total) && (_this->pending_req_queue.size() <= _this->queue_depth))
             {
                 //Form request
-                uint32_t temp_addr=_this->next_addr();
+                uint32_t temp_addr=_this->next_addr() - _this->loc_base;
                 _this->tcdm_req->init();
                 _this->tcdm_req->set_addr(temp_addr);
                 _this->tcdm_req->set_data(_this->access_buffer);
@@ -1117,7 +1141,7 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             if ((_this->fsm_counter < _this->tcdm_block_total) && (_this->pending_req_queue.size() <= _this->queue_depth))
             {
                 //Form request
-                uint32_t temp_addr=_this->next_addr();
+                uint32_t temp_addr=_this->next_addr() - _this->loc_base;
                 _this->tcdm_req->init();
                 _this->tcdm_req->set_addr(temp_addr);
                 _this->tcdm_req->set_data(_this->access_buffer);
@@ -1216,7 +1240,7 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             if ((_this->fsm_counter < _this->tcdm_block_total) && (_this->pending_req_queue.size() <= _this->queue_depth))
             {
                 //Form request
-                uint32_t temp_addr=_this->next_addr();
+                uint32_t temp_addr=_this->next_addr() - _this->loc_base;
                 _this->tcdm_req->init();
                 _this->tcdm_req->set_addr(temp_addr);
                 _this->tcdm_req->set_data(_this->access_buffer);
