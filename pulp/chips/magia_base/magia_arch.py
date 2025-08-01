@@ -22,7 +22,7 @@ class MagiaArch:
 
     # Extra
     BYTES_PER_WORD      = 4
-    TILE_CLK_FREQ       = 50 * (10 ** 6)
+    TILE_CLK_FREQ       = 1 * (10 ** 9)
 
     ENABLE_NOC          = False
     N_TILES_X           = 4

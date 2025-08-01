@@ -23,6 +23,7 @@ from pulp.stdout.stdout_v3 import Stdout
 import pulp.cpu.iss.pulp_cores as iss
 from pulp.cluster.l1_interleaver import L1_interleaver
 from pulp.light_redmule.hwpe_interleaver import HWPEInterleaver
+from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 from pulp.snitch.hierarchical_cache import Hierarchical_cache
 
 from pulp.chips.magia_base.magia_arch import MagiaArch
@@ -47,6 +48,8 @@ class MagiaTileTcdm(gvsoc.systree.Component):
 
         # interleaver for the whole TDCM
         interleaver = L1_interleaver(self, 'interleaver', nb_slaves=nb_banks, nb_masters=nb_masters, interleaving_bits=2)
+
+        dma_interleaver = DmaInterleaver(self, 'dma_interleaver', nb_master_ports=nb_masters, nb_banks=nb_banks, bank_width=4)
         
         hwpe_interleaver = HWPEInterleaver(self, 'hwpe_interleaver', nb_master_ports=nb_masters, nb_banks=nb_banks, bank_width=4)
 
@@ -58,16 +61,21 @@ class MagiaTileTcdm(gvsoc.systree.Component):
 
             # Bind the new bank (slave) to the interleaver (master)
             self.bind(interleaver, f'out_{i}', bank, 'input')
+            self.bind(dma_interleaver, f'out_{i}', bank, 'input')
             self.bind(hwpe_interleaver, f'out_{i}', bank, 'input')
 
         # Bind external ports (input->[internal]output->interleaver)
         for i in range(nb_masters):
             self.bind(self, f'L1_input_{i}', interleaver, f'in_{i}')
+            self.bind(self, f'IDMA_input', dma_interleaver, f'input')
             self.bind(self, f'HWPE_input', hwpe_interleaver, f'input')
 
     # Input ports (port number as arguments)
     def i_INPUT(self, id: int) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'L1_input_{id}', signature='io')
+    
+    def i_DMA_INPUT(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'IDMA_input', signature='io')
     
     def i_HWPE_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'HWPE_input', signature='io')
@@ -139,7 +147,7 @@ class MagiaTile(gvsoc.systree.Component):
         obi_xbar.o_MAP(l1_tcdm.i_INPUT(0), name="local-stack",
                        base=MagiaArch.STACK_ADDR_START,
                        size=MagiaArch.STACK_SIZE, rm_base=False)
-        obi_xbar.o_MAP(l1_tcdm.i_INPUT(0), name="local-l1-mem",
+        obi_xbar.o_MAP(l1_tcdm.i_DMA_INPUT(), name="local-l1-mem", #here we use the iDMA interleaver because an iDMA axi request routed to obi (e.g. local L1 to off-tile L1 data movement) does not handle the right bank interleaving
                        base=MagiaArch.L1_ADDR_START+(tid*MagiaArch.L1_TILE_OFFSET),
                        size=MagiaArch.L1_SIZE, rm_base=False, remove_offset=(tid*MagiaArch.L1_TILE_OFFSET))
         obi_xbar.o_MAP(stdout.i_INPUT(), name="local-uart-mem",
@@ -173,7 +181,7 @@ class MagiaTile(gvsoc.systree.Component):
                         size=MagiaArch.L1_SIZE, rm_base=False)
         
         
-        self.__o_NARROW_INPUT(tile_xbar.i_INPUT()) #lets disable the ports to other clusters for now..
+        self.__o_NARROW_INPUT(tile_xbar.i_INPUT())
 
         # Bind: cv32 core enable ports -> matching composite ports
         self.__o_ENTRY(core_cv32.i_ENTRY())
@@ -191,13 +199,13 @@ class MagiaTile(gvsoc.systree.Component):
 
         # Bind: idma0
         idma0.o_AXI(tile_xbar.i_INPUT())
-        idma0.o_TCDM(l1_tcdm.i_INPUT(0))
+        idma0.o_TCDM(l1_tcdm.i_INPUT(0)) #here we don't use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
         idma_ctrl.o_OFFLOAD_iDMA0_AXI2OBI(idma0.i_OFFLOAD())
         idma0.o_OFFLOAD_GRANT(idma_ctrl.i_OFFLOAD_GRANT_iDMA0_AXI2OBI())
 
         # Bind: idma1
         idma1.o_AXI(tile_xbar.i_INPUT())
-        idma1.o_TCDM(l1_tcdm.i_INPUT(0))
+        idma1.o_TCDM(l1_tcdm.i_INPUT(0)) #here we don't use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
         idma_ctrl.o_OFFLOAD_iDMA1_OBI2AXI(idma1.i_OFFLOAD())
         idma1.o_OFFLOAD_GRANT(idma_ctrl.i_OFFLOAD_GRANT_iDMA1_OBI2AXI())
 
@@ -214,12 +222,17 @@ class MagiaTile(gvsoc.systree.Component):
         xifdec.o_XIF_2_FRACTAL_NORD_SUD(self.__o_SLAVE_NORD_SUD_FRACTAL())
         self.__i_SLAVE_NORD_SUD_FRACTAL(xifdec.i_FRACTAL_2_XIF_NORD_SUD())
 
+        xifdec.o_XIF_2_NEIGHBOUR_FRACTAL_EAST_WEST(self.__o_SLAVE_EAST_WEST_NEIGHBOUR_FRACTAL())
+        self.__i_SLAVE_EAST_WEST_NEIGHBOUR_FRACTAL(xifdec.i_NEIGHBOUR_FRACTAL_2_XIF_EAST_WEST())
+
+        xifdec.o_XIF_2_NEIGHBOUR_FRACTAL_NORD_SUD(self.__o_SLAVE_NORD_SUD_NEIGHBOUR_FRACTAL())
+        self.__i_SLAVE_NORD_SUD_NEIGHBOUR_FRACTAL(xifdec.i_NEIGHBOUR_FRACTAL_2_XIF_NORD_SUD())
+
         # Enable debug
         gdbserver.gdbserver.Gdbserver(self, 'gdbserver')        
 
     
-    # Ports to fractalsync
-
+    # east west port to fractalsync
     def __o_SLAVE_EAST_WEST_FRACTAL(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'xif_2_east_west_fractal', signature='wire<PortReq<uint32_t>*>')
 
@@ -232,6 +245,7 @@ class MagiaTile(gvsoc.systree.Component):
     def i_SLAVE_EAST_WEST_FRACTAL(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'east_west_fractal_2_xif', signature='wire<PortResp<uint32_t>*>')
 
+    # nord sud to fractalsync
     def __o_SLAVE_NORD_SUD_FRACTAL(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'xif_2_nord_sud_fractal', signature='wire<PortReq<uint32_t>*>')
 
@@ -243,6 +257,32 @@ class MagiaTile(gvsoc.systree.Component):
 
     def i_SLAVE_NORD_SUD_FRACTAL(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'nord_sud_fractal_2_xif', signature='wire<PortResp<uint32_t>*>')
+    
+    # east west port to neighbour fractalsync
+    def __o_SLAVE_EAST_WEST_NEIGHBOUR_FRACTAL(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'xif_2_east_west_neighbour_fractal', signature='wire<PortReq<uint32_t>*>')
+
+    def o_SLAVE_EAST_WEST_NEIGHBOUR_FRACTAL(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('xif_2_east_west_neighbour_fractal', itf, signature='wire<PortReq<uint32_t>*>')
+
+    def __i_SLAVE_EAST_WEST_NEIGHBOUR_FRACTAL(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('east_west_neighbour_fractal_2_xif', itf, signature='wire<PortResp<uint32_t>*>',composite_bind=True)
+
+    def i_SLAVE_EAST_WEST_NEIGHBOUR_FRACTAL(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'east_west_neighbour_fractal_2_xif', signature='wire<PortResp<uint32_t>*>')
+    
+    # nord sud to neighbour fractalsync
+    def __o_SLAVE_NORD_SUD_NEIGHBOUR_FRACTAL(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'xif_2_nord_sud_neighbour_fractal', signature='wire<PortReq<uint32_t>*>')
+
+    def o_SLAVE_NORD_SUD_NEIGHBOUR_FRACTAL(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('xif_2_nord_sud_neighbour_fractal', itf, signature='wire<PortReq<uint32_t>*>')
+
+    def __i_SLAVE_NORD_SUD_NEIGHBOUR_FRACTAL(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('nord_sud_neighbour_fractal_2_xif', itf, signature='wire<PortResp<uint32_t>*>',composite_bind=True)
+
+    def i_SLAVE_NORD_SUD_NEIGHBOUR_FRACTAL(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'nord_sud_neighbour_fractal_2_xif', signature='wire<PortResp<uint32_t>*>')
 
     # Output (master) port to off-tile L2 memory
     def o_NARROW_OUTPUT(self, itf: gvsoc.systree.SlaveItf):

@@ -41,7 +41,7 @@ class MagiaSoc(gvsoc.systree.Component):
         clock.o_CLOCK(self.i_CLOCK())
 
         # L2 base model for testing
-        l2_mem = memory.memory.Memory(self, 'test-mem', size=MagiaArch.L2_SIZE)
+        l2_mem = memory.memory.Memory(self, 'test-mem', size=MagiaArch.L2_SIZE,latency=1)
 
         # Create Tiles
         cluster:List[MagiaTile] = []
@@ -75,13 +75,15 @@ class MagiaSoc(gvsoc.systree.Component):
         fsync_sud:List[FractalSync] = [] #used only at level 0
         fsync_west:List[FractalSync] = [] #used only at level 0
         fsync_east:List[FractalSync] = [] #used only at level 0
+        fsync_neighbour_east_west:List[FractalSync] = [] #used only at level 0
+        fsync_neighbour_nord_sud:List[FractalSync] = [] #used only at level 0
         fsync_center_hv: Dict[int, List[FractalSync]] = {} # center fsync used by both the h-tree and the v-tree
         fsync_center_v: Dict[int, List[FractalSync]] = {} # center fsync used by v-tree
-        # Build horizontal tree. This tree builds also the root node
+        # Place horizontal-vertical fsyncs
         lvl=0
         for n_fractal in n_fract_per_lvl(MagiaArch.NB_CLUSTERS):
-            print(f"Placing {n_fractal} fsync in level {lvl}")
             if lvl == 0:
+                print(f"Placing {n_fractal*2} fsync in h+v tree at level {lvl}")
                 for n in range(0,int(n_fractal/2)):
                     fsync_nord.append(FractalSync(self,f'fsync_nord_id_{n}',level=lvl))
                     fsync_sud.append(FractalSync(self,f'fsync_sud_id_{n}',level=lvl))
@@ -90,17 +92,31 @@ class MagiaSoc(gvsoc.systree.Component):
                     
             else:
                 if n_fractal == 1:
+                    print(f"Placing {n_fractal} fsync in root level {lvl}")
                     fsync_root = FractalSync(self,f'fsync_root',level=lvl)
                 else :
                     # note. Center fsync on odd levels host also the vertical tree while in even levels V-tree has its own fractals
+                    print(f"Placing {n_fractal} fsync in h+v tree at level {lvl}")
                     fsync_center_hv[lvl] = [None] * int(n_fractal)
                     for n in range(0,n_fractal):
                         fsync_center_hv[lvl][n] = FractalSync(self,f'fsync_center_hv_lvl_{lvl}_id_{n}',level=lvl)
                     if lvl % 2 == 0:
+                        print(f"Placing {n_fractal} fsync in v tree at level {lvl}")
                         fsync_center_v[lvl] = [None] * int(n_fractal)
                         for n in range(0,n_fractal):
                             fsync_center_v[lvl][n] = FractalSync(self,f'fsync_center_v_lvl_{lvl}_id_{n}',level=lvl)
-            lvl=lvl+1      
+            lvl=lvl+1  
+
+        # Place neighbour fsyncs (here level is always 0) only for achitectures > 2x2
+        n_fractal_neighbour=0
+        if MagiaArch.NB_CLUSTERS > 4:
+            n_fractal_neighbour=(((MagiaArch.N_TILES_X)//2) - 1)*(MagiaArch.N_TILES_Y)
+            print(f"Placing {n_fractal_neighbour*2} neighbour fsync at level 0")
+            for n_fractal in range(0,n_fractal_neighbour):
+                fsync_neighbour_east_west.append(FractalSync(self,f'fsync_east_west_nb_id_{n_fractal}',level=0))
+                fsync_neighbour_nord_sud.append(FractalSync(self,f'fsync_nord_sud_nb_id_{n_fractal}',level=0))
+
+
 
         if (MagiaArch.ENABLE_NOC):
             # this is WIP!!
@@ -158,9 +174,9 @@ class MagiaSoc(gvsoc.systree.Component):
                 if lvl == 0:
                     print("Current level is ", lvl)
                     # get the list of tiles connected to fractal nord west --> even rows and even cols of tile_matrix
-                    tiles_even_rows_cols = [item for row in tile_matrix[::2] for item in row[::2]]
+                    tiles_even_rows_even_cols = [item for row in tile_matrix[::2] for item in row[::2]]
                     n=0
-                    for id in tiles_even_rows_cols:
+                    for id in tiles_even_rows_even_cols:
                         #print(f"Connection tile-id {id} to fsync_nord_id_{n} WEST INPUT port")
                         cluster[id].o_SLAVE_EAST_WEST_FRACTAL(fsync_nord[n].i_SLAVE_WEST())
                         fsync_nord[n].o_SLAVE_WEST(cluster[id].i_SLAVE_EAST_WEST_FRACTAL())
@@ -194,9 +210,9 @@ class MagiaSoc(gvsoc.systree.Component):
                         n=n+1
                         
                     # get the list of tiles connected to fractal sud east --> odd rows and odd cols of tile_matrix
-                    tiles_odd_rows_cols = [item for row in tile_matrix[1::2] for item in row[1::2]]
+                    tiles_odd_rows_odd_cols = [item for row in tile_matrix[1::2] for item in row[1::2]]
                     n=0
-                    for id in tiles_odd_rows_cols:
+                    for id in tiles_odd_rows_odd_cols:
                         #print(f"Connection tile-id {id} to fsync_sud_id_{n} EAST INPUT port")
                         cluster[id].o_SLAVE_EAST_WEST_FRACTAL(fsync_sud[n].i_SLAVE_EAST())
                         fsync_sud[n].o_SLAVE_EAST(cluster[id].i_SLAVE_EAST_WEST_FRACTAL())
@@ -204,6 +220,32 @@ class MagiaSoc(gvsoc.systree.Component):
                         cluster[id].o_SLAVE_NORD_SUD_FRACTAL(fsync_east[n].i_SLAVE_SUD())
                         fsync_east[n].o_SLAVE_SUD(cluster[id].i_SLAVE_NORD_SUD_FRACTAL())
                         n=n+1
+
+                    if n_fractal_neighbour > 0:
+                        transposed = list(zip(*tile_matrix))
+                        odd_columns= [transposed[i] for i in range(len(transposed) - 1) if i % 2 == 1]
+                        n=0
+                        for column in odd_columns:
+                            for id in column:
+                                print(f"Connection tile-id {id} to fsync_neighbour_east_west_{n} WEST INPUT port")
+                                cluster[id].o_SLAVE_EAST_WEST_NEIGHBOUR_FRACTAL(fsync_neighbour_east_west[n].i_SLAVE_WEST())
+                                fsync_neighbour_east_west[n].o_SLAVE_WEST(cluster[id].i_SLAVE_EAST_WEST_NEIGHBOUR_FRACTAL())
+                                print(f"Connection tile-id {id+1} to fsync_neighbour_east_west_{n} EAST INPUT port")
+                                cluster[id+1].o_SLAVE_EAST_WEST_NEIGHBOUR_FRACTAL(fsync_neighbour_east_west[n].i_SLAVE_EAST())
+                                fsync_neighbour_east_west[n].o_SLAVE_EAST(cluster[id+1].i_SLAVE_EAST_WEST_NEIGHBOUR_FRACTAL())
+                                n=n+1
+                        
+                        odd_rows = [tile_matrix[i] for i in range(len(tile_matrix) - 1) if i % 2 == 1]
+                        n=0
+                        for row in odd_rows:
+                            for id in row:
+                                print(f"Connection tile-id {id} to fsync_neighbour_nord_sud_{n} NORD INPUT port")
+                                cluster[id].o_SLAVE_NORD_SUD_NEIGHBOUR_FRACTAL(fsync_neighbour_nord_sud[n].i_SLAVE_NORD())
+                                fsync_neighbour_nord_sud[n].o_SLAVE_NORD(cluster[id].i_SLAVE_NORD_SUD_NEIGHBOUR_FRACTAL())
+                                print(f"Connection tile-id {id+MagiaArch.N_TILES_X} to fsync_neighbour_nord_sud_{n} SUD INPUT port")
+                                cluster[id+MagiaArch.N_TILES_X].o_SLAVE_NORD_SUD_NEIGHBOUR_FRACTAL(fsync_neighbour_nord_sud[n].i_SLAVE_SUD())
+                                fsync_neighbour_nord_sud[n].o_SLAVE_SUD(cluster[id+MagiaArch.N_TILES_X].i_SLAVE_NORD_SUD_NEIGHBOUR_FRACTAL())
+                                n=n+1
       
                 elif (lvl == 1) and (lvl<(int(math.log2(MagiaArch.NB_CLUSTERS))-1)): #this is another special level as from now on we leave the nord-sud naming and we move to a more abstract form
                     print("Current level is ", lvl)
