@@ -85,10 +85,13 @@ class L1_subsystem(gvsoc.systree.Component):
                                     interleaving_bits=int(math.log2(bandwidth)))
         
         #Remote interfaces
-        remote_interfaces = []
+        remote_out_interfaces = []
+        remote_in_interfaces = []
         for i in range(0, nb_remote_masters):
-            remote_interfaces.append(Router(self, f'remote{i}', bandwidth=bandwidth, latency=1))
-            remote_interfaces[i].add_mapping('output')
+            remote_out_interfaces.append(Router(self, f'remote_out_itf{i}', bandwidth=bandwidth, latency=1))
+            remote_out_interfaces[i].add_mapping('output')
+            remote_in_interfaces.append(Router(self, f'remote_in_itf{i}', bandwidth=bandwidth, latency=0))
+            remote_in_interfaces[i].add_mapping('output')
 
         #
         # Bindings
@@ -100,11 +103,12 @@ class L1_subsystem(gvsoc.systree.Component):
 
         #Remote input
         for i in range(0, nb_remote_masters):
-            self.bind(self, f'remote_in{i}', interleaver, 'in_%d' % (i + nb_pe))
+            self.bind(self, f'remote_in{i}', remote_in_interfaces[i], 'input')
+            self.bind(remote_in_interfaces[i], 'output', interleaver, 'in_%d' % (i + nb_pe))
 
         #Remote output
         for i in range(0, nb_remote_masters):
-            self.bind(remote_interfaces[i], 'output', self, f'remote_out{i}')
+            self.bind(remote_out_interfaces[i], 'output', self, f'remote_out{i}')
 
         #
         # Address sorting
@@ -118,7 +122,7 @@ class L1_subsystem(gvsoc.systree.Component):
                 self.bind(interleaver, 'out_%d' % i, remove_offset, 'in_0')
                 self.bind(remove_offset, 'out_0', l1_banks[i - start_bank_id], 'input')
             else :
-                self.bind(interleaver, 'out_%d' % i, remote_interfaces[tgt_grp_id ^ group_id], 'input')
+                self.bind(interleaver, 'out_%d' % i, remote_out_interfaces[tgt_grp_id ^ group_id], 'input')
     
     def i_DMA_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'dma_input', signature='io')
