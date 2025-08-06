@@ -87,7 +87,7 @@ class Tile(st.Component):
         addr_scrambler_list = []
         for i in range(0, nb_cores_per_tile):
             addr_scrambler_list.append(AddressScrambler(self, f'addr_scrambler{i}', \
-                                                       bypass=False, num_tiles=nb_tiles_per_group, \
+                                                       bypass=False, num_tiles=int(total_cores/nb_cores_per_tile), \
                                                        seq_mem_size_per_tile=512, byte_offset=2, \
                                                        num_banks_per_tile=nb_cores_per_tile*bank_factor))
 
