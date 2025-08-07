@@ -234,10 +234,10 @@ class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
         # The total grid contains 1 more node on each direction for the targets
         super().__init__(parent, name, wide_width=wide_width, narrow_width=narrow_width, dim_x=nb_x_clusters+2, dim_y=nb_y_clusters+2, router_input_queue_size=router_input_queue_size, ni_outstanding_reqs=ni_outstanding_reqs)
 
-        for tile_x in range(0, nb_x_clusters):
-            for tile_y in range(0, nb_y_clusters):
+        for tile_x in range(0, nb_x_clusters+2):
+            for tile_y in range(0, nb_y_clusters+2):
                 # Add 1 as clusters, routers and network_interfaces are in the central part
-                self.add_router(tile_x+1, tile_y+1) # Add a router at each cluster
+                self.add_router(tile_x, tile_y) # Add a router at each cluster
         for tile_x in range(0, nb_x_clusters+2):
             for tile_y in range(0, nb_y_clusters+2):
                 # Add a NI at each node, excluding the corners, because it also (once finished) acts as an output to the targets
@@ -283,31 +283,6 @@ class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
             The slave interface
         """
         return self.i_WIDE_INPUT(x+1, y+1)
-
-    def __gen_gui_router(self, routers, name, path):
-        router = gvsoc.gui.Signal(self, routers, name, path=f"{path}/req", groups=['regmap'])
-        gvsoc.gui.Signal(self, router, "stalled_queue_right", path=f"{path}/stalled_queue_right", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
-        gvsoc.gui.Signal(self, router, "stalled_queue_left", path=f"{path}/stalled_queue_left", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
-        gvsoc.gui.Signal(self, router, "stalled_queue_up", path=f"{path}/stalled_queue_up", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
-        gvsoc.gui.Signal(self, router, "stalled_queue_down", path=f"{path}/stalled_queue_down", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
-        gvsoc.gui.Signal(self, router, "stalled_queue_local", path=f"{path}/stalled_queue_local", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
-
-    def gen_gui(self, parent_signal):
-        top = gvsoc.gui.Signal(self, parent_signal, name=self.name)
-
-        routers = gvsoc.gui.Signal(self, top, name="routers")
-        for router_id in self.get_property('routers'):
-            router = gvsoc.gui.Signal(self, routers, f"router_{router_id[0]}_{router_id[1]}")
-            self.__gen_gui_router(router, "req", path=f"req_router_{router_id[0]}_{router_id[1]}")
-            self.__gen_gui_router(router, "rsp", path=f"rsp_router_{router_id[0]}_{router_id[1]}")
-            self.__gen_gui_router(router, "wide", path=f"wide_router_{router_id[0]}_{router_id[1]}")
-
-        nis = gvsoc.gui.Signal(self, top, name="nis")
-        for ni_id in self.get_property('network_interfaces'):
-            ni = gvsoc.gui.Signal(self, nis, f"ni_{ni_id[0]}_{ni_id[1]}")
-            gvsoc.gui.Signal(self, ni, "narrow_req", path=f"ni_{ni_id[0]}_{ni_id[1]}/narrow_req", groups=['regmap'])
-            gvsoc.gui.Signal(self, ni, "wide_req", path=f"ni_{ni_id[0]}_{ni_id[1]}/wide_req", groups=['regmap'])
-
 
 
 class FlooNoc2dMesh(FlooNoc2dMeshNarrowWide):

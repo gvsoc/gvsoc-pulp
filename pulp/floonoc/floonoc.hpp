@@ -101,10 +101,11 @@ public:
     static constexpr int REQ_DEST_BASE = 2;   // Base address of the destination target
     static constexpr int REQ_DEST_X = 3;      // X coordinate of the destination target
     static constexpr int REQ_DEST_Y = 4;      // Y coordinate of the destination target
-    static constexpr int REQ_NI = 5;      // When a request is stalled, this gives the network interface where to grant it
-    static constexpr int REQ_WIDE = 6;        // Indicates if a request is a wide request or not. 1 for wide, 0 for narrow
-    static constexpr int REQ_IS_ADDRESS = 7;     // Indicates if the request is a AR/AW request or not. 1 for address, 0 for data
-    static constexpr int REQ_NB_ARGS = 8;     // Number of request data required by this model
+    static constexpr int REQ_ROUTER = 5;      // When a request is stalled, this gives the router where to grant it
+    static constexpr int REQ_QUEUE = 6;       // When a request is stalled, this gives the queue where to grant it
+    static constexpr int REQ_WIDE = 7;        // Indicates if a request is a wide request or not. 1 for wide, 0 for narrow
+    static constexpr int REQ_IS_ADDRESS = 8;     // Indicates if the request is a AR/AW request or not. 1 for address, 0 for data
+    static constexpr int REQ_NB_ARGS = 9;     // Number of request data required by this model
 
     // The following constants gives the index in the queue array of the queue associated to each direction
     static constexpr int DIR_RIGHT = 0;

@@ -49,13 +49,12 @@ public:
     void unstall_queue(int from_x, int from_y);
 
     // This gets called by a router when the destination is reached and the request is sent from the router to the network interface
-    void req_from_router(vp::IoReq *req, int pos_x, int pos_y);
+    vp::IoReqStatus req_from_router(vp::IoReq *req, int pos_x, int pos_y);
     // Can be used to retrieve the x coordinate of the network interface
     int get_x();
     // Can be used to retrieve the y coordinate of the network interface
     int get_y();
-    // This gets called by the top noc to grant a a request denied by a target
-    void grant(vp::IoReq *req);
+
 private:
     // Input method called when a narrow burst is received from the local initiator
     static vp::IoReqStatus narrow_req(vp::Block *__this, vp::IoReq *req);
@@ -80,8 +79,6 @@ private:
     int x;
     // Y position of this network interface in the grid
     int y;
-    // Target attached to this network interface
-    vp::IoMaster *target;
     // Maxinum number of pending input requests before the initiator is stalled
     int ni_outstanding_reqs;
     // Input IO interface where wide incoming bursts are injected into the network
@@ -119,14 +116,4 @@ private:
     // When initiator is stalled because max number of input pending req has been reached,
     // this give the input request which has been stalled and must be granted.
     vp::IoReq *denied_req;
-    // Signal used for tracing narrow reqs
-    vp::Signal<uint64_t> signal_narrow_req;
-    // Signal used for tracing wide reqs
-    vp::Signal<uint64_t> signal_wide_req;
-    // True when the associated target has reported a stall. No request must be sent until
-    // the stalled one is granted
-    bool target_stalled;
-    // True when the routers has been stalled because either the target reported a stall
-    // or there is not enough requests anymore
-    bool routers_stalled;
 };
