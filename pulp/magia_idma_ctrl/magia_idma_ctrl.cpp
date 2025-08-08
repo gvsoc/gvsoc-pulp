@@ -128,7 +128,11 @@ void Magia_iDMA_Ctrl::fsm_handler_dma0(vp::Block *__this, vp::ClockEvent *event)
         case IDLE:
         {    
             _this->trace.msg(vp::Trace::LEVEL_TRACE,"[Magia iDMA Ctrl] DMA0 In IDLE\n");
-            _this->done_dma0.sync(false); //clear interrupt
+            // IssOffloadInsnGrant<uint32_t> offload_grant = {
+            //     .result=0x0
+            // };
+            // _this->offload_grant_itf_m.sync(&offload_grant);
+            //_this->done_dma0.sync(false); //clear interrupt
             break;
         }
         case POLL_STS_REG:
@@ -160,7 +164,11 @@ void Magia_iDMA_Ctrl::fsm_handler_dma1(vp::Block *__this, vp::ClockEvent *event)
         case IDLE:
         {    
             _this->trace.msg(vp::Trace::LEVEL_TRACE,"[Magia iDMA Ctrl] DMA1 In IDLE\n");
-            _this->done_dma1.sync(false); //clear interrupt
+            // IssOffloadInsnGrant<uint32_t> offload_grant = {
+            //     .result=0x0
+            // };
+            // _this->offload_grant_itf_m.sync(&offload_grant);
+            //_this->done_dma1.sync(false); //clear interrupt
             break;
         }
         case POLL_STS_REG:
@@ -207,6 +215,7 @@ void Magia_iDMA_Ctrl::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t>
         {
             _this->trace.msg(vp::Trace::LEVEL_TRACE,"[Magia iDMA Ctrl] received opcode dmcnf for IDMA - DIR: %d\n",dir);
             insn->granted = true; //immeditaly grant back the core
+            insn->result = 0x0;
             //nothing to configure for now...
             break;
         }
@@ -215,6 +224,7 @@ void Magia_iDMA_Ctrl::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t>
             if (func3==0b111) {
                 _this->trace.msg(vp::Trace::LEVEL_TRACE,"[Magia iDMA Ctrl] received opcode dmstr for IDMA - DIR: %d\n",dir);
                 insn->granted = true; //immeditaly grant back the core
+                insn->result = 0x0;
                 if (!dir) { //dma0
                     //set dmrep
                     dmrep.opcode=R_TYPE_ENCODE(DMREP_FUNCT7, 0, 17, XDMA_FUNCT3, 0, OP_CUSTOM1);
@@ -264,6 +274,7 @@ void Magia_iDMA_Ctrl::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t>
                     {
                         _this->trace.msg(vp::Trace::LEVEL_TRACE,"[Magia iDMA Ctrl] received opcode dm1d2d3d for IDMA - 1D [SRC=0x%08x - DST=0x%08x - LEN=%d - DIR: %d]\n",insn->arg_b,insn->arg_c,insn->arg_a,dir);
                         insn->granted = true; //immeditaly grant back the core
+                        insn->result = 0x0;
                         (!dir) ? (_this->len_dma0 = insn->arg_a) : (_this->len_dma1 = insn->arg_a);
                         src_addr=insn->arg_b;
                         dst_addr=insn->arg_c;
@@ -291,6 +302,7 @@ void Magia_iDMA_Ctrl::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t>
                     {
                         _this->trace.msg(vp::Trace::LEVEL_TRACE,"[Magia iDMA Ctrl] received opcode dm1d2d3d for IDMA - 2D - [SRC_STR=0x%08x - DST_STR=0x%08x - REP=%d - DIR: %d]\n",insn->arg_b,insn->arg_c,insn->arg_a,dir);
                         insn->granted = true; //immeditaly grant back the core
+                        insn->result = 0x0;
                         (!dir) ? (_this->reps2_dma0 = insn->arg_a) : (_this->reps2_dma1 = insn->arg_a);
                         src_stride=insn->arg_b;
                         dst_stride=insn->arg_c;
@@ -310,6 +322,7 @@ void Magia_iDMA_Ctrl::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t>
                     case 0b010:
                         _this->trace.msg(vp::Trace::LEVEL_TRACE,"[Magia iDMA Ctrl] received opcode dm1d2d3d for IDMA - 3D - DIR: %d\n",dir);
                         insn->granted = true; //immeditaly grant back the core
+                        insn->result = 0x0;
                         //3d data movement are not supported yet.
                         break;
                     default:

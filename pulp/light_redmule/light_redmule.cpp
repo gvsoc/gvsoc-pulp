@@ -125,7 +125,6 @@ public:
     vp::WireSlave<IssOffloadInsn<uint32_t> *> offload_itf;
     // Interface for granting previously stalled redmule offload
     vp::WireMaster<IssOffloadInsnGrant<uint32_t> *> offload_grant_itf;
-    bool offload_stalled;
     vp::WireMaster<bool> done;
 
     vp::IoMaster        tcdm_itf;
@@ -235,7 +234,6 @@ LightRedmule::LightRedmule(vp::ComponentConf &config)
     // Declare offload master interface for granting blocked transfers
     //this->offload_grant_itf.set_sync_meth(&LightRedmule::offload_grant);
     this->new_master_port("offload_grant", &this->offload_grant_itf, this);
-    this->offload_stalled=false;
 
     this->new_master_port("done_irq", &this->done, this);
     
@@ -877,16 +875,11 @@ void LightRedmule::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
         case 0b0001011:
         {
             if (_this->state.get() == IDLE) {
-                insn->granted = true;
+                insn->granted = true; //here we always grant the core as it is just a configuration
                 _this->m_size = insn->arg_a & 0xFFFF;
                 _this->n_size = insn->arg_b;
                 _this->k_size = (insn->arg_a) >> 16;
                 _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set MNK size: %d, %d, %d\n", _this->m_size, _this->n_size, _this->k_size);
-            }
-            else {
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] GRANT DEASSERTED\n");
-                insn->granted = false;
-                _this->offload_stalled=true;
             }
             break;
         }
@@ -894,7 +887,7 @@ void LightRedmule::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
         {
             if (_this->state.get() == IDLE)
             {
-                insn->granted = true;
+                insn->granted = true; //as soon as the operations is triggered we deassert the core
                 _this->x_addr = insn->arg_a;
                 _this->w_addr = insn->arg_b;
                 _this->y_addr = insn->arg_c;
@@ -924,11 +917,6 @@ void LightRedmule::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
                 _this->timer_start      = _this->time.get_time();
                 _this->cycle_start      = _this->clock.get_cycles();
                 _this->event_enqueue(_this->fsm_event, 1);
-            }
-            else {
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] GRANT DEASSERTED\n");
-                insn->granted = false; 
-                _this->offload_stalled=true;
             }
             break;
         }
@@ -1064,10 +1052,10 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
     switch (_this->state.get()) {
         case IDLE:
-            _this->done.sync(false); //clear irq
+            //_this->done.sync(false); //clear irq
             break;
 
-        case PRELOAD:
+        case PRELOAD: {
             //Send Request Process
             if ((_this->fsm_counter < _this->tcdm_block_total) && (_this->pending_req_queue.size() <= _this->queue_depth))
             {
@@ -1134,9 +1122,8 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
             _this->event_enqueue(_this->fsm_event, 1);
             break;
-
-        case ROUTINE:
-            
+        }
+        case ROUTINE: {
             //Send Request Process
             if ((_this->fsm_counter < _this->tcdm_block_total) && (_this->pending_req_queue.size() <= _this->queue_depth))
             {
@@ -1233,9 +1220,8 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             }
 
             break;
-
-        case STORING:
-
+        }
+        case STORING: {
             //Send Request Process
             if ((_this->fsm_counter < _this->tcdm_block_total) && (_this->pending_req_queue.size() <= _this->queue_depth))
             {
@@ -1308,50 +1294,37 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 _this->event_enqueue(_this->fsm_event, 1);
             }
             break;
-
-        case FINISHED:
+        }
+        case FINISHED: {
             //Reply Stalled Query
             if (_this->redmule_query == NULL)
             {
-                //_this->state.set(FINISHED); //ZL-MOD
                 _this->done.sync(true); //send interrupt
                 _this->state.set(IDLE);
-                if (_this->offload_stalled) {
-                    _this->offload_stalled = false;
-                    IssOffloadInsnGrant<uint32_t> offload_grant = {
-                        .result=0x1
-                    };
-                    _this->offload_grant_itf.sync(&offload_grant);
-                    _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][FINISHED] GRANT core and Wait for query!\n");
-                }
-                else {
-                    _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][FINISHED] Waiting for query!\n");
-                }
+                // IssOffloadInsnGrant<uint32_t> offload_grant = {
+                //     .result=0x0
+                // };
+                // _this->offload_grant_itf.sync(&offload_grant);
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][FINISHED] GRANT core and Wait for query!\n");
             } else {
                 _this->state.set(ACKNOWLEDGE);
             }
             _this->event_enqueue(_this->fsm_event, 1);
             break;
-
-        case ACKNOWLEDGE:
+        }
+        case ACKNOWLEDGE: {
             _this->redmule_query->get_resp_port()->resp(_this->redmule_query);
             _this->redmule_query = NULL;
             _this->done.sync(true); //send interrupt
             _this->state.set(IDLE);
-            if (_this->offload_stalled) {
-                _this->offload_stalled = false;
-                IssOffloadInsnGrant<uint32_t> offload_grant = {
-                    .result=0x1
-                };
-                _this->offload_grant_itf.sync(&offload_grant);
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][ACKNOWLEDGE] GRANT core and Done!\n");
-            }
-            else {
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][ACKNOWLEDGE] Done!\n");
-            }
-            
+            // IssOffloadInsnGrant<uint32_t> offload_grant = {
+            //     .result=0x0
+            // };
+            // _this->offload_grant_itf.sync(&offload_grant);
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][ACKNOWLEDGE] GRANT core and Done!\n");
+            _this->event_enqueue(_this->fsm_event, 1);
             break;
-
+        }
         default:
             _this->trace.fatal("[LightRedmule] INVALID RedMule Status: %d\n", _this->state);
     }

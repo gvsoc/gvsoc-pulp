@@ -184,7 +184,7 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
         }
         case SLAVE_NORD_REQ:
         {
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] processed request %d from NORD port\n",_this->nord_current_id_req);
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] processed request-id=%d aggr=0x%08x from NORD port\n",_this->nord_current_id_req,_this->nord_current_aggr[_this->nord_current_id_req]);
             msb_pos = (sizeof(_this->nord_current_aggr[_this->nord_current_id_req])*8)-1 - __builtin_clz(_this->nord_current_aggr[_this->nord_current_id_req]); //then get the position of the msbit of the request
             if (msb_pos == (uint32_t)(log2(_this->level))) { //and check if target syncro ends here at this fractal
                 _this->syncro_val_nord_sud[_this->nord_current_id_req]++; //vertical i.e., nord-sud
@@ -221,7 +221,7 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
         }
         case SLAVE_SUD_REQ:
         {
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] processed request %d from SUD port\n",_this->sud_current_id_req);
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] processed request-id=%d aggr=0x%08x from SUD port\n",_this->sud_current_id_req,_this->sud_current_aggr[_this->sud_current_id_req]);
             msb_pos = (sizeof(_this->sud_current_aggr[_this->sud_current_id_req])*8)-1 - __builtin_clz(_this->sud_current_aggr[_this->sud_current_id_req]); //then get the position of the msbit of the request
             if (msb_pos == (uint32_t)(log2(_this->level))) { //and check if syncro ends here at this fractal
                 _this->syncro_val_nord_sud[_this->sud_current_id_req]++; //vertical i.e., nord-sud
@@ -257,7 +257,7 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
         }
         case SLAVE_EAST_REQ:
         {
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] processed request %d from EAST port\n",_this->east_current_id_req);
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] processed request-id=%d aggr=0x%08x from EAST port\n",_this->east_current_id_req,_this->east_current_aggr[_this->east_current_id_req]);
             msb_pos = (sizeof(_this->east_current_aggr[_this->east_current_id_req])*8)-1 - __builtin_clz(_this->east_current_aggr[_this->east_current_id_req]); //then get the position of the msbit of the request
             if (msb_pos == (uint32_t)(log2(_this->level))) { //and check if syncro ends here at this fractal
                 _this->syncro_val_east_west[_this->east_current_id_req]++; //horizontal i.e., east-west
@@ -293,7 +293,7 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
         }
         case SLAVE_WEST_REQ:
         {
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] processed request %d from WEST port\n",_this->west_current_id_req);
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] processed request-id=%d aggr=0x%08x from WEST port\n",_this->west_current_id_req,_this->west_current_aggr[_this->west_current_id_req]);
             msb_pos = (sizeof(_this->west_current_aggr[_this->west_current_id_req])*8)-1 - __builtin_clz(_this->west_current_aggr[_this->west_current_id_req]); //then get the position of the msbit of the request
             if (msb_pos == (uint32_t)(log2(_this->level))) { //and check if syncro ends here at this fractal
                 _this->syncro_val_east_west[_this->west_current_id_req]++; //horizontal i.e., east-west

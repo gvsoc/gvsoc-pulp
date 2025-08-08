@@ -121,7 +121,7 @@ void XifDecoder::grant_sync_s1(vp::Block *__this, IssOffloadInsnGrant<uint32_t> 
 
     XifDecoder *_this = (XifDecoder *)__this;
 
-    //_this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received GRANT from iDMA\n");
+    _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received GRANT from iDMA\n");
 
     _this->offload_grant_itf_m.sync(result);
 }
@@ -130,7 +130,7 @@ void XifDecoder::grant_sync_s2(vp::Block *__this, IssOffloadInsnGrant<uint32_t> 
 
     XifDecoder *_this = (XifDecoder *)__this;
 
-    //_this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received GRANT from RedMule\n");
+    _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received GRANT from RedMule\n");
 
     _this->offload_grant_itf_m.sync(result);
 }
@@ -140,17 +140,17 @@ void XifDecoder::fractal_output_method(vp::Block *__this, PortResp<uint32_t> *re
 
     if ((req->wake) && (!req->error)) {
         if (id==fractal_directions::EAST_WEST)
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received wake response from EAST-WEST Fractal\n");
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received wake response from EAST-WEST Fractal [id=%d aggr=0x%08x]\n",req->id_rsp,req->lvl);
         else if (id==fractal_directions::NORD_SUD)
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received wake response from NORD-SUD Fractal\n");
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received wake response from NORD-SUD Fractal [id=%d aggr=0x%08x]\n",req->id_rsp,req->lvl);
         else if (id==fractal_directions::NEIGHBOUR_EAST_WEST)
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received wake response from NEIGHBOUR-EAST-WEST Fractal\n");
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received wake response from NEIGHBOUR-EAST-WEST Fractal [id=%d aggr=0x%08x]\n",req->id_rsp,req->lvl);
         else if (id==fractal_directions::NEIGHBOUR_NORD_SUD)
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received wake response from NEIGHBOUR-NORD-SUD Fractal\n");
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received wake response from NEIGHBOUR-NORD-SUD Fractal [id=%d aggr=0x%08x]\n",req->id_rsp,req->lvl);
         else
             _this->trace.fatal("[XifDecoder] wrong direction\n");
         IssOffloadInsnGrant<uint32_t> offload_grant = {
-            .result=0x1
+            .result=0x0
         };
         _this->offload_grant_itf_m.sync(&offload_grant);
     }
@@ -170,7 +170,7 @@ void XifDecoder::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
     {
         case 0b1111011: //these are all the opcodes associated with the IDMA
         {
-            //_this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received opcode for IDMA\n");
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received opcode for IDMA\n");
             _this->offload_itf_s1.sync(insn); //passthru the instruction to the magia xdma controller
             //_this->current_Insn=insn;
             //_this->event_enqueue(_this->fsm_event, 1);
@@ -206,7 +206,7 @@ void XifDecoder::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
                 }
             }
             else {
-                //_this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received opcode for IDMA\n");
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received opcode for IDMA\n");
                 _this->offload_itf_s1.sync(insn); //passthru the instruction to the magia xdma controller
                 //_this->current_Insn=insn;
                 //_this->event_enqueue(_this->fsm_event, 1);
@@ -216,7 +216,7 @@ void XifDecoder::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
         case 0b0001011: //these are all the opcodes associated with the RedMule
         case 0b0101011:
         {
-            //_this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received opcode for RedMule\n");
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received opcode for RedMule\n");
             _this->offload_itf_s2.sync(insn);
             //_this->current_Insn=insn;
             //_this->event_enqueue(_this->fsm_event, 1);

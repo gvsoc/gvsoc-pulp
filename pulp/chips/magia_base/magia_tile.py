@@ -44,14 +44,18 @@ class MagiaTileTcdm(gvsoc.systree.Component):
         # TODO: for early tests only. Move to json later
         nb_banks = MagiaArch.N_MEM_BANKS
         bank_size = MagiaArch.N_WORDS_BANK * MagiaArch.BYTES_PER_WORD
-        nb_masters = 1
 
-        # interleaver for the whole TDCM
-        interleaver = L1_interleaver(self, 'interleaver', nb_slaves=nb_banks, nb_masters=nb_masters, interleaving_bits=2)
+        # 1 master: OBI
+        L1_masters = 1
+        interleaver = L1_interleaver(self, 'interleaver', nb_slaves=nb_banks, nb_masters=L1_masters, interleaving_bits=2)
 
-        dma_interleaver = DmaInterleaver(self, 'dma_interleaver', nb_master_ports=nb_masters, nb_banks=nb_banks, bank_width=4)
+        # 3 masters: OBI, iDMA0, iDMA1
+        dma_masters = 3
+        dma_interleaver = DmaInterleaver(self, 'dma_interleaver', nb_master_ports=dma_masters, nb_banks=nb_banks, bank_width=4)
         
-        hwpe_interleaver = HWPEInterleaver(self, 'hwpe_interleaver', nb_master_ports=nb_masters, nb_banks=nb_banks, bank_width=4)
+        # 1 master: redmule
+        redmule_masters = 1
+        redmule_interleaver = HWPEInterleaver(self, 'redmule_interleaver', nb_master_ports=redmule_masters, nb_banks=nb_banks, bank_width=4)
 
         banks = []
         for i in range(nb_banks):
@@ -62,13 +66,17 @@ class MagiaTileTcdm(gvsoc.systree.Component):
             # Bind the new bank (slave) to the interleaver (master)
             self.bind(interleaver, f'out_{i}', bank, 'input')
             self.bind(dma_interleaver, f'out_{i}', bank, 'input')
-            self.bind(hwpe_interleaver, f'out_{i}', bank, 'input')
+            self.bind(redmule_interleaver, f'out_{i}', bank, 'input')
 
         # Bind external ports (input->[internal]output->interleaver)
-        for i in range(nb_masters):
+        for i in range(L1_masters):
             self.bind(self, f'L1_input_{i}', interleaver, f'in_{i}')
+
+        for i in range(dma_masters):
             self.bind(self, f'IDMA_input', dma_interleaver, f'input')
-            self.bind(self, f'HWPE_input', hwpe_interleaver, f'input')
+
+        for i in range(redmule_masters):
+            self.bind(self, f'RedMulE_input', redmule_interleaver, f'input')
 
     # Input ports (port number as arguments)
     def i_INPUT(self, id: int) -> gvsoc.systree.SlaveItf:
@@ -77,8 +85,8 @@ class MagiaTileTcdm(gvsoc.systree.Component):
     def i_DMA_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'IDMA_input', signature='io')
     
-    def i_HWPE_INPUT(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, f'HWPE_input', signature='io')
+    def i_REDMULE_INPUT(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'RedMulE_input', signature='io')
 
 
 class MagiaTile(gvsoc.systree.Component):
@@ -95,8 +103,8 @@ class MagiaTile(gvsoc.systree.Component):
         l1_tcdm = MagiaTileTcdm(self, f'tile-{tid}-tcdm', parser)
 
         # Temporary test interconnects (use obi to access TCDM), to be refined later
-        tile_xbar = router.Router(self, f'tile-{tid}-tile-xbar',bandwidth=4)
-        obi_xbar = router.Router(self, f'tile-{tid}-obi-xbar',bandwidth=4)
+        tile_xbar = router.Router(self, f'tile-{tid}-tile-xbar',bandwidth=4,latency=2)
+        obi_xbar = router.Router(self, f'tile-{tid}-obi-xbar',bandwidth=4,latency=2)
 
         # IDMA Controller
         idma_ctrl= Magia_iDMA_Ctrl(self,f'tile-{tid}-idma-ctrl')
@@ -116,14 +124,13 @@ class MagiaTile(gvsoc.systree.Component):
                                     queue_depth         = 1,
                                     loc_base            = tid*MagiaArch.L1_TILE_OFFSET)
         
-
         #new_rm=RedMule(self, 'new_redmule')
         
         # Xif decoder
         xifdec = XifDecoder(self,f'tile-{tid}-xifdec')
 
         # UART
-        stdout = Stdout(self, f'tile-{tid}-stdout')
+        stdout = Stdout(self, f'tile-{tid}-stdout',max_cluster=MagiaArch.NB_CLUSTERS,max_core_per_cluster=1,user_set_core_id=0,user_set_cluster_id=tid)
 
         # Bind: cv32 core data -> obi interconnect
         core_cv32.o_DATA(obi_xbar.i_INPUT())
@@ -199,18 +206,18 @@ class MagiaTile(gvsoc.systree.Component):
 
         # Bind: idma0
         idma0.o_AXI(tile_xbar.i_INPUT())
-        idma0.o_TCDM(l1_tcdm.i_INPUT(0)) #here we don't use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
+        idma0.o_TCDM(l1_tcdm.i_DMA_INPUT()) #here we don't use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
         idma_ctrl.o_OFFLOAD_iDMA0_AXI2OBI(idma0.i_OFFLOAD())
         idma0.o_OFFLOAD_GRANT(idma_ctrl.i_OFFLOAD_GRANT_iDMA0_AXI2OBI())
 
         # Bind: idma1
         idma1.o_AXI(tile_xbar.i_INPUT())
-        idma1.o_TCDM(l1_tcdm.i_INPUT(0)) #here we don't use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
+        idma1.o_TCDM(l1_tcdm.i_DMA_INPUT()) #here we don't use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
         idma_ctrl.o_OFFLOAD_iDMA1_OBI2AXI(idma1.i_OFFLOAD())
         idma1.o_OFFLOAD_GRANT(idma_ctrl.i_OFFLOAD_GRANT_iDMA1_OBI2AXI())
 
         # Bind: redmule
-        redmule.o_TCDM(l1_tcdm.i_HWPE_INPUT())
+        redmule.o_TCDM(l1_tcdm.i_REDMULE_INPUT())
         xifdec.o_OFFLOAD_S2(redmule.i_OFFLOAD())
         redmule.o_OFFLOAD_GRANT(xifdec.i_OFFLOAD_GRANT_S2())
         redmule.o_IRQ(core_cv32.i_IRQ(31))
