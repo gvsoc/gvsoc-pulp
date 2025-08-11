@@ -123,6 +123,7 @@ class L1_subsystem(st.Component):
             self.bind(interleaver, 'out_%d' % i, l1_banks[i], 'input')
 
         self.bind(self, 'ne16_in', interleaver, 'in_%d' % (nb_pe + 4))
+        self.bind(self, 'redmule_in', interleaver, 'in_%d' % (nb_pe + 4)) # TODO: check why it is "nb_pe + 4" and not "nb_pe + 8" -> alternative to NE16!!
 
         for i in range(0, 4):
             self.bind(self, 'dma_in_%d' % i, interleaver, 'in_%d' % (nb_pe + i))
