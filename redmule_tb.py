@@ -63,7 +63,7 @@ class RedmuleTestbench(st.Component):
         loader.o_ENTRY(host.i_ENTRY())
         host.o_DATA(ico.i_INPUT())
         host.o_FETCH(ico.i_INPUT())
-        redmule.o_OUT(dmemory.i_INPUT())
+        redmule.o_OUT(ico.i_INPUT())
 
 
 class RedmuleTestbenchWrapper(st.Component):
