@@ -19,7 +19,7 @@ from memory.memory import Memory
 from interco.router import Router
 from interco.converter import Converter
 from interco.interleaver import Interleaver
-from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
+from pulp.snitch.snitch_cluster_submodule.dma_interleaver import DmaInterleaver
 import math
 
 
@@ -39,16 +39,16 @@ class L1_subsystem(gvsoc.systree.Component):
         The number of processing elements sharing the subsystem.
     size: int
         The size of the memory in bytes.
-    nb_port: int
-        Number of TCDM ports per PE.   
+    nb_banks_per_tile: int
+        Number of TCDM banks  
     bandwidth: int
         Global bandwidth, in bytes per cycle, applied to all incoming request. This impacts the
         end time of the burst.
         
     """
         
-    def __init__(self, parent: gvsoc.systree.Component, name: str, cluster, nb_pe: int=0, size: int=0, 
-                 nb_port: int=0, bandwidth: int=0):
+    def __init__(self, parent: gvsoc.systree.Component, name: str, tile_id: int=0, group_id: int=0, nb_tiles_per_group: int=16, nb_groups: int=4, nb_remote_masters: int=4, nb_pe: int=0, size: int=0, 
+                 nb_banks_per_tile: int=0, bandwidth: int=0):
         super(L1_subsystem, self).__init__(parent, name)
 
         #
@@ -57,105 +57,75 @@ class L1_subsystem(gvsoc.systree.Component):
         
         self.add_property('nb_pe', nb_pe)
         self.add_property('size', size)
-        self.add_property('nb_port', nb_port)
+        self.add_property('nb_banks_per_tile', nb_banks_per_tile)
         self.add_property('bandwidth', bandwidth)
+        self.add_property('tile_id', tile_id)
+        self.add_property('group_id', group_id)
         
-        nb_banks_per_superbank = 8
-        nb_superbanks = 4
-        l1_bank_size = size / nb_superbanks / nb_banks_per_superbank
-        nb_masters = nb_pe
-        nb_l1_banks = nb_banks_per_superbank * nb_superbanks
-        l1_interleaver_nb_masters = nb_pe * nb_port 
-
+        l1_bank_size = size / nb_banks_per_tile
+        nb_masters = nb_pe + nb_remote_masters
+        total_banks = nb_groups * nb_tiles_per_group * nb_banks_per_tile
+        global_tile_id = tile_id + group_id * nb_tiles_per_group
+        start_bank_id = global_tile_id * nb_banks_per_tile
+        end_bank_id = start_bank_id + nb_banks_per_tile
 
         #
         # Components
         #
 
         # TCDM L1-Memory banks
-        # Snitch TCDM 4 superbanks and 32 banks, each PE has 4 banks
-        # Each bank has size 4kB (depth*width: 512*8), total size 128kB
         l1_banks = []
-        for i in range(0, nb_l1_banks):
+        for i in range(0, nb_banks_per_tile):
             tcdm = Memory(self, 'tcdm_bank%d' % i, size=l1_bank_size, width_log2=int(math.log(bandwidth, 2.0)), 
                             atomics=True)
             l1_banks.append(tcdm)
 
-        # Per-PE interconnects
-        # PE side has 3 ports (NumSsrs) per core
-        pe_icos = []
-        for i in range(0, nb_pe):
-            pe_icos.append(Router(self, 'pe%d_ico_0' % i, bandwidth=8, latency=0))
-            pe_icos.append(Router(self, 'pe%d_ico_1' % i, bandwidth=8, latency=0))
-            pe_icos.append(Router(self, 'pe%d_ico_2' % i, bandwidth=8, latency=0))
-
-        # L1 interleaver
-        # TCDM interconnection, one port per bank, 8 ports per superbank
-        interleaver = Interleaver(self, 'interleaver', nb_slaves=nb_l1_banks, nb_masters=l1_interleaver_nb_masters, 
+        # L1 interleaver (virtual)
+        interleaver = Interleaver(self, 'interleaver', nb_slaves=total_banks, nb_masters=nb_masters, 
                                     interleaving_bits=int(math.log2(bandwidth)))
         
-        # DMA interleaver
-        dma_interleaver = DmaInterleaver(self, 'dma_interleaver', nb_master_ports=l1_interleaver_nb_masters, 
-                                         nb_banks=nb_l1_banks, bank_width=bandwidth)
-
+        #Remote interfaces
+        remote_out_interfaces = []
+        remote_in_interfaces = []
+        for i in range(0, nb_remote_masters):
+            remote_out_interfaces.append(Router(self, f'remote_out_itf{i}', bandwidth=bandwidth, latency=1))
+            remote_out_interfaces[i].add_mapping('output')
+            remote_in_interfaces.append(Router(self, f'remote_in_itf{i}', bandwidth=bandwidth, latency=0))
+            remote_in_interfaces[i].add_mapping('output')
 
         #
         # Bindings
         #
-        
-        # DMA interconnections
-        # cluster_ico "l1" -> pe_icos[0] "input"
-        self.bind(self, 'input', pe_icos[0], 'input')
 
-        # Per-PE interconnects
+        #Core input
         for i in range(0, nb_pe):
-            # Index of interleaver ports for each core complex.
-            port_id = int(i * nb_port)
-            
-            
-            # Memory port 0, shared by Integer LSU, FP LSU and data mover 0.
-            # pe (iss) "data" -> pe interconnect (router) "input"
-            self.bind(self, 'data_pe_%d' % i, pe_icos[port_id], 'input')
+            self.bind(self, f'pe_in{i}', interleaver, 'in_%d' % i)
 
-            # pe interconnect (router) "output" -> tcdm interleaver (interleaver) "in_%d"
-            pe_icos[port_id].add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000)
-            self.bind(pe_icos[port_id], 'l1', interleaver, 'in_%d' % port_id)
+        #Remote input
+        for i in range(0, nb_remote_masters):
+            self.bind(self, f'remote_in{i}', remote_in_interfaces[i], 'input')
+            self.bind(remote_in_interfaces[i], 'output', interleaver, 'in_%d' % (i + nb_pe))
 
-            # connect to cluster axi crossbar
-            pe_icos[port_id].add_mapping('cluster_ico')
-            self.bind(pe_icos[port_id], 'cluster_ico', self, 'cluster_ico')
-            
-        
-            # Memory port 1, private for data mover 1
-            port_id += 1
-            self.bind(self, 'ssr_1_pe_%d' % i, pe_icos[port_id], 'input')
-            pe_icos[port_id].add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000)
-            self.bind(pe_icos[port_id], 'l1', interleaver, 'in_%d' % port_id)
-            
-            
-            # Memory port 2, private for data mover 2
-            port_id += 1
-            self.bind(self, 'ssr_2_pe_%d' % i, pe_icos[port_id], 'input')
-            pe_icos[port_id].add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000)
-            self.bind(pe_icos[port_id], 'l1', interleaver, 'in_%d' % port_id)
-            
-        
-        # DMA interconnections
-        for i in range(0, l1_interleaver_nb_masters):
-            self.bind(self, f'dma_input', dma_interleaver, f'input')
+        #Remote output
+        for i in range(0, nb_remote_masters):
+            self.bind(remote_out_interfaces[i], 'output', self, f'remote_out{i}')
 
+        #
+        # Address sorting
+        #
 
-        # L1 interleaver 
-        # tcdm interleaver "out_%d" -> l1_banks (memory) "input"
-        # dma interleaver "out_%d" -> l1_banks (memory) "input"
-        for i in range(0, nb_l1_banks):
-            self.bind(interleaver, 'out_%d' % i, l1_banks[i], 'input')
-            self.bind(dma_interleaver, 'out_%d' % i, l1_banks[i], 'input')
-            
+        #virtual interleaver -> bank + remote_interfaces
+        for i in range(0, total_banks):
+            tgt_grp_id = int(i / (nb_tiles_per_group * nb_banks_per_tile))
+            if (i >= start_bank_id and i < end_bank_id):
+                remove_offset = Interleaver(self, f'remove_offset_{i}', nb_slaves=1, nb_masters=1, interleaving_bits=2, enable_shift=(total_banks - 1).bit_length())
+                self.bind(interleaver, 'out_%d' % i, remove_offset, 'in_0')
+                self.bind(remove_offset, 'out_0', l1_banks[i - start_bank_id], 'input')
+            else :
+                self.bind(interleaver, 'out_%d' % i, remote_out_interfaces[tgt_grp_id ^ group_id], 'input')
     
     def i_DMA_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'dma_input', signature='io')
-    
     
     def add_mapping(self, name: str, base: int=None, size: int=None, remove_offset: int=None,
             add_offset: int=None, id: int=None, latency: int=None):
