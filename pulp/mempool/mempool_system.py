@@ -67,7 +67,7 @@ class System(st.Component):
         l2_mem = memory.Memory(self, 'l2_mem', size=0x1000000, width_log2=-1, atomics=True)
 
         # CSR
-        csr = CtrlRegisters(self, 'ctrl_registers')
+        csr = CtrlRegisters(self, 'ctrl_registers', wakeup_latency=18 if terapool else 15)
         
         uart = ns16550.Ns16550(self, 'uart')
         # uart = memory.Memory(self, 'uart', size=0x100, width_log2=3, atomics=True)
