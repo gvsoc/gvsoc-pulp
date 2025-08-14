@@ -18,13 +18,14 @@ import gvsoc.systree
 
 class CtrlRegisters(gvsoc.systree.Component):
 
-    def __init__(self, parent: gvsoc.systree.Component, name: str):
+    def __init__(self, parent: gvsoc.systree.Component, name: str, wakeup_latency: int=0):
 
         super().__init__(parent, name)
 
         self.add_sources(['pulp/mempool/ctrl_registers.cpp'])
 
         self.add_properties({
+            'wakeup_latency': wakeup_latency
         })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:

@@ -39,6 +39,7 @@ private:
     vp::IoSlave input_itf;
     vp::WireMaster<bool> barrier_ack_itf;
     vp::ClockEvent * wakeup_event;
+    int wakeup_latency;
 };
 
 
@@ -52,6 +53,7 @@ CtrlRegisters::CtrlRegisters(vp::ComponentConf &config)
     this->new_slave_port("input", &this->input_itf);
     this->new_master_port("barrier_ack", &this->barrier_ack_itf);
     this->wakeup_event = this->event_new(&CtrlRegisters::wakeup_event_handler);
+    wakeup_latency = get_js_config()->get_child_int("wakeup_latency");
 }
 
 void CtrlRegisters::wakeup_event_handler(vp::Block *__this, vp::ClockEvent *event) {
@@ -82,7 +84,7 @@ vp::IoReqStatus CtrlRegisters::req(vp::Block *__this, vp::IoReq *req)
         }
         if (offset == 4 && value == 0xFFFFFFFF)
         {
-            _this->event_enqueue(_this->wakeup_event, 15);
+            _this->event_enqueue(_this->wakeup_event, _this->wakeup_latency);
         }
     }
 
