@@ -39,7 +39,7 @@ GAPY_TARGET = True
 
 class Cluster(st.Component):
 
-    def __init__(self, parent, name, parser, nb_cores_per_tile: int=4, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64):
+    def __init__(self, parent, name, parser, terapool: bool=False, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64):
         super().__init__(parent, name)
 
         ################################################################
@@ -55,22 +55,33 @@ class Cluster(st.Component):
         # TIles
         self.group_list = []
         for i in range(0, nb_groups):
-            self.group_list.append(Group(self,f'group_{i}',parser=parser,group_id=i, nb_cores_per_tile=nb_cores_per_tile, 
-                nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width))
+            self.group_list.append(Group(self,f'group_{i}',parser=parser,terapool=terapool, group_id=i, nb_cores_per_tile=nb_cores_per_tile, 
+                nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width))
         
         ################################################################
         ##########               Design Bindings              ##########
         ################################################################
 
         #Group master output -> Group slave input
-        for ini in range(0, nb_groups):
-            for tgt in range(0, nb_groups):
-                if (ini != tgt):
-                    for tile in range(0, nb_tiles_per_group):
-                        debug_router=router.Router(self, 'debug_router_ini%d_tgt%d_tile%d' % (ini, tgt, tile))
-                        debug_router.add_mapping("output")
-                        self.bind(self.group_list[ini], f'grp_remt{ini^tgt}_tile{tile}_master_out', debug_router, 'input')
-                        self.bind(debug_router, 'output', self.group_list[tgt], f'grp_remt{ini^tgt}_tile{tile}_slave_in')
+        if terapool:
+            for ini in range(0, nb_groups):
+                for tgt in range(0, nb_groups):
+                    if (ini != tgt):
+                        for sg in range(0, nb_sub_groups_per_group):
+                            for tile in range(0, nb_tiles_per_group):
+                                debug_router=router.Router(self, 'debug_router_ini%d_tgt%d_sg%d_tile%d' % (ini, tgt, sg, tile))
+                                debug_router.add_mapping("output")
+                                self.bind(self.group_list[ini], f'grp_remt{ini^tgt}_sg{sg}_tile{tile}_master_out', debug_router, 'input')
+                                self.bind(debug_router, 'output', self.group_list[tgt], f'grp_remt{ini^tgt}_sg{sg}_tile{tile}_slave_in')
+        else:
+            for ini in range(0, nb_groups):
+                for tgt in range(0, nb_groups):
+                    if (ini != tgt):
+                        for tile in range(0, nb_tiles_per_group):
+                            debug_router=router.Router(self, 'debug_router_ini%d_tgt%d_tile%d' % (ini, tgt, tile))
+                            debug_router.add_mapping("output")
+                            self.bind(self.group_list[ini], f'grp_remt{ini^tgt}_tile{tile}_master_out', debug_router, 'input')
+                            self.bind(debug_router, 'output', self.group_list[tgt], f'grp_remt{ini^tgt}_tile{tile}_slave_in')
 
         # Propagate barrier signals from group to cluster boundary
         for i in range(0, nb_groups):

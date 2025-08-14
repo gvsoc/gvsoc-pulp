@@ -47,8 +47,9 @@ class L1_subsystem(gvsoc.systree.Component):
         
     """
         
-    def __init__(self, parent: gvsoc.systree.Component, name: str, tile_id: int=0, group_id: int=0, nb_tiles_per_group: int=16, nb_groups: int=4, nb_remote_masters: int=4, nb_pe: int=0, size: int=0, 
-                 nb_banks_per_tile: int=0, bandwidth: int=0):
+    def __init__(self, parent: gvsoc.systree.Component, name: str, terapool: bool=False, tile_id: int=0, sub_group_id: int=0, group_id: int=0,
+                 nb_tiles_per_sub_group: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, nb_remote_local_masters: int=1, nb_remote_group_masters: int=4,
+                 nb_remote_sub_group_masters: int=4, nb_pe: int=0, size: int=0, nb_banks_per_tile: int=0, bandwidth: int=0):
         super(L1_subsystem, self).__init__(parent, name)
 
         #
@@ -62,10 +63,12 @@ class L1_subsystem(gvsoc.systree.Component):
         self.add_property('tile_id', tile_id)
         self.add_property('group_id', group_id)
         
+        assert nb_remote_local_masters == 1, "Only one remote local master is supported in the L1 subsystem"
         l1_bank_size = size / nb_banks_per_tile
-        nb_masters = nb_pe + nb_remote_masters
-        total_banks = nb_groups * nb_tiles_per_group * nb_banks_per_tile
-        global_tile_id = tile_id + group_id * nb_tiles_per_group
+        nb_masters = nb_pe + nb_remote_local_masters + nb_remote_group_masters + nb_remote_sub_group_masters
+        nb_remote_masters = nb_remote_local_masters + nb_remote_group_masters + nb_remote_sub_group_masters
+        total_banks = nb_groups * nb_sub_groups_per_group * nb_tiles_per_sub_group * nb_banks_per_tile
+        global_tile_id = tile_id + sub_group_id * nb_tiles_per_sub_group + group_id * nb_sub_groups_per_group * nb_tiles_per_sub_group
         start_bank_id = global_tile_id * nb_banks_per_tile
         end_bank_id = start_bank_id + nb_banks_per_tile
 
@@ -77,7 +80,7 @@ class L1_subsystem(gvsoc.systree.Component):
         l1_banks = []
         for i in range(0, nb_banks_per_tile):
             tcdm = Memory(self, 'tcdm_bank%d' % i, size=l1_bank_size, width_log2=int(math.log(bandwidth, 2.0)), 
-                            atomics=True)
+                            latency=1, atomics=True)
             l1_banks.append(tcdm)
 
         # L1 interleaver (virtual)
@@ -85,14 +88,30 @@ class L1_subsystem(gvsoc.systree.Component):
                                     interleaving_bits=int(math.log2(bandwidth)))
         
         #Remote interfaces
-        remote_out_interfaces = []
-        remote_in_interfaces = []
-        for i in range(0, nb_remote_masters):
-            remote_out_interfaces.append(Router(self, f'remote_out_itf{i}', bandwidth=bandwidth, latency=1))
-            remote_out_interfaces[i].add_mapping('output')
-            remote_in_interfaces.append(Router(self, f'remote_in_itf{i}', bandwidth=bandwidth, latency=0))
-            remote_in_interfaces[i].add_mapping('output')
+        remote_local_out_interfaces = []
+        remote_local_in_interfaces = []
+        for i in range(0, nb_remote_local_masters):
+            remote_local_out_interfaces.append(Router(self, f'remote_local_out_itf{i}', bandwidth=bandwidth, latency=2))
+            remote_local_out_interfaces[i].add_mapping('output')
+            remote_local_in_interfaces.append(Router(self, f'remote_local_in_itf{i}', bandwidth=bandwidth, latency=0))
+            remote_local_in_interfaces[i].add_mapping('output')
 
+        remote_sub_group_out_interfaces = []
+        remote_sub_group_in_interfaces = []
+        for i in range(0, nb_remote_sub_group_masters):
+            remote_sub_group_out_interfaces.append(Router(self, f'remote_sub_group_out_itf{i}', bandwidth=bandwidth, latency=2))
+            remote_sub_group_out_interfaces[i].add_mapping('output')
+            remote_sub_group_in_interfaces.append(Router(self, f'remote_sub_group_in_itf{i}', bandwidth=bandwidth, latency=0))
+            remote_sub_group_in_interfaces[i].add_mapping('output')
+
+        remote_group_out_interfaces = []
+        remote_group_in_interfaces = []
+        for i in range(0, nb_remote_group_masters):
+            remote_group_out_interfaces.append(Router(self, f'remote_group_out_itf{i}', bandwidth=bandwidth, latency=2))
+            remote_group_out_interfaces[i].add_mapping('output')
+            remote_group_in_interfaces.append(Router(self, f'remote_group_in_itf{i}', bandwidth=bandwidth, latency=0))
+            remote_group_in_interfaces[i].add_mapping('output')
+            
         #
         # Bindings
         #
@@ -102,13 +121,27 @@ class L1_subsystem(gvsoc.systree.Component):
             self.bind(self, f'pe_in{i}', interleaver, 'in_%d' % i)
 
         #Remote input
-        for i in range(0, nb_remote_masters):
-            self.bind(self, f'remote_in{i}', remote_in_interfaces[i], 'input')
-            self.bind(remote_in_interfaces[i], 'output', interleaver, 'in_%d' % (i + nb_pe))
+        for i in range(0, nb_remote_local_masters):
+            self.bind(self, f'remote_local_in{i}', remote_local_in_interfaces[i], 'input')
+            self.bind(remote_local_in_interfaces[i], 'output', interleaver, 'in_%d' % (i + nb_pe))
 
+        for i in range(0, nb_remote_sub_group_masters):
+            self.bind(self, f'remote_sub_group_in{i}', remote_sub_group_in_interfaces[i], 'input')
+            self.bind(remote_sub_group_in_interfaces[i], 'output', interleaver, 'in_%d' % (i + nb_pe + nb_remote_local_masters))
+
+        for i in range(0, nb_remote_group_masters):
+            self.bind(self, f'remote_group_in{i}', remote_group_in_interfaces[i], 'input')
+            self.bind(remote_group_in_interfaces[i], 'output', interleaver, 'in_%d' % (i + nb_pe + nb_remote_local_masters + nb_remote_sub_group_masters))
+            
         #Remote output
-        for i in range(0, nb_remote_masters):
-            self.bind(remote_out_interfaces[i], 'output', self, f'remote_out{i}')
+        for i in range(0, nb_remote_local_masters):
+            self.bind(remote_local_out_interfaces[i], 'output', self, f'remote_local_out{i}')
+
+        for i in range(0, nb_remote_sub_group_masters):
+            self.bind(remote_sub_group_out_interfaces[i], 'output', self, f'remote_sub_group_out{i}')
+
+        for i in range(0, nb_remote_group_masters):
+            self.bind(remote_group_out_interfaces[i], 'output', self, f'remote_group_out{i}')
 
         #
         # Address sorting
@@ -116,13 +149,19 @@ class L1_subsystem(gvsoc.systree.Component):
 
         #virtual interleaver -> bank + remote_interfaces
         for i in range(0, total_banks):
-            tgt_grp_id = int(i / (nb_tiles_per_group * nb_banks_per_tile))
+            tgt_grp_id = int(i / (nb_sub_groups_per_group * nb_tiles_per_sub_group * nb_banks_per_tile))
+            tgt_sg_id = int((i % (nb_sub_groups_per_group * nb_tiles_per_sub_group * nb_banks_per_tile)) / (nb_tiles_per_sub_group * nb_banks_per_tile))
             if (i >= start_bank_id and i < end_bank_id):
                 remove_offset = Interleaver(self, f'remove_offset_{i}', nb_slaves=1, nb_masters=1, interleaving_bits=2, enable_shift=(total_banks - 1).bit_length())
                 self.bind(interleaver, 'out_%d' % i, remove_offset, 'in_0')
                 self.bind(remove_offset, 'out_0', l1_banks[i - start_bank_id], 'input')
-            else :
-                self.bind(interleaver, 'out_%d' % i, remote_out_interfaces[tgt_grp_id ^ group_id], 'input')
+            elif tgt_grp_id == group_id:
+                if tgt_sg_id == sub_group_id:
+                    self.bind(interleaver, 'out_%d' % i, remote_local_out_interfaces[0], 'input')
+                else:
+                    self.bind(interleaver, 'out_%d' % i, remote_sub_group_out_interfaces[(tgt_sg_id ^ sub_group_id) - 1], 'input')
+            else:
+                self.bind(interleaver, 'out_%d' % i, remote_group_out_interfaces[(tgt_grp_id ^ group_id) - 1], 'input')
     
     def i_DMA_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'dma_input', signature='io')
