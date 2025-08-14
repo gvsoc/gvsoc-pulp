@@ -181,7 +181,6 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             core_id: int=0,
             htif: bool=False, vlen: int=512, spatz_nb_lanes=4):
 
-
         isa_instance = isa_instances.get(isa)
 
         if isa_instances.get(isa) is None:
@@ -333,7 +332,6 @@ class SnitchBare(cpu.iss.riscv.RiscvCommon):
             inc_spatz: bool=False,
             core_id: int=0):
 
-
         isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
             extensions=[ Xdma() ] )
 
@@ -376,11 +374,13 @@ class Snitch_fp_ss(cpu.iss.riscv.RiscvCommon):
             timed: bool=False,
             htif: bool=False):
 
+        isa_instance = isa_instances.get(isa)
 
-        isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_fp_ss_" + isa, isa,
-            extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ] )
-
-        add_latencies(isa_instance)
+        if isa_instances.get(isa) is None:
+            isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_fp_ss_" + isa, isa,
+                extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ] )
+            add_latencies(isa_instance)
+            isa_instances[isa] = isa_instance
 
         if misa is None:
             misa = isa_instance.misa
