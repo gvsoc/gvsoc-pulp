@@ -32,7 +32,7 @@ class SnitchClusterGroup(gvsoc.systree.Component):
             self,
             'snitch_rom',
             size=0x1000,
-            stim_file="pulp/pulp/chips/chimera/snitch/snitch_bootrom.bin")
+            stim_file=self.get_file_path("pulp/chips/chimera/snitch_bootrom.bin"))
 
         # Narrow 64bits router
         self.narrow_axi = router.Router(self, 'narrow_axi', bandwidth=4)
@@ -56,10 +56,15 @@ class SnitchClusterGroup(gvsoc.systree.Component):
                 SnitchCluster(self, f'cluster_{id}', cluster_arch,
                               entry=entry))
 
-        self.narrow_axi.o_MAP(snitch_rom.i_INPUT(),
+        self.wide_axi.o_MAP(snitch_rom.i_INPUT(),
                               base=0x30000000,
                               size=0x1000,
                               rm_base=True)
+        self.wide_axi.add_mapping("mem_island",
+                                    base=0x48000000,
+                                    size=0x08000000,
+                                    remove_offset=0x0)
+        self.bind(self.wide_axi, "mem_island", self, "mem_island_ext")
         self.narrow_axi.add_mapping("clu_reg",
                                     base=0x30001000,
                                     size=0x1000,
