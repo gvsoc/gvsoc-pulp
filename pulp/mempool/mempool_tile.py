@@ -39,7 +39,7 @@ GAPY_TARGET = True
 
 class Tile(st.Component):
 
-    def __init__(self, parent, name, parser, tile_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64):
+    def __init__(self, parent, name, parser, terapool: bool=False, tile_id: int=0, sub_group_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64):
         super().__init__(parent, name)
 
         [args, __] = parser.parse_known_args()
@@ -53,9 +53,10 @@ class Tile(st.Component):
         ##########               Design Variables             ##########
         ################################################################
         # Hardware parameters 
-        nb_remote_ports = nb_groups
-        nb_tiles_per_group = int((total_cores/nb_groups)/nb_cores_per_tile)
-        global_tile_id = tile_id + group_id * nb_tiles_per_group
+        nb_remote_group_ports = nb_groups - 1
+        nb_remote_sub_group_ports = nb_sub_groups_per_group - 1
+        nb_tiles_per_sub_group = int((total_cores/nb_groups/nb_sub_groups_per_group)/nb_cores_per_tile)
+        # global_tile_id = tile_id + group_id * nb_tiles_per_group
         Xfrep = 0
         # stack_size_per_tile = 0x800
         mem_size = nb_cores_per_tile * bank_factor * 1024
@@ -76,9 +77,10 @@ class Tile(st.Component):
         
         # Snitch TCDM (L1 subsystem)
         l1 = l1_subsystem.L1_subsystem(self, 'l1', \
-                                        tile_id=tile_id, group_id=group_id, \
-                                        nb_tiles_per_group=nb_tiles_per_group, nb_groups=nb_groups, \
-                                        nb_pe=nb_cores_per_tile, nb_remote_masters=nb_remote_ports, \
+                                        terapool=terapool, tile_id=tile_id, sub_group_id=sub_group_id, group_id=group_id, \
+                                        nb_tiles_per_sub_group=nb_tiles_per_sub_group, nb_sub_groups_per_group=nb_sub_groups_per_group, \
+                                        nb_groups=nb_groups, nb_remote_local_masters=1, nb_remote_group_masters=nb_remote_group_ports, \
+                                        nb_remote_sub_group_masters=nb_remote_sub_group_ports, nb_pe=nb_cores_per_tile, \
                                         size=mem_size, bandwidth=4,nb_banks_per_tile=nb_cores_per_tile*bank_factor)
         # Shared icache
         icache = Hierarchical_cache(self, 'shared_icache', nb_cores=nb_cores_per_tile, has_cc=0, l1_line_size_bits=7)
@@ -94,14 +96,16 @@ class Tile(st.Component):
         # Route
         ico_list=[]
         for i in range(0, nb_cores_per_tile):
-            ico_list.append(router.Router(self, 'ico%d' % i, bandwidth=4, latency=1))
+            ico_list.append(router.Router(self, 'ico%d' % i, bandwidth=4, latency=0))
         # stack_ico = router.Router(self, 'stack_ico', bandwidth=4, latency=1)
         axi_ico = router.Router(self, 'axi_ico', bandwidth=axi_data_width, latency=1)
 
         # Core Complex
         for core_id in range(0, nb_cores_per_tile):
-            self.int_cores.append(iss.Snitch(self, f'pe{core_id}', isa="rv32imaf", htif=False, core_id=group_id*nb_tiles_per_group*nb_cores_per_tile+tile_id*nb_cores_per_tile+core_id))
-            self.fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa="rv32imaf", htif=False, core_id=group_id*nb_tiles_per_group*nb_cores_per_tile+tile_id*nb_cores_per_tile+core_id))
+            self.int_cores.append(iss.Snitch(self, f'pe{core_id}', isa="rv32imaf", htif=False, \
+                core_id=group_id*nb_sub_groups_per_group*nb_tiles_per_sub_group*nb_cores_per_tile+sub_group_id*nb_tiles_per_sub_group*nb_cores_per_tile+tile_id*nb_cores_per_tile+core_id))
+            self.fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa="rv32imaf", htif=False, \
+                core_id=group_id*nb_sub_groups_per_group*nb_tiles_per_sub_group*nb_cores_per_tile+sub_group_id*nb_tiles_per_sub_group*nb_cores_per_tile+tile_id*nb_cores_per_tile+core_id))
             if Xfrep:
                 fpu_sequencers.append(Sequencer(self, f'fpu_sequencer{core_id}', latency=0))
 
@@ -128,17 +132,16 @@ class Tile(st.Component):
             self.bind(ico_list[i], 'l1', l1, f'pe_in{i}')
         
         # L1 TCDM --> Remote TCDM interfaces
-        self.bind(self, 'grp_local_slave_in', l1, 'remote_in0')
-        self.bind(l1, 'remote_out0', self, 'grp_local_master_out')
+        self.bind(self, 'loc_remt_slave_in', l1, 'remote_local_in0')
+        self.bind(l1, 'remote_local_out0', self, 'loc_remt_master_out')
         
-        self.bind(self, 'grp_remt0_slave_in', l1, 'remote_in1')
-        self.bind(l1, 'remote_out1', self, 'grp_remt0_master_out')
-        
-        self.bind(self, 'grp_remt1_slave_in', l1, 'remote_in2')
-        self.bind(l1, 'remote_out2', self, 'grp_remt1_master_out')
-        
-        self.bind(self, 'grp_remt2_slave_in', l1, 'remote_in3')
-        self.bind(l1, 'remote_out3', self, 'grp_remt2_master_out')
+        for i in range(0, nb_remote_sub_group_ports):
+            self.bind(self, f'sub_grp_remt{i}_slave_in', l1, f'remote_sub_group_in{i}')
+            self.bind(l1, f'remote_sub_group_out{i}', self, f'sub_grp_remt{i}_master_out')
+
+        for i in range(0, nb_remote_group_ports):
+            self.bind(self, f'grp_remt{i}_slave_in', l1, f'remote_group_in{i}')
+            self.bind(l1, f'remote_group_out{i}', self, f'grp_remt{i}_master_out')
 
         # ICO -> AXI -> L2 Memory
         for i in range(0, nb_cores_per_tile):
