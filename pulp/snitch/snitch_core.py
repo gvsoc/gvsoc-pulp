@@ -115,7 +115,7 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
 
         if isa_instances.get(isa) is None:
             isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
-                extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ] )
+                no_hash=True, extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ] )
             add_latencies(isa_instance)
             isa_instances[isa] = isa_instance
 
