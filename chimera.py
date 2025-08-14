@@ -32,7 +32,7 @@ class SnitchClusterGroup(gvsoc.systree.Component):
             self,
             'snitch_rom',
             size=0x1000,
-            stim_file=self.get_file_path("pulp/chips/chimera/snitch_bootrom.bin"))
+            stim_file=self.get_file_path("pulp/chips/chimera/snitch/snitch_bootrom.bin"))
 
         # Narrow 64bits router
         self.narrow_axi = router.Router(self, 'narrow_axi', bandwidth=4)
@@ -126,7 +126,7 @@ class SafetyIsland(gvsoc.systree.Component):
             binary = args.binary
 
         # Load configuration from HJSON file
-        with open('pulp/pulp/chips/chimera/safety-island.hjson', 'r') as file:
+        with open(self.get_file_path('pulp/chips/chimera/safety-island.hjson'), 'r') as file:
             config = hjson.load(file)
         self.add_properties(config)
         soc_events = self.get_property('soc_events')
