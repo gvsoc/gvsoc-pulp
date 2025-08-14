@@ -38,7 +38,7 @@ GAPY_TARGET = True
 
 class System(st.Component):
 
-    def __init__(self, parent, name, parser, nb_cores_per_tile: int=4, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64):
+    def __init__(self, parent, name, parser, terapool: bool=False, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64):
         super().__init__(parent, name)
 
         ################################################################
@@ -57,7 +57,8 @@ class System(st.Component):
         ################################################################ 
 
         #Mempool cluster
-        mempool_cluster=Cluster(self,'mempool_cluster',parser=parser, nb_cores_per_tile=nb_cores_per_tile, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor)
+        mempool_cluster=Cluster(self,'mempool_cluster',terapool=terapool, parser=parser, nb_cores_per_tile=nb_cores_per_tile,
+            nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor)
 
         # Boot Rom
         rom = memory.Memory(self, 'rom', size=0x1000, width_log2=(axi_data_width - 1).bit_length(), stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
@@ -75,7 +76,7 @@ class System(st.Component):
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x80000000)
 
         #Dummy Memory
-        dummy_mem = memory.Memory(self, 'dummy_mem', atomics=True, size=0x100000)
+        dummy_mem = memory.Memory(self, 'dummy_mem', atomics=True, size=0x400000)
 
         # Rom Router
         rom_router = router.Router(self, 'rom_router', bandwidth=axi_data_width, latency=1)
@@ -134,7 +135,7 @@ class System(st.Component):
         self.bind(loader, 'start', mempool_cluster, 'loader_start')
         self.bind(loader, 'entry', mempool_cluster, 'loader_entry')
         self.bind(loader, 'out', loader_router, 'input')
-        loader_router.add_mapping('dummy', base=0x00000000, remove_offset=0x00000000, size=0x100000)
+        loader_router.add_mapping('dummy', base=0x00000000, remove_offset=0x00000000, size=0x400000)
         loader_router.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
         loader_router.add_mapping('rom', base=0xa0000000, remove_offset=0xa0000000, size=0x1000)
         loader_router.add_mapping('csr', base=0x40000000, remove_offset=0x40000000, size=0x10000)
@@ -168,5 +169,17 @@ class MinpoolSystem(st.Component):
         clock = Clock_domain(self, 'clock', frequency=500000000)
 
         soc = System(self, 'mempool_soc', parser, nb_cores_per_tile=4, nb_groups=4, total_cores=16, bank_factor=4, axi_data_width=32)
+
+        self.bind(clock, 'out', soc, 'clock')
+
+class TerapoolSystem(st.Component):
+    
+    def __init__(self, parent, name, parser, options):
+
+        super(TerapoolSystem, self).__init__(parent, name, options=options)
+
+        clock = Clock_domain(self, 'clock', frequency=500000000)
+
+        soc = System(self, 'mempool_soc', parser, terapool=True, nb_cores_per_tile=8, nb_sub_groups_per_group=4, nb_groups=4, total_cores=1024, bank_factor=4, axi_data_width=64)
 
         self.bind(clock, 'out', soc, 'clock')
