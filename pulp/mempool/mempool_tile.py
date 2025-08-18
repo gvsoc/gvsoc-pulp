@@ -25,7 +25,7 @@ import pulp.mempool.l1_subsystem as l1_subsystem
 import interco.router as router
 import utils.loader.loader
 import gvsoc.systree as st
-from pulp.mempool.mempool_tile_submodule.dma_interleaver import DmaInterleaver
+from pulp.snitch.snitch_cluster_submodule.dma_interleaver import DmaInterleaver
 from pulp.idma.snitch_dma import SnitchDma
 from interco.bus_watchpoint import Bus_watchpoint
 from pulp.snitch.sequencer import Sequencer
