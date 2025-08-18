@@ -53,7 +53,7 @@ class CV32CoreTest(cpu.iss.riscv.RiscvCommon):
                  core_id: int=0):
 
         # Properties
-        isa_str = 'rv32imac'
+        isa_str = 'rv32imafc'
         misa = 0x40000000
         debug_handler = 0x1a190800
         fetch_enable = False

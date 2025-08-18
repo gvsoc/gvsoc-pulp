@@ -7,6 +7,7 @@
 #include <string>
 #include <cstring>
 #include <stdint.h>
+#include <queue>
 
 #include "fractal_sync.hpp"
 #include <cmath>
@@ -35,6 +36,11 @@ enum fractalsync_state {
     EAST_WEST_UP_SYNCRO
 };
 
+typedef struct {
+    PortReq<uint32_t> req;
+    int port_id;
+} req_queue_entry;
+
 
 class FractalSync : public vp::Component
 {
@@ -45,10 +51,11 @@ public:
 protected:    
     static void master_input_method(vp::Block *__this, PortResp<uint32_t> *req, int id);
     static void slave_input_method(vp::Block *__this, PortReq<uint32_t> *req, int id);
+    static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
+    static void handle_req(vp::Block *__this, PortReq<uint32_t> *req, int id);
 
     vp::WireSlave<PortResp<uint32_t> *> master_ew_input_port;
     vp::WireMaster<PortReq<uint32_t> *> master_ew_output_port;
-
 
     vp::WireSlave<PortResp<uint32_t> *> master_ns_input_port;
     vp::WireMaster<PortReq<uint32_t> *> master_ns_output_port;
@@ -65,10 +72,9 @@ protected:
     vp::WireSlave<PortReq<uint32_t> *> slave_west_input_port;
     vp::WireMaster<PortResp<uint32_t> *> slave_west_output_port;
 
-    static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
-
     vp::ClockEvent *fsm_event;
     vp::reg_32 state;
+    std::queue<req_queue_entry> *req_queue; 
 
     int syncro_val_nord_sud[128]; //FIXME please make these parametric... I think based on the current level
     int syncro_val_east_west[128]; //FIXME please make these parametric... I think based on the current level
@@ -136,6 +142,7 @@ FractalSync::FractalSync(vp::ComponentConf &config)
 
     //Initialize FSM
     this->state.set(IDLE);
+    req_queue= new std::queue<req_queue_entry>(); //... yep no size fore the queue for now... 
 
     memset(this->syncro_val_nord_sud,0x0,128*sizeof(int));
     memset(this->syncro_val_east_west,0x0,128*sizeof(int));
@@ -175,11 +182,19 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
     FractalSync *_this = (FractalSync *)__this;
 
     uint32_t msb_pos;
+    req_queue_entry entry;
 
     switch (_this->state.get()) {
         case IDLE:
         {    
             //_this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] In IDLE\n");
+            if (_this->req_queue->size()!=0) {
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] In IDLE with pending requests...\n");
+                entry.req=_this->req_queue->front().req;
+                entry.port_id=_this->req_queue->front().port_id;
+                _this->req_queue->pop();
+                handle_req(_this,&entry.req,entry.port_id);
+            }
             break;
         }
         case SLAVE_NORD_REQ:
@@ -427,7 +442,7 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
     }
 }
 
-void FractalSync::slave_input_method(vp::Block *__this, PortReq<uint32_t> *req, int id) {
+void FractalSync::handle_req(vp::Block *__this, PortReq<uint32_t> *req, int id) {
 
     FractalSync *_this = (FractalSync *)__this;
 
@@ -435,7 +450,7 @@ void FractalSync::slave_input_method(vp::Block *__this, PortReq<uint32_t> *req, 
 
     if (req->sync) {
         if ((req->aggr&_this->level)!=0) { //first check if the aggr has a bit set at the level postion of this fractal
-            //_this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] received request from %s - Target is current fractal (aggr is 0x%08x)\n",_this->directions[id],req->aggr);
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] received request from %s - Target is current fractal (aggr is 0x%08x)\n",_this->directions[id],req->aggr);
             switch (id) {
                 case fractalsync_input_directions::NORD: //NORD
                     _this->nord_current_aggr[req->id_req]=req->aggr;
@@ -548,6 +563,23 @@ void FractalSync::slave_input_method(vp::Block *__this, PortReq<uint32_t> *req, 
                 _this->trace.fatal("[FractalSync] wrong direction\n");
                 break;
         }
+    }
+}
+
+void FractalSync::slave_input_method(vp::Block *__this, PortReq<uint32_t> *req, int id) {
+
+    FractalSync *_this = (FractalSync *)__this;
+
+    if (_this->state.get()==fractalsync_state::IDLE)
+        handle_req(_this,req,id);
+    else {
+        _this->trace.msg(vp::Trace::LEVEL_TRACE,"[FractalSync] fsm not in IDLE state... Enqueue request\n");
+        req_queue_entry entry;
+        entry.req.aggr=req->aggr;
+        entry.req.id_req=req->id_req;
+        entry.req.sync=req->sync;
+        entry.port_id=id;
+        _this->req_queue->push(entry);
     }
 }
 
