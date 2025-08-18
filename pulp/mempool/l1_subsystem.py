@@ -19,7 +19,7 @@ from memory.memory import Memory
 from interco.router import Router
 from interco.converter import Converter
 from interco.interleaver import Interleaver
-from pulp.snitch.snitch_cluster_submodule.dma_interleaver import DmaInterleaver
+from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 import math
 
 
