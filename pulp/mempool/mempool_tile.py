@@ -49,10 +49,13 @@ class Tile(st.Component):
             [args, otherArgs] = parser.parse_known_args()
             binary = args.binary
 
+        # Set it to true to swtich to snitch new fast model
+        fast_model = False
+
         ################################################################
         ##########               Design Variables             ##########
         ################################################################
-        # Hardware parameters 
+        # Hardware parameters
         nb_remote_group_ports = nb_groups - 1
         nb_remote_sub_group_ports = nb_sub_groups_per_group - 1
         nb_tiles_per_sub_group = int((total_cores/nb_groups/nb_sub_groups_per_group)/nb_cores_per_tile)
@@ -60,7 +63,7 @@ class Tile(st.Component):
         Xfrep = 0
         # stack_size_per_tile = 0x800
         mem_size = nb_cores_per_tile * bank_factor * 1024
-        
+
         # Snitch core complex
         self.int_cores = []
         self.fp_cores = []
@@ -74,7 +77,7 @@ class Tile(st.Component):
 
         # Stack Memory
         # stack_mem = Memory(self, 'stack_mem', size=0x1000, width_log2=int(math.log(4, 2.0)), atomics=True)
-        
+
         # Snitch TCDM (L1 subsystem)
         l1 = l1_subsystem.L1_subsystem(self, 'l1', \
                                         terapool=terapool, tile_id=tile_id, sub_group_id=sub_group_id, group_id=group_id, \
@@ -84,7 +87,7 @@ class Tile(st.Component):
                                         size=mem_size, bandwidth=4,nb_banks_per_tile=nb_cores_per_tile*bank_factor)
         # Shared icache
         icache = Hierarchical_cache(self, 'shared_icache', nb_cores=nb_cores_per_tile, has_cc=0, l1_line_size_bits=7)
-        
+
         # Address Scrambler
         addr_scrambler_list = []
         for i in range(0, nb_cores_per_tile):
@@ -102,12 +105,20 @@ class Tile(st.Component):
 
         # Core Complex
         for core_id in range(0, nb_cores_per_tile):
-            self.int_cores.append(iss.Snitch(self, f'pe{core_id}', isa="rv32imaf", htif=False, \
-                core_id=group_id*nb_sub_groups_per_group*nb_tiles_per_sub_group*nb_cores_per_tile+sub_group_id*nb_tiles_per_sub_group*nb_cores_per_tile+tile_id*nb_cores_per_tile+core_id))
-            self.fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa="rv32imaf", htif=False, \
-                core_id=group_id*nb_sub_groups_per_group*nb_tiles_per_sub_group*nb_cores_per_tile+sub_group_id*nb_tiles_per_sub_group*nb_cores_per_tile+tile_id*nb_cores_per_tile+core_id))
-            if Xfrep:
-                fpu_sequencers.append(Sequencer(self, f'fpu_sequencer{core_id}', latency=0))
+            if fast_model:
+                self.int_cores.append(iss.SnitchFast(self, f'pe{core_id}', isa="rv32imaf",
+                    core_id=group_id*nb_sub_groups_per_group*nb_tiles_per_sub_group*nb_cores_per_tile+sub_group_id*nb_tiles_per_sub_group*nb_cores_per_tile+tile_id*nb_cores_per_tile+core_id,
+                    htif=False, pulp_v2=True
+                ))
+            else:
+                self.int_cores.append(iss.Snitch(self, f'pe{core_id}', isa="rv32imaf", htif=False, \
+                    core_id=group_id*nb_sub_groups_per_group*nb_tiles_per_sub_group*nb_cores_per_tile+sub_group_id*nb_tiles_per_sub_group*nb_cores_per_tile+tile_id*nb_cores_per_tile+core_id,
+                    pulp_v2=True))
+                self.fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa="rv32imaf", htif=False, \
+                    core_id=group_id*nb_sub_groups_per_group*nb_tiles_per_sub_group*nb_cores_per_tile+sub_group_id*nb_tiles_per_sub_group*nb_cores_per_tile+tile_id*nb_cores_per_tile+core_id,
+                    pulp_v2=True))
+                if Xfrep:
+                    fpu_sequencers.append(Sequencer(self, f'fpu_sequencer{core_id}', latency=0))
 
         ################################################################
         ##########               Design Bindings              ##########
@@ -130,11 +141,11 @@ class Tile(st.Component):
         for i in range(0, nb_cores_per_tile):
             ico_list[i].add_mapping('l1', base=0x00000000, remove_offset=0x00000000, size=total_cores * bank_factor * 1024)
             self.bind(ico_list[i], 'l1', l1, f'pe_in{i}')
-        
+
         # L1 TCDM --> Remote TCDM interfaces
         self.bind(self, 'loc_remt_slave_in', l1, 'remote_local_in0')
         self.bind(l1, 'remote_local_out0', self, 'loc_remt_master_out')
-        
+
         for i in range(0, nb_remote_sub_group_ports):
             self.bind(self, f'sub_grp_remt{i}_slave_in', l1, f'remote_sub_group_in{i}')
             self.bind(l1, f'remote_sub_group_out{i}', self, f'sub_grp_remt{i}_master_out')
@@ -188,33 +199,35 @@ class Tile(st.Component):
             # Icache
             self.bind(self.int_cores[core_id], 'flush_cache_req', icache, 'flush')
             self.bind(icache, 'flush_ack', self.int_cores[core_id], 'flush_cache_ack')
-            
+
             # Snitch integer cores
             self.bind(self.int_cores[core_id], 'data', addr_scrambler_list[core_id], 'input')
             self.bind(self.int_cores[core_id], 'fetch', icache, 'input_%d' % core_id)
             self.bind(self, 'loader_start', self.int_cores[core_id], 'fetchen')
             self.bind(self, 'loader_entry', self.int_cores[core_id], 'bootaddr')
-            
-            # Snitch fp subsystems
-            # Pay attention to interactions and bandwidth between subsystem and tohost.
-            self.bind(self.fp_cores[core_id], 'data', addr_scrambler_list[core_id], 'input')
-            # FP subsystem doesn't fetch instructions from core->ico->memory, but from integer cores acc_req.
-            self.bind(self, 'loader_start', self.fp_cores[core_id], 'fetchen')
-            self.bind(self, 'loader_entry', self.fp_cores[core_id], 'bootaddr')
-            
+
+            if not fast_model:
+                # Snitch fp subsystems
+                # Pay attention to interactions and bandwidth between subsystem and tohost.
+                self.bind(self.fp_cores[core_id], 'data', addr_scrambler_list[core_id], 'input')
+                # FP subsystem doesn't fetch instructions from core->ico->memory, but from integer cores acc_req.
+                self.bind(self, 'loader_start', self.fp_cores[core_id], 'fetchen')
+                self.bind(self, 'loader_entry', self.fp_cores[core_id], 'bootaddr')
+
             # Scrambler
             self.bind(addr_scrambler_list[core_id], 'output', ico_list[core_id], 'input')
-            
+
             # Use WireMaster & WireSlave
             # Add fpu sequence buffer in between int core and fp core to issue instructions
-            if Xfrep:
-                self.bind(self.int_cores[core_id], 'acc_req', fpu_sequencers[core_id], 'input')
-                self.bind(fpu_sequencers[core_id], 'output', self.fp_cores[core_id], 'acc_req')
-                self.bind(self.int_cores[core_id], 'acc_req_ready', fpu_sequencers[core_id], 'acc_req_ready')
-                self.bind(fpu_sequencers[core_id], 'acc_req_ready_o', self.fp_cores[core_id], 'acc_req_ready')
-            else:
-                # Comment out if we want to add sequencer
-                self.bind(self.int_cores[core_id], 'acc_req', self.fp_cores[core_id], 'acc_req')
-                self.bind(self.int_cores[core_id], 'acc_req_ready', self.fp_cores[core_id], 'acc_req_ready')
-            
-            self.bind(self.fp_cores[core_id], 'acc_rsp', self.int_cores[core_id], 'acc_rsp')
+            if not fast_model:
+                if Xfrep:
+                    self.bind(self.int_cores[core_id], 'acc_req', fpu_sequencers[core_id], 'input')
+                    self.bind(fpu_sequencers[core_id], 'output', self.fp_cores[core_id], 'acc_req')
+                    self.bind(self.int_cores[core_id], 'acc_req_ready', fpu_sequencers[core_id], 'acc_req_ready')
+                    self.bind(fpu_sequencers[core_id], 'acc_req_ready_o', self.fp_cores[core_id], 'acc_req_ready')
+                else:
+                    # Comment out if we want to add sequencer
+                    self.bind(self.int_cores[core_id], 'acc_req', self.fp_cores[core_id], 'acc_req')
+                    self.bind(self.int_cores[core_id], 'acc_req_ready', self.fp_cores[core_id], 'acc_req_ready')
+
+                self.bind(self.fp_cores[core_id], 'acc_rsp', self.int_cores[core_id], 'acc_rsp')

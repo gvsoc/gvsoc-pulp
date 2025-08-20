@@ -40,13 +40,13 @@ class L1_subsystem(gvsoc.systree.Component):
     size: int
         The size of the memory in bytes.
     nb_banks_per_tile: int
-        Number of TCDM banks  
+        Number of TCDM banks
     bandwidth: int
         Global bandwidth, in bytes per cycle, applied to all incoming request. This impacts the
         end time of the burst.
-        
+
     """
-        
+
     def __init__(self, parent: gvsoc.systree.Component, name: str, terapool: bool=False, tile_id: int=0, sub_group_id: int=0, group_id: int=0,
                  nb_tiles_per_sub_group: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, nb_remote_local_masters: int=1, nb_remote_group_masters: int=4,
                  nb_remote_sub_group_masters: int=4, nb_pe: int=0, size: int=0, nb_banks_per_tile: int=0, bandwidth: int=0):
@@ -55,14 +55,14 @@ class L1_subsystem(gvsoc.systree.Component):
         #
         # Properties
         #
-        
+
         self.add_property('nb_pe', nb_pe)
         self.add_property('size', size)
         self.add_property('nb_banks_per_tile', nb_banks_per_tile)
         self.add_property('bandwidth', bandwidth)
         self.add_property('tile_id', tile_id)
         self.add_property('group_id', group_id)
-        
+
         assert nb_remote_local_masters == 1, "Only one remote local master is supported in the L1 subsystem"
         l1_bank_size = size / nb_banks_per_tile
         nb_masters = nb_pe + nb_remote_local_masters + nb_remote_group_masters + nb_remote_sub_group_masters
@@ -79,14 +79,14 @@ class L1_subsystem(gvsoc.systree.Component):
         # TCDM L1-Memory banks
         l1_banks = []
         for i in range(0, nb_banks_per_tile):
-            tcdm = Memory(self, 'tcdm_bank%d' % i, size=l1_bank_size, width_log2=int(math.log(bandwidth, 2.0)), 
+            tcdm = Memory(self, 'tcdm_bank%d' % i, size=l1_bank_size, width_log2=int(math.log(bandwidth, 2.0)),
                             latency=1, atomics=True)
             l1_banks.append(tcdm)
 
         # L1 interleaver (virtual)
-        interleaver = Interleaver(self, 'interleaver', nb_slaves=total_banks, nb_masters=nb_masters, 
-                                    interleaving_bits=int(math.log2(bandwidth)))
-        
+        interleaver = Interleaver(self, 'interleaver', nb_slaves=total_banks, nb_masters=nb_masters,
+                                    interleaving_bits=int(math.log2(bandwidth)), offset_translation=False)
+
         #Remote interfaces
         remote_local_out_interfaces = []
         remote_local_in_interfaces = []
@@ -111,7 +111,7 @@ class L1_subsystem(gvsoc.systree.Component):
             remote_group_out_interfaces[i].add_mapping('output')
             remote_group_in_interfaces.append(Router(self, f'remote_group_in_itf{i}', bandwidth=bandwidth, latency=0))
             remote_group_in_interfaces[i].add_mapping('output')
-            
+
         #
         # Bindings
         #
@@ -132,7 +132,7 @@ class L1_subsystem(gvsoc.systree.Component):
         for i in range(0, nb_remote_group_masters):
             self.bind(self, f'remote_group_in{i}', remote_group_in_interfaces[i], 'input')
             self.bind(remote_group_in_interfaces[i], 'output', interleaver, 'in_%d' % (i + nb_pe + nb_remote_local_masters + nb_remote_sub_group_masters))
-            
+
         #Remote output
         for i in range(0, nb_remote_local_masters):
             self.bind(remote_local_out_interfaces[i], 'output', self, f'remote_local_out{i}')
@@ -152,7 +152,7 @@ class L1_subsystem(gvsoc.systree.Component):
             tgt_grp_id = int(i / (nb_sub_groups_per_group * nb_tiles_per_sub_group * nb_banks_per_tile))
             tgt_sg_id = int((i % (nb_sub_groups_per_group * nb_tiles_per_sub_group * nb_banks_per_tile)) / (nb_tiles_per_sub_group * nb_banks_per_tile))
             if (i >= start_bank_id and i < end_bank_id):
-                remove_offset = Interleaver(self, f'remove_offset_{i}', nb_slaves=1, nb_masters=1, interleaving_bits=2, enable_shift=(total_banks - 1).bit_length())
+                remove_offset = Interleaver(self, f'remove_offset_{i}', nb_slaves=1, nb_masters=1, interleaving_bits=2, enable_shift=(total_banks - 1).bit_length(), offset_translation=False)
                 self.bind(interleaver, 'out_%d' % i, remove_offset, 'in_0')
                 self.bind(remove_offset, 'out_0', l1_banks[i - start_bank_id], 'input')
             elif tgt_grp_id == group_id:
@@ -162,10 +162,10 @@ class L1_subsystem(gvsoc.systree.Component):
                     self.bind(interleaver, 'out_%d' % i, remote_sub_group_out_interfaces[(tgt_sg_id ^ sub_group_id) - 1], 'input')
             else:
                 self.bind(interleaver, 'out_%d' % i, remote_group_out_interfaces[(tgt_grp_id ^ group_id) - 1], 'input')
-    
+
     def i_DMA_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'dma_input', signature='io')
-    
+
     def add_mapping(self, name: str, base: int=None, size: int=None, remove_offset: int=None,
             add_offset: int=None, id: int=None, latency: int=None):
         """Add a target port with an associated target memory map.
