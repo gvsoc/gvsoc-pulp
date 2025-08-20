@@ -19,6 +19,7 @@ from pulp.snitch.snitch_isa import *
 import cpu.iss.isa_gen.isa_rvv
 import cpu.iss.isa_gen.isa_rvv_timed
 from cpu.iss.isa_gen.isa_smallfloats import *
+from cpu.iss.isa_gen.isa_pulpv2 import *
 import gvsoc.systree
 import os
 import pulp.ara.ara
@@ -115,7 +116,7 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
 
         if isa_instances.get(isa) is None:
             isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
-                no_hash=True, extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ] )
+                no_hash=True, extensions=[ PulpV2(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ] )
             add_latencies(isa_instance)
             isa_instances[isa] = isa_instance
 
@@ -378,7 +379,7 @@ class Snitch_fp_ss(cpu.iss.riscv.RiscvCommon):
 
         if isa_instances.get(isa) is None:
             isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_fp_ss_" + isa, isa,
-                extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ] )
+                extensions=[ PulpV2(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ] )
             add_latencies(isa_instance)
             isa_instances[isa] = isa_instance
 
