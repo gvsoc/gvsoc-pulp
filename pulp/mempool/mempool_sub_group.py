@@ -45,7 +45,7 @@ class Sub_group(st.Component):
         ################################################################
         ##########               Design Variables             ##########
         ################################################################
-        # Hardware parameters 
+        # Hardware parameters
         nb_remote_group_ports = nb_groups - 1
         nb_remote_sub_group_ports = nb_sub_groups_per_group - 1
         nb_tiles_per_sub_group = int((total_cores/nb_groups/nb_sub_groups_per_group)/nb_cores_per_tile)
@@ -56,12 +56,12 @@ class Sub_group(st.Component):
         # TIles
         self.tile_list = []
         for i in range(0, nb_tiles_per_sub_group):
-            self.tile_list.append(Tile(self,f'tile_{i}',parser=parser,tile_id=i, sub_group_id=sub_group_id, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile, 
+            self.tile_list.append(Tile(self,f'tile_{i}',parser=parser,tile_id=i, sub_group_id=sub_group_id, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
                 nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor))
 
         #Sub Group local interconnect
-        sub_group_local_interleaver = Interleaver(self, 'sub_group_local_interleaver', nb_slaves=nb_tiles_per_sub_group, nb_masters=nb_tiles_per_sub_group, 
-            interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor)))
+        sub_group_local_interleaver = Interleaver(self, 'sub_group_local_interleaver', nb_slaves=nb_tiles_per_sub_group, nb_masters=nb_tiles_per_sub_group,
+            interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor)), offset_translation=False)
 
         #Group Remote Slave Interconnect
         # group_remote_master_interfaces = []
@@ -71,7 +71,7 @@ class Sub_group(st.Component):
         #Sub Group Remote Slave Interconnect
         sub_group_remote_master_interleavers = []
         for i in range(0, nb_remote_sub_group_ports):
-            sub_group_remote_master_interleavers.append(Interleaver(self, f'sub_group_remote_slave_interleaver_{i}', nb_slaves=nb_tiles_per_sub_group, nb_masters=nb_tiles_per_sub_group, interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor))))
+            sub_group_remote_master_interleavers.append(Interleaver(self, f'sub_group_remote_slave_interleaver_{i}', nb_slaves=nb_tiles_per_sub_group, nb_masters=nb_tiles_per_sub_group, interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor)), offset_translation=False))
 
         sub_group_out_interfaces = []
         for port in range(0, nb_remote_group_ports):
@@ -93,7 +93,7 @@ class Sub_group(st.Component):
         #csr router
         csr_router = router.Router(self, 'csr_router', bandwidth=32, latency=1)
         csr_router.add_mapping('output')
-        
+
         #uart router
         uart_router = router.Router(self, 'uart_router', bandwidth=8, latency=1)
         uart_router.add_mapping('output')
@@ -136,19 +136,19 @@ class Sub_group(st.Component):
         #Tile l2 data -> l2 router
         for i in range(0, nb_tiles_per_sub_group):
             self.bind(self.tile_list[i], 'L2_data', l2_router, 'input')
-        
+
         #Tile l2 data -> csr router
         for i in range(0, nb_tiles_per_sub_group):
             self.bind(self.tile_list[i], 'csr', csr_router, 'input')
-            
+
         #Tile uart -> uart router
         for i in range(0, nb_tiles_per_sub_group):
             self.bind(self.tile_list[i], 'uart', uart_router, 'input')
-        
+
         #Tile l2 data -> dummy_mem router
         for i in range(0, nb_tiles_per_sub_group):
             self.bind(self.tile_list[i], 'dummy_mem', dummy_mem_router, 'input')
-        
+
         #Group loader -> Tile loader
         for i in range(0, nb_tiles_per_sub_group):
             self.bind(self, 'loader_start', self.tile_list[i], 'loader_start')

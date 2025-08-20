@@ -28,11 +28,11 @@ class Hierarchical_cache(gvsoc.systree.Component):
         #
         # Properties
         #
-        
+
         self.add_property('nb_cores', nb_cores)
         self.add_property('has_cc', has_cc)
         self.add_property('l1_line_size_bits', l1_line_size_bits)
-        
+
         nb_l1_banks = 1
         nb_l1_banks_log2 = int(math.log(nb_l1_banks, 2.0))
         nb_pes = nb_cores - 1 if has_cc else nb_cores
@@ -47,14 +47,14 @@ class Hierarchical_cache(gvsoc.systree.Component):
         l0_caches = []
         for i in range(0, nb_pes):
             l0_caches.append(Cache(self, 'l0_bank%d' % i, nb_sets_bits=0, nb_ways_bits=0, line_size_bits=5, refill_latency=0))
-        
+
         # L1 caches
         l1_caches = []
         for i in range(0, nb_l1_banks):
             l1_caches.append(Cache(self, 'l1_bank%d' % i, nb_sets_bits=7, nb_ways_bits=1, line_size_bits=5, refill_latency=0, refill_shift=nb_l1_banks_log2, add_offset=i*l1_cache_line_size))
 
         # L1 interleaver
-        interleaver = Interleaver(self, 'interleaver', nb_slaves=nb_l1_banks, nb_masters=0, interleaving_bits=l1_line_size_bits)
+        interleaver = Interleaver(self, 'interleaver', nb_slaves=nb_l1_banks, nb_masters=0, interleaving_bits=l1_line_size_bits, offset_translation=False)
 
 
         #
@@ -77,4 +77,3 @@ class Hierarchical_cache(gvsoc.systree.Component):
         # Interleaver
         for i in range(0, nb_l1_banks):
             self.bind(interleaver, 'out_%d' % i, l1_caches[i], 'input')
-
