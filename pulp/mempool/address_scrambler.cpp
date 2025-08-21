@@ -40,12 +40,10 @@ private:
     static void grant(vp::Block *__this, vp::IoReq *req);
     static void response(vp::Block *__this, vp::IoReq *req);
     static unsigned int clog2(int value);
-    // static void wakeup_event_handler(vp::Block *__this, vp::ClockEvent *event);
 
     vp::Trace trace;
     vp::IoSlave input_itf;
     vp::IoMaster output_itf;
-    // vp::ClockEvent * wakeup_event;
 
     bool bypass;
     int num_tiles;
@@ -75,7 +73,6 @@ AddressScrambler::AddressScrambler(vp::ComponentConf &config)
 
     this->new_slave_port("input", &this->input_itf);
     this->new_master_port("output", &this->output_itf);
-    // this->wakeup_event = this->event_new(&CtrlRegisters::wakeup_event_handler);
 
     bypass = get_js_config()->get_child_bool("bypass");
     num_tiles = get_js_config()->get_child_int("num_tiles");
@@ -92,13 +89,6 @@ AddressScrambler::AddressScrambler(vp::ComponentConf &config)
     constant_bits_lsb = byte_offset + bank_offset_bits;
     scramble_bits = seq_per_tile_bits - constant_bits_lsb;
 }
-
-// void CtrlRegisters::wakeup_event_handler(vp::Block *__this, vp::ClockEvent *event) {
-//     CtrlRegisters *_this = (CtrlRegisters *)__this;
-//     _this->barrier_ack_itf.sync(1);
-//     _this->trace.msg("Control registers wake up signal work and write %d to barrier ack output\n", 1);
-// }
-
 
 vp::IoReqStatus AddressScrambler::req(vp::Block *__this, vp::IoReq *req)
 {
@@ -121,21 +111,6 @@ vp::IoReqStatus AddressScrambler::req(vp::Block *__this, vp::IoReq *req)
         }
     }
 
-    // _this->trace.msg("Control registers access (offset: 0x%x, size: 0x%x, is_write: %d, data:%x)\n", offset, size, is_write, *(uint32_t *)data);
-
-    // if (is_write && size == 4)
-    // {
-    //     uint32_t value = *(uint32_t *)data;
-    //     if (offset == 0 && (value & 1))
-    //     {
-    //         std::cout << "EOC register return value: 0x" << std::hex << ((value - 1) >> 1) << std::endl;
-    //         _this->time.get_engine()->quit(value >> 1);
-    //     }
-    //     if (offset == 4 && value == 0xFFFFFFFF)
-    //     {
-    //         _this->event_enqueue(_this->wakeup_event, 1000);
-    //     }
-    // }
     return _this->output_itf.req_forward(req);
 }
 

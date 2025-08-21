@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Discription: This file is the GVSoC configuration file for the MemPool Tile.
+# Discription: This file is the GVSoC configuration file for the MemPool System.
 # Author: Yichao Zhang (ETH Zurich) (yiczhang@iis.ee.ethz.ch)
+#         Yinrong Li (ETH Zurich) (yinrli@student.ethz.ch)
 
 import gvsoc.runner
 import cpu.iss.riscv as iss
@@ -70,7 +71,6 @@ class System(st.Component):
         csr = CtrlRegisters(self, 'ctrl_registers', wakeup_latency=18 if terapool else 15)
         
         uart = ns16550.Ns16550(self, 'uart')
-        # uart = memory.Memory(self, 'uart', size=0x100, width_log2=3, atomics=True)
 
         # Binary Loader
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x80000000)

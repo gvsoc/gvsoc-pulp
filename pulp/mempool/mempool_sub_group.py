@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Discription: This file is the GVSoC configuration file for the MemPool Tile.
+# Discription: This file is the GVSoC configuration file for the MemPool Sub-group.
 # Author: Yichao Zhang (ETH Zurich) (yiczhang@iis.ee.ethz.ch)
+#         Yinrong Li (ETH Zurich) (yinrli@student.ethz.ch)
 
 import gvsoc.runner
 import cpu.iss.riscv as iss
@@ -63,11 +64,6 @@ class Sub_group(st.Component):
         sub_group_local_interleaver = Interleaver(self, 'sub_group_local_interleaver', nb_slaves=nb_tiles_per_sub_group, nb_masters=nb_tiles_per_sub_group,
             interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor)), offset_translation=False)
 
-        #Group Remote Slave Interconnect
-        # group_remote_master_interfaces = []
-        # for i in range(0, nb_remote_group_ports):
-        #     group_remote_master_interfaces.append(Interleaver(self, f'group_remote_slave_interleaver_{i}', nb_slaves=nb_tiles_per_sub_group, nb_masters=nb_tiles_per_sub_group, interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor))))
-
         #Sub Group Remote Slave Interconnect
         sub_group_remote_master_interleavers = []
         for i in range(0, nb_remote_sub_group_ports):
@@ -113,11 +109,6 @@ class Sub_group(st.Component):
         #Group local interconnect -> Tile local slave
         for i in range(0, nb_tiles_per_sub_group):
             self.bind(sub_group_local_interleaver, 'out_%d' % i, self.tile_list[i], 'loc_remt_slave_in')
-
-        #Tile group remote master -> Group remote routers
-        # for port in range(0, nb_remote_group_ports):
-        #     for i in range(0, nb_tiles_per_sub_group):
-        #         self.bind(self.tile_list[i], f'grp_remt{port}_master_out', group_remote_master_interfaces[port], 'in_%d' % i)
 
         #Tile sub group remote master -> Sub Group remote interleavers
         for port in range(0, nb_remote_sub_group_ports):

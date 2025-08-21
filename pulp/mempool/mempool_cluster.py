@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Discription: This file is the GVSoC configuration file for the MemPool Tile.
+# Discription: This file is the GVSoC configuration file for the MemPool Cluster.
 # Author: Yichao Zhang (ETH Zurich) (yiczhang@iis.ee.ethz.ch)
+#         Yinrong Li (ETH Zurich) (yinrli@student.ethz.ch)
 
 import gvsoc.runner
 import cpu.iss.riscv as iss

@@ -31,9 +31,3 @@ class AddressScrambler(gvsoc.systree.Component):
             "byte_offset": byte_offset,
             "num_banks_per_tile": num_banks_per_tile
         })
-
-    # def i_INPUT(self) -> gvsoc.systree.SlaveItf:
-    #     return gvsoc.systree.SlaveItf(self, 'input', signature='io')
-    
-    # def o_BARRIER_ACK(self) -> gvsoc.systree.SlaveItf:
-    #     return gvsoc.systree.SlaveItf(self, 'barrier_ack', signature='wire')
