@@ -136,9 +136,7 @@ vp::IoReqStatus AddressScrambler::req(vp::Block *__this, vp::IoReq *req)
     //         _this->event_enqueue(_this->wakeup_event, 1000);
     //     }
     // }
-    _this->output_itf.req_forward(req);
-
-    return vp::IO_REQ_OK;
+    return _this->output_itf.req_forward(req);
 }
 
 void AddressScrambler::grant(vp::Block *__this, vp::IoReq *req)
