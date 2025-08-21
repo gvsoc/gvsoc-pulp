@@ -132,7 +132,7 @@ void Magia_iDMA_Ctrl::fsm_handler_dma0(vp::Block *__this, vp::ClockEvent *event)
             //     .result=0x0
             // };
             // _this->offload_grant_itf_m.sync(&offload_grant);
-            //_this->done_dma0.sync(false); //clear interrupt
+            _this->done_dma0.sync(false); //clear interrupt
             break;
         }
         case POLL_STS_REG:
@@ -168,7 +168,7 @@ void Magia_iDMA_Ctrl::fsm_handler_dma1(vp::Block *__this, vp::ClockEvent *event)
             //     .result=0x0
             // };
             // _this->offload_grant_itf_m.sync(&offload_grant);
-            //_this->done_dma1.sync(false); //clear interrupt
+            _this->done_dma1.sync(false); //clear interrupt
             break;
         }
         case POLL_STS_REG:

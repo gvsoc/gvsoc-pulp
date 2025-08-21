@@ -24,7 +24,7 @@ import pulp.cpu.iss.pulp_cores as iss
 from pulp.cluster.l1_interleaver import L1_interleaver
 from pulp.light_redmule.hwpe_interleaver import HWPEInterleaver
 from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
-from pulp.snitch.hierarchical_cache import Hierarchical_cache
+from pulp.chips.magia_base.hierarchical_cache import Hierarchical_cache
 
 from pulp.chips.magia_base.magia_arch import MagiaArch
 from pulp.chips.magia_base.magia_core import CV32CoreTest
@@ -97,7 +97,7 @@ class MagiaTile(gvsoc.systree.Component):
         core_cv32 = CV32CoreTest(self, f'tile-{tid}-cv32-core',core_id=tid)
 
         # Instruction cache (from snitch cluster model)
-        i_cache = Hierarchical_cache(self, f'tile-{tid}-icache', nb_cores=1, has_cc=0)
+        i_cache = Hierarchical_cache(self, f'tile-{tid}-icache', nb_cores=1, has_cc=0, l1_line_size_bits=7)
 
         # Data scratchpad
         l1_tcdm = MagiaTileTcdm(self, f'tile-{tid}-tcdm', parser)
@@ -110,8 +110,8 @@ class MagiaTile(gvsoc.systree.Component):
         idma_ctrl= Magia_iDMA_Ctrl(self,f'tile-{tid}-idma-ctrl')
 
         # IDMA
-        idma0 = SnitchDma(self,f'tile-{tid}-idma0',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4)
-        idma1 = SnitchDma(self,f'tile-{tid}-idma1',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4)
+        idma0 = SnitchDma(self,f'tile-{tid}-idma0',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4,transfer_queue_size=8,burst_queue_size=8)
+        idma1 = SnitchDma(self,f'tile-{tid}-idma1',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4,transfer_queue_size=8,burst_queue_size=8)
 
         # Redmule
         redmule = LightRedmule(self, f'tile-{tid}-redmule',
@@ -206,13 +206,13 @@ class MagiaTile(gvsoc.systree.Component):
 
         # Bind: idma0
         idma0.o_AXI(tile_xbar.i_INPUT())
-        idma0.o_TCDM(l1_tcdm.i_DMA_INPUT()) #here we don't use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
+        idma0.o_TCDM(l1_tcdm.i_DMA_INPUT()) #here maybe we should not use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
         idma_ctrl.o_OFFLOAD_iDMA0_AXI2OBI(idma0.i_OFFLOAD())
         idma0.o_OFFLOAD_GRANT(idma_ctrl.i_OFFLOAD_GRANT_iDMA0_AXI2OBI())
 
         # Bind: idma1
         idma1.o_AXI(tile_xbar.i_INPUT())
-        idma1.o_TCDM(l1_tcdm.i_DMA_INPUT()) #here we don't use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
+        idma1.o_TCDM(l1_tcdm.i_DMA_INPUT()) #here maybe we should not use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
         idma_ctrl.o_OFFLOAD_iDMA1_OBI2AXI(idma1.i_OFFLOAD())
         idma1.o_OFFLOAD_GRANT(idma_ctrl.i_OFFLOAD_GRANT_iDMA1_OBI2AXI())
 
