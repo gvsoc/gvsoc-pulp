@@ -15,6 +15,7 @@
 #
 # Discription: This file is the GVSoC configuration file for the MemPool Tile.
 # Author: Yichao Zhang (ETH Zurich) (yiczhang@iis.ee.ethz.ch)
+#         Yinrong Li (ETH Zurich) (yinrli@student.ethz.ch)
 
 import gvsoc.runner
 import pulp.snitch.snitch_core as iss
@@ -75,9 +76,6 @@ class Tile(st.Component):
         ##########              Design Components             ##########
         ################################################################
 
-        # Stack Memory
-        # stack_mem = Memory(self, 'stack_mem', size=0x1000, width_log2=int(math.log(4, 2.0)), atomics=True)
-
         # Snitch TCDM (L1 subsystem)
         l1 = l1_subsystem.L1_subsystem(self, 'l1', \
                                         terapool=terapool, tile_id=tile_id, sub_group_id=sub_group_id, group_id=group_id, \
@@ -100,7 +98,6 @@ class Tile(st.Component):
         ico_list=[]
         for i in range(0, nb_cores_per_tile):
             ico_list.append(router.Router(self, 'ico%d' % i, bandwidth=4, latency=0))
-        # stack_ico = router.Router(self, 'stack_ico', bandwidth=4, latency=1)
         axi_ico = router.Router(self, 'axi_ico', bandwidth=axi_data_width, latency=1)
 
         # Core Complex
@@ -129,13 +126,6 @@ class Tile(st.Component):
         # Core --> ico router -->|--> L1 submodule --> Remote TCDM interfaces    #
         #                        |--> AXI router --> ROM, CSR, L2 Memory, Dummy  #
         ##########################################################################
-
-        # ICO --> stack_ico --> stack_mem (non-interleaved)
-        # for i in range(0, nb_cores_per_tile):
-        #     ico_list[i].add_mapping('stack_mem', base=0x00000000 + global_tile_id * stack_size_per_tile, remove_offset=0x00000000 + global_tile_id * stack_size_per_tile, size=stack_size_per_tile)
-        #     self.bind(ico_list[i], 'stack_mem', stack_ico, 'input')
-        # stack_ico.add_mapping('stack_mem', base=0x00000000 + global_tile_id * stack_size_per_tile, remove_offset=0x00000000 + global_tile_id * stack_size_per_tile, size=stack_size_per_tile)
-        # self.bind(stack_ico, 'stack_mem', stack_mem, 'input')
 
         # ICO --> L1 TCDM
         for i in range(0, nb_cores_per_tile):
