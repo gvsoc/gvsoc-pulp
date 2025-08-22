@@ -135,20 +135,6 @@ class MagiaSoc(gvsoc.systree.Component):
                     print(f"Adding router and NI at position x={x} y={y}")
                     noc.add_router(x, y)
                     noc.add_network_interface(x, y)
-            # noc.add_router(0, 0) # This is the router used by L2 memory
-            # noc.add_router(1, 0) # Add a router at each cluster
-            # noc.add_router(2, 0) # Add a router at each cluster
-            # noc.add_router(0, 1) # This is the router used by L2 memory
-            # noc.add_router(1, 1) # Add a router at each cluster
-            # noc.add_router(2, 1) # Add a router at each cluster
-
-            # Create NI
-            # noc.add_network_interface(0, 0) # This is the NI used by the L2 memory
-            # noc.add_network_interface(1, 0)
-            # noc.add_network_interface(2, 0)
-            # noc.add_network_interface(0, 1) # This is the NI used by the L2 memory
-            # noc.add_network_interface(1, 1)
-            # noc.add_network_interface(2, 1)
 
             # Bind clusters to noc. E.g. for 4x4
             # {1.3}----{2.3}----{3.3}----{4.3}
@@ -172,17 +158,6 @@ class MagiaSoc(gvsoc.systree.Component):
                     noc.o_NARROW_MAP(cluster[id].i_NARROW_INPUT(),name=f'tile-{id}-l1-mem',base=MagiaArch.L1_ADDR_START+(id*MagiaArch.L1_TILE_OFFSET),size=MagiaArch.L1_SIZE,x=x,y=y,rm_base=False)
                     id += 1
 
-            # cluster[0].o_NARROW_OUTPUT(noc.i_NARROW_INPUT(1,1))
-            # cluster[1].o_NARROW_OUTPUT(noc.i_NARROW_INPUT(2,1))
-            # cluster[2].o_NARROW_OUTPUT(noc.i_NARROW_INPUT(1,0))
-            # cluster[3].o_NARROW_OUTPUT(noc.i_NARROW_INPUT(2,0))
-
-            # Bind noc to clusters
-            # noc.o_NARROW_MAP(cluster[0].i_NARROW_INPUT(),name=f'tile-{0}-l1-mem',base=MagiaArch.L1_ADDR_START+(0*MagiaArch.L1_TILE_OFFSET),size=MagiaArch.L1_SIZE,x=1,y=1,rm_base=False)
-            # noc.o_NARROW_MAP(cluster[1].i_NARROW_INPUT(),name=f'tile-{1}-l1-mem',base=MagiaArch.L1_ADDR_START+(1*MagiaArch.L1_TILE_OFFSET),size=MagiaArch.L1_SIZE,x=2,y=1,rm_base=False)
-            # noc.o_NARROW_MAP(cluster[2].i_NARROW_INPUT(),name=f'tile-{2}-l1-mem',base=MagiaArch.L1_ADDR_START+(2*MagiaArch.L1_TILE_OFFSET),size=MagiaArch.L1_SIZE,x=1,y=0,rm_base=False)
-            # noc.o_NARROW_MAP(cluster[3].i_NARROW_INPUT(),name=f'tile-{3}-l1-mem',base=MagiaArch.L1_ADDR_START+(3*MagiaArch.L1_TILE_OFFSET),size=MagiaArch.L1_SIZE,x=2,y=0,rm_base=False)
-
             # Bind memory to noc
             # {0.3}----{1.3}----{2.3}----{3.3}----{4.3}
             #   | L2     | 0      |  1     |  2     |  3
@@ -192,18 +167,16 @@ class MagiaSoc(gvsoc.systree.Component):
             #   |        |        |        |        |
             # {0.1}----{1.1}----{2.1}----{3.1}----{4.1}
             #   | L2     | 8      |  9     |  10    |  11
-            #   |        |        |        |
+            #   |        |        |        |        |
             # {0.0}----{1.0}----{2.0}----{3.0}----{4.0}
             #     L2       12        13       14       15
             #
+
             id = 0   
             for y in reversed(range(0,MagiaArch.N_TILES_Y)):
                 print(f"Adding L2 {id} at position x={0} y={y}")
                 noc.o_NARROW_MAP(l2_mem[id].i_INPUT(),name=f'l2-map-{id}',base=MagiaArch.L2_ADDR_START + id*(MagiaArch.L2_SIZE // MagiaArch.N_TILES_Y),size=MagiaArch.L2_SIZE // MagiaArch.N_TILES_Y,x=0,y=y,rm_base=True)
                 id += 1
-            #noc.o_NARROW_MAP(l2_mem_0.i_INPUT(),name='l2map_0',base=MagiaArch.L2_ADDR_START,                         size=MagiaArch.L2_SIZE // 2,x=0,y=0,rm_base=True)
-            #noc.o_NARROW_MAP(l2_mem_1.i_INPUT(),name='l2map_1',base=MagiaArch.L2_ADDR_START + MagiaArch.L2_SIZE // 2,size=MagiaArch.L2_SIZE // 2,x=0,y=1,rm_base=True)
-
 
         else:
 

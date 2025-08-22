@@ -278,6 +278,7 @@ void IDmaBeAxi::write_data(IdmaTransfer *transfer, uint8_t *data, uint64_t size)
     req->set_addr(base);
     req->set_size(size);
     req->set_data(data);
+    req->arg_alloc(); //ZL-MOD 22082025 fix for Floonoc
     *req->arg_get(0) = (void *)transfer;
 
     vp::IoReqStatus status = this->ico_itf.req(req);
@@ -305,14 +306,10 @@ void IDmaBeAxi::write_handle_req_end(vp::IoReq *req)
 
     // Acknowledge now the data since they are gone, to let the other backend protocol sending the
     // rest of the burst immediately
-    vp::IoReq *burst = this->pending_bursts.front(); //GET THE BURST VARIABLE
-    //this->be->ack_data((IdmaTransfer *)*req->arg_get(0), req->get_data(), req->get_size());
-
-    //printf("IDMA TRANSFER ADDR IS %p REQ ADDR IS %p\n",(void *)*burst->arg_get(0),(IdmaTransfer *)*req->arg_get(0)); 
-    this->be->ack_data((IdmaTransfer *)*burst->arg_get(0), req->get_data(), req->get_size()); //ACK DATA WITH BURST VARIABLE
+    this->be->ack_data((IdmaTransfer *)*req->arg_get(0), req->get_data(), req->get_size());
 
     // Account this chunk on the first pending burst
-    //vp::IoReq *burst = this->pending_bursts.front();
+    vp::IoReq *burst = this->pending_bursts.front();
     burst->set_size(burst->get_size() - req->get_size());
 
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Updating burst remaining size (burst: %p, req_size: %d, burst_size: %d)\n",
