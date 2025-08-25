@@ -22,6 +22,7 @@ import utils.loader.loader
 import gvsoc.systree as st
 from elftools.elf.elffile import *
 import gvsoc.runner
+from gvrun.target import TargetProperty
 
 
 class SnitchTestbench(st.Component):
@@ -29,9 +30,10 @@ class SnitchTestbench(st.Component):
     def __init__(self, parent, name, parser):
         super().__init__(parent, name)
 
-        binary = self.declare_user_property(
-            name='binary', value=None, description='Binary to be loaded and started'
-        )
+        binary = TargetProperty(
+            self, name='binary', value=None, description='Binary to be loaded and started',
+            cast=str
+        ).value
 
         binaries = []
         if binary is not None:
