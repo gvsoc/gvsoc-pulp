@@ -22,28 +22,29 @@ import utils.loader.loader
 import gvsoc.systree as st
 from elftools.elf.elffile import *
 import gvsoc.runner
-from gvrun.target import TargetProperty
+from gvrun.target import TargetProperty, ArchProperty
 
 
 class SnitchTestbench(st.Component):
 
-    def __init__(self, parent, name, parser):
+    def __init__(self, parent, name):
         super().__init__(parent, name)
 
-        binary = TargetProperty(
+        TargetProperty(
             self, name='binary', value=None, description='Binary to be loaded and started',
             cast=str
-        ).value
+        )
 
-        binaries = []
-        if binary is not None:
-            binaries.append(binary)
+        memory_size = ArchProperty(
+            self, name='memory_size', value=0x10000, description='Memory size',
+            cast=int, dump_format='0x%x'
+        ).get_value()
 
-        mem = memory.Memory(self, 'imem', size=0x10000)
+        mem = memory.Memory(self, 'imem', size=memory_size)
 
         ico = router.Router(self, 'ico')
-        host = iss.SnitchFast(self, f'core', isa='rv32imfdca', binaries=binaries)
-        loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
+        host = iss.SnitchFast(self, f'core', isa='rv32imfdca')
+        loader = utils.loader.loader.ElfLoader(self, 'loader')
 
         ico.o_MAP(mem.i_INPUT(), base=0x80000000, size=0x10000000)
 
@@ -53,29 +54,37 @@ class SnitchTestbench(st.Component):
         host.o_DATA(ico.i_INPUT())
         host.o_FETCH(ico.i_INPUT())
 
+        # Make sure the loader is notified by any executable attached to the hieararchy of this
+        # component so that it is automatically loaded
+        self.loader = loader
+        self.register_binary_handler(self.handle_binary)
+
+    def configure(self):
+        # We configure the loader binary now int he configure steps since it is coming from
+        # a target property which can be set either from command line or from the build process
+        self.loader.set_binary(self.get_runner_property('binary'))
+
+    def handle_binary(self, binary):
+        # This gets called when an executable is attached to a hierarchy of components containing
+        # this one
+        self.set_runner_property('binary', binary)
+
 
 class SnitchTestbenchWrapper(st.Component):
 
-    def __init__(self, parent, name, parser, options):
+    def __init__(self, parent, name='snitch.testbench'):
 
-        super(SnitchTestbenchWrapper, self).__init__(parent, name, options=options,
-            target_name='snitch.testbench')
+        super(SnitchTestbenchWrapper, self).__init__(parent, name, target_name='snitch.testbench')
 
         clock = Clock_domain(self, 'clock', frequency=10000000)
 
-        soc = SnitchTestbench(self, 'soc', parser)
+        soc = SnitchTestbench(self, 'soc')
 
         self.bind(clock, 'out', soc, 'clock')
-
-        # Make sure the loader is notified by any executable attached to this component so that it is
-        # automatically loaded
-        self.add_binary_loader(self.get_component('soc/loader'))
 
 
 class Target(gvsoc.runner.Target):
 
-    gapy_description="Snitch testbench"
-
-    def __init__(self, parser, options):
-        super(Target, self).__init__(parser, options,
-            model=SnitchTestbenchWrapper)
+    gapy_description = "Snitch testbench"
+    model = SnitchTestbenchWrapper
+    name = "snitch_testbench"
