@@ -67,6 +67,10 @@ class SnitchTestbenchWrapper(st.Component):
 
         self.bind(clock, 'out', soc, 'clock')
 
+        # Make sure the loader is notified by any executable attached to this component so that it is
+        # automatically loaded
+        self.add_binary_loader(self.get_component('soc/loader'))
+
 
 class Target(gvsoc.runner.Target):
 
