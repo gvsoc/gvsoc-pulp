@@ -45,6 +45,11 @@ class MagiaSoc(gvsoc.systree.Component):
         for id in range(0,MagiaArch.NB_CLUSTERS):
             cluster.append(MagiaTile(self, f'magia-tile-{id}', parser, id))
 
+        # L2 memory
+        l2_mem:List[memory.Memory] = []
+        for id in range(0,MagiaArch.N_TILES_Y):
+            l2_mem.append(memory.Memory(self, f'L2-mem-{id}', size=MagiaArch.L2_SIZE // MagiaArch.N_TILES_Y,latency=1))
+
         # Create Tile matrix for IDs
         # --------------> X direction
         # | 0  1  2  3
@@ -114,11 +119,6 @@ class MagiaSoc(gvsoc.systree.Component):
                 fsync_neighbour_nord_sud.append(FractalSync(self,f'fsync_nord_sud_nb_id_{n_fractal}',level=0))
 
         if (MagiaArch.ENABLE_NOC):
-
-            # L2 memory
-            l2_mem:List[memory.Memory] = []
-            for id in range(0,MagiaArch.N_TILES_Y):
-                l2_mem.append(memory.Memory(self, f'L2-mem-{id}', size=MagiaArch.L2_SIZE // MagiaArch.N_TILES_Y,latency=1))
             
             noc = FlooNoc2dMeshNarrowWide(self,
                                         name='magia-noc',
@@ -132,7 +132,7 @@ class MagiaSoc(gvsoc.systree.Component):
             # Create noc routers
             for x in range(0,MagiaArch.N_TILES_X+1):
                 for y in range(0,MagiaArch.N_TILES_Y):
-                    print(f"Adding router and NI at position x={x} y={y}")
+                    print(f"[NoC] Adding router and NI at position x={x} y={y}")
                     noc.add_router(x, y)
                     noc.add_network_interface(x, y)
 
@@ -153,7 +153,7 @@ class MagiaSoc(gvsoc.systree.Component):
             id = 0
             for y in reversed(range(0,MagiaArch.N_TILES_Y)):
                 for x in range(1,MagiaArch.N_TILES_X+1):
-                    print(f"Adding cluster {id} at position x={x} y={y}")
+                    print(f"[NoC] Adding cluster {id} at position x={x} y={y}")
                     cluster[id].o_NARROW_OUTPUT(noc.i_NARROW_INPUT(x,y))
                     noc.o_NARROW_MAP(cluster[id].i_NARROW_INPUT(),name=f'tile-{id}-l1-mem',base=MagiaArch.L1_ADDR_START+(id*MagiaArch.L1_TILE_OFFSET),size=MagiaArch.L1_SIZE,x=x,y=y,rm_base=False)
                     id += 1
@@ -174,20 +174,24 @@ class MagiaSoc(gvsoc.systree.Component):
 
             id = 0   
             for y in reversed(range(0,MagiaArch.N_TILES_Y)):
-                print(f"Adding L2 {id} at position x={0} y={y}")
+                print(f"[NoC] Adding L2 {id} at position x={0} y={y}")
                 noc.o_NARROW_MAP(l2_mem[id].i_INPUT(),name=f'l2-map-{id}',base=MagiaArch.L2_ADDR_START + id*(MagiaArch.L2_SIZE // MagiaArch.N_TILES_Y),size=MagiaArch.L2_SIZE // MagiaArch.N_TILES_Y,x=0,y=y,rm_base=True)
                 id=id+1
 
         else:
 
-            l2_mem = memory.Memory(self, 'test-mem', size=MagiaArch.L2_SIZE,latency=1)
             soc_xbar = router.Router(self, f'soc-xbar',bandwidth=4,latency=2)
             
             for id in range(0,MagiaArch.NB_CLUSTERS):
+                print(f"[G-XBAR] Adding cluster {id}")
                 cluster[id].o_NARROW_OUTPUT(soc_xbar.i_INPUT())
                 soc_xbar.o_MAP(cluster[id].i_NARROW_INPUT(),f'tile-{id}-l1-mem',base=MagiaArch.L1_ADDR_START+(id*MagiaArch.L1_TILE_OFFSET),size=MagiaArch.L1_SIZE,rm_base=False)
 
-            soc_xbar.o_MAP(l2_mem.i_INPUT(),"l2_mem",base=MagiaArch.L2_ADDR_START,size=MagiaArch.L2_SIZE,rm_base=True)
+            id = 0   
+            for y in reversed(range(0,MagiaArch.N_TILES_Y)):
+                print(f"[G-XBAR] Adding L2 {id} at position x={0} y={y}")
+                soc_xbar.o_MAP(l2_mem[id].i_INPUT(),name=f'l2-map-{id}',base=MagiaArch.L2_ADDR_START + id*(MagiaArch.L2_SIZE // MagiaArch.N_TILES_Y),size=MagiaArch.L2_SIZE // MagiaArch.N_TILES_Y,rm_base=True)
+                id=id+1
 
         # Fractal tree routing
         for lvl in range(0,int(math.log2(MagiaArch.NB_CLUSTERS))):
