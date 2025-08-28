@@ -23,11 +23,20 @@ import gvsoc.systree as st
 from elftools.elf.elffile import *
 import gvsoc.runner
 from gvrun.target import TargetProperty, ArchProperty
+from gvrun.attribute import Tree, Area, Value
+
+
+class SnitchTestbenchAttr(Tree):
+
+    def __init__(self):
+        super().__init__()
+        self.memory = Area(0x80000000, 0x10000)
+        self.isa = Value('rv32imfdca')
 
 
 class SnitchTestbench(st.Component):
 
-    def __init__(self, parent, name):
+    def __init__(self, parent, name, attr):
         super().__init__(parent, name)
 
         TargetProperty(
@@ -35,18 +44,14 @@ class SnitchTestbench(st.Component):
             cast=str
         )
 
-        memory_size = ArchProperty(
-            self, name='memory_size', value=0x10000, description='Memory size',
-            cast=int, dump_format='0x%x'
-        ).get_value()
-
-        mem = memory.Memory(self, 'imem', size=memory_size)
+        mem = memory.Memory(self, 'imem', size=attr.memory.size)
 
         ico = router.Router(self, 'ico')
-        host = iss.SnitchFast(self, f'core', isa='rv32imfdca')
+        host = iss.SnitchFast(self, f'core', isa=attr.isa)
         loader = utils.loader.loader.ElfLoader(self, 'loader')
 
-        ico.o_MAP(mem.i_INPUT(), base=0x80000000, size=0x10000000)
+        print (attr.memory.base)
+        ico.o_MAP(mem.i_INPUT(), base=attr.memory.base, size=attr.memory.size)
 
         loader.o_OUT(ico.i_INPUT())
         loader.o_START(host.i_FETCHEN())
@@ -76,9 +81,11 @@ class SnitchTestbenchWrapper(st.Component):
 
         super(SnitchTestbenchWrapper, self).__init__(parent, name, target_name='snitch.testbench')
 
+        attr = self.set_attributes(SnitchTestbenchAttr())
+
         clock = Clock_domain(self, 'clock', frequency=10000000)
 
-        soc = SnitchTestbench(self, 'soc')
+        soc = SnitchTestbench(self, 'soc', attr)
 
         self.bind(clock, 'out', soc, 'clock')
 
