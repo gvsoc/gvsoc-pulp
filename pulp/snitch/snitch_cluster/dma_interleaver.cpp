@@ -74,6 +74,8 @@ vp::IoReqStatus DmaInterleaver::req(vp::Block *__this, vp::IoReq *req)
     bool is_write = req->get_is_write();
     uint64_t size = req->get_size();
     uint8_t *data = req->get_data();
+    uint8_t *second_data = req->get_second_data(); //needed for amo
+    vp::IoReqOpcode opcode = req->get_opcode(); //needed for amo
 
     _this->trace.msg(vp::Trace::LEVEL_TRACE, "Received IO req (req 0x%p, offset: 0x%llx, size: 0x%llx, is_write: %d)\n", req, offset, size, is_write);
 
@@ -92,7 +94,9 @@ vp::IoReqStatus DmaInterleaver::req(vp::Block *__this, vp::IoReq *req)
         bank_req.set_addr(bank_offset);
         bank_req.set_size(bank_size);
         bank_req.set_data(data);
+        bank_req.set_second_data(second_data); //needed for amo
         bank_req.set_is_write(is_write);
+        bank_req.set_opcode(opcode); //needed for amo
         _this->trace.msg(vp::Trace::LEVEL_TRACE, "Forwarding bank request to bank %d (req x%p, offset: 0x%llx, size: 0x%llx)\n", bank_id, &bank_req, bank_offset, bank_size);
         _this->output_ports[bank_id].req_forward(&bank_req);
         max_delay = std::max(max_delay, bank_req.get_latency()); // Report back the maximum latency of all banks

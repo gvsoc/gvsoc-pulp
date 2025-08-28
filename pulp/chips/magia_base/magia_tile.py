@@ -45,12 +45,12 @@ class MagiaTileTcdm(gvsoc.systree.Component):
         nb_banks = MagiaArch.N_MEM_BANKS
         bank_size = MagiaArch.N_WORDS_BANK * MagiaArch.BYTES_PER_WORD
 
-        # 1 master: OBI
-        L1_masters = 1
+        # 1 master: OBI, iDMA0, iDMA1
+        L1_masters = 3
         interleaver = L1_interleaver(self, 'interleaver', nb_slaves=nb_banks, nb_masters=L1_masters, interleaving_bits=2)
 
-        # 3 masters: OBI, iDMA0, iDMA1
-        dma_masters = 3
+        # 3 masters: OBI
+        dma_masters = 1
         dma_interleaver = DmaInterleaver(self, 'dma_interleaver', nb_master_ports=dma_masters, nb_banks=nb_banks, bank_width=4)
         
         # 1 master: redmule
@@ -147,46 +147,59 @@ class MagiaTile(gvsoc.systree.Component):
         # Bind: icache -> tile interconnect
         i_cache.o_REFILL(tile_xbar.i_INPUT())
 
-        # Bind: obi interconnect -> L1 TCDM, L2 off-tile (through tile_xbar)
+        # Bind obi xbar so that it can communicate with local reserved
         obi_xbar.o_MAP(l1_tcdm.i_INPUT(0), name="local-reserved",
                        base=MagiaArch.RESERVED_ADDR_START,
                        size=MagiaArch.RESERVED_SIZE, rm_base=False)
+        
+        # Bind obi xbar so that it can communicate with local stack
         obi_xbar.o_MAP(l1_tcdm.i_INPUT(0), name="local-stack",
                        base=MagiaArch.STACK_ADDR_START,
                        size=MagiaArch.STACK_SIZE, rm_base=False)
+        
+        # Bind obi xbar so that it can communicate with local L1
         obi_xbar.o_MAP(l1_tcdm.i_DMA_INPUT(), name="local-l1-mem", #here we use the iDMA interleaver because an iDMA axi request routed to obi (e.g. local L1 to off-tile L1 data movement) does not handle the right bank interleaving
                        base=MagiaArch.L1_ADDR_START+(tid*MagiaArch.L1_TILE_OFFSET),
                        size=MagiaArch.L1_SIZE, rm_base=False, remove_offset=(tid*MagiaArch.L1_TILE_OFFSET))
-        obi_xbar.o_MAP(stdout.i_INPUT(), name="local-uart-mem",
-                       base=MagiaArch.STDOUT_START,
-                       size=MagiaArch.STDOUT_SIZE, rm_base=False)
-
-        # Mapping used by obi xbar to communicate with tile xbar
-        obi_xbar.o_MAP(tile_xbar.i_INPUT(), name="obi-to-axi-off-tile-l2-mem",
-                       base=MagiaArch.L2_ADDR_START,
-                       size=MagiaArch.L2_SIZE, rm_base=False)
+        
+        # Bind obi xbar so that it can communicate with tile xbar to get access to remote tiles l1 and reserved mem
         for tile_id in range(0,MagiaArch.NB_CLUSTERS):
             if (tile_id!=tid): #skip yourself
-                obi_xbar.o_MAP(tile_xbar.i_INPUT(), name=f'obi-to-axi-off-tile-{tile_id}-l1-mem',
+                obi_xbar.o_MAP(tile_xbar.i_INPUT(), name=f'obi2axi-off-tile-{tile_id}-l1-mem',
+                        base=MagiaArch.L1_ADDR_START+(tile_id*MagiaArch.L1_TILE_OFFSET),
+                        size=MagiaArch.L1_SIZE, rm_base=False)
+        
+        # Bind tile xbar so that it can communicate with remote tiles l1 and reserved mem
+        for tile_id in range(0,MagiaArch.NB_CLUSTERS):
+            if (tile_id!=tid): #skip yourself
+                tile_xbar.o_MAP(self.__i_NARROW_OUTPUT(), name=f'axi-to-off-tile-{tile_id}-l1-mem',
                         base=MagiaArch.L1_ADDR_START+(tile_id*MagiaArch.L1_TILE_OFFSET),
                         size=MagiaArch.L1_SIZE, rm_base=False)
 
-        # Bind (with address relocation): tile interconnect -> L2 off-tile
-        # Bind tile xbar so that it can write l2 mem
-        tile_xbar.o_MAP(self.__i_NARROW_OUTPUT(), name="axi-off-tile-l2-mem",
-                        base=MagiaArch.L2_ADDR_START,
-                        size=MagiaArch.L2_SIZE, rm_base=False)
-        # Bind tile xbar so that it can communicate with other tiles l1 mem
-        for tile_id in range(0,MagiaArch.NB_CLUSTERS):
-            if (tile_id!=tid): #skip yourself
-                tile_xbar.o_MAP(self.__i_NARROW_OUTPUT(), name=f'axi-off-tile-{tile_id}-l1-mem',
-                        base=MagiaArch.L1_ADDR_START+(tile_id*MagiaArch.L1_TILE_OFFSET),
-                        size=MagiaArch.L1_SIZE, rm_base=False)
-        # Bind tile xbar so that it can coomunicate with obi xbar
+        # Bind tile xbar so that it can coomunicate with obi xbar l1 mem
         tile_xbar.o_MAP(obi_xbar.i_INPUT(), name="axi-to-obi-l1-mem",
                         base=MagiaArch.L1_ADDR_START+(tid*MagiaArch.L1_TILE_OFFSET),
                         size=MagiaArch.L1_SIZE, rm_base=False)
         
+        # Bind tile xbar so that it can coomunicate with obi xbar reserved mem
+        tile_xbar.o_MAP(obi_xbar.i_INPUT(), name="axi-to-obi-reserved-mem",
+                        base=MagiaArch.RESERVED_ADDR_START+(tid*MagiaArch.L1_TILE_OFFSET),
+                        size=MagiaArch.RESERVED_SIZE, rm_base=False)
+        
+        # Mapping used by obi xbar to communicate with tile xbar
+        obi_xbar.o_MAP(tile_xbar.i_INPUT(), name="obi2axi-off-tile-l2-mem",
+                       base=MagiaArch.L2_ADDR_START,
+                       size=MagiaArch.L2_SIZE, rm_base=False)
+
+        # Bind tile xbar so that it can write l2 mem
+        tile_xbar.o_MAP(self.__i_NARROW_OUTPUT(), name="axi-to-off-tile-l2-mem",
+                        base=MagiaArch.L2_ADDR_START,
+                        size=MagiaArch.L2_SIZE, rm_base=False)
+        
+        # Bind obi xbar so that it can write to uart
+        obi_xbar.o_MAP(stdout.i_INPUT(), name="local-uart-mem",
+                base=MagiaArch.STDOUT_START,
+                size=MagiaArch.STDOUT_SIZE, rm_base=False)
         
         self.__o_NARROW_INPUT(tile_xbar.i_INPUT())
 
@@ -206,13 +219,13 @@ class MagiaTile(gvsoc.systree.Component):
 
         # Bind: idma0
         idma0.o_AXI(tile_xbar.i_INPUT())
-        idma0.o_TCDM(l1_tcdm.i_DMA_INPUT()) #here maybe we should not use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
+        idma0.o_TCDM(l1_tcdm.i_INPUT(1)) #here we don't use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
         idma_ctrl.o_OFFLOAD_iDMA0_AXI2OBI(idma0.i_OFFLOAD())
         idma0.o_OFFLOAD_GRANT(idma_ctrl.i_OFFLOAD_GRANT_iDMA0_AXI2OBI())
 
         # Bind: idma1
         idma1.o_AXI(tile_xbar.i_INPUT())
-        idma1.o_TCDM(l1_tcdm.i_DMA_INPUT()) #here maybe we should not use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
+        idma1.o_TCDM(l1_tcdm.i_INPUT(2)) #here we don't use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
         idma_ctrl.o_OFFLOAD_iDMA1_OBI2AXI(idma1.i_OFFLOAD())
         idma1.o_OFFLOAD_GRANT(idma_ctrl.i_OFFLOAD_GRANT_iDMA1_OBI2AXI())
 

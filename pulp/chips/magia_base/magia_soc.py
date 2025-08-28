@@ -176,7 +176,7 @@ class MagiaSoc(gvsoc.systree.Component):
             for y in reversed(range(0,MagiaArch.N_TILES_Y)):
                 print(f"Adding L2 {id} at position x={0} y={y}")
                 noc.o_NARROW_MAP(l2_mem[id].i_INPUT(),name=f'l2-map-{id}',base=MagiaArch.L2_ADDR_START + id*(MagiaArch.L2_SIZE // MagiaArch.N_TILES_Y),size=MagiaArch.L2_SIZE // MagiaArch.N_TILES_Y,x=0,y=y,rm_base=True)
-                id += 1
+                id=id+1
 
         else:
 

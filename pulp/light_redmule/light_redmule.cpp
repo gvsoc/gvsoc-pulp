@@ -1413,7 +1413,6 @@ void matmul_fp16(fp16 * z, fp16 * y, fp16 * x, fp16 * w, uint16_t m_size, uint16
             {
                 z[i * k_size + j] = fp16_fma(x[i * n_size + k], w[k * k_size + j], z[i * k_size + j]);
             }
-            //printf("[%d][%d] float-result=%f fp16-result=0x%02x\n",i,j,fp16_to_float(z[i * k_size + j]),z[i * k_size + j]);
         }
     }
 }
