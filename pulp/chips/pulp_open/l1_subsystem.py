@@ -30,7 +30,7 @@ class L1_subsystem(st.Component):
     ----------
     cluster: Cluster
         The cluster class.
-    
+
     """
 
     def __init__(self, parent, name, cluster):
@@ -84,25 +84,25 @@ class L1_subsystem(st.Component):
 
             pe_icos[i].add_mapping('l1', **cluster._reloc_mapping(cluster.get_property('l1/mapping')))
             self.bind(pe_icos[i], 'l1', interleaver, 'in_%d' % i)
-            
+
             pe_icos[i].add_mapping('l1_alias', **cluster._reloc_mapping_alias(cluster.get_property('l1/mapping')))
             self.bind(pe_icos[i], 'l1_alias', interleaver, 'in_%d' % i)
-            
+
             pe_icos[i].add_mapping('l1_ts', **cluster._reloc_mapping(cluster.get_property('l1/ts_mapping')))
             self.bind(pe_icos[i], 'l1_ts', interleaver, 'ts_in_%d' % i)
-            
+
             pe_icos[i].add_mapping('l1_ts_alias', **cluster._reloc_mapping_alias(cluster.get_property('l1/ts_mapping')))
             self.bind(pe_icos[i], 'l1_ts_alias', interleaver, 'ts_in_%d' % i)
-            
+
             pe_icos[i].add_mapping('dma', **cluster._reloc_mapping(cluster.get_property('demux_peripherals/dma/mapping')))
             self.bind(pe_icos[i], 'dma', self, 'dma_%d' % i)
-            
+
             pe_icos[i].add_mapping('dma_alias', **cluster._reloc_mapping_alias(cluster.get_property('demux_peripherals/dma/mapping')))
             self.bind(pe_icos[i], 'dma_alias', self, 'dma_%d' % i)
 
             pe_icos[i].add_mapping('event_unit', **cluster._reloc_mapping(cluster.get_property('demux_peripherals/event_unit/mapping')))
             self.bind(pe_icos[i], 'event_unit', self, 'event_unit_%d' % i)
-            
+
             pe_icos[i].add_mapping('event_unit_alias', **cluster._reloc_mapping_alias(cluster.get_property('demux_peripherals/event_unit/mapping')))
             self.bind(pe_icos[i], 'event_unit_alias', self, 'event_unit_%d' % i)
 

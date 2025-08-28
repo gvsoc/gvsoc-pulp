@@ -40,32 +40,32 @@ class L1_subsystem(gvsoc.systree.Component):
     size: int
         The size of the memory in bytes.
     nb_port: int
-        Number of TCDM ports per PE.   
+        Number of TCDM ports per PE.
     bandwidth: int
         Global bandwidth, in bytes per cycle, applied to all incoming request. This impacts the
         end time of the burst.
-        
+
     """
-        
-    def __init__(self, parent: gvsoc.systree.Component, name: str, cluster, nb_pe: int=0, size: int=0, 
+
+    def __init__(self, parent: gvsoc.systree.Component, name: str, cluster, nb_pe: int=0, size: int=0,
                  nb_port: int=0, bandwidth: int=0):
         super(L1_subsystem, self).__init__(parent, name)
 
         #
         # Properties
         #
-        
+
         self.add_property('nb_pe', nb_pe)
         self.add_property('size', size)
         self.add_property('nb_port', nb_port)
         self.add_property('bandwidth', bandwidth)
-        
+
         nb_banks_per_superbank = 8
         nb_superbanks = 4
         l1_bank_size = size / nb_superbanks / nb_banks_per_superbank
         nb_masters = nb_pe
         nb_l1_banks = nb_banks_per_superbank * nb_superbanks
-        l1_interleaver_nb_masters = nb_pe * nb_port 
+        l1_interleaver_nb_masters = nb_pe * nb_port
 
 
         #
@@ -77,7 +77,7 @@ class L1_subsystem(gvsoc.systree.Component):
         # Each bank has size 4kB (depth*width: 512*8), total size 128kB
         l1_banks = []
         for i in range(0, nb_l1_banks):
-            tcdm = Memory(self, 'tcdm_bank%d' % i, size=l1_bank_size, width_log2=int(math.log(bandwidth, 2.0)), 
+            tcdm = Memory(self, 'tcdm_bank%d' % i, size=l1_bank_size, width_log2=int(math.log(bandwidth, 2.0)),
                             atomics=True)
             l1_banks.append(tcdm)
 
@@ -91,18 +91,18 @@ class L1_subsystem(gvsoc.systree.Component):
 
         # L1 interleaver
         # TCDM interconnection, one port per bank, 8 ports per superbank
-        interleaver = Interleaver(self, 'interleaver', nb_slaves=nb_l1_banks, nb_masters=l1_interleaver_nb_masters, 
+        interleaver = Interleaver(self, 'interleaver', nb_slaves=nb_l1_banks, nb_masters=l1_interleaver_nb_masters,
                                     interleaving_bits=int(math.log2(bandwidth)))
-        
+
         # DMA interleaver
-        dma_interleaver = DmaInterleaver(self, 'dma_interleaver', nb_master_ports=l1_interleaver_nb_masters, 
+        dma_interleaver = DmaInterleaver(self, 'dma_interleaver', nb_master_ports=l1_interleaver_nb_masters,
                                          nb_banks=nb_l1_banks, bank_width=bandwidth)
 
 
         #
         # Bindings
         #
-        
+
         # DMA interconnections
         # cluster_ico "l1" -> pe_icos[0] "input"
         self.bind(self, 'input', pe_icos[0], 'input')
@@ -111,8 +111,8 @@ class L1_subsystem(gvsoc.systree.Component):
         for i in range(0, nb_pe):
             # Index of interleaver ports for each core complex.
             port_id = int(i * nb_port)
-            
-            
+
+
             # Memory port 0, shared by Integer LSU, FP LSU and data mover 0.
             # pe (iss) "data" -> pe interconnect (router) "input"
             self.bind(self, 'data_pe_%d' % i, pe_icos[port_id], 'input')
@@ -124,39 +124,39 @@ class L1_subsystem(gvsoc.systree.Component):
             # connect to cluster axi crossbar
             pe_icos[port_id].add_mapping('cluster_ico')
             self.bind(pe_icos[port_id], 'cluster_ico', self, 'cluster_ico')
-            
-        
+
+
             # Memory port 1, private for data mover 1
             port_id += 1
             self.bind(self, 'ssr_1_pe_%d' % i, pe_icos[port_id], 'input')
             pe_icos[port_id].add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000)
             self.bind(pe_icos[port_id], 'l1', interleaver, 'in_%d' % port_id)
-            
-            
+
+
             # Memory port 2, private for data mover 2
             port_id += 1
             self.bind(self, 'ssr_2_pe_%d' % i, pe_icos[port_id], 'input')
             pe_icos[port_id].add_mapping('l1', base=0x10000000, remove_offset=0x10000000, size=0x20000)
             self.bind(pe_icos[port_id], 'l1', interleaver, 'in_%d' % port_id)
-            
-        
+
+
         # DMA interconnections
         for i in range(0, l1_interleaver_nb_masters):
             self.bind(self, f'dma_input', dma_interleaver, f'input')
 
 
-        # L1 interleaver 
+        # L1 interleaver
         # tcdm interleaver "out_%d" -> l1_banks (memory) "input"
         # dma interleaver "out_%d" -> l1_banks (memory) "input"
         for i in range(0, nb_l1_banks):
             self.bind(interleaver, 'out_%d' % i, l1_banks[i], 'input')
             self.bind(dma_interleaver, 'out_%d' % i, l1_banks[i], 'input')
-            
-    
+
+
     def i_DMA_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'dma_input', signature='io')
-    
-    
+
+
     def add_mapping(self, name: str, base: int=None, size: int=None, remove_offset: int=None,
             add_offset: int=None, id: int=None, latency: int=None):
         """Add a target port with an associated target memory map.

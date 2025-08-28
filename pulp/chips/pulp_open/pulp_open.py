@@ -38,7 +38,7 @@ class Pulp_open(st.Component):
         cluster_config_file = self.add_property('cluster_config_file', cluster_config_file)
         nb_cluster = self.add_property('nb_cluster', 1)
 
-    
+
         #
         # Components
         #

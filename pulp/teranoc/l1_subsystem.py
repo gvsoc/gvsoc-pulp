@@ -88,12 +88,12 @@ class L1_subsystem(gvsoc.systree.Component):
         # L1 interleaver (virtual)
         local_interleavers = []
         for i in range(0, nb_pe):
-            local_interleavers.append(Interleaver(self, f'local_interleaver{i}', nb_slaves=total_banks, nb_masters=1, 
+            local_interleavers.append(Interleaver(self, f'local_interleaver{i}', nb_slaves=total_banks, nb_masters=1,
                                              interleaving_bits=int(math.log2(bandwidth)), offset_translation=False))
 
-        remote_interleaver = Interleaver(self, 'remote_interleaver', nb_slaves=total_banks, nb_masters=nb_remote_masters, 
+        remote_interleaver = Interleaver(self, 'remote_interleaver', nb_slaves=total_banks, nb_masters=nb_remote_masters,
                                     interleaving_bits=int(math.log2(bandwidth)), offset_translation=False)
-        
+
         #Remote interfaces
         remote_local_out_interfaces = []
         remote_local_in_interfaces = []

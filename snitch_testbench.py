@@ -22,16 +22,36 @@ import utils.loader.loader
 import gvsoc.systree as st
 from elftools.elf.elffile import *
 import gvsoc.runner
-from gvrun.target import TargetProperty, ArchProperty
+from gvrun.target import TargetParameter
 from gvrun.attribute import Tree, Area, Value
 
 
+
+class SnitchCore(Tree):
+    def __init__(self, parent, name, id):
+        super().__init__(parent, name)
+        self.isa    = Value(self, 'isa', 'rv32imfdca', description='ISA string of the core')
+        self.id    = Value(self, 'id', id, cast=int)
+
+class SnitchCluster(Tree):
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
+
+        self.nb_cores = Value(self, 'nb_cores', 10, cast=int)
+        self.cores = []
+        self.cores.append(SnitchCore(self, f'core_{len(self.cores)}', len(self.cores)))
+        self.cores.append(SnitchCore(self, f'core_{len(self.cores)}', len(self.cores)))
+        self.cores.append(SnitchCore(self, f'core_{len(self.cores)}', len(self.cores)))
+        self.cores.append(SnitchCore(self, f'core_{len(self.cores)}', len(self.cores)))
+
 class SnitchTestbenchAttr(Tree):
 
-    def __init__(self):
-        super().__init__()
-        self.memory = Area(0x80000000, 0x10000)
-        self.isa = Value('rv32imfdca')
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.memory = Area(self, 'memory', 0x80000000, 0x10000, description='Address range of the memory')
+        self.isa    = Value(self, 'isa', 'rv32imfdca')
+        self.cluster0 = SnitchCluster(self, 'cluster_0')
+        self.cluster1 = SnitchCluster(self, 'cluster_1')
 
 
 class SnitchTestbench(st.Component):
@@ -39,7 +59,7 @@ class SnitchTestbench(st.Component):
     def __init__(self, parent, name, attr):
         super().__init__(parent, name)
 
-        TargetProperty(
+        TargetParameter(
             self, name='binary', value=None, description='Binary to be loaded and started',
             cast=str
         )
@@ -50,7 +70,6 @@ class SnitchTestbench(st.Component):
         host = iss.SnitchFast(self, f'core', isa=attr.isa)
         loader = utils.loader.loader.ElfLoader(self, 'loader')
 
-        print (attr.memory.base)
         ico.o_MAP(mem.i_INPUT(), base=attr.memory.base, size=attr.memory.size)
 
         loader.o_OUT(ico.i_INPUT())
@@ -66,13 +85,13 @@ class SnitchTestbench(st.Component):
 
     def configure(self):
         # We configure the loader binary now int he configure steps since it is coming from
-        # a target property which can be set either from command line or from the build process
-        self.loader.set_binary(self.get_runner_property('binary'))
+        # a parameter which can be set either from command line or from the build process
+        self.loader.set_binary(self.get_parameter('binary'))
 
     def handle_binary(self, binary):
         # This gets called when an executable is attached to a hierarchy of components containing
         # this one
-        self.set_runner_property('binary', binary)
+        self.set_parameter('binary', binary)
 
 
 class SnitchTestbenchWrapper(st.Component):
@@ -81,7 +100,7 @@ class SnitchTestbenchWrapper(st.Component):
 
         super(SnitchTestbenchWrapper, self).__init__(parent, name, target_name='snitch.testbench')
 
-        attr = self.set_attributes(SnitchTestbenchAttr())
+        attr = self.set_attributes(SnitchTestbenchAttr(self))
 
         clock = Clock_domain(self, 'clock', frequency=10000000)
 

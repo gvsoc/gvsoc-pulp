@@ -29,4 +29,3 @@ class Apb_soc_ctrl(st.Component):
         })
 
         self.add_properties(soc.get_property('peripherals/apb_soc_ctrl/config'))
-        
