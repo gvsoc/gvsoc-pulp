@@ -48,7 +48,9 @@ class SnitchTestbenchAttr(Tree):
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.memory = Area(self, 'memory', 0x80000000, 0x10000, description='Address range of the memory')
+        self.mem_l0 = Area(self, 'mem_l0', 0x80000000, 0x100000, description='Address range of the memory')
+        self.mem_l1 = Area(self, 'mem_l1', 0x90000000, 0x100000, description='Address range of the memory')
+        self.mem_l2 = Area(self, 'mem_l2', 0xA0000000, 0x100000, description='Address range of the memory')
         self.isa    = Value(self, 'isa', 'rv32imfdca')
         self.cluster0 = SnitchCluster(self, 'cluster_0')
         self.cluster1 = SnitchCluster(self, 'cluster_1')
@@ -64,13 +66,17 @@ class SnitchTestbench(st.Component):
             cast=str
         )
 
-        mem = memory.Memory(self, 'imem', size=attr.memory.size)
+        mem_l0 = memory.Memory(self, 'mem_l0', size=attr.mem_l0.size)
+        mem_l1 = memory.Memory(self, 'mem_l1', size=attr.mem_l1.size)
+        mem_l2 = memory.Memory(self, 'mem_l2', size=attr.mem_l2.size)
 
         ico = router.Router(self, 'ico')
-        host = iss.SnitchFast(self, f'core', isa=attr.isa)
+        host = iss.SnitchFast(self, f'core', isa=attr.isa, nb_outstanding=8)
         loader = utils.loader.loader.ElfLoader(self, 'loader')
 
-        ico.o_MAP(mem.i_INPUT(), base=attr.memory.base, size=attr.memory.size)
+        ico.o_MAP(mem_l0.i_INPUT(), base=attr.mem_l0.base, size=attr.mem_l0.size, latency=0)
+        ico.o_MAP(mem_l1.i_INPUT(), base=attr.mem_l1.base, size=attr.mem_l1.size, latency=10)
+        ico.o_MAP(mem_l2.i_INPUT(), base=attr.mem_l2.base, size=attr.mem_l2.size, latency=1000)
 
         loader.o_OUT(ico.i_INPUT())
         loader.o_START(host.i_FETCHEN())
