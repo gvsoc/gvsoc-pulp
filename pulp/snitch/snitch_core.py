@@ -112,7 +112,8 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
             inc_spatz: bool=False,
             core_id: int=0,
             htif: bool=False,
-            pulp_v2: bool=False):
+            pulp_v2: bool=False,
+            nb_outstanding: int=1):
 
         isa_instance = isa_instances.get(isa)
 
@@ -133,7 +134,8 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
             fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True,
-            prefetcher_size=32, custom_sources=True, htif=htif, binaries=binaries)
+            prefetcher_size=32, custom_sources=True, htif=htif, binaries=binaries,
+            nb_outstanding=nb_outstanding)
 
         if pulp_v2:
             self.add_c_flags([f'-DCONFIG_GVSOC_ISS_SNITCH_PULP_V2=1'])
@@ -192,7 +194,9 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             inc_spatz: bool=False,
             core_id: int=0,
             htif: bool=False, vlen: int=512, spatz_nb_lanes=4,
-            pulp_v2: bool=False):
+            pulp_v2: bool=False,
+            nb_outstanding: int=1
+        ):
 
         isa_instance = isa_instances.get(isa)
 
@@ -219,7 +223,8 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
             fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True,
-            prefetcher_size=32, htif=htif, binaries=binaries, handle_misaligned=True, custom_sources=True)
+            prefetcher_size=32, htif=htif, binaries=binaries, handle_misaligned=True, custom_sources=True,
+            nb_outstanding=nb_outstanding)
 
         self.inc_spatz = inc_spatz
 
