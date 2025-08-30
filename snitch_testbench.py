@@ -27,22 +27,33 @@ from gvrun.attribute import Tree, Area, Value
 
 
 
-class SnitchCore(Tree):
-    def __init__(self, parent, name, id):
-        super().__init__(parent, name)
-        self.isa    = Value(self, 'isa', 'rv32imfdca', description='ISA string of the core')
-        self.id    = Value(self, 'id', id, cast=int)
+# class SnitchCore(Tree):
+#     def __init__(self, parent, name, id):
+#         super().__init__(parent, name)
+#         self.isa    = Value(self, 'isa', 'rv32imfdca', description='ISA string of the core')
+#         self.id    = Value(self, 'id', id, cast=int)
 
-class SnitchCluster(Tree):
-    def __init__(self, parent, name):
-        super().__init__(parent, name)
+# class SnitchCluster(Tree):
+#     def __init__(self, parent, name):
+#         super().__init__(parent, name)
 
-        self.nb_cores = Value(self, 'nb_cores', 10, cast=int)
-        self.cores = []
-        self.cores.append(SnitchCore(self, f'core_{len(self.cores)}', len(self.cores)))
-        self.cores.append(SnitchCore(self, f'core_{len(self.cores)}', len(self.cores)))
-        self.cores.append(SnitchCore(self, f'core_{len(self.cores)}', len(self.cores)))
-        self.cores.append(SnitchCore(self, f'core_{len(self.cores)}', len(self.cores)))
+#         self.nb_cores = Value(self, 'nb_cores', 10, cast=int)
+#         self.cores = []
+#         self.cores.append(SnitchCore(self, f'core_{len(self.cores)}', len(self.cores)))
+#         self.cores.append(SnitchCore(self, f'core_{len(self.cores)}', len(self.cores)))
+#         self.cores.append(SnitchCore(self, f'core_{len(self.cores)}', len(self.cores)))
+#         self.cores.append(SnitchCore(self, f'core_{len(self.cores)}', len(self.cores)))
+
+# class SnitchTestbenchAttr(Tree):
+
+#     def __init__(self, parent):
+#         super().__init__(parent)
+#         self.mem_l0 = Area(self, 'mem_l0', 0x80000000, 0x100000, description='Address range of the memory')
+#         self.mem_l1 = Area(self, 'mem_l1', 0x90000000, 0x100000, description='Address range of the memory')
+#         self.mem_l2 = Area(self, 'mem_l2', 0xA0000000, 0x100000, description='Address range of the memory')
+#         self.isa    = Value(self, 'isa', 'rv32imfdca')
+#         self.cluster0 = SnitchCluster(self, 'cluster_0')
+#         self.cluster1 = SnitchCluster(self, 'cluster_1')
 
 class SnitchTestbenchAttr(Tree):
 
@@ -52,8 +63,6 @@ class SnitchTestbenchAttr(Tree):
         self.mem_l1 = Area(self, 'mem_l1', 0x90000000, 0x100000, description='Address range of the memory')
         self.mem_l2 = Area(self, 'mem_l2', 0xA0000000, 0x100000, description='Address range of the memory')
         self.isa    = Value(self, 'isa', 'rv32imfdca')
-        self.cluster0 = SnitchCluster(self, 'cluster_0')
-        self.cluster1 = SnitchCluster(self, 'cluster_1')
 
 
 class SnitchTestbench(st.Component):
@@ -102,7 +111,7 @@ class SnitchTestbench(st.Component):
 
 class SnitchTestbenchWrapper(st.Component):
 
-    def __init__(self, parent, name='snitch.testbench'):
+    def __init__(self, parent, name=None):
 
         super(SnitchTestbenchWrapper, self).__init__(parent, name, target_name='snitch.testbench')
 
