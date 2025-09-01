@@ -51,7 +51,7 @@ class L1_subsystem(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, terapool: bool=False, tile_id: int=0, sub_group_id: int=0, group_id: int=0,
                  nb_tiles_per_sub_group: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, nb_remote_local_masters: int=1, nb_remote_group_masters: int=4,
-                 nb_remote_sub_group_masters: int=4, nb_pe: int=0, size: int=0, nb_banks_per_tile: int=0, bandwidth: int=0):
+                 nb_remote_sub_group_masters: int=4, nb_pe: int=0, size: int=0, nb_banks_per_tile: int=0, bandwidth: int=0, axi_data_width: int=512):
         super(L1_subsystem, self).__init__(parent, name)
 
         #
@@ -114,6 +114,13 @@ class L1_subsystem(gvsoc.systree.Component):
             remote_group_in_interfaces.append(Router(self, f'remote_group_in_itf{i}', bandwidth=bandwidth, latency=0))
             remote_group_in_interfaces[i].add_mapping('output')
 
+        # DMA Interface
+        dma_interface = Router(self, 'dma_itf', bandwidth=axi_data_width, latency=0, shared_rw_bandwidth=True)
+        dma_interface.add_mapping('output')
+
+        # DMA Interleaver
+        dma_interleaver = DmaInterleaver(self, 'dma_interleaver', nb_master_ports=1, nb_banks=nb_banks_per_tile, bank_width=4)
+
         #
         # Bindings
         #
@@ -144,6 +151,12 @@ class L1_subsystem(gvsoc.systree.Component):
 
         for i in range(0, nb_remote_group_masters):
             self.bind(remote_group_out_interfaces[i], 'output', self, f'remote_group_out{i}')
+
+        self.bind(self, 'dma', dma_interface, 'input')
+        self.bind(dma_interface, 'output', dma_interleaver, 'input')
+
+        for i in range(0, nb_banks_per_tile):
+            self.bind(dma_interleaver, f'out_{i}', l1_banks[i], 'input')
 
         #
         # Address sorting

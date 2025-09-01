@@ -20,15 +20,12 @@
 import gvsoc.runner
 import cpu.iss.riscv as iss
 import memory.memory as memory
-from pulp.snitch.hierarchical_cache import Hierarchical_cache
 from vp.clock_domain import Clock_domain
-import pulp.mempool.l1_subsystem as l1_subsystem
 import interco.router as router
 import devices.uart.ns16550 as ns16550
 import utils.loader.loader
 import gvsoc.systree as st
-from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
-from pulp.idma.snitch_dma import SnitchDma
+from pulp.mempool.mempool_dma import MemPoolDma
 from elftools.elf.elffile import *
 import gvsoc.runner as gvsoc
 import math
@@ -72,6 +69,10 @@ class System(st.Component):
         
         uart = ns16550.Ns16550(self, 'uart')
 
+        dma = MemPoolDma(self, 'dma', loc_base=0x0, loc_size=0x400000, tcdm_width=total_cores*bank_factor*4)
+        dma_remove_offset = router.Router(self, 'dma_remove_offset')
+        dma_remove_offset.add_mapping('output', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
+
         # Binary Loader
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x80000000)
 
@@ -93,6 +94,10 @@ class System(st.Component):
         # UART Router
         uart_router = router.Router(self, 'uart_router', bandwidth=8, latency=1)
         uart_router.add_mapping('output')
+        
+        # DMA Ctrl Router
+        dma_ctrl_router = router.Router(self, 'dma_ctrl_router', bandwidth=32, latency=1)
+        dma_ctrl_router.add_mapping('output')
 
         # Dummy Memory Router
         dummy_mem_router = router.Router(self, 'dummy_mem_router', bandwidth=32, latency=1)
@@ -125,6 +130,11 @@ class System(st.Component):
         for i in range(0, nb_groups):
             self.bind(mempool_cluster, 'uart_%d' % i, uart_router, 'input')
         self.bind(uart_router,'output',uart, 'input')
+        
+        #dma ctrl router
+        for i in range(0, nb_groups):
+            self.bind(mempool_cluster, 'dma_ctrl_%d' % i, dma_ctrl_router, 'input')
+        self.bind(dma_ctrl_router, 'output', dma, 'input')
 
         #dummy_mem router
         for i in range(0, nb_groups):
@@ -147,6 +157,16 @@ class System(st.Component):
         #Cluster Registers for synchronization barrier
         for i in range(0, total_cores):
             self.bind(csr, f'barrier_ack', mempool_cluster, f'barrier_ack_{i}')
+
+        #dma data
+        # self.bind(dma, 'axi_read', l2_router, 'input')
+        # self.bind(dma, 'axi_write', l2_router, 'input')
+        self.bind(dma, 'axi_read', dma_remove_offset, 'input')
+        self.bind(dma, 'axi_write', dma_remove_offset, 'input')
+        self.bind(dma_remove_offset, 'output', l2_router, 'input')
+
+        self.bind(dma, 'tcdm_read', mempool_cluster, 'dma_tcdm')
+        self.bind(dma, 'tcdm_write', mempool_cluster, 'dma_tcdm')
 
 class MempoolSystem(st.Component):
 
