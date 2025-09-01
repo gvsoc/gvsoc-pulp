@@ -51,7 +51,7 @@ class Tile(st.Component):
             binary = args.binary
 
         # Set it to true to swtich to snitch new fast model
-        fast_model = False
+        fast_model = True
 
         ################################################################
         ##########               Design Variables             ##########
