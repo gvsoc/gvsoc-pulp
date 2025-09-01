@@ -82,7 +82,7 @@ class Tile(st.Component):
                                         nb_tiles_per_sub_group=nb_tiles_per_sub_group, nb_sub_groups_per_group=nb_sub_groups_per_group, \
                                         nb_groups=nb_groups, nb_remote_local_masters=1, nb_remote_group_masters=nb_remote_group_ports, \
                                         nb_remote_sub_group_masters=nb_remote_sub_group_ports, nb_pe=nb_cores_per_tile, \
-                                        size=mem_size, bandwidth=4,nb_banks_per_tile=nb_cores_per_tile*bank_factor)
+                                        size=mem_size, bandwidth=4, nb_banks_per_tile=nb_cores_per_tile*bank_factor, axi_data_width=axi_data_width)
         # Shared icache
         icache = Hierarchical_cache(self, 'shared_icache', nb_cores=nb_cores_per_tile, has_cc=0, l1_line_size_bits=7)
 
@@ -144,6 +144,8 @@ class Tile(st.Component):
             self.bind(self, f'grp_remt{i}_slave_in', l1, f'remote_group_in{i}')
             self.bind(l1, f'remote_group_out{i}', self, f'grp_remt{i}_master_out')
 
+        self.bind(self, 'dma_tcdm', l1, 'dma')
+
         # ICO -> AXI -> L2 Memory
         for i in range(0, nb_cores_per_tile):
             # Add default mapping for the others
@@ -175,6 +177,9 @@ class Tile(st.Component):
         # AXI -> UART ports
         axi_ico.add_mapping('uart', base=0xc0000000, remove_offset=0xc0000000, size=0x100)
         self.bind(axi_ico, 'uart', self, 'uart')
+
+        axi_ico.add_mapping('dma_ctrl', base=0x40010000, remove_offset=0x40010000, size=0x100)
+        self.bind(axi_ico, 'dma_ctrl', self, 'dma_ctrl')
 
         # AXI -> Dummy Memory ports
         axi_ico.add_mapping('dummy')

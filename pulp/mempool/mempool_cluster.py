@@ -49,6 +49,8 @@ class Cluster(st.Component):
         # Hardware parameters 
         nb_remote_ports_per_group = nb_groups - 1
         nb_tiles_per_group = int((total_cores/nb_groups)/nb_cores_per_tile)
+        total_banks = total_cores * bank_factor
+        nb_banks_per_group = int(total_cores/nb_groups) * bank_factor
 
         ################################################################
         ##########              Design Components             ##########
@@ -58,7 +60,14 @@ class Cluster(st.Component):
         for i in range(0, nb_groups):
             self.group_list.append(Group(self,f'group_{i}',parser=parser,terapool=terapool, group_id=i, nb_cores_per_tile=nb_cores_per_tile, 
                 nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width))
-        
+
+        # DMA TCDM Interface
+        dma_tcdm_itf = router.Router(self, f'dma_tcdm_itf', bandwidth=total_banks*4, latency=1, shared_rw_bandwidth=True)
+        dma_tcdm_itf.add_mapping('output')
+
+        # DMA TCDM Interleaver
+        dma_tcdm_interleaver = DmaInterleaver(self, f'dma_tcdm_interleaver', nb_master_ports=1, nb_banks=nb_groups, bank_width=nb_banks_per_group*4)
+
         ################################################################
         ##########               Design Bindings              ##########
         ################################################################
@@ -95,6 +104,13 @@ class Cluster(st.Component):
             self.bind(self.group_list[i], 'L2_data', self, 'L2_data_%d' % i)
             self.bind(self.group_list[i], 'csr', self, 'csr_%d' % i)
             self.bind(self.group_list[i], 'uart', self, 'uart_%d' % i)
+            self.bind(self.group_list[i], 'dma_ctrl', self, 'dma_ctrl_%d' % i)
             self.bind(self.group_list[i], 'dummy_mem', self, 'dummy_mem_%d' % i)
             self.bind(self, 'loader_start', self.group_list[i], 'loader_start')
             self.bind(self, 'loader_entry', self.group_list[i], 'loader_entry')
+
+        self.bind(self, 'dma_tcdm', dma_tcdm_itf, 'input')
+        self.bind(dma_tcdm_itf, 'output', dma_tcdm_interleaver, 'input')
+        
+        for i in range(0, nb_groups):
+            self.bind(dma_tcdm_interleaver, f'out_{i}', self.group_list[i], 'dma_tcdm')
