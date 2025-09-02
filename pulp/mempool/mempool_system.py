@@ -66,12 +66,12 @@ class System(st.Component):
 
         # CSR
         csr = CtrlRegisters(self, 'ctrl_registers', wakeup_latency=18 if terapool else 15)
-        
+
+        # UART        
         uart = ns16550.Ns16550(self, 'uart')
 
+        # DMA
         dma = MemPoolDma(self, 'dma', loc_base=0x0, loc_size=0x400000, tcdm_width=total_cores*bank_factor*4)
-        dma_remove_offset = router.Router(self, 'dma_remove_offset')
-        dma_remove_offset.add_mapping('output', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
 
         # Binary Loader
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x80000000)
@@ -83,11 +83,11 @@ class System(st.Component):
         axi_ico = []
         for i in range(0, nb_groups):
             axi_ico.append(router.Router(self, f'axi_ico_{i}', latency=0))
-            axi_ico[i].add_mapping('l2', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
+            axi_ico[i].add_mapping('l2', base=0x80000000, size=0x1000000)
             axi_ico[i].add_mapping('soc')
 
         l2_ico = router.Router(self, 'l2_ico', latency=1)
-        l2_ico.add_mapping('output')
+        l2_ico.add_mapping('output', remove_offset=0x80000000)
 
         soc_ico = router.Router(self, 'soc_ico')    # TODO: output bandwidth only
         soc_ico.add_mapping('bootrom', base=0xa0000000, remove_offset=0xa0000000, size=0x10000, latency=1)
@@ -159,13 +159,10 @@ class System(st.Component):
         for i in range(0, total_cores):
             self.bind(csr, f'barrier_ack', mempool_cluster, f'barrier_ack_{i}')
 
-        #dma data
-        # self.bind(dma, 'axi_read', l2_router, 'input')
-        # self.bind(dma, 'axi_write', l2_router, 'input')
-        self.bind(dma, 'axi_read', dma_remove_offset, 'input')
-        self.bind(dma, 'axi_write', dma_remove_offset, 'input')
-        self.bind(dma_remove_offset, 'output', l2_ico, 'input')
-
+        #DMA data
+        #To emulate distributed backends in groups
+        self.bind(dma, 'axi_read', mempool_cluster, 'dma_axi')
+        self.bind(dma, 'axi_write', mempool_cluster, 'dma_axi')
         self.bind(dma, 'tcdm_read', mempool_cluster, 'dma_tcdm')
         self.bind(dma, 'tcdm_write', mempool_cluster, 'dma_tcdm')
 
