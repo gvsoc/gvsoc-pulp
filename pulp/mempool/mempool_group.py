@@ -239,29 +239,9 @@ class Group(st.Component):
             # DMA TCDM Interleaver
             dma_tcdm_interleaver = DmaInterleaver(self, f'dma_tcdm_interleaver', nb_master_ports=1, nb_banks=nb_tiles_per_group, bank_width=nb_banks_per_tile*4)
 
-            #rom router
-            rom_router = router.Router(self, 'rom_router', bandwidth=axi_data_width, latency=1)
-            rom_router.add_mapping('output')
-
-            #l2 router
-            l2_router = router.Router(self, 'l2_router', bandwidth=axi_data_width, latency=1)
-            l2_router.add_mapping('output')
-
-            #csr router
-            csr_router = router.Router(self, 'csr_router', bandwidth=32, latency=1)
-            csr_router.add_mapping('output')
-
-            #uart router
-            uart_router = router.Router(self, 'uart_router', bandwidth=8, latency=1)
-            uart_router.add_mapping('output')
-            
-            #dma ctrl router
-            dma_ctrl_router = router.Router(self, 'dma_ctrl_router', bandwidth=32, latency=1)
-            dma_ctrl_router.add_mapping('output')
-
-            #dummy_mem router
-            dummy_mem_router = router.Router(self, 'dummy_mem_router', bandwidth=32, latency=1)
-            dummy_mem_router.add_mapping('output')
+            # AXI Interconnect
+            axi_ico = router.Router(self, 'axi_ico', bandwidth=axi_data_width, latency=1)
+            axi_ico.add_mapping('output')
 
             ################################################################
             ##########               Design Bindings              ##########
@@ -285,29 +265,9 @@ class Group(st.Component):
                 for i in range(0, nb_tiles_per_group):
                     self.bind(group_remote_master_interleavers[port], 'out_%d' % i, group_remote_out_interfaces[port][i], 'input')
 
-            #Tile rom -> rom router
+            # Tile axi port -> axi interconnect
             for i in range(0, nb_tiles_per_group):
-                self.bind(self.tile_list[i], 'rom', rom_router, 'input')
-
-            #Tile l2 data -> l2 router
-            for i in range(0, nb_tiles_per_group):
-                self.bind(self.tile_list[i], 'L2_data', l2_router, 'input')
-
-            #Tile l2 data -> csr router
-            for i in range(0, nb_tiles_per_group):
-                self.bind(self.tile_list[i], 'csr', csr_router, 'input')
-
-            #Tile uart -> uart router
-            for i in range(0, nb_tiles_per_group):
-                self.bind(self.tile_list[i], 'uart', uart_router, 'input')
-
-            #Tile dma ctrl -> dma ctrl router
-            for i in range(0, nb_tiles_per_group):
-                self.bind(self.tile_list[i], 'dma_ctrl', dma_ctrl_router, 'input')
-
-            #Tile l2 data -> dummy_mem router
-            for i in range(0, nb_tiles_per_group):
-                self.bind(self.tile_list[i], 'dummy_mem', dummy_mem_router, 'input')
+                self.bind(self.tile_list[i], 'axi_out', axi_ico, 'input')
 
             #Group loader -> Tile loader
             for i in range(0, nb_tiles_per_group):
@@ -334,12 +294,8 @@ class Group(st.Component):
                 for j in range(0, nb_cores_per_tile):
                     self.bind(self, f'barrier_ack_{i*nb_cores_per_tile+j}', self.tile_list[i], f'barrier_ack_{j}')
 
-            # Other signals propagated to the group interface
-            self.bind(rom_router, 'output', self, 'rom')
-            self.bind(l2_router, 'output', self, 'L2_data')
-            self.bind(csr_router, 'output', self, 'csr')
-            self.bind(uart_router, 'output', self, 'uart')
-            self.bind(dma_ctrl_router, 'output', self, 'dma_ctrl')
-            self.bind(dummy_mem_router, 'output', self, 'dummy_mem')
+            # AXI
+            self.bind(axi_ico, 'output', self, 'axi_out')
 
+            # DMA
             self.bind(self, 'dma_tcdm', dma_tcdm_itf, 'input')

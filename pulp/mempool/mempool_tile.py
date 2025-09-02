@@ -99,6 +99,7 @@ class Tile(st.Component):
         for i in range(0, nb_cores_per_tile):
             ico_list.append(router.Router(self, 'ico%d' % i, bandwidth=4, latency=0))
         axi_ico = router.Router(self, 'axi_ico', bandwidth=axi_data_width, latency=1)
+        axi_ico.add_mapping('output', latency=1)
 
         # Core Complex
         for core_id in range(0, nb_cores_per_tile):
@@ -161,29 +162,9 @@ class Tile(st.Component):
 
         # Icache -> AXI
         self.bind(icache, 'refill', axi_ico, 'input')
-
-        # AXI <-> ROM ports
-        axi_ico.add_mapping('rom', base=0xa0000000, remove_offset=0xa0000000, size=0x1000)
-        self.bind(axi_ico, 'rom', self, 'rom')
-
-        # AXI <-> L2 Memory ports
-        axi_ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
-        self.bind(axi_ico, 'mem', self, 'L2_data')
-
-        # AXI -> CSR ports
-        axi_ico.add_mapping('csr', base=0x40000000, remove_offset=0x40000000, size=0x10000)
-        self.bind(axi_ico, 'csr', self, 'csr')
-
-        # AXI -> UART ports
-        axi_ico.add_mapping('uart', base=0xc0000000, remove_offset=0xc0000000, size=0x100)
-        self.bind(axi_ico, 'uart', self, 'uart')
-
-        axi_ico.add_mapping('dma_ctrl', base=0x40010000, remove_offset=0x40010000, size=0x100)
-        self.bind(axi_ico, 'dma_ctrl', self, 'dma_ctrl')
-
-        # AXI -> Dummy Memory ports
-        axi_ico.add_mapping('dummy')
-        self.bind(axi_ico, 'dummy', self, 'dummy_mem')
+        
+        # AXI -> Remote AXI port
+        self.bind(axi_ico, 'output', self, 'axi_out')
 
         # Sync barrier
         for core_id in range(0, nb_cores_per_tile):

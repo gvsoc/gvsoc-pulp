@@ -79,29 +79,27 @@ class System(st.Component):
         #Dummy Memory
         dummy_mem = memory.Memory(self, 'dummy_mem', atomics=True, size=0x400000)
 
-        # Rom Router
-        rom_router = router.Router(self, 'rom_router', bandwidth=axi_data_width, latency=1)
-        rom_router.add_mapping('output')
+        # AXI Interconnect
+        axi_ico = []
+        for i in range(0, nb_groups):
+            axi_ico.append(router.Router(self, f'axi_ico_{i}', latency=0))
+            axi_ico[i].add_mapping('l2', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
+            axi_ico[i].add_mapping('soc')
 
-        # L2 Memory Router
-        l2_router = router.Router(self, 'l2_router', bandwidth=0, latency=1)
-        l2_router.add_mapping('output')
+        l2_ico = router.Router(self, 'l2_ico', latency=1)
+        l2_ico.add_mapping('output')
 
-        # CSR Router
-        csr_router = router.Router(self, 'csr_router', bandwidth=32, latency=1)
-        csr_router.add_mapping('output')
-        
-        # UART Router
-        uart_router = router.Router(self, 'uart_router', bandwidth=8, latency=1)
-        uart_router.add_mapping('output')
-        
-        # DMA Ctrl Router
-        dma_ctrl_router = router.Router(self, 'dma_ctrl_router', bandwidth=32, latency=1)
-        dma_ctrl_router.add_mapping('output')
+        soc_ico = router.Router(self, 'soc_ico')    # TODO: output bandwidth only
+        soc_ico.add_mapping('bootrom', base=0xa0000000, remove_offset=0xa0000000, size=0x10000, latency=1)
+        soc_ico.add_mapping('peripheral', base=0x40000000, size=0x20000, latency=1)
+        soc_ico.add_mapping('external', latency=1)
 
-        # Dummy Memory Router
-        dummy_mem_router = router.Router(self, 'dummy_mem_router', bandwidth=32, latency=1)
-        dummy_mem_router.add_mapping('output')
+        periph_ico = router.Router(self, 'periph_ico', bandwidth=4)
+        periph_ico.add_mapping('csr', base=0x40000000, remove_offset=0x40000000, size=0x10000, latency=1)
+        periph_ico.add_mapping('dma_ctrl', base=0x40010000, remove_offset=0x40010000, size=0x10000, latency=1)
+
+        ext_ico = router.Router(self, 'ext_ico', bandwidth=4)
+        ext_ico.add_mapping('uart', base=0xc0000000, remove_offset=0xc0000000, size=0x100, latency=1)
 
         # Binary Loader Router
         loader_router = router.Router(self, 'loader_router', bandwidth=32, latency=1)
@@ -111,35 +109,38 @@ class System(st.Component):
         ##########               Design Bindings              ##########
         ################################################################
 
-        #rom router
+        # Group axi port -> axi interconnect
         for i in range(0, nb_groups):
-            self.bind(mempool_cluster, 'rom_%d' % i, rom_router, 'input')
-        self.bind(rom_router,'output',rom, 'input')
+            self.bind(mempool_cluster, 'axi_%d' % i, axi_ico[i], 'input')
 
-        #l2 router
+        # L2 interconnect
         for i in range(0, nb_groups):
-            self.bind(mempool_cluster, 'L2_data_%d' % i, l2_router, 'input')
-        self.bind(l2_router,'output',l2_mem, 'input')
+            self.bind(axi_ico[i], 'l2', l2_ico, 'input')
 
-        #csr router
+        # SoC interconnect
         for i in range(0, nb_groups):
-            self.bind(mempool_cluster, 'csr_%d' % i, csr_router, 'input')
-        self.bind(csr_router,'output',csr, 'input')
-        
-        #uart router
-        for i in range(0, nb_groups):
-            self.bind(mempool_cluster, 'uart_%d' % i, uart_router, 'input')
-        self.bind(uart_router,'output',uart, 'input')
-        
-        #dma ctrl router
-        for i in range(0, nb_groups):
-            self.bind(mempool_cluster, 'dma_ctrl_%d' % i, dma_ctrl_router, 'input')
-        self.bind(dma_ctrl_router, 'output', dma, 'input')
+            self.bind(axi_ico[i], 'soc', soc_ico, 'input')
 
-        #dummy_mem router
-        for i in range(0, nb_groups):
-            self.bind(mempool_cluster, 'dummy_mem_%d' % i, dummy_mem_router, 'input')
-        self.bind(dummy_mem_router,'output',dummy_mem, 'input')
+        # Peripheral interconnect
+        self.bind(soc_ico, 'peripheral', periph_ico, 'input')
+
+        # External interconnect
+        self.bind(soc_ico, 'external', ext_ico, 'input')
+
+        # Bootrom
+        self.bind(soc_ico, 'bootrom', rom, 'input')
+
+        # L2
+        self.bind(l2_ico, 'output', l2_mem, 'input')
+
+        # CSR
+        self.bind(periph_ico, 'csr', csr, 'input')
+
+        # DMA Ctrl
+        self.bind(periph_ico, 'dma_ctrl', dma, 'input')
+
+        # UART
+        self.bind(ext_ico, 'uart', uart, 'input')
 
         #loader router
         self.bind(loader, 'start', mempool_cluster, 'loader_start')
@@ -163,7 +164,7 @@ class System(st.Component):
         # self.bind(dma, 'axi_write', l2_router, 'input')
         self.bind(dma, 'axi_read', dma_remove_offset, 'input')
         self.bind(dma, 'axi_write', dma_remove_offset, 'input')
-        self.bind(dma_remove_offset, 'output', l2_router, 'input')
+        self.bind(dma_remove_offset, 'output', l2_ico, 'input')
 
         self.bind(dma, 'tcdm_read', mempool_cluster, 'dma_tcdm')
         self.bind(dma, 'tcdm_write', mempool_cluster, 'dma_tcdm')
