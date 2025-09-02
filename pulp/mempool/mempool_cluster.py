@@ -100,12 +100,7 @@ class Cluster(st.Component):
                     self.bind(self, f'barrier_ack_{i*nb_cores_per_tile*nb_tiles_per_group+j*nb_cores_per_tile+k}', self.group_list[i], f'barrier_ack_{j*nb_cores_per_tile+k}')
 
         for i in range(0, nb_groups):
-            self.bind(self.group_list[i], 'rom', self, 'rom_%d' % i)
-            self.bind(self.group_list[i], 'L2_data', self, 'L2_data_%d' % i)
-            self.bind(self.group_list[i], 'csr', self, 'csr_%d' % i)
-            self.bind(self.group_list[i], 'uart', self, 'uart_%d' % i)
-            self.bind(self.group_list[i], 'dma_ctrl', self, 'dma_ctrl_%d' % i)
-            self.bind(self.group_list[i], 'dummy_mem', self, 'dummy_mem_%d' % i)
+            self.bind(self.group_list[i], 'axi_out', self, 'axi_%d' % i)
             self.bind(self, 'loader_start', self.group_list[i], 'loader_start')
             self.bind(self, 'loader_entry', self.group_list[i], 'loader_entry')
 
