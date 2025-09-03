@@ -233,14 +233,14 @@ class Group(st.Component):
                 group_remote_out_interfaces.append(tile_itf_list)
 
             # DMA TCDM Interface
-            dma_tcdm_itf = router.Router(self, f'dma_tcdm_itf', bandwidth=axi_data_width, latency=1, shared_rw_bandwidth=True)
+            dma_tcdm_itf = router.Router(self, f'dma_tcdm_itf', bandwidth=axi_data_width)
             dma_tcdm_itf.add_mapping('output')
 
             # DMA TCDM Interleaver
             dma_tcdm_interleaver = DmaInterleaver(self, f'dma_tcdm_interleaver', nb_master_ports=1, nb_banks=nb_tiles_per_group, bank_width=nb_banks_per_tile*4)
 
             # DMA AXI Interface
-            dma_axi_itf = router.Router(self, f'dma_axi_itf', bandwidth=axi_data_width, latency=1, shared_rw_bandwidth=True)
+            dma_axi_itf = router.Router(self, f'dma_axi_itf', bandwidth=axi_data_width)
             dma_axi_itf.add_mapping('output')
 
             # AXI Interconnect

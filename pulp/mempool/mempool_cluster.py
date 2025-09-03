@@ -62,18 +62,18 @@ class Cluster(st.Component):
                 nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width))
 
         # DMA TCDM Interface
-        dma_tcdm_itf = router.Router(self, f'dma_tcdm_itf', bandwidth=total_banks*4, latency=1, shared_rw_bandwidth=True)
+        dma_tcdm_itf = router.Router(self, f'dma_tcdm_itf')
         dma_tcdm_itf.add_mapping('output')
 
         # DMA TCDM Interleaver
         dma_tcdm_interleaver = DmaInterleaver(self, f'dma_tcdm_interleaver', nb_master_ports=1, nb_banks=nb_groups, bank_width=nb_banks_per_group*4)
 
         # DMA AXI Interface
-        dma_axi_itf = router.Router(self, f'dma_axi_itf', bandwidth=total_banks*4, latency=1, shared_rw_bandwidth=True)
+        dma_axi_itf = router.Router(self, f'dma_axi_itf')
         dma_axi_itf.add_mapping('output')
 
         # DMA AXI Interleaver
-        dma_axi_interleaver = Interleaver(self, f'dma_axi_interleaver', nb_masters=1, nb_slaves=nb_groups, interleaving_bits=nb_banks_per_group*4, offset_translation=False)
+        dma_axi_interleaver = Interleaver(self, f'dma_axi_interleaver', nb_masters=1, nb_slaves=nb_groups, interleaving_bits=int(math.log2(nb_banks_per_group*4)), offset_translation=False)
 
         ################################################################
         ##########               Design Bindings              ##########

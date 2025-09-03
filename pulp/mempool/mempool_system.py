@@ -31,12 +31,13 @@ import gvsoc.runner as gvsoc
 import math
 from pulp.mempool.mempool_cluster import Cluster
 from pulp.mempool.ctrl_registers import CtrlRegisters
+from pulp.mempool.l2_subsystem import L2_subsystem
 
 GAPY_TARGET = True
 
 class System(st.Component):
 
-    def __init__(self, parent, name, parser, terapool: bool=False, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64):
+    def __init__(self, parent, name, parser, terapool: bool=False, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1, l2_size: int=0x1000000, nb_l2_banks: int=4):
         super().__init__(parent, name)
 
         ################################################################
@@ -62,7 +63,8 @@ class System(st.Component):
         rom = memory.Memory(self, 'rom', size=0x1000, width_log2=(axi_data_width - 1).bit_length(), stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
 
         # L2 Memory
-        l2_mem = memory.Memory(self, 'l2_mem', size=0x1000000, width_log2=-1, atomics=True)
+        # Efficient bandwidth of each port is only 1/4 of axi_data_width in current design
+        l2_mem = L2_subsystem(self, 'l2_mem', nb_banks=nb_l2_banks, bank_width=axi_data_width, size=l2_size, nb_masters=nb_axi_masters_per_group*nb_groups, port_bandwidth=axi_data_width//4)
 
         # CSR
         csr = CtrlRegisters(self, 'ctrl_registers', wakeup_latency=18 if terapool else 15)
@@ -83,11 +85,8 @@ class System(st.Component):
         axi_ico = []
         for i in range(0, nb_groups):
             axi_ico.append(router.Router(self, f'axi_ico_{i}', latency=0))
-            axi_ico[i].add_mapping('l2', base=0x80000000, size=0x1000000)
+            axi_ico[i].add_mapping('l2', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
             axi_ico[i].add_mapping('soc')
-
-        l2_ico = router.Router(self, 'l2_ico', latency=1)
-        l2_ico.add_mapping('output', remove_offset=0x80000000)
 
         soc_ico = router.Router(self, 'soc_ico')    # TODO: output bandwidth only
         soc_ico.add_mapping('bootrom', base=0xa0000000, remove_offset=0xa0000000, size=0x10000, latency=1)
@@ -113,10 +112,6 @@ class System(st.Component):
         for i in range(0, nb_groups):
             self.bind(mempool_cluster, 'axi_%d' % i, axi_ico[i], 'input')
 
-        # L2 interconnect
-        for i in range(0, nb_groups):
-            self.bind(axi_ico[i], 'l2', l2_ico, 'input')
-
         # SoC interconnect
         for i in range(0, nb_groups):
             self.bind(axi_ico[i], 'soc', soc_ico, 'input')
@@ -131,7 +126,8 @@ class System(st.Component):
         self.bind(soc_ico, 'bootrom', rom, 'input')
 
         # L2
-        self.bind(l2_ico, 'output', l2_mem, 'input')
+        for i in range(0, nb_groups):
+            self.bind(axi_ico[i], 'l2', l2_mem, 'input_%d' % i)
 
         # CSR
         self.bind(periph_ico, 'csr', csr, 'input')
@@ -150,7 +146,7 @@ class System(st.Component):
         loader_router.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
         loader_router.add_mapping('rom', base=0xa0000000, remove_offset=0xa0000000, size=0x1000)
         loader_router.add_mapping('csr', base=0x40000000, remove_offset=0x40000000, size=0x10000)
-        self.bind(loader_router, 'mem', l2_mem, 'input')
+        self.bind(loader_router, 'mem', l2_mem, 'input_loader')
         self.bind(loader_router, 'rom', rom, 'input')
         self.bind(loader_router, 'csr', csr, 'input')
         self.bind(loader_router, 'dummy', dummy_mem, 'input')
