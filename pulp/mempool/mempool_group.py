@@ -45,24 +45,38 @@ class Group(st.Component):
     def __init__(self, parent, name, parser, terapool: bool=False, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64):
         super().__init__(parent, name)
 
+        ################################################################
+        ##########               Design Variables             ##########
+        ################################################################
+        # Hardware parameters
         if terapool:
-
-            ################################################################
-            ##########               Design Variables             ##########
-            ################################################################
-            # Hardware parameters
             nb_remote_group_ports = nb_groups - 1
             nb_tiles_per_sub_group = int((total_cores/nb_groups/nb_sub_groups_per_group)/nb_cores_per_tile)
+            nb_banks_per_sub_group = int((total_cores/nb_groups/nb_sub_groups_per_group)) * bank_factor
+        else:
+            nb_remote_ports = nb_groups - 1
+            nb_tiles_per_group = int((total_cores/nb_groups)/nb_cores_per_tile)
+            nb_banks_per_tile = nb_cores_per_tile * bank_factor
 
-            ################################################################
-            ##########              Design Components             ##########
-            ################################################################
+        ################################################################
+        ##########              Design Components             ##########
+        ################################################################
+        # Next-level components
+        if terapool:
             # Sub groups
             self.sub_group_list = []
             for i in range(0, nb_sub_groups_per_group):
                 self.sub_group_list.append(Sub_group(self,f'sub_group_{i}',parser=parser, sub_group_id=i, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
-                    nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor))
+                    nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width))
+        else:
+            # TIles
+            self.tile_list = []
+            for i in range(0, nb_tiles_per_group):
+                self.tile_list.append(Tile(self,f'tile_{i}',parser=parser, tile_id=i, sub_group_id=0, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
+                    nb_sub_groups_per_group=1, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width))
 
+        # TCDM Interconnect
+        if terapool:
             #Group Remote Slave Interconnect
             group_remote_master_interleavers = []
             for i in range(0, nb_remote_group_ports):
@@ -75,48 +89,74 @@ class Group(st.Component):
                 for i in range(0, nb_sub_groups_per_group):
                     tile_itf_list = []
                     for j in range(0, nb_tiles_per_sub_group):
-                        itf = router.Router(self, f'group_remote_out_itf{port}_sg{i}_tile{j}', bandwidth=4, latency=4)
+                        itf = router.Router(self, f'group_remote_out_itf{port}_sg{i}_tile{j}', latency=4)
                         itf.add_mapping('output')
                         tile_itf_list.append(itf)
                     sub_group_itf_list.append(tile_itf_list)
                 group_remote_out_interfaces.append(sub_group_itf_list)
+        else:
+            #Group local interconnect
+            group_local_interleaver = Interleaver(self, 'group_local_interleaver', nb_slaves=nb_tiles_per_group, nb_masters=nb_tiles_per_group,
+                interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor)), offset_translation=False)
 
-            group_remote_in_interfaces = []
-            for port in range(0, nb_remote_group_ports):
-                sub_group_itf_list = []
-                for i in range(0, nb_sub_groups_per_group):
-                    tile_itf_list = []
-                    for j in range(0, nb_tiles_per_sub_group):
-                        itf = router.Router(self, f'group_remote_in_itf{port}_sg{i}_tile{j}', latency=0)
-                        itf.add_mapping('output')
-                        tile_itf_list.append(itf)
-                    sub_group_itf_list.append(tile_itf_list)
-                group_remote_in_interfaces.append(sub_group_itf_list)
+            #Group Remote Slave Interconnect
+            group_remote_master_interleavers = []
+            for i in range(0, nb_remote_ports):
+                group_remote_master_interleavers.append(Interleaver(self, f'group_remote_slave_interleaver_{i}', nb_slaves=nb_tiles_per_group, nb_masters=nb_tiles_per_group, interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor)), offset_translation=False))
 
-            #rom router
-            rom_router = router.Router(self, 'rom_router', bandwidth=axi_data_width, latency=1)
-            rom_router.add_mapping('output')
+            group_remote_out_interfaces = []
+            for port in range(0, nb_remote_ports):
+                tile_itf_list = []
+                for i in range(0, nb_tiles_per_group):
+                    itf = router.Router(self, f'group_remote_out_itf{port}_tile{i}', latency=2 if nb_tiles_per_group>1 else 0)
+                    itf.add_mapping('output')
+                    tile_itf_list.append(itf)
+                group_remote_out_interfaces.append(tile_itf_list)
 
-            #l2 router
-            l2_router = router.Router(self, 'l2_router', bandwidth=0, latency=1)
-            l2_router.add_mapping('output')
+        # DMA network(virtual, to emulate multiple backends)
+        if terapool:
+            # DMA TCDM Interface
+            dma_tcdm_itf = router.Router(self, f'dma_tcdm_itf')
+            dma_tcdm_itf.add_mapping('output')
 
-            #csr router
-            csr_router = router.Router(self, 'csr_router', bandwidth=32, latency=1)
-            csr_router.add_mapping('output')
+            # DMA TCDM Interleaver
+            dma_tcdm_interleaver = DmaInterleaver(self, f'dma_tcdm_interleaver', nb_master_ports=1, nb_banks=nb_sub_groups_per_group, bank_width=nb_banks_per_sub_group*4)
 
-            #uart router
-            uart_router = router.Router(self, 'uart_router', bandwidth=8, latency=1)
-            uart_router.add_mapping('output')
+            # DMA AXI Interface
+            dma_axi_itf = router.Router(self, f'dma_axi_itf')
+            dma_axi_itf.add_mapping('output')
 
-            #dummy_mem router
-            dummy_mem_router = router.Router(self, 'dummy_mem_router', bandwidth=32, latency=1)
-            dummy_mem_router.add_mapping('output')
+            # DMA AXI Interleaver
+            dma_axi_interleaver = Interleaver(self, f'dma_axi_interleaver', nb_masters=1, nb_slaves=nb_sub_groups_per_group, interleaving_bits=int(math.log2(nb_banks_per_sub_group*4)), offset_translation=False)
+        else:
+            # DMA TCDM Interface
+            dma_tcdm_itf = router.Router(self, f'dma_tcdm_itf', bandwidth=axi_data_width)
+            dma_tcdm_itf.add_mapping('output')
 
-            ################################################################
-            ##########               Design Bindings              ##########
-            ################################################################
+            # DMA TCDM Interleaver
+            dma_tcdm_interleaver = DmaInterleaver(self, f'dma_tcdm_interleaver', nb_master_ports=1, nb_banks=nb_tiles_per_group, bank_width=nb_banks_per_tile*4)
 
+            # DMA AXI Interface
+            dma_axi_itf = router.Router(self, f'dma_axi_itf', bandwidth=axi_data_width)
+            dma_axi_itf.add_mapping('output')
+
+        # Group-level AXI Interconnect, does not exist in Terapool
+        if not terapool:
+            # L2 cache rules
+            l2_cache_rules = []
+            l2_cache_rules.append((0x0000000C, 0x00000010))
+            l2_cache_rules.append((0x00000008, 0x0000000C))
+            l2_cache_rules.append((0xA0000000, 0xA0001000))
+            l2_cache_rules.append((0x80000000, 0x80001000))
+
+            # AXI Interconnect
+            axi_ico = Hierarchical_Interco(self, 'axi_ico', enable_cache=True, cache_rules=l2_cache_rules, bandwidth=axi_data_width)
+
+        ################################################################
+        ##########               Design Bindings              ##########
+        ################################################################
+        # TCDM Interconnect
+        if terapool:
             #Sub group master output -> Sub group slave input
             for ini in range(0, nb_sub_groups_per_group):
                 for tgt in range(0, nb_sub_groups_per_group):
@@ -138,126 +178,7 @@ class Group(st.Component):
                 for i in range(0, nb_sub_groups_per_group):
                     for j in range(0, nb_tiles_per_sub_group):
                         self.bind(group_remote_master_interleavers[port], 'out_%d' % (j + i * nb_tiles_per_sub_group), group_remote_out_interfaces[port][i][j], 'input')
-
-            #Group remote routers -> Tile remote slave
-            for port in range(0, nb_remote_group_ports):
-                for i in range(0, nb_sub_groups_per_group):
-                    for j in range(0, nb_tiles_per_sub_group):
-                        self.bind(group_remote_in_interfaces[port][i][j], 'output', self.sub_group_list[i], f'grp_remt{port}_tile{j}_slave_in')
-
-            #Tile rom -> rom router
-            for i in range(0, nb_sub_groups_per_group):
-                self.bind(self.sub_group_list[i], 'rom', rom_router, 'input')
-
-            #Tile l2 data -> l2 router
-            for i in range(0, nb_sub_groups_per_group):
-                self.bind(self.sub_group_list[i], 'L2_data', l2_router, 'input')
-
-            #Tile l2 data -> csr router
-            for i in range(0, nb_sub_groups_per_group):
-                self.bind(self.sub_group_list[i], 'csr', csr_router, 'input')
-
-            #Tile uart -> uart router
-            for i in range(0, nb_sub_groups_per_group):
-                self.bind(self.sub_group_list[i], 'uart', uart_router, 'input')
-
-            #Tile l2 data -> dummy_mem router
-            for i in range(0, nb_sub_groups_per_group):
-                self.bind(self.sub_group_list[i], 'dummy_mem', dummy_mem_router, 'input')
-
-            #Group loader -> Tile loader
-            for i in range(0, nb_sub_groups_per_group):
-                self.bind(self, 'loader_start', self.sub_group_list[i], 'loader_start')
-                self.bind(self, 'loader_entry', self.sub_group_list[i], 'loader_entry')
-
-            ################################################################
-            ##########               Group Interfaces             ##########
-            ################################################################
-
-            # Remote TCDM interface between tiles to the group
-            for port in range(0, nb_remote_group_ports):
-                for i in range(0, nb_sub_groups_per_group):
-                    for j in range(0, nb_tiles_per_sub_group):
-                        self.bind(self, f'grp_remt{port+1}_sg{i}_tile{j}_slave_in', group_remote_in_interfaces[port][i][j], 'input')
-                        self.bind(group_remote_out_interfaces[port][i][j], 'output', self, f'grp_remt{port+1}_sg{i}_tile{j}_master_out')
-
-            # Propagate the barrier signals from the tiles to the group boundary
-            for i in range(0, nb_sub_groups_per_group):
-                for j in range(0, nb_tiles_per_sub_group):
-                    for k in range(0, nb_cores_per_tile):
-                        self.bind(self, f'barrier_ack_{i*nb_tiles_per_sub_group*nb_cores_per_tile+j*nb_cores_per_tile+k}',
-                                  self.sub_group_list[i], f'barrier_ack_{j*nb_cores_per_tile+k}')
-
-            # Other signals propagated to the group interface
-            self.bind(rom_router, 'output', self, 'rom')
-            self.bind(l2_router, 'output', self, 'L2_data')
-            self.bind(csr_router, 'output', self, 'csr')
-            self.bind(uart_router, 'output', self, 'uart')
-            self.bind(dummy_mem_router, 'output', self, 'dummy_mem')
-
         else:
-
-            ################################################################
-            ##########               Design Variables             ##########
-            ################################################################
-            # Hardware parameters
-            nb_remote_ports = nb_groups - 1
-            nb_tiles_per_group = int((total_cores/nb_groups)/nb_cores_per_tile)
-            nb_banks_per_group = int(total_cores/nb_groups) * bank_factor
-            nb_banks_per_tile = nb_cores_per_tile * bank_factor
-
-            ################################################################
-            ##########              Design Components             ##########
-            ################################################################
-            # TIles
-            self.tile_list = []
-            for i in range(0, nb_tiles_per_group):
-                self.tile_list.append(Tile(self,f'tile_{i}',parser=parser,tile_id=i, sub_group_id=0, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
-                    nb_sub_groups_per_group=1, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor))
-
-            #Group local interconnect
-            group_local_interleaver = Interleaver(self, 'group_local_interleaver', nb_slaves=nb_tiles_per_group, nb_masters=nb_tiles_per_group,
-                interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor)), offset_translation=False)
-
-            #Group Remote Slave Interconnect
-            group_remote_master_interleavers = []
-            for i in range(0, nb_remote_ports):
-                group_remote_master_interleavers.append(Interleaver(self, f'group_remote_slave_interleaver_{i}', nb_slaves=nb_tiles_per_group, nb_masters=nb_tiles_per_group, interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor)), offset_translation=False))
-
-            group_remote_out_interfaces = []
-            for port in range(0, nb_remote_ports):
-                tile_itf_list = []
-                for i in range(0, nb_tiles_per_group):
-                    itf = router.Router(self, f'group_remote_out_itf{port}_tile{i}', bandwidth=4, latency=2 if nb_tiles_per_group>1 else 0)
-                    itf.add_mapping('output')
-                    tile_itf_list.append(itf)
-                group_remote_out_interfaces.append(tile_itf_list)
-
-            # DMA TCDM Interface
-            dma_tcdm_itf = router.Router(self, f'dma_tcdm_itf', bandwidth=axi_data_width)
-            dma_tcdm_itf.add_mapping('output')
-
-            # DMA TCDM Interleaver
-            dma_tcdm_interleaver = DmaInterleaver(self, f'dma_tcdm_interleaver', nb_master_ports=1, nb_banks=nb_tiles_per_group, bank_width=nb_banks_per_tile*4)
-
-            # DMA AXI Interface
-            dma_axi_itf = router.Router(self, f'dma_axi_itf', bandwidth=axi_data_width)
-            dma_axi_itf.add_mapping('output')
-
-            # L2 cache rules
-            l2_cache_rules = []
-            l2_cache_rules.append((0x0000000C, 0x00000010))
-            l2_cache_rules.append((0x00000008, 0x0000000C))
-            l2_cache_rules.append((0xA0000000, 0xA0001000))
-            l2_cache_rules.append((0x80000000, 0x80001000))
-
-            # AXI Interconnect
-            axi_ico = Hierarchical_Interco(self, 'axi_ico', enable_cache=True, cache_rules=l2_cache_rules, bandwidth=axi_data_width)
-
-            ################################################################
-            ##########               Design Bindings              ##########
-            ################################################################
-
             #Tile local master -> Group local interconnect
             for i in range(0, nb_tiles_per_group):
                 self.bind(self.tile_list[i], 'loc_remt_master_out', group_local_interleaver, 'in_%d' % i)
@@ -276,40 +197,81 @@ class Group(st.Component):
                 for i in range(0, nb_tiles_per_group):
                     self.bind(group_remote_master_interleavers[port], 'out_%d' % i, group_remote_out_interfaces[port][i], 'input')
 
+        # AXI Interconnect, does not exist on Terapool
+        if not terapool:
             # Tile axi port -> axi interconnect
             for i in range(0, nb_tiles_per_group):
                 self.bind(self.tile_list[i], 'axi_out', axi_ico, 'input')
 
+        # DMA network(virtual, to emulate multiple backends)
+        self.bind(dma_tcdm_itf, 'output', dma_tcdm_interleaver, 'input')
+        if terapool:
+            for i in range(0, nb_sub_groups_per_group):
+                self.bind(dma_tcdm_interleaver, f'out_{i}', self.sub_group_list[i], 'dma_tcdm')
+        else:
+            for i in range(0, nb_tiles_per_group):
+                self.bind(dma_tcdm_interleaver, f'out_{i}', self.tile_list[i], 'dma_tcdm')
+
+        if terapool:
+            self.bind(dma_axi_itf, 'output', dma_axi_interleaver, 'in_0')
+            for i in range(0, nb_sub_groups_per_group):
+                self.bind(dma_axi_interleaver, f'out_{i}', self.sub_group_list[i], 'dma_axi')
+        else:
+            self.bind(dma_axi_itf, 'output', axi_ico, 'input')
+
+        # Loader
+        if terapool:
+            #Group loader -> Sub group loader
+            for i in range(0, nb_sub_groups_per_group):
+                self.bind(self, 'loader_start', self.sub_group_list[i], 'loader_start')
+                self.bind(self, 'loader_entry', self.sub_group_list[i], 'loader_entry')
+        else:
             #Group loader -> Tile loader
             for i in range(0, nb_tiles_per_group):
                 self.bind(self, 'loader_start', self.tile_list[i], 'loader_start')
                 self.bind(self, 'loader_entry', self.tile_list[i], 'loader_entry')
 
-            self.bind(dma_tcdm_itf, 'output', dma_tcdm_interleaver, 'input')
 
-            for i in range(0, nb_tiles_per_group):
-                self.bind(dma_tcdm_interleaver, f'out_{i}', self.tile_list[i], 'dma_tcdm')
+        ################################################################
+        ##########               Group Interfaces             ##########
+        ################################################################
+        # TCDM interface
+        if terapool:
+            # Remote TCDM interface between tiles to the group
+            for port in range(0, nb_remote_group_ports):
+                for i in range(0, nb_sub_groups_per_group):
+                    for j in range(0, nb_tiles_per_sub_group):
+                        self.bind(self, f'grp_remt{port+1}_sg{i}_tile{j}_slave_in', self.sub_group_list[i], f'grp_remt{port}_tile{j}_slave_in')
+                        self.bind(group_remote_out_interfaces[port][i][j], 'output', self, f'grp_remt{port+1}_sg{i}_tile{j}_master_out')
 
-            self.bind(dma_axi_itf, 'output', axi_ico, 'input')
-
-            ################################################################
-            ##########               Group Interfaces             ##########
-            ################################################################
-
+        else:
             # Remote TCDM interface between tiles to the group
             for port in range(0, nb_remote_ports):
                 for i in range(0, nb_tiles_per_group):
                     self.bind(self, f'grp_remt{port+1}_tile{i}_slave_in', self.tile_list[i], f'grp_remt{port}_slave_in')
                     self.bind(group_remote_out_interfaces[port][i], 'output', self, f'grp_remt{port+1}_tile{i}_master_out')
 
+        # Barrier
+        if terapool:
+            # Propagate the barrier signals from the tiles to the group boundary
+            for i in range(0, nb_sub_groups_per_group):
+                for j in range(0, nb_tiles_per_sub_group):
+                    for k in range(0, nb_cores_per_tile):
+                        self.bind(self, f'barrier_ack_{i*nb_tiles_per_sub_group*nb_cores_per_tile+j*nb_cores_per_tile+k}',
+                                  self.sub_group_list[i], f'barrier_ack_{j*nb_cores_per_tile+k}')
+        else:
             # Propagate the barrier signals from the tiles to the group boundary
             for i in range(0, nb_tiles_per_group):
                 for j in range(0, nb_cores_per_tile):
                     self.bind(self, f'barrier_ack_{i*nb_cores_per_tile+j}', self.tile_list[i], f'barrier_ack_{j}')
 
-            # AXI
-            self.bind(axi_ico, 'output', self, 'axi_out')
+        # AXI
+        if terapool:
+            for i in range(0, nb_sub_groups_per_group):
+                self.bind(self.sub_group_list[i], 'axi_out', self, 'axi_out_%d' % i)
+        else:
+            self.bind(axi_ico, 'output', self, 'axi_out_0')
 
-            # DMA
-            self.bind(self, 'dma_tcdm', dma_tcdm_itf, 'input')
-            self.bind(self, 'dma_axi', dma_axi_itf, 'input')
+        # DMA
+        self.bind(self, 'dma_tcdm', dma_tcdm_itf, 'input')
+        self.bind(self, 'dma_axi', dma_axi_itf, 'input')

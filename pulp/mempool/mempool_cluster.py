@@ -40,7 +40,7 @@ GAPY_TARGET = True
 
 class Cluster(st.Component):
 
-    def __init__(self, parent, name, parser, terapool: bool=False, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64):
+    def __init__(self, parent, name, parser, terapool: bool=False, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1):
         super().__init__(parent, name)
 
         ################################################################
@@ -107,9 +107,12 @@ class Cluster(st.Component):
                     self.bind(self, f'barrier_ack_{i*nb_cores_per_tile*nb_tiles_per_group+j*nb_cores_per_tile+k}', self.group_list[i], f'barrier_ack_{j*nb_cores_per_tile+k}')
 
         for i in range(0, nb_groups):
-            self.bind(self.group_list[i], 'axi_out', self, 'axi_%d' % i)
             self.bind(self, 'loader_start', self.group_list[i], 'loader_start')
             self.bind(self, 'loader_entry', self.group_list[i], 'loader_entry')
+
+        for i in range(0, nb_groups):
+            for j in range(0, nb_axi_masters_per_group):
+                self.bind(self.group_list[i], f'axi_out_{j}', self, 'axi_%d' % (i * nb_axi_masters_per_group + j))
 
         self.bind(self, 'dma_tcdm', dma_tcdm_itf, 'input')
         self.bind(dma_tcdm_itf, 'output', dma_tcdm_interleaver, 'input')

@@ -51,20 +51,23 @@ class System(st.Component):
             [args, otherArgs] = parser.parse_known_args()
             binary = args.binary
 
+        nb_axi_masters = nb_axi_masters_per_group * nb_groups
+
         ################################################################
         ##########              Design Components             ##########
         ################################################################ 
 
         #Mempool cluster
         mempool_cluster=Cluster(self,'mempool_cluster',terapool=terapool, parser=parser, nb_cores_per_tile=nb_cores_per_tile,
-            nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor)
+            nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor,
+            axi_data_width=axi_data_width, nb_axi_masters_per_group=nb_axi_masters_per_group)
 
         # Boot Rom
         rom = memory.Memory(self, 'rom', size=0x1000, width_log2=(axi_data_width - 1).bit_length(), stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
 
         # L2 Memory
         # Efficient bandwidth of each port is only 1/4 of axi_data_width in current design
-        l2_mem = L2_subsystem(self, 'l2_mem', nb_banks=nb_l2_banks, bank_width=axi_data_width, size=l2_size, nb_masters=nb_axi_masters_per_group*nb_groups, port_bandwidth=axi_data_width//4)
+        l2_mem = L2_subsystem(self, 'l2_mem', nb_banks=nb_l2_banks, bank_width=axi_data_width, size=l2_size, nb_masters=nb_axi_masters, port_bandwidth=axi_data_width//4)
 
         # CSR
         csr = CtrlRegisters(self, 'ctrl_registers', wakeup_latency=18 if terapool else 15)
@@ -83,7 +86,7 @@ class System(st.Component):
 
         # AXI Interconnect
         axi_ico = []
-        for i in range(0, nb_groups):
+        for i in range(0, nb_axi_masters):
             axi_ico.append(router.Router(self, f'axi_ico_{i}', latency=0))
             axi_ico[i].add_mapping('l2', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
             axi_ico[i].add_mapping('soc')
@@ -109,11 +112,11 @@ class System(st.Component):
         ################################################################
 
         # Group axi port -> axi interconnect
-        for i in range(0, nb_groups):
+        for i in range(0, nb_axi_masters):
             self.bind(mempool_cluster, 'axi_%d' % i, axi_ico[i], 'input')
 
         # SoC interconnect
-        for i in range(0, nb_groups):
+        for i in range(0, nb_axi_masters):
             self.bind(axi_ico[i], 'soc', soc_ico, 'input')
 
         # Peripheral interconnect
@@ -126,7 +129,7 @@ class System(st.Component):
         self.bind(soc_ico, 'bootrom', rom, 'input')
 
         # L2
-        for i in range(0, nb_groups):
+        for i in range(0, nb_axi_masters):
             self.bind(axi_ico[i], 'l2', l2_mem, 'input_%d' % i)
 
         # CSR
@@ -182,7 +185,7 @@ class MinpoolSystem(st.Component):
 
         clock = Clock_domain(self, 'clock', frequency=500000000)
 
-        soc = System(self, 'mempool_soc', parser, nb_cores_per_tile=4, nb_groups=4, total_cores=16, bank_factor=4, axi_data_width=32)
+        soc = System(self, 'mempool_soc', parser, total_cores=16, axi_data_width=32)
 
         self.bind(clock, 'out', soc, 'clock')
 
@@ -194,6 +197,6 @@ class TerapoolSystem(st.Component):
 
         clock = Clock_domain(self, 'clock', frequency=500000000)
 
-        soc = System(self, 'mempool_soc', parser, terapool=True, nb_cores_per_tile=8, nb_sub_groups_per_group=4, nb_groups=4, total_cores=1024, bank_factor=4, axi_data_width=64)
+        soc = System(self, 'mempool_soc', parser, terapool=True, nb_cores_per_tile=8, nb_sub_groups_per_group=4, total_cores=1024, nb_axi_masters_per_group=4, nb_l2_banks=16)
 
         self.bind(clock, 'out', soc, 'clock')

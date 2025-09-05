@@ -35,6 +35,7 @@ from elftools.elf.elffile import *
 import gvsoc.runner as gvsoc
 import math
 from pulp.mempool.mempool_tile import Tile
+from pulp.mempool.hierarchical_interco import Hierarchical_Interco
 
 GAPY_TARGET = True
 
@@ -50,6 +51,7 @@ class Sub_group(st.Component):
         nb_remote_group_ports = nb_groups - 1
         nb_remote_sub_group_ports = nb_sub_groups_per_group - 1
         nb_tiles_per_sub_group = int((total_cores/nb_groups/nb_sub_groups_per_group)/nb_cores_per_tile)
+        nb_banks_per_tile = nb_cores_per_tile * bank_factor
 
         ################################################################
         ##########              Design Components             ##########
@@ -73,30 +75,33 @@ class Sub_group(st.Component):
         for port in range(0, nb_remote_group_ports):
             tile_itf_list = []
             for i in range(0, nb_tiles_per_sub_group):
-                itf = router.Router(self, f'sub_group_remote_out_itf{port}_tile{i}', bandwidth=4, latency=2)
+                itf = router.Router(self, f'sub_group_remote_out_itf{port}_tile{i}', latency=2)
                 itf.add_mapping('output')
                 tile_itf_list.append(itf)
             sub_group_out_interfaces.append(tile_itf_list)
 
-        #rom router
-        rom_router = router.Router(self, 'rom_router', bandwidth=axi_data_width, latency=1)
-        rom_router.add_mapping('output')
+        # DMA network(virtual, to emulate multiple backends)
+        # DMA TCDM Interface
+        dma_tcdm_itf = router.Router(self, f'dma_tcdm_itf', bandwidth=axi_data_width)
+        dma_tcdm_itf.add_mapping('output')
 
-        #l2 router
-        l2_router = router.Router(self, 'l2_router', bandwidth=axi_data_width, latency=1)
-        l2_router.add_mapping('output')
+        # DMA TCDM Interleaver
+        dma_tcdm_interleaver = DmaInterleaver(self, f'dma_tcdm_interleaver', nb_master_ports=1, nb_banks=nb_tiles_per_sub_group, bank_width=nb_banks_per_tile*4)
 
-        #csr router
-        csr_router = router.Router(self, 'csr_router', bandwidth=32, latency=1)
-        csr_router.add_mapping('output')
+        # DMA AXI Interface
+        dma_axi_itf = router.Router(self, f'dma_axi_itf', bandwidth=axi_data_width)
+        dma_axi_itf.add_mapping('output')
 
-        #uart router
-        uart_router = router.Router(self, 'uart_router', bandwidth=8, latency=1)
-        uart_router.add_mapping('output')
+        # SG-level AXI Interconnect
+        # L2 cache rules
+        l2_cache_rules = []
+        l2_cache_rules.append((0x0000000C, 0x00000010))
+        l2_cache_rules.append((0x00000008, 0x0000000C))
+        l2_cache_rules.append((0xA0000000, 0xA0001000))
+        l2_cache_rules.append((0x80000000, 0x80001000))
 
-        #dummy_mem router
-        dummy_mem_router = router.Router(self, 'dummy_mem_router', bandwidth=32, latency=1)
-        dummy_mem_router.add_mapping('output')
+        # AXI Interconnect
+        axi_ico = Hierarchical_Interco(self, 'axi_ico', enable_cache=True, cache_rules=l2_cache_rules, bandwidth=axi_data_width)
 
         ################################################################
         ##########               Design Bindings              ##########
@@ -120,25 +125,15 @@ class Sub_group(st.Component):
             for i in range(0, nb_tiles_per_sub_group):
                 self.bind(sub_group_remote_master_interleavers[port], 'out_%d' % i, sub_group_out_interfaces[port][i], 'input')
 
-        #Tile rom -> rom router
+        #Tile axi port -> axi interconnect
         for i in range(0, nb_tiles_per_sub_group):
-            self.bind(self.tile_list[i], 'rom', rom_router, 'input')
+           self.bind(self.tile_list[i], 'axi_out', axi_ico, 'input')
 
-        #Tile l2 data -> l2 router
+        # DMA network(virtual, to emulate multiple backends)
+        self.bind(dma_tcdm_itf, 'output', dma_tcdm_interleaver, 'input')
         for i in range(0, nb_tiles_per_sub_group):
-            self.bind(self.tile_list[i], 'L2_data', l2_router, 'input')
-
-        #Tile l2 data -> csr router
-        for i in range(0, nb_tiles_per_sub_group):
-            self.bind(self.tile_list[i], 'csr', csr_router, 'input')
-
-        #Tile uart -> uart router
-        for i in range(0, nb_tiles_per_sub_group):
-            self.bind(self.tile_list[i], 'uart', uart_router, 'input')
-
-        #Tile l2 data -> dummy_mem router
-        for i in range(0, nb_tiles_per_sub_group):
-            self.bind(self.tile_list[i], 'dummy_mem', dummy_mem_router, 'input')
+            self.bind(dma_tcdm_interleaver, f'out_{i}', self.tile_list[i], 'dma_tcdm')
+        self.bind(dma_axi_itf, 'output', axi_ico, 'input')
 
         #Group loader -> Tile loader
         for i in range(0, nb_tiles_per_sub_group):
@@ -166,9 +161,9 @@ class Sub_group(st.Component):
             for j in range(0, nb_cores_per_tile):
                 self.bind(self, f'barrier_ack_{i*nb_cores_per_tile+j}', self.tile_list[i], f'barrier_ack_{j}')
 
-        # Other signals propagated to the group interface
-        self.bind(rom_router, 'output', self, 'rom')
-        self.bind(l2_router, 'output', self, 'L2_data')
-        self.bind(csr_router, 'output', self, 'csr')
-        self.bind(uart_router, 'output', self, 'uart')
-        self.bind(dummy_mem_router, 'output', self, 'dummy_mem')
+        # AXI
+        self.bind(axi_ico, 'output', self, 'axi_out')
+
+        # DMA
+        self.bind(self, 'dma_tcdm', dma_tcdm_itf, 'input')
+        self.bind(self, 'dma_axi', dma_axi_itf, 'input')
