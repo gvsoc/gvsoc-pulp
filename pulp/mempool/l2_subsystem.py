@@ -62,7 +62,7 @@ class L2_subsystem(gvsoc.systree.Component):
         l2_banks = []
         for i in range(0, nb_banks):
             l2_bank = Memory(self, 'l2_bank%d' % i, size=bank_size, width_log2=int(math.log(bank_width, 2.0)),
-                            latency=3, atomics=True)
+                            latency=1, atomics=True)
             l2_banks.append(l2_bank)
 
         l2_interleaver = Interleaver(self, 'l2_interleaver', nb_slaves=nb_banks, nb_masters=nb_masters+1,
