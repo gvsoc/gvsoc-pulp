@@ -22,9 +22,9 @@ class MagiaArch:
 
     # Extra
     BYTES_PER_WORD      = 4
-    TILE_CLK_FREQ       = 1 * (10 ** 9)
+    TILE_CLK_FREQ       = 200 * (10 ** 6)
 
-    ENABLE_NOC          = False
-    N_TILES_X           = 8
-    N_TILES_Y           = 8
+    ENABLE_NOC          = True
+    N_TILES_X           = 2
+    N_TILES_Y           = 2
     NB_CLUSTERS         = N_TILES_X*N_TILES_Y

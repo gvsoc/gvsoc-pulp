@@ -104,7 +104,7 @@ class MagiaTile(gvsoc.systree.Component):
 
         # Temporary test interconnects (use obi to access TCDM), to be refined later
         tile_xbar = router.Router(self, f'tile-{tid}-tile-xbar',bandwidth=4,latency=2)
-        obi_xbar = router.Router(self, f'tile-{tid}-obi-xbar',bandwidth=4,latency=2)
+        obi_xbar = router.Router(self, f'tile-{tid}-obi-xbar',bandwidth=4,latency=0)
 
         # IDMA Controller
         idma_ctrl= Magia_iDMA_Ctrl(self,f'tile-{tid}-idma-ctrl')

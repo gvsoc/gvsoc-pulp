@@ -59,7 +59,7 @@ bool Router::handle_request(vp::IoReq *req, int from_x, int from_y)
 
     // And push it to the queue. The queue will automatically trigger the FSM if needed
     vp::Queue *queue = this->input_queues[queue_index];
-    queue->push_back(req, 1); // The queue has an intrinsic delay of 1. With this additional delay, we model the fact that a real router takes 2 cycles to forward a request
+    queue->push_back(req, 8); // The queue has an intrinsic delay of 1. With this additional delay, we model the fact that a real router takes 2 cycles to forward a request
 
     // We let the source enqueue one more request than what is possible to model the fact the fact
     // the request is stalled. This will then stall the source which will not send any request there
