@@ -158,6 +158,9 @@ class System(st.Component):
         for i in range(0, total_cores):
             self.bind(csr, f'barrier_ack', mempool_cluster, f'barrier_ack_{i}')
 
+        #L2 ro-cache configuration
+        self.bind(csr, 'rocache_cfg', mempool_cluster, 'rocache_cfg')
+
         #DMA data
         #To emulate distributed backends in groups
         self.bind(dma, 'axi_read', mempool_cluster, 'dma_axi')

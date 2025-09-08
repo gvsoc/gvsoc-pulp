@@ -114,6 +114,9 @@ class Cluster(st.Component):
             for j in range(0, nb_axi_masters_per_group):
                 self.bind(self.group_list[i], f'axi_out_{j}', self, 'axi_%d' % (i * nb_axi_masters_per_group + j))
 
+        for i in range(0, nb_groups):
+            self.bind(self, 'rocache_cfg', self.group_list[i], 'rocache_cfg')
+
         self.bind(self, 'dma_tcdm', dma_tcdm_itf, 'input')
         self.bind(dma_tcdm_itf, 'output', dma_tcdm_interleaver, 'input')
         

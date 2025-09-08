@@ -161,6 +161,9 @@ class Sub_group(st.Component):
             for j in range(0, nb_cores_per_tile):
                 self.bind(self, f'barrier_ack_{i*nb_cores_per_tile+j}', self.tile_list[i], f'barrier_ack_{j}')
 
+        # L2 ro-cache configuration
+        self.bind(self, 'rocache_cfg', axi_ico, 'rocache_cfg')
+
         # AXI
         self.bind(axi_ico, 'output', self, 'axi_out')
 
