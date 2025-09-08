@@ -23,6 +23,7 @@
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
+#include <cpu/iss/include/offload.hpp>
 
 
 class CtrlRegisters : public vp::Component
@@ -38,6 +39,7 @@ private:
     vp::Trace trace;
     vp::IoSlave input_itf;
     vp::WireMaster<bool> barrier_ack_itf;
+    vp::WireMaster<IssOffloadInsn<uint32_t>*> rocache_cfg_itf;
     vp::ClockEvent * wakeup_event;
     int wakeup_latency;
 };
@@ -52,6 +54,7 @@ CtrlRegisters::CtrlRegisters(vp::ComponentConf &config)
 
     this->new_slave_port("input", &this->input_itf);
     this->new_master_port("barrier_ack", &this->barrier_ack_itf);
+    this->new_master_port("rocache_cfg", &this->rocache_cfg_itf);
     this->wakeup_event = this->event_new(&CtrlRegisters::wakeup_event_handler);
     wakeup_latency = get_js_config()->get_child_int("wakeup_latency");
 }
@@ -86,6 +89,14 @@ vp::IoReqStatus CtrlRegisters::req(vp::Block *__this, vp::IoReq *req)
         if (offset == 4 && value == 0xFFFFFFFF)
         {
             _this->event_enqueue(_this->wakeup_event, 1000);
+        }
+        if (offset == 0x50)
+        {
+            IssOffloadInsn<uint32_t> insn;
+            insn.arg_a = 3;
+            insn.arg_b = 1;
+            insn.arg_c = value;
+            _this->rocache_cfg_itf.sync(&insn);
         }
     }
 

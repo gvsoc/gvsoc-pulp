@@ -19,7 +19,7 @@ import gvsoc.systree
 from typing import List, Tuple
 from cache.cache import Cache
 from interco.router import Router
-from interco.interleaver import Interleaver
+from pulp.mempool.cache_filter import CacheFilter
 import math
 
 
@@ -47,13 +47,15 @@ class Hierarchical_Interco(gvsoc.systree.Component):
         cache = Cache(self, 'cache', nb_sets_bits=int(math.log2(nb_cache_sets)), nb_ways_bits=int(math.log2(nb_ways)),
                       line_size_bits=int(math.log2(cache_line_width)), enabled=enable_cache)
 
-        input_itf = Router(self, 'input_itf', bandwidth=bandwidth)
-        
-        for i, rule in enumerate(cache_rules):
-            input_itf.add_mapping('cache_rule_%d' % i, base=rule[0], size=rule[1]-rule[0], latency=1)
-            self.bind(input_itf, 'cache_rule_%d' % i, cache, 'input')
-        input_itf.add_mapping('bypass')
+        input_itf = Router(self, 'input_itf', bandwidth=bandwidth, latency=2)
+        input_itf.add_mapping("output")
 
+        filter = CacheFilter(self, 'filter', bypass=False, cache_rules=cache_rules, cache_latency=2)
+        
+        self.bind(input_itf, 'output', filter, 'input')
+        self.bind(filter, 'cache', cache, 'input')
+        
         self.bind(self, 'input', input_itf, 'input')
-        self.bind(input_itf, 'bypass', self, 'output')
+        self.bind(filter, 'bypass', self, 'output')
         self.bind(cache, 'refill', self, 'output')
+        self.bind(self, 'rocache_cfg', filter, 'config')

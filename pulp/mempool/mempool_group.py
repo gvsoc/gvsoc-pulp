@@ -265,6 +265,13 @@ class Group(st.Component):
                 for j in range(0, nb_cores_per_tile):
                     self.bind(self, f'barrier_ack_{i*nb_cores_per_tile+j}', self.tile_list[i], f'barrier_ack_{j}')
 
+        # L2 ro-cache configuration
+        if terapool:
+            for i in range(0, nb_sub_groups_per_group):
+                self.bind(self, 'rocache_cfg', self.sub_group_list[i], 'rocache_cfg')
+        else:
+            self.bind(self, 'rocache_cfg', axi_ico, 'rocache_cfg')
+
         # AXI
         if terapool:
             for i in range(0, nb_sub_groups_per_group):
