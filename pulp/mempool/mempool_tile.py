@@ -20,7 +20,7 @@
 import gvsoc.runner
 import pulp.snitch.snitch_core as iss
 from memory.memory import Memory
-from pulp.snitch.hierarchical_cache import Hierarchical_cache
+from pulp.mempool.hierarchical_cache import Hierarchical_cache
 from vp.clock_domain import Clock_domain
 import pulp.mempool.l1_subsystem as l1_subsystem
 import interco.router as router
@@ -84,7 +84,7 @@ class Tile(st.Component):
                                         nb_remote_sub_group_masters=nb_remote_sub_group_ports, nb_pe=nb_cores_per_tile, \
                                         size=mem_size, bandwidth=4, nb_banks_per_tile=nb_cores_per_tile*bank_factor, axi_data_width=axi_data_width)
         # Shared icache
-        icache = Hierarchical_cache(self, 'shared_icache', nb_cores=nb_cores_per_tile, has_cc=0, l1_line_size_bits=7)
+        icache = Hierarchical_cache(self, 'shared_icache', nb_cores=nb_cores_per_tile)
 
         # Address Scrambler
         addr_scrambler_list = []
