@@ -42,10 +42,15 @@ class Hierarchical_Interco(gvsoc.systree.Component):
                  cache_line_width: int=64, cache_size: int=8192, nb_cache_sets: int=2):
         super(Hierarchical_Interco, self).__init__(parent, name)
 
-        nb_ways = cache_size // (cache_line_width * nb_cache_sets)
+        nb_sets = 2
+        nb_lines = cache_size / (cache_line_width * nb_sets)
 
-        cache = Cache(self, 'cache', nb_sets_bits=int(math.log2(nb_cache_sets)), nb_ways_bits=int(math.log2(nb_ways)),
-                      line_size_bits=int(math.log2(cache_line_width)), enabled=enable_cache)
+        nb_sets_bits = int(math.log2(nb_lines))
+        nb_ways_bits = int(math.log2(nb_sets))
+        line_size_bits = int(math.log2(cache_line_width))
+
+        cache = Cache(self, 'cache', nb_sets_bits=nb_sets_bits, nb_ways_bits=nb_ways_bits,
+                      line_size_bits=line_size_bits, enabled=enable_cache)
 
         input_itf = Router(self, 'input_itf', bandwidth=bandwidth, latency=2)
         input_itf.add_mapping("output")
