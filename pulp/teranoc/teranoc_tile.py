@@ -17,25 +17,13 @@
 # Author: Yinrong Li (ETH Zurich) (yinrli@student.ethz.ch)
 #         Yichao Zhang (ETH Zurich) (yiczhang@iis.ee.ethz.ch)
 
-import gvsoc.runner
 import pulp.snitch.snitch_core as iss
-from memory.memory import Memory
-from pulp.snitch.hierarchical_cache import Hierarchical_cache
-from vp.clock_domain import Clock_domain
+from pulp.mempool.hierarchical_cache import Hierarchical_cache
 import pulp.teranoc.l1_subsystem as l1_subsystem
 import interco.router as router
-import utils.loader.loader
 import gvsoc.systree as st
-from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
-from pulp.idma.snitch_dma import SnitchDma
-from interco.bus_watchpoint import Bus_watchpoint
 from pulp.snitch.sequencer import Sequencer
-from pulp.spatz.cluster_registers import Cluster_registers
 from pulp.mempool.address_scrambler import AddressScrambler
-from elftools.elf.elffile import *
-import math
-
-GAPY_TARGET = True
 
 class Tile(st.Component):
 
@@ -44,13 +32,8 @@ class Tile(st.Component):
 
         [args, __] = parser.parse_known_args()
 
-        binary = None
-        if parser is not None:
-            [args, otherArgs] = parser.parse_known_args()
-            binary = args.binary
-
         # Set it to true to swtich to snitch new fast model
-        fast_model = False
+        fast_model = True
 
         ################################################################
         ##########               Design Variables             ##########
@@ -77,9 +60,10 @@ class Tile(st.Component):
                                         tile_id=tile_id, group_id=group_id, nb_tiles_per_group=nb_tiles_per_group, \
                                         nb_groups=nb_groups, nb_remote_local_masters=1, \
                                         nb_remote_group_masters=nb_remote_ports_per_tile, nb_pe=nb_cores_per_tile, \
-                                        size=mem_size, bandwidth=4, nb_banks_per_tile=nb_cores_per_tile*bank_factor)
+                                        size=mem_size, bandwidth=4, nb_banks_per_tile=nb_cores_per_tile*bank_factor, \
+                                        axi_data_width=axi_data_width)
         # Shared icache
-        icache = Hierarchical_cache(self, 'shared_icache', nb_cores=nb_cores_per_tile, has_cc=0, l1_line_size_bits=7)
+        icache = Hierarchical_cache(self, 'shared_icache', nb_cores=nb_cores_per_tile)
 
         # Address Scrambler
         addr_scrambler_list = []
@@ -94,6 +78,7 @@ class Tile(st.Component):
         for i in range(0, nb_cores_per_tile):
             ico_list.append(router.Router(self, 'ico%d' % i, bandwidth=4, latency=0))
         axi_ico = router.Router(self, 'axi_ico', bandwidth=axi_data_width, latency=1)
+        axi_ico.add_mapping('output', latency=1)
 
         # Core Complex
         for core_id in range(0, nb_cores_per_tile):
@@ -135,6 +120,8 @@ class Tile(st.Component):
             self.bind(self, f'grp_remt{i}_slave_in', l1, f'remote_group_in{i}')
             self.bind(l1, f'remote_group_out{i}', self, f'grp_remt{i}_master_out')
 
+        self.bind(self, 'dma_tcdm', l1, 'dma')
+
         # ICO -> AXI -> L2 Memory
         for i in range(0, nb_cores_per_tile):
             # Add default mapping for the others
@@ -150,26 +137,9 @@ class Tile(st.Component):
 
         # Icache -> AXI
         self.bind(icache, 'refill', axi_ico, 'input')
-
-        # AXI <-> ROM ports
-        axi_ico.add_mapping('rom', base=0xa0000000, remove_offset=0xa0000000, size=0x1000)
-        self.bind(axi_ico, 'rom', self, 'rom')
-
-        # AXI <-> L2 Memory ports
-        axi_ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
-        self.bind(axi_ico, 'mem', self, 'L2_data')
-
-        # AXI -> CSR ports
-        axi_ico.add_mapping('csr', base=0x40000000, remove_offset=0x40000000, size=0x10000)
-        self.bind(axi_ico, 'csr', self, 'csr')
-
-        # AXI -> UART ports
-        axi_ico.add_mapping('uart', base=0xc0000000, remove_offset=0xc0000000, size=0x100)
-        self.bind(axi_ico, 'uart', self, 'uart')
-
-        # AXI -> Dummy Memory ports
-        axi_ico.add_mapping('dummy')
-        self.bind(axi_ico, 'dummy', self, 'dummy_mem')
+        
+        # AXI -> Remote AXI port
+        self.bind(axi_ico, 'output', self, 'axi_out')
 
         # Sync barrier
         for core_id in range(0, nb_cores_per_tile):
