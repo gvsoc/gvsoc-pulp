@@ -17,27 +17,13 @@
 # Author: Yichao Zhang (ETH Zurich) (yiczhang@iis.ee.ethz.ch)
 #         Yinrong Li (ETH Zurich) (yinrli@student.ethz.ch)
 
-import gvsoc.runner
-import cpu.iss.riscv as iss
-from memory.memory import Memory
-from pulp.snitch.hierarchical_cache import Hierarchical_cache
-from vp.clock_domain import Clock_domain
-import pulp.mempool.l1_subsystem as l1_subsystem
-import interco.router as router
-import utils.loader.loader
 import gvsoc.systree as st
+import interco.router as router
 from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 from interco.interleaver import Interleaver
-from pulp.idma.snitch_dma import SnitchDma
-from interco.bus_watchpoint import Bus_watchpoint
-from pulp.spatz.cluster_registers import Cluster_registers
-from elftools.elf.elffile import *
-import gvsoc.runner as gvsoc
 import math
 from pulp.mempool.mempool_tile import Tile
 from pulp.mempool.hierarchical_interco import Hierarchical_Interco
-
-GAPY_TARGET = True
 
 class Sub_group(st.Component):
 

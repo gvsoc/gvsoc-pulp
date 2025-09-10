@@ -17,8 +17,6 @@
 # Author: Yichao Zhang (ETH Zurich) (yiczhang@iis.ee.ethz.ch)
 #         Yinrong Li (ETH Zurich) (yinrli@student.ethz.ch)
 
-import gvsoc.runner
-import cpu.iss.riscv as iss
 import memory.memory as memory
 from vp.clock_domain import Clock_domain
 import interco.router as router
@@ -27,13 +25,9 @@ import utils.loader.loader
 import gvsoc.systree as st
 from pulp.mempool.mempool_dma import MemPoolDma
 from elftools.elf.elffile import *
-import gvsoc.runner as gvsoc
-import math
 from pulp.mempool.mempool_cluster import Cluster
 from pulp.mempool.ctrl_registers import CtrlRegisters
 from pulp.mempool.l2_subsystem import L2_subsystem
-
-GAPY_TARGET = True
 
 class System(st.Component):
 

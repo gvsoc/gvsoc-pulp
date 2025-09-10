@@ -17,26 +17,12 @@
 # Author: Yichao Zhang (ETH Zurich) (yiczhang@iis.ee.ethz.ch)
 #         Yinrong Li (ETH Zurich) (yinrli@student.ethz.ch)
 
-import gvsoc.runner
-import cpu.iss.riscv as iss
-from memory.memory import Memory
-from pulp.snitch.hierarchical_cache import Hierarchical_cache
-from vp.clock_domain import Clock_domain
-import pulp.mempool.l1_subsystem as l1_subsystem
 import interco.router as router
-import utils.loader.loader
 import gvsoc.systree as st
 from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 from interco.interleaver import Interleaver
-from pulp.idma.snitch_dma import SnitchDma
-from interco.bus_watchpoint import Bus_watchpoint
-from pulp.spatz.cluster_registers import Cluster_registers
-from elftools.elf.elffile import *
-import gvsoc.runner as gvsoc
 import math
 from pulp.mempool.mempool_group import Group
-
-GAPY_TARGET = True
 
 class Cluster(st.Component):
 
@@ -47,9 +33,7 @@ class Cluster(st.Component):
         ##########               Design Variables             ##########
         ################################################################
         # Hardware parameters 
-        nb_remote_ports_per_group = nb_groups - 1
         nb_tiles_per_group = int((total_cores/nb_groups)/nb_cores_per_tile)
-        total_banks = total_cores * bank_factor
         nb_banks_per_group = int(total_cores/nb_groups) * bank_factor
 
         ################################################################
