@@ -17,28 +17,21 @@
 # Author: Yinrong Li (ETH Zurich) (yinrli@student.ethz.ch)
 #         Yichao Zhang (ETH Zurich) (yiczhang@iis.ee.ethz.ch)
 
-import gvsoc.runner
-import cpu.iss.riscv as iss
 import memory.memory as memory
-from pulp.snitch.hierarchical_cache import Hierarchical_cache
 from vp.clock_domain import Clock_domain
-import pulp.mempool.l1_subsystem as l1_subsystem
 import interco.router as router
 import devices.uart.ns16550 as ns16550
 import utils.loader.loader
 import gvsoc.systree as st
-from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
-from pulp.idma.snitch_dma import SnitchDma
+from pulp.mempool.mempool_dma import MemPoolDma
 from elftools.elf.elffile import *
-import math
 from pulp.teranoc.teranoc_cluster import Cluster
 from pulp.mempool.ctrl_registers import CtrlRegisters
-
-GAPY_TARGET = True
+from pulp.mempool.l2_subsystem import L2_subsystem
 
 class System(st.Component):
 
-    def __init__(self, parent, name, parser, terapool: bool=False, nb_cores_per_tile: int=4, nb_x_groups: int=4, nb_y_groups: int=4, total_cores: int= 256, nb_remote_ports_per_tile: int=2, bank_factor: int=4, axi_data_width: int=64):
+    def __init__(self, parent, name, parser, terapool: bool=False, nb_cores_per_tile: int=4, nb_x_groups: int=4, nb_y_groups: int=4, total_cores: int= 256, nb_remote_ports_per_tile: int=2, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1, l2_size: int=0x1000000, nb_l2_banks: int=4):
         super().__init__(parent, name)
 
         ################################################################
@@ -53,27 +46,32 @@ class System(st.Component):
             binary = args.binary
 
         nb_groups = nb_x_groups * nb_y_groups
+        nb_axi_masters = nb_axi_masters_per_group * nb_groups
 
         ################################################################
         ##########              Design Components             ##########
         ################################################################ 
 
         #Mempool cluster
-        mempool_cluster=Cluster(self,'mempool_cluster',terapool=terapool, parser=parser, nb_cores_per_tile=nb_cores_per_tile, \
+        mempool_cluster=Cluster(self,'mempool_cluster',parser=parser, nb_cores_per_tile=nb_cores_per_tile, \
             nb_x_groups=nb_x_groups, nb_y_groups=nb_y_groups, total_cores=total_cores, nb_remote_ports_per_tile=nb_remote_ports_per_tile, \
-            bank_factor=bank_factor, axi_data_width=axi_data_width)
+            bank_factor=bank_factor, axi_data_width=axi_data_width, nb_axi_masters_per_group=nb_axi_masters_per_group)
 
         # Boot Rom
         rom = memory.Memory(self, 'rom', size=0x1000, width_log2=(axi_data_width - 1).bit_length(), stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
 
         # L2 Memory
-        l2_mem = memory.Memory(self, 'l2_mem', size=0x1000000, width_log2=-1, atomics=True)
+        # Efficient bandwidth of each port is only 1/4 of axi_data_width in current design
+        l2_mem = L2_subsystem(self, 'l2_mem', nb_banks=nb_l2_banks, bank_width=axi_data_width, size=l2_size, nb_masters=nb_axi_masters, port_bandwidth=axi_data_width//4)
 
         # CSR
         csr = CtrlRegisters(self, 'ctrl_registers', wakeup_latency=18 if terapool else 15)
-        
+
+        # UART        
         uart = ns16550.Ns16550(self, 'uart')
-        # uart = memory.Memory(self, 'uart', size=0x100, width_log2=3, atomics=True)
+
+        # DMA
+        dma = MemPoolDma(self, 'dma', loc_base=0x0, loc_size=0x400000, tcdm_width=total_cores*bank_factor*4)
 
         # Binary Loader
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x80000000)
@@ -81,25 +79,24 @@ class System(st.Component):
         #Dummy Memory
         dummy_mem = memory.Memory(self, 'dummy_mem', atomics=True, size=0x400000)
 
-        # Rom Router
-        rom_router = router.Router(self, 'rom_router', bandwidth=axi_data_width, latency=1)
-        rom_router.add_mapping('output')
+        # AXI Interconnect
+        axi_ico = []
+        for i in range(0, nb_axi_masters):
+            axi_ico.append(router.Router(self, f'axi_ico_{i}', latency=0))
+            axi_ico[i].add_mapping('l2', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
+            axi_ico[i].add_mapping('soc')
 
-        # L2 Memory Router
-        l2_router = router.Router(self, 'l2_router', bandwidth=0, latency=1)
-        l2_router.add_mapping('output')
+        soc_ico = router.Router(self, 'soc_ico')    # TODO: output bandwidth only
+        soc_ico.add_mapping('bootrom', base=0xa0000000, remove_offset=0xa0000000, size=0x10000, latency=1)
+        soc_ico.add_mapping('peripheral', base=0x40000000, size=0x20000, latency=1)
+        soc_ico.add_mapping('external', latency=1)
 
-        # CSR Router
-        csr_router = router.Router(self, 'csr_router', bandwidth=32, latency=1)
-        csr_router.add_mapping('output')
-        
-        # UART Router
-        uart_router = router.Router(self, 'uart_router', bandwidth=8, latency=1)
-        uart_router.add_mapping('output')
+        periph_ico = router.Router(self, 'periph_ico', bandwidth=4)
+        periph_ico.add_mapping('csr', base=0x40000000, remove_offset=0x40000000, size=0x10000, latency=1)
+        periph_ico.add_mapping('dma_ctrl', base=0x40010000, remove_offset=0x40010000, size=0x10000, latency=1)
 
-        # Dummy Memory Router
-        dummy_mem_router = router.Router(self, 'dummy_mem_router', bandwidth=32, latency=1)
-        dummy_mem_router.add_mapping('output')
+        ext_ico = router.Router(self, 'ext_ico', bandwidth=4)
+        ext_ico.add_mapping('uart', base=0xc0000000, remove_offset=0xc0000000, size=0x100, latency=1)
 
         # Binary Loader Router
         loader_router = router.Router(self, 'loader_router', bandwidth=32, latency=1)
@@ -109,30 +106,35 @@ class System(st.Component):
         ##########               Design Bindings              ##########
         ################################################################
 
-        #rom router
-        for i in range(0, nb_groups):
-            self.bind(mempool_cluster, 'rom_%d' % i, rom_router, 'input')
-        self.bind(rom_router,'output',rom, 'input')
+        # Group axi port -> axi interconnect
+        for i in range(0, nb_axi_masters):
+            self.bind(mempool_cluster, 'axi_%d' % i, axi_ico[i], 'input')
 
-        #l2 router
-        for i in range(0, nb_groups):
-            self.bind(mempool_cluster, 'L2_data_%d' % i, l2_router, 'input')
-        self.bind(l2_router,'output',l2_mem, 'input')
+        # SoC interconnect
+        for i in range(0, nb_axi_masters):
+            self.bind(axi_ico[i], 'soc', soc_ico, 'input')
 
-        #csr router
-        for i in range(0, nb_groups):
-            self.bind(mempool_cluster, 'csr_%d' % i, csr_router, 'input')
-        self.bind(csr_router,'output',csr, 'input')
-        
-        #uart router
-        for i in range(0, nb_groups):
-            self.bind(mempool_cluster, 'uart_%d' % i, uart_router, 'input')
-        self.bind(uart_router,'output',uart, 'input')
+        # Peripheral interconnect
+        self.bind(soc_ico, 'peripheral', periph_ico, 'input')
 
-        #dummy_mem router
-        for i in range(0, nb_groups):
-            self.bind(mempool_cluster, 'dummy_mem_%d' % i, dummy_mem_router, 'input')
-        self.bind(dummy_mem_router,'output',dummy_mem, 'input')
+        # External interconnect
+        self.bind(soc_ico, 'external', ext_ico, 'input')
+
+        # Bootrom
+        self.bind(soc_ico, 'bootrom', rom, 'input')
+
+        # L2
+        for i in range(0, nb_axi_masters):
+            self.bind(axi_ico[i], 'l2', l2_mem, 'input_%d' % i)
+
+        # CSR
+        self.bind(periph_ico, 'csr', csr, 'input')
+
+        # DMA Ctrl
+        self.bind(periph_ico, 'dma_ctrl', dma, 'input')
+
+        # UART
+        self.bind(ext_ico, 'uart', uart, 'input')
 
         #loader router
         self.bind(loader, 'start', mempool_cluster, 'loader_start')
@@ -142,7 +144,7 @@ class System(st.Component):
         loader_router.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
         loader_router.add_mapping('rom', base=0xa0000000, remove_offset=0xa0000000, size=0x1000)
         loader_router.add_mapping('csr', base=0x40000000, remove_offset=0x40000000, size=0x10000)
-        self.bind(loader_router, 'mem', l2_mem, 'input')
+        self.bind(loader_router, 'mem', l2_mem, 'input_loader')
         self.bind(loader_router, 'rom', rom, 'input')
         self.bind(loader_router, 'csr', csr, 'input')
         self.bind(loader_router, 'dummy', dummy_mem, 'input')
@@ -151,8 +153,18 @@ class System(st.Component):
         for i in range(0, total_cores):
             self.bind(csr, f'barrier_ack', mempool_cluster, f'barrier_ack_{i}')
 
+        #L2 ro-cache configuration
+        self.bind(csr, 'rocache_cfg', mempool_cluster, 'rocache_cfg')
+
+        #DMA data
+        #To emulate distributed backends in groups
+        self.bind(dma, 'axi_read', mempool_cluster, 'dma_axi')
+        self.bind(dma, 'axi_write', mempool_cluster, 'dma_axi')
+        self.bind(dma, 'tcdm_read', mempool_cluster, 'dma_tcdm')
+        self.bind(dma, 'tcdm_write', mempool_cluster, 'dma_tcdm')
+
 class TeranocSystem(st.Component):
-    
+
     def __init__(self, parent, name, parser, options):
 
         super(TeranocSystem, self).__init__(parent, name, options=options)
@@ -164,14 +176,14 @@ class TeranocSystem(st.Component):
         self.bind(clock, 'out', soc, 'clock')
 
 class MempoolNocSystem(st.Component):
-    
+
     def __init__(self, parent, name, parser, options):
 
         super(MempoolNocSystem, self).__init__(parent, name, options=options)
 
         clock = Clock_domain(self, 'clock', frequency=500000000)
 
-        soc = System(self, 'mempool_noc_soc', parser, terapool=False, nb_cores_per_tile=4, nb_x_groups=2, nb_y_groups=2, total_cores=256, nb_remote_ports_per_tile=2, bank_factor=4, axi_data_width=64)
+        soc = System(self, 'mempool_noc_soc', parser, terapool=False, nb_cores_per_tile=4, nb_x_groups=2, nb_y_groups=2, total_cores=256, nb_remote_ports_per_tile=2, bank_factor=4, axi_data_width=64, nb_axi_masters_per_group=4, nb_l2_banks=16)
 
         self.bind(clock, 'out', soc, 'clock')
 
