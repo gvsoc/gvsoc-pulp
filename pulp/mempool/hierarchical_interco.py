@@ -22,7 +22,6 @@ from interco.router import Router
 from pulp.mempool.cache_filter import CacheFilter
 import math
 
-
 class Hierarchical_Interco(gvsoc.systree.Component):
     """
     Hierarchical interconnect for cluster AXI

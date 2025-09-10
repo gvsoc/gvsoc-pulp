@@ -17,26 +17,13 @@
 # Author: Yichao Zhang (ETH Zurich) (yiczhang@iis.ee.ethz.ch)
 #         Yinrong Li (ETH Zurich) (yinrli@student.ethz.ch)
 
-import gvsoc.runner
 import pulp.snitch.snitch_core as iss
-from memory.memory import Memory
 from pulp.mempool.hierarchical_cache import Hierarchical_cache
-from vp.clock_domain import Clock_domain
 import pulp.mempool.l1_subsystem as l1_subsystem
 import interco.router as router
-import utils.loader.loader
 import gvsoc.systree as st
-from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
-from pulp.idma.snitch_dma import SnitchDma
-from interco.bus_watchpoint import Bus_watchpoint
 from pulp.snitch.sequencer import Sequencer
-from pulp.spatz.cluster_registers import Cluster_registers
 from pulp.mempool.address_scrambler import AddressScrambler
-from elftools.elf.elffile import *
-import gvsoc.runner as gvsoc
-import math
-
-GAPY_TARGET = True
 
 class Tile(st.Component):
 
@@ -44,11 +31,6 @@ class Tile(st.Component):
         super().__init__(parent, name)
 
         [args, __] = parser.parse_known_args()
-
-        binary = None
-        if parser is not None:
-            [args, otherArgs] = parser.parse_known_args()
-            binary = args.binary
 
         # Set it to true to swtich to snitch new fast model
         fast_model = True

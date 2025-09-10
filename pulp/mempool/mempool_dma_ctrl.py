@@ -15,7 +15,6 @@
 #
 
 import gvsoc.systree
-from pulp.idma.snitch_dma import SnitchDma
 
 class MemPoolDmaCtrl(gvsoc.systree.Component):
 
