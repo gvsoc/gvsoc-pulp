@@ -195,7 +195,8 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             core_id: int=0,
             htif: bool=False, vlen: int=512, spatz_nb_lanes=4,
             pulp_v2: bool=False,
-            nb_outstanding: int=1
+            nb_outstanding: int=1,
+            wakeup_counter: bool=False
         ):
 
         isa_instance = isa_instances.get(isa)
@@ -230,6 +231,9 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
 
         if pulp_v2:
             self.add_c_flags([f'-DCONFIG_GVSOC_ISS_SNITCH_PULP_V2=1'])
+
+        if wakeup_counter:
+            self.add_c_flags([f'-DCONFIG_GVSOC_ISS_EXEC_WAKEUP_COUNTER=1'])
 
         self.add_c_flags([
             "-DPIPELINE_STAGES=1",
