@@ -45,6 +45,14 @@ class Cluster(st.Component):
             self.group_list.append(Group(self,f'group_{i}',parser=parser,terapool=terapool, group_id=i, nb_cores_per_tile=nb_cores_per_tile, 
                 nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width))
 
+        # AXI Interface
+        if terapool:
+            axi_itf = []
+            for i in range(0, nb_groups * nb_axi_masters_per_group):
+                itf = router.Router(self, f'axi_itf_{i}', bandwidth=axi_data_width, latency=2)
+                itf.add_mapping('output')
+                axi_itf.append(itf)
+
         # DMA TCDM Interface
         dma_tcdm_itf = router.Router(self, f'dma_tcdm_itf')
         dma_tcdm_itf.add_mapping('output')
@@ -94,9 +102,16 @@ class Cluster(st.Component):
             self.bind(self, 'loader_start', self.group_list[i], 'loader_start')
             self.bind(self, 'loader_entry', self.group_list[i], 'loader_entry')
 
-        for i in range(0, nb_groups):
-            for j in range(0, nb_axi_masters_per_group):
-                self.bind(self.group_list[i], f'axi_out_{j}', self, 'axi_%d' % (i * nb_axi_masters_per_group + j))
+        if terapool:
+            for i in range(0, nb_groups):
+                for j in range(0, nb_axi_masters_per_group):
+                    self.bind(self.group_list[i], f'axi_out_{j}', axi_itf[i * nb_axi_masters_per_group + j], 'input')
+            for i in range(0, nb_groups * nb_axi_masters_per_group):
+                self.bind(axi_itf[i], 'output', self, f'axi_{i}')
+        else:
+            for i in range(0, nb_groups):
+                for j in range(0, nb_axi_masters_per_group):
+                    self.bind(self.group_list[i], f'axi_out_{j}', self, 'axi_%d' % (i * nb_axi_masters_per_group + j))
 
         for i in range(0, nb_groups):
             self.bind(self, 'rocache_cfg', self.group_list[i], 'rocache_cfg')

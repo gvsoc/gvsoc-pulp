@@ -81,7 +81,7 @@ class Tile(st.Component):
         for i in range(0, nb_cores_per_tile):
             ico_list.append(router.Router(self, 'ico%d' % i, bandwidth=4, latency=0))
         axi_ico = router.Router(self, 'axi_ico', bandwidth=axi_data_width, latency=1)
-        axi_ico.add_mapping('output', latency=1)
+        axi_ico.add_mapping('output')
 
         # Core Complex
         for core_id in range(0, nb_cores_per_tile):
@@ -132,7 +132,7 @@ class Tile(st.Component):
         # ICO -> AXI -> L2 Memory
         for i in range(0, nb_cores_per_tile):
             # Add default mapping for the others
-            ico_list[i].add_mapping('axi')
+            ico_list[i].add_mapping('axi', latency=4)
             self.bind(ico_list[i], 'axi', axi_ico, 'input')
 
         ###########################################################
