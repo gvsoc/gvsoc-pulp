@@ -88,7 +88,7 @@ vp::IoReqStatus CtrlRegisters::req(vp::Block *__this, vp::IoReq *req)
         }
         if (offset == 4 && value == 0xFFFFFFFF)
         {
-            _this->event_enqueue(_this->wakeup_event, 1000);
+            _this->event_enqueue(_this->wakeup_event, _this->wakeup_latency);
         }
         if (offset == 0x50)
         {
