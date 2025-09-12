@@ -88,7 +88,7 @@ class Tile(st.Component):
             if fast_model:
                 self.int_cores.append(iss.SnitchFast(self, f'pe{core_id}', isa="rv32imaf",
                     core_id=group_id*nb_sub_groups_per_group*nb_tiles_per_sub_group*nb_cores_per_tile+sub_group_id*nb_tiles_per_sub_group*nb_cores_per_tile+tile_id*nb_cores_per_tile+core_id,
-                    htif=False, pulp_v2=True
+                    htif=False, pulp_v2=True, wakeup_counter=True
                 ))
             else:
                 self.int_cores.append(iss.Snitch(self, f'pe{core_id}', isa="rv32imaf", htif=False, \
