@@ -88,6 +88,8 @@ class Sub_group(st.Component):
 
         # AXI Interconnect
         axi_ico = Hierarchical_Interco(self, 'axi_ico', enable_cache=True, cache_rules=l2_cache_rules, bandwidth=axi_data_width)
+        axi_itf = router.Router(self, 'axi_itf', bandwidth=axi_data_width, latency=2)
+        axi_itf.add_mapping('output')
 
         ################################################################
         ##########               Design Bindings              ##########
@@ -114,6 +116,9 @@ class Sub_group(st.Component):
         #Tile axi port -> axi interconnect
         for i in range(0, nb_tiles_per_sub_group):
            self.bind(self.tile_list[i], 'axi_out', axi_ico, 'input')
+
+        # axi interconnect -> axi port
+        self.bind(axi_ico, 'output', axi_itf, 'input')
 
         # DMA network(virtual, to emulate multiple backends)
         self.bind(dma_tcdm_itf, 'output', dma_tcdm_interleaver, 'input')
@@ -151,7 +156,7 @@ class Sub_group(st.Component):
         self.bind(self, 'rocache_cfg', axi_ico, 'rocache_cfg')
 
         # AXI
-        self.bind(axi_ico, 'output', self, 'axi_out')
+        self.bind(axi_itf, 'output', self, 'axi_out')
 
         # DMA
         self.bind(self, 'dma_tcdm', dma_tcdm_itf, 'input')

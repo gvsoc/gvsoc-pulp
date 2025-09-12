@@ -138,6 +138,17 @@ class Group(st.Component):
             # AXI Interconnect
             axi_ico = Hierarchical_Interco(self, 'axi_ico', enable_cache=True, cache_rules=l2_cache_rules, bandwidth=axi_data_width)
 
+        # AXI Interface
+        if terapool:
+            axi_itf = []
+            for i in range(0, nb_sub_groups_per_group):
+                itf = router.Router(self, f'axi_itf_{i}', bandwidth=axi_data_width, latency=2)
+                itf.add_mapping('output')
+                axi_itf.append(itf)
+        else:
+            axi_itf = router.Router(self, 'axi_itf', bandwidth=axi_data_width, latency=2)
+            axi_itf.add_mapping('output')
+
         ################################################################
         ##########               Design Bindings              ##########
         ################################################################
@@ -188,6 +199,13 @@ class Group(st.Component):
             # Tile axi port -> axi interconnect
             for i in range(0, nb_tiles_per_group):
                 self.bind(self.tile_list[i], 'axi_out', axi_ico, 'input')
+
+        # AXI Interface
+        if terapool:
+            for i in range(0, nb_sub_groups_per_group):
+                self.bind(self.sub_group_list[i], 'axi_out', axi_itf[i], 'input')
+        else:
+            self.bind(axi_ico, 'output', axi_itf, 'input')
 
         # DMA network(virtual, to emulate multiple backends)
         self.bind(dma_tcdm_itf, 'output', dma_tcdm_interleaver, 'input')
@@ -261,9 +279,9 @@ class Group(st.Component):
         # AXI
         if terapool:
             for i in range(0, nb_sub_groups_per_group):
-                self.bind(self.sub_group_list[i], 'axi_out', self, 'axi_out_%d' % i)
+                self.bind(axi_itf[i], 'output', self, f'axi_out_{i}')
         else:
-            self.bind(axi_ico, 'output', self, 'axi_out_0')
+            self.bind(axi_itf, 'output', self, 'axi_out_0')
 
         # DMA
         self.bind(self, 'dma_tcdm', dma_tcdm_itf, 'input')

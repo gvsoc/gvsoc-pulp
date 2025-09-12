@@ -54,7 +54,7 @@ class Hierarchical_Interco(gvsoc.systree.Component):
         input_itf = Router(self, 'input_itf', bandwidth=bandwidth, latency=2)
         input_itf.add_mapping("output")
 
-        filter = CacheFilter(self, 'filter', bypass=False, cache_rules=cache_rules, cache_latency=2)
+        filter = CacheFilter(self, 'filter', bypass=False, cache_rules=cache_rules)
         
         self.bind(input_itf, 'output', filter, 'input')
         self.bind(filter, 'cache', cache, 'input')
