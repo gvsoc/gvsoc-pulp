@@ -83,7 +83,7 @@ class AraChip(st.Component):
 
 class Target(gvsoc.Target):
 
-    gapy_description="RV64 virtual board"
+    gapy_description="Ara virtual board"
 
     def __init__(self, parser, options):
         super(Target, self).__init__(parser, options,

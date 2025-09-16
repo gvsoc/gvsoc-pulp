@@ -355,7 +355,8 @@ class SnitchBoard(gvsoc.systree.Component):
         if arch.hbm.type == 'dramsys':
             mem = memory.dramsys.Dramsys(self, 'ddr')
         else:
-            mem = memory.memory.Memory(self, 'mem', size=arch.hbm.size, atomics=True)
+            mem = memory.memory.Memory(self, 'mem', size=arch.hbm.size, atomics=True,
+                width_log2=2)
 
         self.bind(clock, 'out', chip, 'clock')
         self.bind(clock, 'out', mem, 'clock')

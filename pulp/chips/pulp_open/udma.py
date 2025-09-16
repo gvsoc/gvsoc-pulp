@@ -24,6 +24,8 @@ class Udma(st.Component):
 
         self.vcd_group(skip=True)
 
+        self.add_c_flags(['-DPULP_OPEN_UDMA=1'])
+
         self.set_component('pulp.udma.udma_v3_pulp_impl')
 
         self.add_properties(self.load_property_file(config_file))

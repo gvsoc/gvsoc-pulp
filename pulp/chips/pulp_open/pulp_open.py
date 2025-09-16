@@ -22,6 +22,34 @@ from utils.clock_generator import Clock_generator
 from pulp.padframe.padframe_v1 import Padframe
 import interco.router_proxy as router_proxy
 import memory.dramsys
+from gvrun.attribute import Tree, Area, Value
+
+class PulpOpenL2SharedAttr(Tree):
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
+        self.nb_banks = Value(self, 'nb_banks', 4)
+        self.nb_regions = Value(self, 'nb_regions', 12)
+        self.interleaving_bits = Value(self, 'interleaving_bits', 2)
+        self.range = Area(self, 'range', 0x1C010000, 0x00180000, description='L2 shared banks')
+
+class PulpOpenL2Attr(Tree):
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
+        self.range = Area(self, 'range', 0x1C000000, 0x00190000, description='L2 whole address range')
+        self.priv0 = Area(self, 'priv0', 0x1C000000, 0x00008000, description='L2 private bank 0')
+        self.priv1 = Area(self, 'priv1', 0x1C008000, 0x00008000, description='L2 private bank 1')
+        self.shared = PulpOpenL2SharedAttr(self, 'shared')
+
+class PulpOpenSocAttr(Tree):
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
+        self.l2 = PulpOpenL2Attr(self, 'l2')
+
+class PulpOpenAttr(Tree):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.soc = PulpOpenSocAttr(self, 'soc')
+
 
 class Pulp_open(st.Component):
 
@@ -38,7 +66,7 @@ class Pulp_open(st.Component):
         cluster_config_file = self.add_property('cluster_config_file', cluster_config_file)
         nb_cluster = self.add_property('nb_cluster', 1)
 
-    
+
         #
         # Components
         #
@@ -134,7 +162,7 @@ class Pulp_open(st.Component):
             cluster = clusters[cid]
             self.bind(ref_clock_generator, 'clock_sync', cluster, 'ref_clock')
             self.bind(cluster, 'dma_irq', soc, 'dma_irq')
-            for pe in range(0, clusters[0].get_property('nb_pe', int)):
+            for pe in range(0, clusters[0].conf.get_property('nb_pe', int)):
                 self.bind(soc, 'halt_cluster%d_pe%d' % (cid, pe), cluster, 'halt_pe%d' % pe)
 
             self.bind(cluster_clocks[cid], 'out', clusters[cid], 'clock')

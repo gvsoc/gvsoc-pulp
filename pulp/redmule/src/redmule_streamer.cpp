@@ -98,7 +98,7 @@ int RedMule_Streamer::rw_data(int width, void* buf, strobe_t strb) {
 				this->req->set_size(BYTES_PER_BANK);
 			}
 
-			vp::io_req_status_e err = this->redmule->out.req(this->req);
+			vp::IoReqStatus err = this->redmule->out.req(this->req);
 
 			if (err != vp::IO_REQ_OK) {
 				this->redmule->trace.fatal("There was an error while reading/writing data\n");
@@ -131,7 +131,7 @@ int RedMule_Streamer::rw_data(int width, void* buf, strobe_t strb) {
 					this->req->set_data(((uint8_t *) buf) + i);
 					this->req->set_size(BYTES_PER_BANK);
 
-					vp::io_req_status_e err = this->redmule->out.req(this->req);
+					vp::IoReqStatus err = this->redmule->out.req(this->req);
 
 					if (err != vp::IO_REQ_OK) {
 						this->redmule->trace.fatal("There was an error while reading/writing data\n");
@@ -156,7 +156,7 @@ int RedMule_Streamer::rw_data(int width, void* buf, strobe_t strb) {
 						this->req->set_size(BYTES_PER_BANK);
 					}
 
-					vp::io_req_status_e err = this->redmule->out.req(this->req);
+					vp::IoReqStatus err = this->redmule->out.req(this->req);
 
 					if (err != vp::IO_REQ_OK) {
 						this->redmule->trace.fatal("There was an error while reading/writing data\n");
@@ -189,7 +189,7 @@ int RedMule_Streamer::rw_data(int width, void* buf, strobe_t strb) {
 				}
 
 				if (req->get_size() != 0) {
-					vp::io_req_status_e err = this->redmule->out.req(this->req);
+					vp::IoReqStatus err = this->redmule->out.req(this->req);
 
 					if (err != vp::IO_REQ_OK) {
 						this->redmule->trace.fatal("There was an error while reading/writing data\n");

@@ -17,4 +17,4 @@ add_subdirectory(stdout)
 add_subdirectory(neureka)
 add_subdirectory(spatz)
 add_subdirectory(snitch)
-#add_subdirectory(redmule) #ZL-MOD 24072025
+add_subdirectory(redmule)

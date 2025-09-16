@@ -4,7 +4,7 @@
 
 #define JMP ARRAY_HEIGHT * (PIPE_REGS + 1) * sizeof(src_fmt_t)
 
-void RedMule::fsm_start_handler(void *__this, vp::clock_event *event) {
+void RedMule::fsm_start_handler(vp::Block *__this, vp::ClockEvent *event) {
     RedMule* _this = (RedMule *) __this;
 
     _this->trace.msg("Starting op...\n");
@@ -94,13 +94,13 @@ void RedMule::fsm_start_handler(void *__this, vp::clock_event *event) {
     _this->fsm_loop();
 }
 
-void RedMule::fsm_handler(void *__this, vp::clock_event *event) {
+void RedMule::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
     RedMule* _this = (RedMule *) __this;
 
     _this->fsm_loop();
 }
 
-void RedMule::fsm_end_handler(void *__this, vp::clock_event *event) {
+void RedMule::fsm_end_handler(vp::Block *__this, vp::ClockEvent *event) {
     RedMule* _this = (RedMule *) __this;
 	_this->buffers.free_buffers();
 

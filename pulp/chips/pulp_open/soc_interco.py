@@ -24,25 +24,25 @@ class Soc_interco(st.Component):
 
         ll_ico = router.Router(self, 'll_ico')
 
-        ll_ico.add_mapping('apb'           , **soc.get_property('peripherals/mapping'))
-        ll_ico.add_mapping('rom'           , base=soc.get_property('apb_ico/mappings/rom/base'), size=soc.get_property('apb_ico/mappings/rom/size'))
-        ll_ico.add_mapping('axi_master'    , **cluster.get_property('mapping'))
-        ll_ico.add_mapping('l2_priv0'      , **soc.get_property('l2/priv0/mapping'))
-        ll_ico.add_mapping('l2_priv0_alias', **soc.get_property('l2/priv0_alias/mapping'))
-        ll_ico.add_mapping('l2_priv1'      , **soc.get_property('l2/priv1/mapping'))
-        ll_ico.add_mapping('l2_shared'     , **soc.get_property('l2/shared/mapping'))
+        ll_ico.add_mapping('apb'           , **soc.conf.get_property('peripherals/mapping'))
+        ll_ico.add_mapping('rom'           , base=soc.conf.get_property('apb_ico/mappings/rom/base'), size=soc.conf.get_property('apb_ico/mappings/rom/size'))
+        ll_ico.add_mapping('axi_master'    , **cluster.conf.get_property('mapping'))
+        ll_ico.add_mapping('l2_priv0'      , **soc.conf.get_property('l2/priv0/mapping'))
+        ll_ico.add_mapping('l2_priv0_alias', **soc.conf.get_property('l2/priv0_alias/mapping'))
+        ll_ico.add_mapping('l2_priv1'      , **soc.conf.get_property('l2/priv1/mapping'))
+        ll_ico.add_mapping('l2_shared'     , **soc.conf.get_property('l2/shared/mapping'))
 
         self.bind(self, 'debug', ll_ico, 'input')
         self.bind(self, 'axi_slave', ll_ico, 'input')
 
         hb_ico = router.Router(self, 'hb_ico')
 
-        l2_shared_size = soc.get_property('l2/shared/mapping/size', int)
-        l2_shared_nb_regions = soc.get_property('l2/shared/nb_regions')
-        region_base = soc.get_property('l2/shared/mapping/base', int)
+        l2_shared_size = soc.conf.get_property('l2/shared/mapping/size', int)
+        l2_shared_nb_regions = soc.conf.get_property('l2/shared/nb_regions')
+        region_base = soc.conf.get_property('l2/shared/mapping/base', int)
         region_size = int(l2_shared_size / l2_shared_nb_regions)
 
-        for i in range(0, soc.get_property('l2/shared/nb_regions')):
+        for i in range(0, soc.conf.get_property('l2/shared/nb_regions')):
             hb_ico.add_mapping('l2_shared_%d' % i, base=region_base, size=region_size, remove_offset=region_base)
             self.bind(hb_ico, 'l2_shared_%d' % i, self, 'l2_shared_%d' % i)
             region_base += region_size
@@ -50,26 +50,26 @@ class Soc_interco(st.Component):
         fc_fetch_ico = router.Router(self, 'fc_fetch_ico', latency=5)
         fc_data_ico = router.Router(self, 'fc_data_ico')
 
-        fc_fetch_ico.add_mapping('l2_shared', **soc.get_property('l2/shared/mapping'))
-        fc_fetch_ico.add_mapping('xip', **soc.get_property('l2/xip/mapping'))
+        fc_fetch_ico.add_mapping('l2_shared', **soc.conf.get_property('l2/shared/mapping'))
+        fc_fetch_ico.add_mapping('xip', **soc.conf.get_property('l2/xip/mapping'))
         self.bind(fc_fetch_ico, 'xip', self, 'fc_fetch_input')
-        fc_data_ico.add_mapping('xip', **soc.get_property('l2/xip/mapping'))
+        fc_data_ico.add_mapping('xip', **soc.conf.get_property('l2/xip/mapping'))
         self.bind(fc_data_ico, 'xip', self, 'fc_data_input')
         fc_fetch_ico.add_mapping('ll_ico')
 
-        fc_data_ico.add_mapping('l2_shared', **soc.get_property('l2/shared/mapping'))
+        fc_data_ico.add_mapping('l2_shared', **soc.conf.get_property('l2/shared/mapping'))
         fc_data_ico.add_mapping('axi_proxy', base=0x20000000, size=0x10000000)
         fc_data_ico.add_mapping('ddr', base=0x80000000, size=0x80000000)
         fc_data_ico.add_mapping('ll_ico')
-        
+
         udma_rx_ico = router.Router(self, 'udma_rx_ico')
-        udma_rx_ico.add_mapping('l2_shared', **soc.get_property('l2/shared/mapping'))
+        udma_rx_ico.add_mapping('l2_shared', **soc.conf.get_property('l2/shared/mapping'))
         self.bind(udma_rx_ico, 'l2_shared', hb_ico, 'input')
         udma_rx_ico.add_mapping('ll_ico')
         self.bind(udma_rx_ico, 'll_ico', ll_ico, 'input')
-        
+
         udma_tx_ico = router.Router(self, 'udma_tx_ico', latency=4)
-        udma_tx_ico.add_mapping('l2_shared', **soc.get_property('l2/shared/mapping'))
+        udma_tx_ico.add_mapping('l2_shared', **soc.conf.get_property('l2/shared/mapping'))
         self.bind(udma_tx_ico, 'l2_shared', hb_ico, 'input')
         udma_tx_ico.add_mapping('ll_ico')
         self.bind(udma_tx_ico, 'll_ico', ll_ico, 'input')
@@ -97,4 +97,3 @@ class Soc_interco(st.Component):
         self.bind(ll_ico, 'l2_priv1', self, 'l2_priv1')
         self.bind(ll_ico, 'l2_shared', hb_ico, 'input')
         self.bind(ll_ico, 'axi_master', self, 'axi_master')
-    

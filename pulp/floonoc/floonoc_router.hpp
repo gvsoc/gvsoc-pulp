@@ -22,7 +22,9 @@
 
 #pragma once
 
+#include <array>
 #include <vp/vp.hpp>
+#include <vp/signal.hpp>
 
 class FlooNoc;
 
@@ -41,10 +43,10 @@ public:
 
     // This gets called by other routers or a network interface to move a request to this router
     bool handle_request(vp::IoReq *req, int from_x, int from_y);
-    // Called by other routers to unstall an output queue after an input queue became available
+    // Called by other routers or NI to unstall an output queue after an input queue became available
     void unstall_queue(int from_x, int from_y);
-    // This gets called by the top noc to grant a a request denied by a target
-    void grant(vp::IoReq *req);
+    // Called by NI to stall the queues in case no more request should be sent to NI
+    void stall_queue(int from_x, int from_y);
 
 private:
     // FSM event handler called when something happened and queues need to be checked to see
@@ -83,5 +85,7 @@ private:
     int current_queue;
     // State of the output queues, true if it is stalled and nothing can be sent to it anymore
     // until it is unstalled.
-    bool stalled_queues[5];
+    std::array<vp::Signal<bool>, 5> stalled_queues;
+    // Signal used for tracing router request address
+    vp::Signal<uint64_t> signal_req;
 };

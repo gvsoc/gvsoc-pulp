@@ -22,7 +22,7 @@ import math
 
 class Hierarchical_cache(gvsoc.systree.Component):
 
-    def __init__(self, parent: gvsoc.systree.Component, name: str, nb_cores: int=0, has_cc: int=0, l1_line_size_bits: int=0):
+    def __init__(self, parent: gvsoc.systree.Component, name: str, nb_cores: int=0, has_cc: int=0, l1_line_size_bits: int=7):
 
         super(Hierarchical_cache, self).__init__(parent, name)
 

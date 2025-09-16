@@ -104,7 +104,7 @@ class RedMule_Streamer {
 
 	private:
 		RedMule* redmule;
-		vp::io_req* req;
+		vp::IoReq* req;
 
 		uint32_t pos;
 		uint32_t tot_iters;
@@ -126,29 +126,30 @@ class RedMule_Streamer {
 		int rw_data(int width, void* buf, strobe_t strb);
 };
 
-class RedMule : public vp::component {
+class RedMule : public vp::Component {
 
 	friend class RedMule_base;
 
 	public:
-    	RedMule(js::config *config);
+    	// RedMule(js::Config *config);
+		RedMule(vp::ComponentConf &config);
 		
-		int build();
+		//int build();
 		void reset(bool active);
 		
-		vp::io_slave in;
+		vp::IoSlave in;
 
 		//vp::io_req io_req;
-		vp::io_master out;
-		vp::trace trace;
+		vp::IoMaster out;
+		vp::Trace trace;
 		vp::reg_32 state;
 
 	private:
-		static vp::io_req_status_e hwpe_slave(void *__this, vp::io_req *req);
+		static vp::IoReqStatus hwpe_slave(vp::Block *__this, vp::IoReq *req);
 
-    	static void fsm_start_handler(void *__this, vp::clock_event *event);
-    	static void fsm_handler(void *__this, vp::clock_event *event);
-    	static void fsm_end_handler(void *__this, vp::clock_event *event);
+    	static void fsm_start_handler(vp::Block *__this, vp::ClockEvent *event);
+    	static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
+    	static void fsm_end_handler(vp::Block *__this, vp::ClockEvent *event);
 
     	// MAIN FSM and LOOP
     	int  fsm();
@@ -172,11 +173,11 @@ class RedMule : public vp::component {
 		uint32_t register_file [19];
 
 		
-		vp::wire_master<bool> irq;
+		vp::WireMaster<bool> irq;
 
-		vp::clock_event *fsm_start_event;
-    	vp::clock_event *fsm_event;
-    	vp::clock_event *fsm_end_event;
+		vp::ClockEvent *fsm_start_event;
+    	vp::ClockEvent *fsm_event;
+    	vp::ClockEvent *fsm_end_event;
 
 		//Everything else...
 

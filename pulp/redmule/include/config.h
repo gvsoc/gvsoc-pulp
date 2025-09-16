@@ -1,3 +1,4 @@
+#pragma once
 #include "archi_redmule.h"
 
 #define SRC_FMT FP16
@@ -11,4 +12,3 @@ typedef float dst_fmt_t;
 #define ARRAY_WIDTH  (PIPE_REGS * ARRAY_HEIGHT)
 
 #define DATA_WIDTH 256
-

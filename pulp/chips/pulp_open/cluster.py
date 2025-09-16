@@ -26,6 +26,7 @@ from pulp.cluster.cluster_control_v2 import Cluster_control
 from pulp.ne16.ne16 import Ne16
 from pulp.icache_ctrl.icache_ctrl_v2 import Icache_ctrl
 
+from pulp.redmule.redmule import RedMule
 
 def get_cluster_name(cid: int):
     """
@@ -40,13 +41,20 @@ def get_cluster_name(cid: int):
     -------
     string
         The cluster name
-    
+
     """
 
     if cid == 0:
         return 'cluster'
     else:
         return 'cluster_%d' % (cid)
+
+
+class ClusterConf(st.Component):
+    def __init__(self, property_file):
+        super(ClusterConf, self).__init__(parent=None, name=None)
+
+        self.add_properties(self.load_property_file(property_file))
 
 
 class Cluster(st.Component):
@@ -57,7 +65,7 @@ class Cluster(st.Component):
     ----------
     cid : int
         Cluster ID
-    
+
     """
 
     def __init__(self, parent, name, config_file, cid: int=0):
@@ -67,21 +75,27 @@ class Cluster(st.Component):
         # Properties
         #
 
-        self.add_properties(self.load_property_file(config_file))
+        cluster_conf = ClusterConf(config_file)
+        self.conf = cluster_conf
 
-        nb_pe               = self.get_property('nb_pe', int)
-        cluster_size        = self.get_property('mapping/size', int)
+        nb_pe               = cluster_conf.get_property('nb_pe', int)
+        cluster_size        = cluster_conf.get_property('mapping/size', int)
         self.cluster_offset = cluster_size * cid
-        self.cluster_base   = self.get_property('mapping/base', int)
-        self.cluster_alias  = self.get_property('alias', int)
-        ne16_irq            = self.get_property('pe/irq').index('acc_0')
-        dma_irq_0           = self.get_property('pe/irq').index('dma_0')
-        dma_irq_1           = self.get_property('pe/irq').index('dma_1')
-        dma_irq_ext         = self.get_property('pe/irq').index('dma_ext')
-        timer_irq_0         = self.get_property('pe/irq').index('timer_0')
-        timer_irq_1         = self.get_property('pe/irq').index('timer_1')
+        self.cluster_base   = cluster_conf.get_property('mapping/base', int)
+        self.cluster_alias  = cluster_conf.get_property('alias', int)
+        ne16_irq            = cluster_conf.get_property('pe/irq').index('acc_0')
+        redmule_irq         = cluster_conf.get_property('pe/irq').index('acc_0') # TODO: why is RedMulE mapped in the same location as NE16?
+        dma_irq_0           = cluster_conf.get_property('pe/irq').index('dma_0')
+        dma_irq_1           = cluster_conf.get_property('pe/irq').index('dma_1')
+        dma_irq_ext         = cluster_conf.get_property('pe/irq').index('dma_ext')
+        timer_irq_0         = cluster_conf.get_property('pe/irq').index('timer_0')
+        timer_irq_1         = cluster_conf.get_property('pe/irq').index('timer_1')
         first_external_pcer = 12
-        has_ne16 = False
+        has_ne16 = False       # Because RedMulE is alternative to NE16!!
+
+        has_redmule = self.declare_user_property(
+            name='redmule', value=False, cast=bool, description='Enable Redmule'
+        )
 
 
         #
@@ -89,7 +103,7 @@ class Cluster(st.Component):
         #
 
         # L1 subsystem
-        l1 = L1_subsystem(self, 'l1', self)
+        l1 = L1_subsystem(self, 'l1', self, cluster_conf)
 
         # Cores
         pes = []
@@ -97,10 +111,10 @@ class Cluster(st.Component):
             pes.append(iss.ClusterCore(self, 'pe%d' % i, cluster_id=cid, core_id=i))
 
         # Icache
-        icache = Hierarchical_cache(self, 'icache', self.get_property('icache/config'))
+        icache = Hierarchical_cache(self, 'icache', cluster_conf.get_property('icache/config'))
 
         # Event unit
-        event_unit = Event_unit(self, 'event_unit', self.get_property('peripherals/event_unit/config'))
+        event_unit = Event_unit(self, 'event_unit', cluster_conf.get_property('peripherals/event_unit/config'))
 
         # Cluster interconnect
         cluster_ico = Router(self, 'cluster_ico', latency=2)
@@ -124,9 +138,13 @@ class Cluster(st.Component):
             # NE16
             ne16 = Ne16(self, 'ne16')
 
+        if has_redmule:
+            # REDMULE
+            redmule = RedMule(self, 'redmule')
+
         # Icache controller
         icache_ctrl = Icache_ctrl(self, 'icache_ctrl')
-    
+
 
         #
         # Bindings
@@ -163,47 +181,51 @@ class Cluster(st.Component):
         # Cluster interconnect
         self.bind(self, 'input', cluster_ico, 'input')
 
-        cluster_ico.add_mapping('error', **self._reloc_mapping(self.get_property('mapping')))
+        cluster_ico.add_mapping('error', **self._reloc_mapping(cluster_conf.get_property('mapping')))
 
         cluster_ico.add_mapping('soc')
         self.bind(cluster_ico, 'soc', self, 'soc')
 
-        cluster_ico.add_mapping('l1', **self._reloc_mapping(self.get_property('l1/mapping')))
+        cluster_ico.add_mapping('l1', **self._reloc_mapping(cluster_conf.get_property('l1/mapping')))
         self.bind(cluster_ico, 'l1', l1, 'ext2loc')
 
-        cluster_ico.add_mapping('l1_ts', **self._reloc_mapping(self.get_property('l1/ts_mapping')))
+        cluster_ico.add_mapping('l1_ts', **self._reloc_mapping(cluster_conf.get_property('l1/ts_mapping')))
         self.bind(cluster_ico, 'l1_ts', l1, 'ext2loc_ts')
 
-        cluster_ico.add_mapping('periph_ico', **self.get_property('peripherals/mapping'))
+        cluster_ico.add_mapping('periph_ico', **cluster_conf.get_property('peripherals/mapping'))
         self.bind(cluster_ico, 'periph_ico', periph_ico, 'input')
 
-        cluster_ico.add_mapping('periph_ico_alias', **self.get_property('peripherals/alias'), add_offset=int(self.get_property('peripherals/mapping/base'), 0) - int(self.get_property('peripherals/alias/base'), 0))
+        cluster_ico.add_mapping('periph_ico_alias', **cluster_conf.get_property('peripherals/alias'), add_offset=int(cluster_conf.get_property('peripherals/mapping/base'), 0) - int(cluster_conf.get_property('peripherals/alias/base'), 0))
         self.bind(cluster_ico, 'periph_ico_alias', periph_ico, 'input')
 
         # Periph interconnect
-        periph_ico.add_mapping('error', **self._reloc_mapping(self.get_property('mapping')))
+        periph_ico.add_mapping('error', **self._reloc_mapping(cluster_conf.get_property('mapping')))
 
         periph_ico.add_mapping('cluster_ico')
         self.bind(periph_ico, 'cluster_ico', cluster_ico, 'input')
 
-        periph_ico.add_mapping('event_unit', **self._reloc_mapping(self.get_property('peripherals/event_unit/mapping')))
+        periph_ico.add_mapping('event_unit', **self._reloc_mapping(cluster_conf.get_property('peripherals/event_unit/mapping')))
         self.bind(periph_ico, 'event_unit', event_unit, 'input')
 
-        periph_ico.add_mapping('cluster_ctrl', **self._reloc_mapping(self.get_property('peripherals/cluster_ctrl/mapping')))
+        periph_ico.add_mapping('cluster_ctrl', **self._reloc_mapping(cluster_conf.get_property('peripherals/cluster_ctrl/mapping')))
         self.bind(periph_ico, 'cluster_ctrl', cluster_control, 'input')
 
-        periph_ico.add_mapping('icache_ctrl', **self._reloc_mapping(self.get_property('peripherals/icache_ctrl/mapping')))
+        periph_ico.add_mapping('icache_ctrl', **self._reloc_mapping(cluster_conf.get_property('peripherals/icache_ctrl/mapping')))
         self.bind(periph_ico, 'icache_ctrl', icache_ctrl, 'input')
 
-        periph_ico.add_mapping('timer', **self._reloc_mapping(self.get_property('peripherals/timer/mapping')))
+        periph_ico.add_mapping('timer', **self._reloc_mapping(cluster_conf.get_property('peripherals/timer/mapping')))
         self.bind(periph_ico, 'timer', timer, 'input')
 
-        periph_ico.add_mapping('dma', **self._reloc_mapping(self.get_property('peripherals/dma/mapping')))
+        periph_ico.add_mapping('dma', **self._reloc_mapping(cluster_conf.get_property('peripherals/dma/mapping')))
         self.bind(periph_ico, 'dma', mchan, 'in_%d' % nb_pe)
 
         if has_ne16:
-            periph_ico.add_mapping('ne16', **self._reloc_mapping(self.get_property('peripherals/ne16/mapping')))
+            periph_ico.add_mapping('ne16', **self._reloc_mapping(cluster_conf.get_property('peripherals/ne16/mapping')))
             self.bind(periph_ico, 'ne16', ne16, 'input')
+
+        if has_redmule:
+            periph_ico.add_mapping('redmule', **self._reloc_mapping(cluster_conf.get_property('peripherals/redmule/mapping')))
+            self.bind(periph_ico, 'redmule', redmule, 'input')
 
         # MCHAN
         self.bind(mchan, 'ext_irq_itf', self, 'dma_irq')
@@ -216,7 +238,7 @@ class Cluster(st.Component):
             self.bind(mchan, 'event_itf_%d' % i, event_unit, 'in_event_%d_pe_%d' % (dma_irq_0, i))
             self.bind(mchan, 'irq_itf_%d' % i, event_unit, 'in_event_%d_pe_%d' % (dma_irq_1, i))
             self.bind(mchan, 'ext_irq_itf', event_unit, 'in_event_%d_pe_%d' % (dma_irq_ext, i))
-    
+
         # Timer
         self.bind(self, 'ref_clock', timer, 'ref_clock')
         for i in range(0, nb_pe):
@@ -236,6 +258,14 @@ class Cluster(st.Component):
                 self.bind(ne16, 'irq', event_unit, 'in_event_%d_pe_%d' % (ne16_irq, i))
 
             self.bind(ne16, 'out', l1, 'ne16_in')
+
+        if has_redmule:
+            # REDMULE
+            for i in range(0, nb_pe):
+                self.bind(redmule, 'irq', event_unit, 'in_event_%d_pe_%d' % (redmule_irq, i))
+
+            self.bind(redmule, 'out', l1, 'redmule_in')
+
 
         # Icache controller
         self.bind(icache_ctrl, 'enable', icache, 'enable')
@@ -267,7 +297,7 @@ class Cluster(st.Component):
 
         if mapping.get('remove_offset') is not None:
             mapping['remove_offset'] = '0x%x' % (int(mapping['remove_offset'], 0) + self.cluster_offset)
-            
+
         if mapping.get('add_offset') is not None:
             mapping['add_offset'] = '0x%x' % (int(mapping['add_offset'], 0) + self.cluster_offset)
 
@@ -294,7 +324,7 @@ class Cluster(st.Component):
 
         if mapping.get('remove_offset') is not None:
             mapping['remove_offset'] = '0x%x' % (int(mapping['remove_offset'], 0) - self.cluster_base + self.cluster_alias)
-            
+
         if mapping.get('add_offset') is not None:
             mapping['add_offset'] = '0x%x' % (int(mapping['add_offset'], 0) - self.cluster_base + self.cluster_alias)
 

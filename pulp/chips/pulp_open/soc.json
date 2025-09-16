@@ -30,14 +30,14 @@
                 "remove_offset" : "0x1C000000"
             }
         },
-    
+
         "priv0_alias": {
             "mapping": {
                 "base"         : "0x00000000",
                 "size"         : "0x00008000"
             }
         },
-    
+
         "priv1": {
             "mapping": {
                 "base"         : "0x1C008000",
@@ -45,7 +45,7 @@
                 "remove_offset" : "0x1C008000"
             }
         },
-    
+
         "shared": {
             "nb_banks"          : 4,
             "nb_regions"        : 12,
@@ -70,97 +70,97 @@
                 "size"          : "0x00000010",
                 "remove_offset" : "0x1A100000"
             },
-    
+
             "fll_periph": {
                 "base"          : "0x1A100010",
                 "size"          : "0x00000010",
-                "remove_offset" : "0x1A100000"
+                "remove_offset" : "0x1A100010"
             },
-    
+
             "fll_cluster": {
                 "base"          : "0x1A100020",
                 "size"          : "0x00000010",
-                "remove_offset" : "0x1A100000"
+                "remove_offset" : "0x1A100020"
             },
-    
+
             "gpio": {
                 "base"          : "0x1A101000",
                 "size"          : "0x00001000",
                 "remove_offset" : "0x1A101000"
             },
-    
+
             "udma": {
                 "base"          : "0x1A102000",
                 "size"          : "0x00002000",
                 "remove_offset" : "0x1A102000"
             },
-    
+
             "apb_soc_ctrl": {
                 "base"          : "0x1A104000",
                 "size"          : "0x00001000",
                 "remove_offset" : "0x1A104000"
             },
-    
+
             "soc_eu": {
                 "base"          : "0x1A106000",
                 "size"          : "0x00001000",
                 "remove_offset" : "0x1A106000"
             },
-    
+
             "pmu": {
                 "base"          : "0x1A107000",
                 "size"          : "0x00000800",
                 "remove_offset" : "0x1A107000"
             },
-    
+
             "rtc": {
                 "base"          : "0x1A108000",
                 "size"          : "0x00000800",
                 "remove_offset" : "0x1A108000"
             },
-    
+
             "fc_itc": {
                 "base"          : "0x1A109800",
                 "size"          : "0x00000800",
                 "remove_offset" : "0x1A109800"
             },
-    
+
             "xip": {
                 "base"          : "0x1A150000",
                 "size"          : "0x00010000",
                 "remove_offset" : "0x1A150000"
             },
-    
+
             "fc_timer": {
                 "base"          : "0x1A10B000",
                 "size"          : "0x00000800",
                 "remove_offset" : "0x1A10B000"
             },
-    
+
             "fc_timer_1": {
                 "base"          : "0x1A10B800",
                 "size"          : "0x00000800",
                 "remove_offset" : "0x1A10B800"
             },
-    
+
             "fc_icache_ctrl": {
                 "base"          : "0x1A108800",
                 "size"          : "0x00000800",
                 "remove_offset" : "0x1A108800"
             },
-    
+
             "stdout": {
                 "base"          : "0x1A10F000",
                 "size"          : "0x00001000",
                 "remove_offset" : "0x1A10F000"
             },
-    
+
             "fc_dbg_unit": {
                 "base"          : "0x1A190000",
                 "size"          : "0x00000800",
                 "remove_offset" : "0x1A190000"
             },
-    
+
             "debug_rom": {
                 "base"          : "0x1A190800",
                 "size"          : "0x00000800",
@@ -169,7 +169,7 @@
 
         }
     },
-    
+
     "peripherals": {
 
         "mapping": {
@@ -240,25 +240,25 @@
                 "evt_sw_event5"       : 5,
                 "evt_sw_event6"       : 6,
                 "evt_sw_event7"       : 7,
-      
+
                 "evt_timer0"          : 10,
                 "evt_timer1"          : 11,
-      
+
                 "evt_clkref"          : 14,
                 "evt_gpio"            : 15,
                 "evt_rtc"             : 16,
-      
+
                 "evt_adv_timer0"      : 17,
                 "evt_adv_timer1"      : 18,
                 "evt_adv_timer2"      : 19,
                 "evt_adv_timer3"      : 20,
-      
+
                 "evt_cluster_not_busy": 21,
                 "evt_cluster_pok"     : 22,
                 "evt_cluster_cg_ok"   : 23,
                 "evt_picl_ok"         : 24,
                 "evt_scu_ok"          : 25,
-      
+
                 "evt_soc_evt"         : 26,
                 "evt_queue_error"     : 29
             }
@@ -334,10 +334,10 @@
         "soc_evt_rtc_apb"         : 43,
         "soc_evt_rtc"             : 44,
         "soc_evt_ref_clock"       : 56,
-    
+
         "soc_evt_sw_first"        : 48,
         "soc_evt_sw_nb"           : 8,
-    
+
         "soc_evt_pmu0"            : 31
     }
 }

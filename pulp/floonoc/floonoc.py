@@ -291,6 +291,31 @@ class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
         """
         return self.i_WIDE_INPUT(x+1, y+1)
 
+    def __gen_gui_router(self, routers, name, path):
+        router = gvsoc.gui.Signal(self, routers, name, path=f"{path}/req", groups=['regmap'])
+        gvsoc.gui.Signal(self, router, "stalled_queue_right", path=f"{path}/stalled_queue_right", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+        gvsoc.gui.Signal(self, router, "stalled_queue_left", path=f"{path}/stalled_queue_left", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+        gvsoc.gui.Signal(self, router, "stalled_queue_up", path=f"{path}/stalled_queue_up", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+        gvsoc.gui.Signal(self, router, "stalled_queue_down", path=f"{path}/stalled_queue_down", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+        gvsoc.gui.Signal(self, router, "stalled_queue_local", path=f"{path}/stalled_queue_local", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+
+    def gen_gui(self, parent_signal):
+        top = gvsoc.gui.Signal(self, parent_signal, name=self.name)
+
+        routers = gvsoc.gui.Signal(self, top, name="routers")
+        for router_id in self.get_property('routers'):
+            router = gvsoc.gui.Signal(self, routers, f"router_{router_id[0]}_{router_id[1]}")
+            self.__gen_gui_router(router, "req", path=f"req_router_{router_id[0]}_{router_id[1]}")
+            self.__gen_gui_router(router, "rsp", path=f"rsp_router_{router_id[0]}_{router_id[1]}")
+            self.__gen_gui_router(router, "wide", path=f"wide_router_{router_id[0]}_{router_id[1]}")
+
+        nis = gvsoc.gui.Signal(self, top, name="nis")
+        for ni_id in self.get_property('network_interfaces'):
+            ni = gvsoc.gui.Signal(self, nis, f"ni_{ni_id[0]}_{ni_id[1]}")
+            gvsoc.gui.Signal(self, ni, "narrow_req", path=f"ni_{ni_id[0]}_{ni_id[1]}/narrow_req", groups=['regmap'])
+            gvsoc.gui.Signal(self, ni, "wide_req", path=f"ni_{ni_id[0]}_{ni_id[1]}/wide_req", groups=['regmap'])
+
+
 
 class FlooNoc2dMesh(FlooNoc2dMeshNarrowWide):
     pass
