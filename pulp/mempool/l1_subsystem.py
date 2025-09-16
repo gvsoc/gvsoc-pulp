@@ -47,7 +47,7 @@ class L1_subsystem(gvsoc.systree.Component):
 
     """
 
-    def __init__(self, parent: gvsoc.systree.Component, name: str, tile_id: int=0, sub_group_id: int=0, group_id: int=0,
+    def __init__(self, parent: gvsoc.systree.Component, name: str, async_interco: bool=False, tile_id: int=0, sub_group_id: int=0, group_id: int=0,
                  nb_tiles_per_sub_group: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, nb_remote_local_masters: int=1, nb_remote_group_masters: int=4,
                  nb_remote_sub_group_masters: int=4, nb_pe: int=0, size: int=0, nb_banks_per_tile: int=0, bandwidth: int=0, axi_data_width: int=512):
         super(L1_subsystem, self).__init__(parent, name)
@@ -89,8 +89,20 @@ class L1_subsystem(gvsoc.systree.Component):
             local_interleavers.append(Interleaver(self, f'local_interleaver{i}', nb_slaves=total_banks, nb_masters=1, 
                                              interleaving_bits=int(math.log2(bandwidth)), offset_translation=False))
 
-        remote_interleaver = Interleaver(self, 'remote_interleaver', nb_slaves=total_banks, nb_masters=nb_remote_masters, 
-                                    interleaving_bits=int(math.log2(bandwidth)), offset_translation=False)
+        remote_local_interleavers = []
+        for i in range(0, nb_remote_local_masters):
+            remote_local_interleavers.append(Interleaver(self, f'remote_local_interleaver{i}', nb_slaves=total_banks, nb_masters=1, 
+                                             interleaving_bits=int(math.log2(bandwidth)), offset_translation=False))
+
+        remote_group_interleavers = []
+        for i in range(0, nb_remote_group_masters):
+            remote_group_interleavers.append(Interleaver(self, f'remote_group_interleaver{i}', nb_slaves=total_banks, nb_masters=1, 
+                                             interleaving_bits=int(math.log2(bandwidth)), offset_translation=False))
+
+        remote_sub_group_interleavers = []
+        for i in range(0, nb_remote_sub_group_masters):
+            remote_sub_group_interleavers.append(Interleaver(self, f'remote_sub_group_interleaver{i}', nb_slaves=total_banks, nb_masters=1, 
+                                             interleaving_bits=int(math.log2(bandwidth)), offset_translation=False))
 
         #Remote interfaces
         remote_local_out_interfaces = []
@@ -135,15 +147,15 @@ class L1_subsystem(gvsoc.systree.Component):
         #Remote input
         for i in range(0, nb_remote_local_masters):
             self.bind(self, f'remote_local_in{i}', remote_local_in_interfaces[i], 'input')
-            self.bind(remote_local_in_interfaces[i], 'output', remote_interleaver, 'in_%d' % i)
+            self.bind(remote_local_in_interfaces[i], 'output', remote_local_interleavers[i], 'in_0')
 
         for i in range(0, nb_remote_sub_group_masters):
             self.bind(self, f'remote_sub_group_in{i}', remote_sub_group_in_interfaces[i], 'input')
-            self.bind(remote_sub_group_in_interfaces[i], 'output', remote_interleaver, 'in_%d' % (i + nb_remote_local_masters))
+            self.bind(remote_sub_group_in_interfaces[i], 'output', remote_sub_group_interleavers[i], 'in_0')
 
         for i in range(0, nb_remote_group_masters):
             self.bind(self, f'remote_group_in{i}', remote_group_in_interfaces[i], 'input')
-            self.bind(remote_group_in_interfaces[i], 'output', remote_interleaver, 'in_%d' % (i + nb_remote_local_masters + nb_remote_sub_group_masters))
+            self.bind(remote_group_in_interfaces[i], 'output', remote_group_interleavers[i], 'in_0')
 
         #Remote output
         for i in range(0, nb_remote_local_masters):
@@ -170,10 +182,15 @@ class L1_subsystem(gvsoc.systree.Component):
             tgt_grp_id = int(i / (nb_sub_groups_per_group * nb_tiles_per_sub_group * nb_banks_per_tile))
             tgt_sg_id = int((i % (nb_sub_groups_per_group * nb_tiles_per_sub_group * nb_banks_per_tile)) / (nb_tiles_per_sub_group * nb_banks_per_tile))
             if (i >= start_bank_id and i < end_bank_id):
-                remove_offset = Interleaver(self, f'remove_offset_{i}', nb_slaves=1, nb_masters=nb_pe+1, interleaving_bits=2, enable_shift=(total_banks - 1).bit_length(), offset_translation=False)
-                for j, local_interleaver in enumerate(local_interleavers):
-                    self.bind(local_interleaver, 'out_%d' % i, remove_offset, 'in_%d' % j)
-                self.bind(remote_interleaver, 'out_%d' % i, remove_offset, 'in_%d' % nb_pe)
+                remove_offset = Interleaver(self, f'remove_offset_{i}', nb_slaves=1, nb_masters=1, interleaving_bits=2, enable_shift=(total_banks - 1).bit_length(), offset_translation=False)
+                for local_interleaver in local_interleavers:
+                    self.bind(local_interleaver, 'out_%d' % i, remove_offset, 'in_0')
+                for remote_local_interleaver in remote_local_interleavers:
+                    self.bind(remote_local_interleaver, 'out_%d' % i, remove_offset, 'in_0')
+                for remote_sub_group_interleaver in remote_sub_group_interleavers:
+                    self.bind(remote_sub_group_interleaver, 'out_%d' % i, remove_offset, 'in_0')
+                for remote_group_interleaver in remote_group_interleavers:
+                    self.bind(remote_group_interleaver, 'out_%d' % i, remove_offset, 'in_0')
                 self.bind(remove_offset, 'out_0', l1_banks[i - start_bank_id], 'input')
             elif tgt_grp_id == group_id:
                 if tgt_sg_id == sub_group_id:
