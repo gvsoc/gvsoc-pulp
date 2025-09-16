@@ -14,6 +14,7 @@
 # limitations under the License.
 #
 
+import os
 import gvsoc.systree as st
 from pulp.chips.pulp_open.pulp_open import Pulp_open
 from devices.hyperbus.hyperflash import Hyperflash
@@ -23,7 +24,9 @@ from devices.hyperbus.hyperram import Hyperram
 from devices.testbench.testbench import Testbench
 from devices.uart.uart_checker import Uart_checker
 import gvsoc.runner
-from gapylib.chips.pulp.flash import *
+from pulp.chips.pulp_open.pulp_open import PulpOpenAttr
+if os.environ.get('USE_GVRUN') is None:
+    from gapylib.chips.pulp.flash import *
 
 
 class Pulp_open_board(st.Component):
@@ -32,6 +35,10 @@ class Pulp_open_board(st.Component):
 
         super(Pulp_open_board, self).__init__(parent, name, options=options)
 
+        self.set_target_name('pulp-open')
+
+        attr = self.set_attributes(PulpOpenAttr(self))
+
         # Pulp
         pulp = Pulp_open(self, 'chip', parser, use_ddr=use_ddr)
 
@@ -39,13 +46,14 @@ class Pulp_open_board(st.Component):
         hyperflash = Hyperflash(self, 'hyperflash')
         hyperram = Hyperram(self, 'ram')
 
-        self.register_flash(
-            DefaultFlashRomV2(self, 'hyperflash', image_name=hyperflash.get_image_path(),
-                flash_attributes={
-                    "flash_type": 'hyper'
-                },
-                size=8*1024*1024
-            ))
+        if os.environ.get('USE_GVRUN') is None:
+            self.register_flash(
+                DefaultFlashRomV2(self, 'hyperflash', image_name=hyperflash.get_image_path(),
+                    flash_attributes={
+                        "flash_type": 'hyper'
+                    },
+                    size=8*1024*1024
+                ))
 
         self.bind(pulp, 'hyper0_cs1_data', hyperflash, 'input')
 

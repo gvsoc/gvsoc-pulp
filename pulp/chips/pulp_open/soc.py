@@ -38,6 +38,14 @@ from pulp.adv_dbg_unit.pulp_tap import Pulp_tap
 from pulp.adv_dbg_unit.riscv_tap import Riscv_tap
 from gdbserver.gdbserver import Gdbserver
 import utils.loader.loader
+from gvrun.target import TargetParameter
+
+
+class SocConf(st.Component):
+    def __init__(self, property_file):
+        super(SocConf, self).__init__(parent=None, name=None)
+
+        self.add_properties(self.load_property_file(property_file))
 
 
 class Soc(st.Component):
@@ -49,31 +57,37 @@ class Soc(st.Component):
         # Properties
         #
 
-        self.add_properties(self.load_property_file(config_file))
+        soc_conf = SocConf(config_file)
+        self.conf = soc_conf
 
         nb_cluster = chip.get_property('nb_cluster', int)
-        nb_pe = cluster.get_property('nb_pe', int)
-        soc_events = self.get_property('soc_events')
+        nb_pe = cluster.conf.get_property('nb_pe', int)
+        soc_events = soc_conf.get_property('soc_events')
         udma_conf_path = 'pulp/chips/pulp_open/udma.json'
         udma_conf = self.load_property_file(udma_conf_path)
-        fc_events = self.get_property('peripherals/fc_itc/irq')
+        fc_events = soc_conf.get_property('peripherals/fc_itc/irq')
 
-    
+        TargetParameter(
+            self, name='binary', value=None, description='Binary to be loaded and started',
+            cast=str
+        )
+
         #
         # Components
         #
 
         # Loader
         binary = None
-        if parser is not None:
-            [args, otherArgs] = parser.parse_known_args()
-            binary = args.binary
+        if os.environ.get('USE_GVRUN') is None:
+            if parser is not None:
+                [args, otherArgs] = parser.parse_known_args()
+                binary = args.binary
 
-        loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
+        loader = utils.loader.loader.ElfLoader(self, 'loader', binary)
 
         # Debug ROM
         debug_rom = memory.Memory(self, 'debug_rom',
-            size=self.get_property('apb_ico/mappings/debug_rom/size'),
+            size=soc_conf.get_property('apb_ico/mappings/debug_rom/size'),
             stim_file=self.get_file_path('pulp/chips/pulp/debug_rom.bin')
         )
 
@@ -87,13 +101,13 @@ class Soc(st.Component):
 
         # FC ITC
         fc_itc = itc.Itc_v1(self, 'fc_itc')
-    
+
         # FC icache
-        fc_icache = cache.Cache(self, 'fc_icache', **self.get_property('peripherals/fc_icache/config'))
-    
+        fc_icache = cache.Cache(self, 'fc_icache', **soc_conf.get_property('peripherals/fc_icache/config'))
+
         # FC icache controller
         fc_icache_ctrl = Icache_ctrl(self, 'fc_icache_ctrl')
-    
+
         # APB soc controller
         soc_ctrl = apb_soc_ctrl.Apb_soc_ctrl(self, 'apb_soc_ctrl', self)
 
@@ -107,29 +121,29 @@ class Soc(st.Component):
         axi_ico = router.Router(self, 'axi_ico', latency=12)
 
         # GPIO
-        gpio = gpio_module.Gpio(self, 'gpio', nb_gpio=self.get_property('peripherals/gpio/nb_gpio'), soc_event=soc_events['soc_evt_gpio'])
+        gpio = gpio_module.Gpio(self, 'gpio', nb_gpio=soc_conf.get_property('peripherals/gpio/nb_gpio'), soc_event=soc_events['soc_evt_gpio'])
 
         # UDMA
         udma = Udma(self, 'udma', config_file=udma_conf_path)
 
         # RISCV bus watchpoint
-        fc_tohost = self.get_property('fc/riscv_fesvr_tohost_addr')
+        fc_tohost = soc_conf.get_property('fc/riscv_fesvr_tohost_addr')
         if fc_tohost is not None:
             bus_watchpoint = Bus_watchpoint(self, 'bus_watchpoint', fc_tohost)
 
         # L2
-        l2_priv0 = memory.Memory(self, 'l2_priv0', size=self.get_property('l2/priv0/mapping/size'))
-        l2_priv1 = memory.Memory(self, 'l2_priv1', size=self.get_property('l2/priv1/mapping/size'))
+        l2_priv0 = memory.Memory(self, 'l2_priv0', size=soc_conf.get_property('l2/priv0/mapping/size'))
+        l2_priv1 = memory.Memory(self, 'l2_priv1', size=soc_conf.get_property('l2/priv1/mapping/size'))
 
-        l2_shared_size = self.get_property('l2/shared/mapping/size', int)
-    
-        l2_shared_nb_banks = self.get_property('l2/shared/nb_banks', int)
-        l2_shared_nb_regions = self.get_property('l2/shared/nb_regions', int)
+        l2_shared_size = soc_conf.get_property('l2/shared/mapping/size', int)
+
+        l2_shared_nb_banks = soc_conf.get_property('l2/shared/nb_banks', int)
+        l2_shared_nb_regions = soc_conf.get_property('l2/shared/nb_regions', int)
         cut_size = int(l2_shared_size / l2_shared_nb_regions / l2_shared_nb_banks)
 
         for i in range(0, l2_shared_nb_regions):
 
-            l2_shared_interleaver = interleaver.Interleaver(self, 'l2_shared_%d' % i, nb_slaves=l2_shared_nb_banks, interleaving_bits=self.get_property('l2/shared/interleaving_bits'))
+            l2_shared_interleaver = interleaver.Interleaver(self, 'l2_shared_%d' % i, nb_slaves=l2_shared_nb_banks, interleaving_bits=soc_conf.get_property('l2/shared/interleaving_bits'))
 
             self.bind(soc_ico, 'l2_shared_%d' % i, l2_shared_interleaver, 'input')
 
@@ -141,7 +155,7 @@ class Soc(st.Component):
 
 
         # SOC EU
-        soc_eu = soc_eu_module.Soc_eu(self, 'soc_eu', ref_clock_event=soc_events['soc_evt_ref_clock'], **self.get_property('peripherals/soc_eu/config'))
+        soc_eu = soc_eu_module.Soc_eu(self, 'soc_eu', ref_clock_event=soc_events['soc_evt_ref_clock'], **soc_conf.get_property('peripherals/soc_eu/config'))
 
         # Timers
         timer = Timer(self, 'timer')
@@ -151,7 +165,7 @@ class Soc(st.Component):
         stdout = Stdout(self, 'stdout')
 
         # Pulp TAP
-        pulp_tap = Pulp_tap(self, 'pulp_tag', **self.get_property('pulp_tap/config'))
+        pulp_tap = Pulp_tap(self, 'pulp_tag', **soc_conf.get_property('pulp_tap/config'))
 
         # RISCV TAP
         harts = []
@@ -160,11 +174,11 @@ class Soc(st.Component):
         for cid in range(0, nb_cluster):
             for pe in range(0, nb_pe):
                 hart_id = (cid << 5) | pe
-    
+
                 name = 'cluster%d_pe%d' % (cid, pe)
                 harts.append([hart_id, name])
 
-        riscv_tap = Riscv_tap(self, 'riscv_tap', **self.get_property('riscv_tap/config'), harts=harts)
+        riscv_tap = Riscv_tap(self, 'riscv_tap', **soc_conf.get_property('riscv_tap/config'), harts=harts)
 
         # GDB server
         gdbserver = Gdbserver(self, 'gdbserver')
@@ -194,7 +208,7 @@ class Soc(st.Component):
         # FC
         self.bind(fc, 'fetch', fc_icache, 'input_0')
         self.bind(fc, 'irq_ack', fc_itc, 'irq_ack')
-        if self.get_property('fc/riscv_fesvr_tohost_addr') is not None:
+        if soc_conf.get_property('fc/riscv_fesvr_tohost_addr') is not None:
             self.bind(fc, 'data', bus_watchpoint, 'input')
         else:
             self.bind(fc, 'data', soc_ico, 'fc_data')
@@ -232,7 +246,8 @@ class Soc(st.Component):
         self.bind(pulp_tap, 'confreg_ext', soc_ctrl, 'confreg_ext')
 
         # APB
-        apb_ico_mappings = self.get_property('apb_ico/mappings')
+        apb_ico_mappings = soc_conf.get_property('apb_ico/mappings')
+        apb_ico.add_property('mappings', apb_ico_mappings)
         self.bind(apb_ico, 'stdout', stdout, 'input')
         self.bind(apb_ico, 'fc_icache_ctrl', fc_icache_ctrl, 'input')
         self.bind(apb_ico, 'apb_soc_ctrl', soc_ctrl, 'input')
@@ -249,7 +264,7 @@ class Soc(st.Component):
         self.bind(apb_ico, 'fc_timer', timer, 'input')
         self.bind(apb_ico, 'fc_timer_1', timer_1, 'input')
 
-        # Soc interconnect 
+        # Soc interconnect
         self.bind(soc_ico, 'apb', apb_ico, 'input')
         self.bind(soc_ico, 'l2_priv0', l2_priv0, 'input')
         self.bind(soc_ico, 'l2_priv1', l2_priv1, 'input')
@@ -266,17 +281,17 @@ class Soc(st.Component):
 
         self.bind(axi_ico, 'soc', soc_ico, 'axi_slave')
         self.bind(self, 'soc_input', axi_ico, 'input')
-        axi_ico.add_mapping('soc'      , **self.get_property('mapping'))
-        base = cluster.get_property('mapping/base')
-        size = cluster.get_property('mapping/size')
+        axi_ico.add_mapping('soc'      , **soc_conf.get_property('mapping'))
+        base = cluster.conf.get_property('mapping/base')
+        size = cluster.conf.get_property('mapping/size')
         for cid in range(0, nb_cluster):
             axi_ico.add_mapping(get_cluster_name(cid), base=base + size * cid, size=size)
             self.bind(axi_ico, get_cluster_name(cid), self, get_cluster_name(cid) + '_input')
 
         # GPIO
-        self.bind(gpio, 'irq', fc_itc, 'in_event_%d' % self.get_property('peripherals/fc_itc/irq/evt_gpio'))
+        self.bind(gpio, 'irq', fc_itc, 'in_event_%d' % soc_conf.get_property('peripherals/fc_itc/irq/evt_gpio'))
         self.bind(gpio, 'event', soc_eu, 'event_in')
-        for i in range(0, self.get_property('peripherals/gpio/nb_gpio')):
+        for i in range(0, soc_conf.get_property('peripherals/gpio/nb_gpio')):
             self.bind(self, 'gpio%d' % i, gpio, 'gpio%d' % i)
 
         # UDMA
@@ -291,7 +306,7 @@ class Soc(st.Component):
             is_dual = itf_conf.get('is_dual')
             for channel in range(0, nb_channels):
                 itf_name = itf + str(channel)
-    
+
                 if is_master:
                     self.bind(udma, itf_name, self, itf_name)
                 if is_slave:
@@ -301,9 +316,9 @@ class Soc(st.Component):
                     else:
                         self.bind(self, itf_name, udma, itf_name)
 
-              
+
         # Riscv bus watchpoint
-        if self.get_property('fc/riscv_fesvr_tohost_addr') is not None:
+        if soc_conf.get_property('fc/riscv_fesvr_tohost_addr') is not None:
             self.bind(bus_watchpoint, 'output', soc_ico, 'fc_data')
 
         # Soc eu
@@ -342,9 +357,25 @@ class Soc(st.Component):
         # Pulp TAP
         self.bind(pulp_tap, 'io', soc_ico, 'debug')
 
+        # Make sure the loader is notified by any executable attached to the hieararchy of this
+        # component so that it is automatically loaded
+        self.loader = loader
+        self.register_binary_handler(self.handle_binary)
 
     def gen_gtkw_conf(self, tree, traces):
         if tree.get_view() == 'overview':
             self.vcd_group(skip=True)
         else:
             self.vcd_group(skip=False)
+
+    def configure(self):
+        # We configure the loader binary now int he configure steps since it is coming from
+        # a parameter which can be set either from command line or from the build process
+        binary = self.get_parameter('binary')
+        if binary is not None:
+            self.loader.set_binary(binary)
+
+    def handle_binary(self, binary):
+        # This gets called when an executable is attached to a hierarchy of components containing
+        # this one
+        self.set_parameter('binary', binary)

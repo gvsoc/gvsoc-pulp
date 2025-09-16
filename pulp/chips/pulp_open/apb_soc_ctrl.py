@@ -24,9 +24,8 @@ class Apb_soc_ctrl(st.Component):
         self.set_component('pulp.chips.pulp.apb_soc_impl')
 
         self.add_properties({
-            'cluster_power_event': soc.get_property('soc_events/soc_evt_cluster_pok'),
-            'cluster_clock_gate_event': soc.get_property('soc_events/soc_evt_cluster_cg_ok')
+            'cluster_power_event': soc.conf.get_property('soc_events/soc_evt_cluster_pok'),
+            'cluster_clock_gate_event': soc.conf.get_property('soc_events/soc_evt_cluster_cg_ok')
         })
 
-        self.add_properties(soc.get_property('peripherals/apb_soc_ctrl/config'))
-        
+        self.add_properties(soc.conf.get_property('peripherals/apb_soc_ctrl/config'))
