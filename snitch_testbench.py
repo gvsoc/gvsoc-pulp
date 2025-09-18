@@ -59,9 +59,17 @@ class SnitchTestbenchAttr(Tree):
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.mem_l0 = Area(self, 'mem_l0', 0x80000000, 0x100000, description='Address range of the memory')
-        self.mem_l1 = Area(self, 'mem_l1', 0x90000000, 0x100000, description='Address range of the memory')
-        self.mem_l2 = Area(self, 'mem_l2', 0xA0000000, 0x100000, description='Address range of the memory')
+        self.mem_l0 = Area(self, 'mem_l0', 0x8000_0000, 0x10_0000, description='Address range of the memory')
+        self.mem_l1 = Area(self, 'mem_l1', 0x8010_0000, 0x10_0000, description='Address range of the memory')
+        self.mem_l2 = Area(self, 'mem_l2', 0x8020_0000, 0x100000, description='Address range of the memory')
+        self.mem_l0_async = Area(self, 'mem_l0', 0x9000_0000, 0x10_0000, description='Address range of the memory')
+        self.mem_l1_async = Area(self, 'mem_l1', 0x9010_0000, 0x10_0000, description='Address range of the memory')
+        self.mem_l2_async = Area(self, 'mem_l2', 0x9020_0000, 0x10_0000, description='Address range of the memory')
+        self.async_area = Area(self, 'mem_l2', 0x9000_0000, 0x30_0000, description='Address range of the memory')
+        self.mem_l0_async2 = Area(self, 'mem_l0', 0xA000_0000, 0x10_0000, description='Address range of the memory')
+        self.mem_l1_async2 = Area(self, 'mem_l1', 0xA010_0000, 0x10_0000, description='Address range of the memory')
+        self.mem_l2_async2 = Area(self, 'mem_l2', 0xA020_0000, 0x10_0000, description='Address range of the memory')
+        self.async2_area = Area(self, 'mem_l2', 0xA000_0000, 0x30_0000, description='Address range of the memory')
         self.isa    = Value(self, 'isa', 'rv32imfdca')
 
 
@@ -75,17 +83,30 @@ class SnitchTestbench(st.Component):
             cast=str
         )
 
-        mem_l0 = memory.Memory(self, 'mem_l0', size=attr.mem_l0.size)
-        mem_l1 = memory.Memory(self, 'mem_l1', size=attr.mem_l1.size)
-        mem_l2 = memory.Memory(self, 'mem_l2', size=attr.mem_l2.size)
+        mem_l0 = memory.Memory(self, 'mem_l0', size=attr.mem_l0.size, atomics=True, latency=0)
+        mem_l1 = memory.Memory(self, 'mem_l1', size=attr.mem_l1.size, atomics=True, latency=10)
+        mem_l2 = memory.Memory(self, 'mem_l2', size=attr.mem_l2.size, atomics=True, latency=1000)
 
         ico = router.Router(self, 'ico')
+        ico_async = router.Router(self, 'ico_async', synchronous=False, max_input_pending_size=4)
+        ico_async2 = router.Router(self, 'ico_async2', synchronous=False, max_input_pending_size=4, bandwidth=1)
         host = iss.SnitchFast(self, f'core', isa=attr.isa, nb_outstanding=8)
         loader = utils.loader.loader.ElfLoader(self, 'loader')
 
-        ico.o_MAP(mem_l0.i_INPUT(), base=attr.mem_l0.base, size=attr.mem_l0.size, latency=0)
-        ico.o_MAP(mem_l1.i_INPUT(), base=attr.mem_l1.base, size=attr.mem_l1.size, latency=10)
-        ico.o_MAP(mem_l2.i_INPUT(), base=attr.mem_l2.base, size=attr.mem_l2.size, latency=1000)
+        ico.o_MAP(mem_l0.i_INPUT(), base=attr.mem_l0.base, size=attr.mem_l0.size)
+        ico.o_MAP(mem_l1.i_INPUT(), base=attr.mem_l1.base, size=attr.mem_l1.size)
+        ico.o_MAP(mem_l2.i_INPUT(), base=attr.mem_l2.base, size=attr.mem_l2.size)
+        ico.o_MAP(ico_async.i_INPUT(), base=attr.async_area.base, size=attr.async_area.size, rm_base=False)
+        ico.o_MAP(ico_async.i_INPUT(), name="async2", base=attr.async2_area.base, size=attr.async2_area.size, rm_base=False)
+
+        ico_async.o_MAP(mem_l0.i_INPUT(), base=attr.mem_l0_async.base, size=attr.mem_l0_async.size, latency=0)
+        ico_async.o_MAP(mem_l1.i_INPUT(), base=attr.mem_l1_async.base, size=attr.mem_l1_async.size, latency=10)
+        ico_async.o_MAP(mem_l2.i_INPUT(), base=attr.mem_l2_async.base, size=attr.mem_l2_async.size, latency=1000)
+        ico_async.o_MAP(ico_async2.i_INPUT(), base=attr.async2_area.base, size=attr.async2_area.size, rm_base=False)
+
+        ico_async2.o_MAP(mem_l0.i_INPUT(), base=attr.mem_l0_async2.base, size=attr.mem_l0_async2.size, latency=0)
+        ico_async2.o_MAP(mem_l1.i_INPUT(), base=attr.mem_l1_async2.base, size=attr.mem_l1_async2.size, latency=10)
+        ico_async2.o_MAP(mem_l2.i_INPUT(), base=attr.mem_l2_async2.base, size=attr.mem_l2_async2.size, latency=1000)
 
         loader.o_OUT(ico.i_INPUT())
         loader.o_START(host.i_FETCHEN())
