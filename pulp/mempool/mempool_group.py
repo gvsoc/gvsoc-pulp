@@ -130,11 +130,10 @@ class Group(st.Component):
         if not terapool:
             # L2 cache rules
             l2_cache_rules = []
-            l2_cache_rules.append((0x0000000C, 0x00000010))
-            l2_cache_rules.append((0x00000008, 0x0000000C))
-            l2_cache_rules.append((0xA0000000, 0xA0001000))
             l2_cache_rules.append((0x80000000, 0x80001000))
-
+            l2_cache_rules.append((0xA0000000, 0xA0001000))
+            l2_cache_rules.append((0x00000008, 0x0000000C))
+            l2_cache_rules.append((0x0000000C, 0x00000010))
             # AXI Interconnect
             axi_ico = Hierarchical_Interco(self, 'axi_ico', enable_cache=True, cache_rules=l2_cache_rules, bandwidth=axi_data_width)
 
