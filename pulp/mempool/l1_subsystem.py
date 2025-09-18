@@ -20,6 +20,7 @@ import gvsoc.systree
 from memory.memory import Memory
 from interco.router import Router
 from interco.interleaver import Interleaver
+from pulp.mempool.l1_remote_itf import L1_RemoteItf
 from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 import math
 
@@ -115,8 +116,7 @@ class L1_subsystem(gvsoc.systree.Component):
             else:
                 remote_local_out_interfaces.append(Router(self, f'remote_local_out_itf{i}', bandwidth=bandwidth, latency=2, shared_rw_bandwidth=True))
             remote_local_out_interfaces[i].add_mapping('output')
-            remote_local_in_interfaces.append(Router(self, f'remote_local_in_itf{i}', bandwidth=bandwidth, latency=0, shared_rw_bandwidth=True))
-            remote_local_in_interfaces[i].add_mapping('output')
+            remote_local_in_interfaces.append(L1_RemoteItf(self, f'remote_local_in_itf{i}', bandwidth=bandwidth))
 
         remote_sub_group_out_interfaces = []
         remote_sub_group_in_interfaces = []
@@ -128,8 +128,7 @@ class L1_subsystem(gvsoc.systree.Component):
             else:
                 remote_sub_group_out_interfaces.append(Router(self, f'remote_sub_group_out_itf{i}', bandwidth=bandwidth, latency=2, shared_rw_bandwidth=True))
             remote_sub_group_out_interfaces[i].add_mapping('output')
-            remote_sub_group_in_interfaces.append(Router(self, f'remote_sub_group_in_itf{i}', bandwidth=bandwidth, latency=0, shared_rw_bandwidth=True))
-            remote_sub_group_in_interfaces[i].add_mapping('output')
+            remote_sub_group_in_interfaces.append(L1_RemoteItf(self, f'remote_sub_group_in_itf{i}', bandwidth=bandwidth))
 
         remote_group_out_interfaces = []
         remote_group_in_interfaces = []
@@ -141,8 +140,7 @@ class L1_subsystem(gvsoc.systree.Component):
             else:
                 remote_group_out_interfaces.append(Router(self, f'remote_group_out_itf{i}', bandwidth=bandwidth, latency=2, shared_rw_bandwidth=True))
             remote_group_out_interfaces[i].add_mapping('output')
-            remote_group_in_interfaces.append(Router(self, f'remote_group_in_itf{i}', bandwidth=bandwidth, latency=0, shared_rw_bandwidth=True))
-            remote_group_in_interfaces[i].add_mapping('output')
+            remote_group_in_interfaces.append(L1_RemoteItf(self, f'remote_group_in_itf{i}', bandwidth=bandwidth))
 
         # DMA Interface
         dma_interface = Router(self, 'dma_itf', bandwidth=axi_data_width, latency=0, shared_rw_bandwidth=True)
