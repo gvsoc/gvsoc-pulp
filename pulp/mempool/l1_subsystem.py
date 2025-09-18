@@ -111,8 +111,6 @@ class L1_subsystem(gvsoc.systree.Component):
         for i in range(0, nb_remote_local_masters):
             if async_interco:
                 remote_local_out_interfaces.append(Router(self, f'remote_local_out_itf{i}', bandwidth=bandwidth, latency=1, shared_rw_bandwidth=True, synchronous=False, max_input_pending_size=4))
-                for j in range(nb_pe):
-                    remote_local_out_interfaces[i].i_INPUT(j)
             else:
                 remote_local_out_interfaces.append(Router(self, f'remote_local_out_itf{i}', bandwidth=bandwidth, latency=2, shared_rw_bandwidth=True))
             remote_local_out_interfaces[i].add_mapping('output')
@@ -123,8 +121,6 @@ class L1_subsystem(gvsoc.systree.Component):
         for i in range(0, nb_remote_sub_group_masters):
             if async_interco:
                 remote_sub_group_out_interfaces.append(Router(self, f'remote_sub_group_out_itf{i}', bandwidth=bandwidth, latency=1, shared_rw_bandwidth=True, synchronous=False, max_input_pending_size=4))
-                for j in range(nb_pe):
-                    remote_sub_group_out_interfaces[i].i_INPUT(j)
             else:
                 remote_sub_group_out_interfaces.append(Router(self, f'remote_sub_group_out_itf{i}', bandwidth=bandwidth, latency=2, shared_rw_bandwidth=True))
             remote_sub_group_out_interfaces[i].add_mapping('output')
@@ -135,8 +131,6 @@ class L1_subsystem(gvsoc.systree.Component):
         for i in range(0, nb_remote_group_masters):
             if async_interco:
                 remote_group_out_interfaces.append(Router(self, f'remote_group_out_itf{i}', bandwidth=bandwidth, latency=1, shared_rw_bandwidth=True, synchronous=False, max_input_pending_size=4))
-                for j in range(nb_pe):
-                    remote_group_out_interfaces[i].i_INPUT(j)
             else:
                 remote_group_out_interfaces.append(Router(self, f'remote_group_out_itf{i}', bandwidth=bandwidth, latency=2, shared_rw_bandwidth=True))
             remote_group_out_interfaces[i].add_mapping('output')
@@ -207,23 +201,14 @@ class L1_subsystem(gvsoc.systree.Component):
                 self.bind(remove_offset, 'out_0', l1_banks[i - start_bank_id], 'input')
             elif tgt_grp_id == group_id:
                 if tgt_sg_id == sub_group_id:
-                    for j, local_interleaver in enumerate(local_interleavers):
-                        if async_interco:
-                            self.bind(local_interleaver, 'out_%d' % i, remote_local_out_interfaces[0], 'input' if j == 0 else f'input_{j}')
-                        else:
-                            self.bind(local_interleaver, 'out_%d' % i, remote_local_out_interfaces[0], 'input')
+                    for local_interleaver in local_interleavers:
+                        self.bind(local_interleaver, 'out_%d' % i, remote_local_out_interfaces[0], 'input')
                 else:
-                    for j, local_interleaver in enumerate(local_interleavers):
-                        if async_interco:
-                            self.bind(local_interleaver, 'out_%d' % i, remote_sub_group_out_interfaces[(tgt_sg_id ^ sub_group_id) - 1], 'input' if j == 0 else f'input_{j}')
-                        else:
-                            self.bind(local_interleaver, 'out_%d' % i, remote_sub_group_out_interfaces[(tgt_sg_id ^ sub_group_id) - 1], 'input')
+                    for local_interleaver in local_interleavers:
+                        self.bind(local_interleaver, 'out_%d' % i, remote_sub_group_out_interfaces[(tgt_sg_id ^ sub_group_id) - 1], 'input')
             else:
-                for j, local_interleaver in enumerate(local_interleavers):
-                    if async_interco:
-                        self.bind(local_interleaver, 'out_%d' % i, remote_group_out_interfaces[(tgt_grp_id ^ group_id) - 1], 'input' if j == 0 else f'input_{j}')
-                    else:
-                        self.bind(local_interleaver, 'out_%d' % i, remote_group_out_interfaces[(tgt_grp_id ^ group_id) - 1], 'input')
+                for local_interleaver in local_interleavers:
+                    self.bind(local_interleaver, 'out_%d' % i, remote_group_out_interfaces[(tgt_grp_id ^ group_id) - 1], 'input')
 
     def i_DMA_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'dma_input', signature='io')

@@ -46,13 +46,14 @@ class System(st.Component):
             binary = args.binary
 
         nb_axi_masters = nb_axi_masters_per_group * nb_groups
+        async_interco = False
 
         ################################################################
         ##########              Design Components             ##########
         ################################################################ 
 
         #Mempool cluster
-        mempool_cluster=Cluster(self,'mempool_cluster',terapool=terapool, parser=parser, nb_cores_per_tile=nb_cores_per_tile,
+        mempool_cluster=Cluster(self, 'mempool_cluster', async_interco=async_interco, terapool=terapool, parser=parser, nb_cores_per_tile=nb_cores_per_tile,
             nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor,
             axi_data_width=axi_data_width, nb_axi_masters_per_group=nb_axi_masters_per_group)
 
