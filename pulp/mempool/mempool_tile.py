@@ -27,7 +27,7 @@ from pulp.mempool.address_scrambler import AddressScrambler
 
 class Tile(st.Component):
 
-    def __init__(self, parent, name, parser, async_interco: bool=False, tile_id: int=0, sub_group_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64):
+    def __init__(self, parent, name, parser, terapool: bool=False, async_interco: bool=False, tile_id: int=0, sub_group_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64):
         super().__init__(parent, name)
 
         [args, __] = parser.parse_known_args()
@@ -59,7 +59,7 @@ class Tile(st.Component):
         ################################################################
 
         # Snitch TCDM (L1 subsystem)
-        l1 = l1_subsystem.L1_subsystem(self, 'l1', \
+        l1 = l1_subsystem.L1_subsystem(self, 'l1', terapool=terapool, \
                                         async_interco=async_interco, tile_id=tile_id, sub_group_id=sub_group_id, group_id=group_id, \
                                         nb_tiles_per_sub_group=nb_tiles_per_sub_group, nb_sub_groups_per_group=nb_sub_groups_per_group, \
                                         nb_groups=nb_groups, nb_remote_local_masters=1, nb_remote_group_masters=nb_remote_group_ports, \

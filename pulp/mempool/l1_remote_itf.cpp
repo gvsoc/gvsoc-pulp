@@ -76,6 +76,8 @@ private:
     vp::Trace trace;
 
     BandwidthLimiter *bw_limiter;
+    int req_latency;
+    int resp_latency;
 
     vp::IoSlave input_itf;
     vp::IoMaster output_itf;
@@ -86,9 +88,9 @@ private:
 L1_RemoteItf::L1_RemoteItf(vp::ComponentConf &config)
     : vp::Component(config)
 {
+    req_latency = this->get_js_config()->get_int("req_latency");
+    resp_latency = this->get_js_config()->get_int("resp_latency");
     int bandwidth = this->get_js_config()->get_int("bandwidth");
-    int req_latency = this->get_js_config()->get_int("req_latency");
-    int resp_latency = this->get_js_config()->get_int("resp_latency");
     bool shared_rw_bandwidth = this->get_js_config()->get_child_bool("shared_rw_bandwidth");
 
     this->bw_limiter = new BandwidthLimiter(this, bandwidth, req_latency, shared_rw_bandwidth);
@@ -125,7 +127,9 @@ vp::IoReqStatus L1_RemoteItf::handle_req(vp::IoReq *req, int port)
         return vp::IO_REQ_INVALID;
     }
 
-    return this->output_itf.req_forward(req);
+    vp::IoReqStatus retval = this->output_itf.req_forward(req);
+    req->inc_latency(this->resp_latency);
+    return retval;
 }
 
 BandwidthLimiter::BandwidthLimiter(L1_RemoteItf *top, int64_t bandwidth, int64_t latency, bool shared_rw_bandwidth)

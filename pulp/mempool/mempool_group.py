@@ -52,13 +52,13 @@ class Group(st.Component):
             # Sub groups
             self.sub_group_list = []
             for i in range(0, nb_sub_groups_per_group):
-                self.sub_group_list.append(Sub_group(self, f'sub_group_{i}', parser=parser, async_interco=async_interco, sub_group_id=i, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
+                self.sub_group_list.append(Sub_group(self, f'sub_group_{i}', parser=parser, terapool=terapool, async_interco=async_interco, sub_group_id=i, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
                     nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width))
         else:
             # TIles
             self.tile_list = []
             for i in range(0, nb_tiles_per_group):
-                self.tile_list.append(Tile(self, f'tile_{i}', parser=parser, async_interco=async_interco, tile_id=i, sub_group_id=0, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
+                self.tile_list.append(Tile(self, f'tile_{i}', parser=parser, terapool=terapool, async_interco=async_interco, tile_id=i, sub_group_id=0, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
                     nb_sub_groups_per_group=1, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width))
 
         # TCDM Interconnect
@@ -75,10 +75,7 @@ class Group(st.Component):
                 for i in range(0, nb_sub_groups_per_group):
                     tile_itf_list = []
                     for j in range(0, nb_tiles_per_sub_group):
-                        if async_interco:
-                            itf = router.Router(self, f'group_remote_out_itf{port}_sg{i}_tile{j}', latency=1, bandwidth=4, shared_rw_bandwidth=True, synchronous=False, max_input_pending_size=4)
-                        else:
-                            itf = router.Router(self, f'group_remote_out_itf{port}_sg{i}_tile{j}', latency=2, bandwidth=4, shared_rw_bandwidth=True)
+                        itf = router.Router(self, f'group_remote_out_itf{port}_sg{i}_tile{j}', latency=1, bandwidth=4, shared_rw_bandwidth=True, synchronous=not async_interco, max_input_pending_size=4)
                         itf.add_mapping('output')
                         tile_itf_list.append(itf)
                     sub_group_itf_list.append(tile_itf_list)
@@ -99,10 +96,8 @@ class Group(st.Component):
                 for i in range(0, nb_tiles_per_group):
                     if nb_tiles_per_group == 1:
                         itf = router.Router(self, f'group_remote_out_itf{port}_tile{i}', latency=0, bandwidth=4, shared_rw_bandwidth=True)
-                    elif async_interco:
-                        itf = router.Router(self, f'group_remote_out_itf{port}_tile{i}', latency=1, bandwidth=4, shared_rw_bandwidth=True, synchronous=False, max_input_pending_size=4)
                     else:
-                        itf = router.Router(self, f'group_remote_out_itf{port}_tile{i}', latency=2, bandwidth=4, shared_rw_bandwidth=True)
+                        itf = router.Router(self, f'group_remote_out_itf{port}_tile{i}', latency=1, bandwidth=4, shared_rw_bandwidth=True, synchronous=not async_interco, max_input_pending_size=4)
                     itf.add_mapping('output')
                     tile_itf_list.append(itf)
                 group_remote_out_interfaces.append(tile_itf_list)
