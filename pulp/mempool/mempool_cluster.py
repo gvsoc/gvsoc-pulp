@@ -26,7 +26,7 @@ from pulp.mempool.mempool_group import Group
 
 class Cluster(st.Component):
 
-    def __init__(self, parent, name, parser, async_interco: bool=False, terapool: bool=False, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1):
+    def __init__(self, parent, name, parser, async_l1_interco: bool=False, terapool: bool=False, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1):
         super().__init__(parent, name)
 
         ################################################################
@@ -42,7 +42,7 @@ class Cluster(st.Component):
         # TIles
         self.group_list = []
         for i in range(0, nb_groups):
-            self.group_list.append(Group(self, f'group_{i}', parser=parser, async_interco=async_interco, terapool=terapool, group_id=i, nb_cores_per_tile=nb_cores_per_tile, 
+            self.group_list.append(Group(self, f'group_{i}', parser=parser, async_l1_interco=async_l1_interco, terapool=terapool, group_id=i, nb_cores_per_tile=nb_cores_per_tile, 
                 nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width))
 
         # AXI Interface

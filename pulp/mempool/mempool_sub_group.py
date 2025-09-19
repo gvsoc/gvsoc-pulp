@@ -27,7 +27,7 @@ from pulp.mempool.hierarchical_interco import Hierarchical_Interco
 
 class Sub_group(st.Component):
 
-    def __init__(self, parent, name, parser, terapool: bool=False, async_interco: bool=False, sub_group_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=4, nb_groups: int=4, total_cores: int=1024, bank_factor: int=4, axi_data_width: int=64):
+    def __init__(self, parent, name, parser, terapool: bool=False, async_l1_interco: bool=False, sub_group_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=4, nb_groups: int=4, total_cores: int=1024, bank_factor: int=4, axi_data_width: int=64):
         super().__init__(parent, name)
 
         ################################################################
@@ -45,7 +45,7 @@ class Sub_group(st.Component):
         # TIles
         self.tile_list = []
         for i in range(0, nb_tiles_per_sub_group):
-            self.tile_list.append(Tile(self, f'tile_{i}',parser=parser, terapool=terapool, async_interco=async_interco, tile_id=i, sub_group_id=sub_group_id, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
+            self.tile_list.append(Tile(self, f'tile_{i}',parser=parser, terapool=terapool, async_l1_interco=async_l1_interco, tile_id=i, sub_group_id=sub_group_id, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
                 nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor))
 
         #Sub Group local interconnect
@@ -61,7 +61,7 @@ class Sub_group(st.Component):
         for port in range(0, nb_remote_group_ports):
             tile_itf_list = []
             for i in range(0, nb_tiles_per_sub_group):
-                itf = router.Router(self, f'sub_group_remote_out_itf{port}_tile{i}', latency=1, bandwidth=4, shared_rw_bandwidth=True, synchronous=not async_interco, max_input_pending_size=4)
+                itf = router.Router(self, f'sub_group_remote_out_itf{port}_tile{i}', latency=1, bandwidth=4, shared_rw_bandwidth=True, synchronous=not async_l1_interco, max_input_pending_size=4)
                 itf.add_mapping('output')
                 tile_itf_list.append(itf)
             sub_group_out_interfaces.append(tile_itf_list)
