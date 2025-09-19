@@ -75,7 +75,8 @@ private:
     // This component trace
     vp::Trace trace;
 
-    BandwidthLimiter *bw_limiter;
+    BandwidthLimiter *req_bw_limiter;
+    BandwidthLimiter *resp_bw_limiter;
     int req_latency;
     int resp_latency;
 
@@ -93,7 +94,8 @@ L1_RemoteItf::L1_RemoteItf(vp::ComponentConf &config)
     int bandwidth = this->get_js_config()->get_int("bandwidth");
     bool shared_rw_bandwidth = this->get_js_config()->get_child_bool("shared_rw_bandwidth");
 
-    this->bw_limiter = new BandwidthLimiter(this, bandwidth, req_latency, shared_rw_bandwidth);
+    this->req_bw_limiter = new BandwidthLimiter(this, bandwidth, req_latency, shared_rw_bandwidth);
+    this->resp_bw_limiter = new BandwidthLimiter(this, bandwidth, resp_latency, shared_rw_bandwidth);
 
     this->input_itf.set_req_meth(&L1_RemoteItf::req);
     this->new_slave_port("input", &this->input_itf);
@@ -117,8 +119,8 @@ vp::IoReqStatus L1_RemoteItf::handle_req(vp::IoReq *req, int port)
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Received IO req (offset: 0x%llx, size: 0x%llx, is_write: %d)\n",
         offset, size, is_write);
 
-    // First apply the bandwidth limitation coming from the input port
-    this->bw_limiter->apply_bandwidth(this->clock.get_cycles(), req);
+    // First apply the bandwidth limitation of request input
+    this->req_bw_limiter->apply_bandwidth(this->clock.get_cycles(), req);
 
     // The mapping may exist and not be connected, return an error in this case
     if (!this->output_itf.is_bound())
@@ -127,8 +129,12 @@ vp::IoReqStatus L1_RemoteItf::handle_req(vp::IoReq *req, int port)
         return vp::IO_REQ_INVALID;
     }
 
+    // Foward the request to the output port
     vp::IoReqStatus retval = this->output_itf.req_forward(req);
-    req->inc_latency(this->resp_latency);
+
+    // Then apply the bandwidth limitation of response output
+    this->resp_bw_limiter->apply_bandwidth(this->clock.get_cycles(), req);
+
     return retval;
 }
 
