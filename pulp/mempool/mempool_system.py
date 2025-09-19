@@ -46,16 +46,16 @@ class System(st.Component):
             binary = args.binary
 
         nb_axi_masters = nb_axi_masters_per_group * nb_groups
-        async_interco = False
+        async_l1_interco = True
 
         ################################################################
         ##########              Design Components             ##########
         ################################################################ 
 
         #Mempool cluster
-        mempool_cluster=Cluster(self, 'mempool_cluster', async_interco=async_interco, terapool=terapool, parser=parser, nb_cores_per_tile=nb_cores_per_tile,
-            nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor,
-            axi_data_width=axi_data_width, nb_axi_masters_per_group=nb_axi_masters_per_group)
+        mempool_cluster=Cluster(self, 'mempool_cluster', async_l1_interco=async_l1_interco, terapool=terapool, parser=parser, nb_cores_per_tile=nb_cores_per_tile,
+                            nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor,
+                            axi_data_width=axi_data_width, nb_axi_masters_per_group=nb_axi_masters_per_group)
 
         # Boot Rom
         rom = memory.Memory(self, 'rom', size=0x1000, width_log2=(axi_data_width - 1).bit_length(), stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))

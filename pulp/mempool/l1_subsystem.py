@@ -48,7 +48,7 @@ class L1_subsystem(gvsoc.systree.Component):
 
     """
 
-    def __init__(self, parent: gvsoc.systree.Component, name: str, terapool: bool=False, async_interco: bool=False, tile_id: int=0, sub_group_id: int=0, group_id: int=0,
+    def __init__(self, parent: gvsoc.systree.Component, name: str, terapool: bool=False, async_l1_interco: bool=False, tile_id: int=0, sub_group_id: int=0, group_id: int=0,
                  nb_tiles_per_sub_group: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, nb_remote_local_masters: int=1, nb_remote_group_masters: int=4,
                  nb_remote_sub_group_masters: int=4, nb_pe: int=0, size: int=0, nb_banks_per_tile: int=0, bandwidth: int=0, axi_data_width: int=512):
         super(L1_subsystem, self).__init__(parent, name)
@@ -110,7 +110,7 @@ class L1_subsystem(gvsoc.systree.Component):
         remote_local_in_interfaces = []
         for i in range(0, nb_remote_local_masters):
             remote_local_out_interfaces.append(Router(self, f'remote_local_out_itf{i}', bandwidth=bandwidth, latency=1, shared_rw_bandwidth=True, \
-                                            synchronous=not async_interco, max_input_pending_size=4))
+                                            synchronous=not async_l1_interco, max_input_pending_size=4))
             remote_local_out_interfaces[i].add_mapping('output')
             remote_local_in_interfaces.append(L1_RemoteItf(self, f'remote_local_in_itf{i}', bandwidth=bandwidth, resp_latency=1))
 
@@ -118,7 +118,7 @@ class L1_subsystem(gvsoc.systree.Component):
         remote_sub_group_in_interfaces = []
         for i in range(0, nb_remote_sub_group_masters):
             remote_sub_group_out_interfaces.append(Router(self, f'remote_sub_group_out_itf{i}', bandwidth=bandwidth, latency=1, shared_rw_bandwidth=True, \
-                                            synchronous=not async_interco, max_input_pending_size=4))
+                                            synchronous=not async_l1_interco, max_input_pending_size=4))
             remote_sub_group_out_interfaces[i].add_mapping('output')
             remote_sub_group_in_interfaces.append(L1_RemoteItf(self, f'remote_sub_group_in_itf{i}', bandwidth=bandwidth, resp_latency=2))
 
@@ -126,7 +126,7 @@ class L1_subsystem(gvsoc.systree.Component):
         remote_group_in_interfaces = []
         for i in range(0, nb_remote_group_masters):
             remote_group_out_interfaces.append(Router(self, f'remote_group_out_itf{i}', bandwidth=bandwidth, latency=1, shared_rw_bandwidth=True, \
-                                            synchronous=not async_interco, max_input_pending_size=4))
+                                            synchronous=not async_l1_interco, max_input_pending_size=4))
             remote_group_out_interfaces[i].add_mapping('output')
             remote_group_in_interfaces.append(L1_RemoteItf(self, f'remote_group_in_itf{i}', bandwidth=bandwidth, \
                                                 resp_latency=3 if terapool else 2 if (nb_sub_groups_per_group * nb_tiles_per_sub_group) > 1 else 1))
