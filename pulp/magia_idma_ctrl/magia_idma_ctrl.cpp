@@ -240,10 +240,15 @@ void Magia_iDMA_Ctrl::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t>
                         dmcpyi.arg_a=_this->len_dma0;
                         dmcpyi.arg_b=0b00010; //configure the transfer as a 2d transfer
                     }
-                    _this->offload_itf_idma0.sync(&dmrep);
-                    _this->offload_itf_idma0.sync(&dmcpyi);
-                    _this->state_dma0.set(POLL_STS_REG);
-                    _this->event_enqueue(_this->fsm_event_dma0, 1); //trigger fsm
+                    if (_this->state_dma0.get()!=IDLE) {
+                        _this->trace.fatal("[Magia iDMA Ctrl] Received dmstr for IDMA - DIR: %d when not in IDLE state\n",dir);
+                    }
+                    else {
+                        _this->offload_itf_idma0.sync(&dmrep);
+                        _this->offload_itf_idma0.sync(&dmcpyi);
+                        _this->state_dma0.set(POLL_STS_REG);
+                        _this->event_enqueue(_this->fsm_event_dma0, 1); //trigger fsm
+                    }
                 }
                 else { //dma1
                     //set dmrep
@@ -260,10 +265,15 @@ void Magia_iDMA_Ctrl::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t>
                         dmcpyi.arg_a=_this->len_dma1;
                         dmcpyi.arg_b=0b00010; //configure the transfer as a 2d transfer
                     }
-                    _this->offload_itf_idma1.sync(&dmrep);
-                    _this->offload_itf_idma1.sync(&dmcpyi);
-                    _this->state_dma1.set(POLL_STS_REG);
-                    _this->event_enqueue(_this->fsm_event_dma1, 1); //trigger fsm
+                    if (_this->state_dma1.get()!=IDLE) {
+                        _this->trace.fatal("[Magia iDMA Ctrl] Received dmstr for IDMA - DIR: %d when not in IDLE state\n",dir);
+                    }
+                    else {
+                        _this->offload_itf_idma1.sync(&dmrep);
+                        _this->offload_itf_idma1.sync(&dmcpyi);
+                        _this->state_dma1.set(POLL_STS_REG);
+                        _this->event_enqueue(_this->fsm_event_dma1, 1); //trigger fsm
+                    }
                 }
                 break;
             }
