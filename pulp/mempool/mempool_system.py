@@ -17,8 +17,6 @@
 # Author: Yichao Zhang (ETH Zurich) (yiczhang@iis.ee.ethz.ch)
 #         Yinrong Li (ETH Zurich) (yinrli@student.ethz.ch)
 
-import gvsoc.runner
-import cpu.iss.riscv as iss
 import memory.memory as memory
 from vp.clock_domain import Clock_domain
 import interco.router as router
@@ -27,13 +25,9 @@ import utils.loader.loader
 import gvsoc.systree as st
 from pulp.mempool.mempool_dma import MemPoolDma
 from elftools.elf.elffile import *
-import gvsoc.runner as gvsoc
-import math
 from pulp.mempool.mempool_cluster import Cluster
 from pulp.mempool.ctrl_registers import CtrlRegisters
 from pulp.mempool.l2_subsystem import L2_subsystem
-
-GAPY_TARGET = True
 
 class System(st.Component):
 
@@ -52,15 +46,16 @@ class System(st.Component):
             binary = args.binary
 
         nb_axi_masters = nb_axi_masters_per_group * nb_groups
+        async_l1_interco = True
 
         ################################################################
         ##########              Design Components             ##########
         ################################################################ 
 
         #Mempool cluster
-        mempool_cluster=Cluster(self,'mempool_cluster',terapool=terapool, parser=parser, nb_cores_per_tile=nb_cores_per_tile,
-            nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor,
-            axi_data_width=axi_data_width, nb_axi_masters_per_group=nb_axi_masters_per_group)
+        mempool_cluster=Cluster(self, 'mempool_cluster', async_l1_interco=async_l1_interco, terapool=terapool, parser=parser, nb_cores_per_tile=nb_cores_per_tile,
+                            nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor,
+                            axi_data_width=axi_data_width, nb_axi_masters_per_group=nb_axi_masters_per_group)
 
         # Boot Rom
         rom = memory.Memory(self, 'rom', size=0x1000, width_log2=(axi_data_width - 1).bit_length(), stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))

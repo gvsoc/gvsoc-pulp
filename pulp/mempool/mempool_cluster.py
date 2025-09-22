@@ -17,39 +17,23 @@
 # Author: Yichao Zhang (ETH Zurich) (yiczhang@iis.ee.ethz.ch)
 #         Yinrong Li (ETH Zurich) (yinrli@student.ethz.ch)
 
-import gvsoc.runner
-import cpu.iss.riscv as iss
-from memory.memory import Memory
-from pulp.snitch.hierarchical_cache import Hierarchical_cache
-from vp.clock_domain import Clock_domain
-import pulp.mempool.l1_subsystem as l1_subsystem
 import interco.router as router
-import utils.loader.loader
 import gvsoc.systree as st
 from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 from interco.interleaver import Interleaver
-from pulp.idma.snitch_dma import SnitchDma
-from interco.bus_watchpoint import Bus_watchpoint
-from pulp.spatz.cluster_registers import Cluster_registers
-from elftools.elf.elffile import *
-import gvsoc.runner as gvsoc
 import math
 from pulp.mempool.mempool_group import Group
 
-GAPY_TARGET = True
-
 class Cluster(st.Component):
 
-    def __init__(self, parent, name, parser, terapool: bool=False, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1):
+    def __init__(self, parent, name, parser, async_l1_interco: bool=False, terapool: bool=False, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1):
         super().__init__(parent, name)
 
         ################################################################
         ##########               Design Variables             ##########
         ################################################################
         # Hardware parameters 
-        nb_remote_ports_per_group = nb_groups - 1
         nb_tiles_per_group = int((total_cores/nb_groups)/nb_cores_per_tile)
-        total_banks = total_cores * bank_factor
         nb_banks_per_group = int(total_cores/nb_groups) * bank_factor
 
         ################################################################
@@ -58,8 +42,16 @@ class Cluster(st.Component):
         # TIles
         self.group_list = []
         for i in range(0, nb_groups):
-            self.group_list.append(Group(self,f'group_{i}',parser=parser,terapool=terapool, group_id=i, nb_cores_per_tile=nb_cores_per_tile, 
+            self.group_list.append(Group(self, f'group_{i}', parser=parser, async_l1_interco=async_l1_interco, terapool=terapool, group_id=i, nb_cores_per_tile=nb_cores_per_tile, 
                 nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width))
+
+        # AXI Interface
+        if terapool:
+            axi_itf = []
+            for i in range(0, nb_groups * nb_axi_masters_per_group):
+                itf = router.Router(self, f'axi_itf_{i}', bandwidth=axi_data_width, latency=2)
+                itf.add_mapping('output')
+                axi_itf.append(itf)
 
         # DMA TCDM Interface
         dma_tcdm_itf = router.Router(self, f'dma_tcdm_itf')
@@ -110,9 +102,16 @@ class Cluster(st.Component):
             self.bind(self, 'loader_start', self.group_list[i], 'loader_start')
             self.bind(self, 'loader_entry', self.group_list[i], 'loader_entry')
 
-        for i in range(0, nb_groups):
-            for j in range(0, nb_axi_masters_per_group):
-                self.bind(self.group_list[i], f'axi_out_{j}', self, 'axi_%d' % (i * nb_axi_masters_per_group + j))
+        if terapool:
+            for i in range(0, nb_groups):
+                for j in range(0, nb_axi_masters_per_group):
+                    self.bind(self.group_list[i], f'axi_out_{j}', axi_itf[i * nb_axi_masters_per_group + j], 'input')
+            for i in range(0, nb_groups * nb_axi_masters_per_group):
+                self.bind(axi_itf[i], 'output', self, f'axi_{i}')
+        else:
+            for i in range(0, nb_groups):
+                for j in range(0, nb_axi_masters_per_group):
+                    self.bind(self.group_list[i], f'axi_out_{j}', self, 'axi_%d' % (i * nb_axi_masters_per_group + j))
 
         for i in range(0, nb_groups):
             self.bind(self, 'rocache_cfg', self.group_list[i], 'rocache_cfg')

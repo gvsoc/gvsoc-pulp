@@ -17,31 +17,17 @@
 # Author: Yichao Zhang (ETH Zurich) (yiczhang@iis.ee.ethz.ch)
 #         Yinrong Li (ETH Zurich) (yinrli@student.ethz.ch)
 
-import gvsoc.runner
-import cpu.iss.riscv as iss
-from memory.memory import Memory
-from pulp.snitch.hierarchical_cache import Hierarchical_cache
-from vp.clock_domain import Clock_domain
-import pulp.mempool.l1_subsystem as l1_subsystem
-import interco.router as router
-import utils.loader.loader
 import gvsoc.systree as st
+import interco.router as router
 from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 from interco.interleaver import Interleaver
-from pulp.idma.snitch_dma import SnitchDma
-from interco.bus_watchpoint import Bus_watchpoint
-from pulp.spatz.cluster_registers import Cluster_registers
-from elftools.elf.elffile import *
-import gvsoc.runner as gvsoc
 import math
 from pulp.mempool.mempool_tile import Tile
 from pulp.mempool.hierarchical_interco import Hierarchical_Interco
 
-GAPY_TARGET = True
-
 class Sub_group(st.Component):
 
-    def __init__(self, parent, name, parser, sub_group_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=4, nb_groups: int=4, total_cores: int=1024, bank_factor: int=4, axi_data_width: int=64):
+    def __init__(self, parent, name, parser, terapool: bool=False, async_l1_interco: bool=False, sub_group_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=4, nb_groups: int=4, total_cores: int=1024, bank_factor: int=4, axi_data_width: int=64):
         super().__init__(parent, name)
 
         ################################################################
@@ -59,7 +45,7 @@ class Sub_group(st.Component):
         # TIles
         self.tile_list = []
         for i in range(0, nb_tiles_per_sub_group):
-            self.tile_list.append(Tile(self,f'tile_{i}',parser=parser,tile_id=i, sub_group_id=sub_group_id, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
+            self.tile_list.append(Tile(self, f'tile_{i}',parser=parser, terapool=terapool, async_l1_interco=async_l1_interco, tile_id=i, sub_group_id=sub_group_id, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
                 nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor))
 
         #Sub Group local interconnect
@@ -75,7 +61,7 @@ class Sub_group(st.Component):
         for port in range(0, nb_remote_group_ports):
             tile_itf_list = []
             for i in range(0, nb_tiles_per_sub_group):
-                itf = router.Router(self, f'sub_group_remote_out_itf{port}_tile{i}', latency=2)
+                itf = router.Router(self, f'sub_group_remote_out_itf{port}_tile{i}', latency=1, bandwidth=4, shared_rw_bandwidth=True, synchronous=not async_l1_interco, max_input_pending_size=4)
                 itf.add_mapping('output')
                 tile_itf_list.append(itf)
             sub_group_out_interfaces.append(tile_itf_list)
@@ -95,13 +81,15 @@ class Sub_group(st.Component):
         # SG-level AXI Interconnect
         # L2 cache rules
         l2_cache_rules = []
-        l2_cache_rules.append((0x0000000C, 0x00000010))
-        l2_cache_rules.append((0x00000008, 0x0000000C))
-        l2_cache_rules.append((0xA0000000, 0xA0001000))
         l2_cache_rules.append((0x80000000, 0x80001000))
+        l2_cache_rules.append((0xA0000000, 0xA0001000))
+        l2_cache_rules.append((0x00000008, 0x0000000C))
+        l2_cache_rules.append((0x0000000C, 0x00000010))
 
         # AXI Interconnect
         axi_ico = Hierarchical_Interco(self, 'axi_ico', enable_cache=True, cache_rules=l2_cache_rules, bandwidth=axi_data_width)
+        axi_itf = router.Router(self, 'axi_itf', bandwidth=axi_data_width, latency=2)
+        axi_itf.add_mapping('output')
 
         ################################################################
         ##########               Design Bindings              ##########
@@ -128,6 +116,9 @@ class Sub_group(st.Component):
         #Tile axi port -> axi interconnect
         for i in range(0, nb_tiles_per_sub_group):
            self.bind(self.tile_list[i], 'axi_out', axi_ico, 'input')
+
+        # axi interconnect -> axi port
+        self.bind(axi_ico, 'output', axi_itf, 'input')
 
         # DMA network(virtual, to emulate multiple backends)
         self.bind(dma_tcdm_itf, 'output', dma_tcdm_interleaver, 'input')
@@ -165,7 +156,7 @@ class Sub_group(st.Component):
         self.bind(self, 'rocache_cfg', axi_ico, 'rocache_cfg')
 
         # AXI
-        self.bind(axi_ico, 'output', self, 'axi_out')
+        self.bind(axi_itf, 'output', self, 'axi_out')
 
         # DMA
         self.bind(self, 'dma_tcdm', dma_tcdm_itf, 'input')

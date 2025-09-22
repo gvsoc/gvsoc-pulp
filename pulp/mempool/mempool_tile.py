@@ -17,38 +17,20 @@
 # Author: Yichao Zhang (ETH Zurich) (yiczhang@iis.ee.ethz.ch)
 #         Yinrong Li (ETH Zurich) (yinrli@student.ethz.ch)
 
-import gvsoc.runner
 import pulp.snitch.snitch_core as iss
-from memory.memory import Memory
 from pulp.mempool.hierarchical_cache import Hierarchical_cache
-from vp.clock_domain import Clock_domain
 import pulp.mempool.l1_subsystem as l1_subsystem
 import interco.router as router
-import utils.loader.loader
 import gvsoc.systree as st
-from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
-from pulp.idma.snitch_dma import SnitchDma
-from interco.bus_watchpoint import Bus_watchpoint
 from pulp.snitch.sequencer import Sequencer
-from pulp.spatz.cluster_registers import Cluster_registers
 from pulp.mempool.address_scrambler import AddressScrambler
-from elftools.elf.elffile import *
-import gvsoc.runner as gvsoc
-import math
-
-GAPY_TARGET = True
 
 class Tile(st.Component):
 
-    def __init__(self, parent, name, parser, tile_id: int=0, sub_group_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64):
+    def __init__(self, parent, name, parser, terapool: bool=False, async_l1_interco: bool=False, tile_id: int=0, sub_group_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64):
         super().__init__(parent, name)
 
         [args, __] = parser.parse_known_args()
-
-        binary = None
-        if parser is not None:
-            [args, otherArgs] = parser.parse_known_args()
-            binary = args.binary
 
         # Set it to true to swtich to snitch new fast model
         fast_model = True
@@ -77,8 +59,8 @@ class Tile(st.Component):
         ################################################################
 
         # Snitch TCDM (L1 subsystem)
-        l1 = l1_subsystem.L1_subsystem(self, 'l1', \
-                                        tile_id=tile_id, sub_group_id=sub_group_id, group_id=group_id, \
+        l1 = l1_subsystem.L1_subsystem(self, 'l1', terapool=terapool, \
+                                        async_l1_interco=async_l1_interco, tile_id=tile_id, sub_group_id=sub_group_id, group_id=group_id, \
                                         nb_tiles_per_sub_group=nb_tiles_per_sub_group, nb_sub_groups_per_group=nb_sub_groups_per_group, \
                                         nb_groups=nb_groups, nb_remote_local_masters=1, nb_remote_group_masters=nb_remote_group_ports, \
                                         nb_remote_sub_group_masters=nb_remote_sub_group_ports, nb_pe=nb_cores_per_tile, \
@@ -99,14 +81,14 @@ class Tile(st.Component):
         for i in range(0, nb_cores_per_tile):
             ico_list.append(router.Router(self, 'ico%d' % i, bandwidth=4, latency=0))
         axi_ico = router.Router(self, 'axi_ico', bandwidth=axi_data_width, latency=1)
-        axi_ico.add_mapping('output', latency=1)
+        axi_ico.add_mapping('output')
 
         # Core Complex
         for core_id in range(0, nb_cores_per_tile):
             if fast_model:
                 self.int_cores.append(iss.SnitchFast(self, f'pe{core_id}', isa="rv32imaf",
                     core_id=group_id*nb_sub_groups_per_group*nb_tiles_per_sub_group*nb_cores_per_tile+sub_group_id*nb_tiles_per_sub_group*nb_cores_per_tile+tile_id*nb_cores_per_tile+core_id,
-                    htif=False, pulp_v2=True
+                    htif=False, pulp_v2=True, wakeup_counter=True, nb_outstanding=8
                 ))
             else:
                 self.int_cores.append(iss.Snitch(self, f'pe{core_id}', isa="rv32imaf", htif=False, \
@@ -150,7 +132,7 @@ class Tile(st.Component):
         # ICO -> AXI -> L2 Memory
         for i in range(0, nb_cores_per_tile):
             # Add default mapping for the others
-            ico_list[i].add_mapping('axi')
+            ico_list[i].add_mapping('axi', latency=4)
             self.bind(ico_list[i], 'axi', axi_ico, 'input')
 
         ###########################################################
