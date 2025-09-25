@@ -16,7 +16,7 @@
 
 import gvsoc.systree
 import cpu.iss.riscv
-from pulp.chips.magia_base.magia_isa import *
+from pulp.chips.magia.isa import *
 from cpu.iss.isa_gen.isa_smallfloats import *
 
 # Tentative model of the cv32e40x adapted from pulp_cores.py

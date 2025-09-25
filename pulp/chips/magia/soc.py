@@ -4,10 +4,11 @@ import vp.clock_domain
 import utils.loader.loader
 import interco.router as router
 
-from pulp.chips.magia_base.magia_tile import MagiaTile
-from pulp.chips.magia_base.magia_arch import MagiaArch
+from pulp.chips.magia.tile import MagiaTile
+from pulp.chips.magia.arch import MagiaArch
 from pulp.floonoc.floonoc import *
-from pulp.fractal_sync.fractal_sync import *
+from pulp.chips.magia.fractal_sync import *
+from pulp.chips.magia.kill_module import *
 from typing import List, Dict
 import math
 
@@ -33,7 +34,11 @@ class MagiaSoc(gvsoc.systree.Component):
     def __init__(self, parent, name, parser, binary):
         super().__init__(parent, name)
 
+        # Bin Loader
         loader=utils.loader.loader.ElfLoader(self, f'loader', binary=binary)
+
+        # Simulation engine killer
+        killer=KillModule(self,'kill-module',kill_addr_base=MagiaArch.TEST_END_ADDR_START,kill_addr_size=MagiaArch.TEST_END_SIZE,nb_cores_to_wait=MagiaArch.NB_CLUSTERS)
 
         # Single clock domain
         clock = vp.clock_domain.Clock_domain(self, 'tile-clock',
@@ -154,6 +159,7 @@ class MagiaSoc(gvsoc.systree.Component):
             for y in reversed(range(0,MagiaArch.N_TILES_Y)):
                 for x in range(1,MagiaArch.N_TILES_X+1):
                     print(f"[NoC] Adding cluster {id} at position x={x} y={y}")
+                    cluster[id].o_KILLER_OUTPUT(killer.i_INPUT())
                     cluster[id].o_NARROW_OUTPUT(noc.i_NARROW_INPUT(x,y))
                     noc.o_NARROW_MAP(cluster[id].i_NARROW_INPUT(),name=f'tile-{id}-l1-mem',base=MagiaArch.L1_ADDR_START+(id*MagiaArch.L1_TILE_OFFSET),size=MagiaArch.L1_SIZE,x=x,y=y,rm_base=False)
                     id += 1
@@ -184,6 +190,7 @@ class MagiaSoc(gvsoc.systree.Component):
             
             for id in range(0,MagiaArch.NB_CLUSTERS):
                 print(f"[G-XBAR] Adding cluster {id}")
+                cluster[id].o_KILLER_OUTPUT(killer.i_INPUT())
                 cluster[id].o_NARROW_OUTPUT(soc_xbar.i_INPUT())
                 soc_xbar.o_MAP(cluster[id].i_NARROW_INPUT(),f'tile-{id}-l1-mem',base=MagiaArch.L1_ADDR_START+(id*MagiaArch.L1_TILE_OFFSET),size=MagiaArch.L1_SIZE,rm_base=False)
 

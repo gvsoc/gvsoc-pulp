@@ -24,15 +24,15 @@ import pulp.cpu.iss.pulp_cores as iss
 from pulp.cluster.l1_interleaver import L1_interleaver
 from pulp.light_redmule.hwpe_interleaver import HWPEInterleaver
 from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
-from pulp.chips.magia_base.hierarchical_cache import Hierarchical_cache
+from pulp.chips.magia.hierarchical_cache import Hierarchical_cache
 
-from pulp.chips.magia_base.magia_arch import MagiaArch
-from pulp.chips.magia_base.magia_core import CV32CoreTest
+from pulp.chips.magia.arch import MagiaArch
+from pulp.chips.magia.core import CV32CoreTest
 #from pulp.redmule.redmule import RedMule
 from pulp.light_redmule.light_redmule import LightRedmule
 from pulp.idma.snitch_dma import SnitchDma
-from pulp.xif_decoder.xif_decoder import XifDecoder
-from pulp.magia_idma_ctrl.magia_idma_ctrl import Magia_iDMA_Ctrl
+from pulp.chips.magia.xif_decoder import XifDecoder
+from pulp.chips.magia.idma_ctrl import Magia_iDMA_Ctrl
 
 
 # adapted from snitch cluster model
@@ -46,11 +46,11 @@ class MagiaTileTcdm(gvsoc.systree.Component):
         bank_size = MagiaArch.N_WORDS_BANK * MagiaArch.BYTES_PER_WORD
 
         # 1 master: OBI, iDMA0, iDMA1
-        L1_masters = 3
+        L1_masters = 1
         interleaver = L1_interleaver(self, 'interleaver', nb_slaves=nb_banks, nb_masters=L1_masters, interleaving_bits=2)
 
         # 3 masters: OBI
-        dma_masters = 1
+        dma_masters = 3
         dma_interleaver = DmaInterleaver(self, 'dma_interleaver', nb_master_ports=dma_masters, nb_banks=nb_banks, bank_width=4)
         
         # 1 master: redmule
@@ -103,7 +103,7 @@ class MagiaTile(gvsoc.systree.Component):
         l1_tcdm = MagiaTileTcdm(self, f'tile-{tid}-tcdm', parser)
 
         # Temporary test interconnects (use obi to access TCDM), to be refined later
-        tile_xbar = router.Router(self, f'tile-{tid}-tile-xbar',bandwidth=4,latency=2)
+        tile_xbar = router.Router(self, f'tile-{tid}-axi-xbar',bandwidth=4,latency=2)
         obi_xbar = router.Router(self, f'tile-{tid}-obi-xbar',bandwidth=4,latency=2)
 
         # IDMA Controller
@@ -196,9 +196,14 @@ class MagiaTile(gvsoc.systree.Component):
                         base=MagiaArch.L2_ADDR_START,
                         size=MagiaArch.L2_SIZE, rm_base=False)
         
+        # Bind obi xbar so that it can write to kill_module
+        obi_xbar.o_MAP(self.__i_KILLER_OUTPUT(), name="Kill-sim-mem",
+                base=MagiaArch.TEST_END_ADDR_START,
+                size=MagiaArch.TEST_END_SIZE, rm_base=False)
+        
         # Bind obi xbar so that it can write to uart
         obi_xbar.o_MAP(stdout.i_INPUT(), name="local-uart-mem",
-                base=MagiaArch.STDOUT_START,
+                base=MagiaArch.STDOUT_ADDR_START,
                 size=MagiaArch.STDOUT_SIZE, rm_base=False)
         
         self.__o_NARROW_INPUT(tile_xbar.i_INPUT())
@@ -219,13 +224,13 @@ class MagiaTile(gvsoc.systree.Component):
 
         # Bind: idma0
         idma0.o_AXI(tile_xbar.i_INPUT())
-        idma0.o_TCDM(l1_tcdm.i_INPUT(1)) #here we don't use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
+        idma0.o_TCDM(l1_tcdm.i_DMA_INPUT()) #here we don't use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
         idma_ctrl.o_OFFLOAD_iDMA0_AXI2OBI(idma0.i_OFFLOAD())
         idma0.o_OFFLOAD_GRANT(idma_ctrl.i_OFFLOAD_GRANT_iDMA0_AXI2OBI())
 
         # Bind: idma1
         idma1.o_AXI(tile_xbar.i_INPUT())
-        idma1.o_TCDM(l1_tcdm.i_INPUT(2)) #here we don't use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
+        idma1.o_TCDM(l1_tcdm.i_DMA_INPUT()) #here we don't use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
         idma_ctrl.o_OFFLOAD_iDMA1_OBI2AXI(idma1.i_OFFLOAD())
         idma1.o_OFFLOAD_GRANT(idma_ctrl.i_OFFLOAD_GRANT_iDMA1_OBI2AXI())
 
@@ -335,3 +340,10 @@ class MagiaTile(gvsoc.systree.Component):
 
     def __o_ENTRY(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('entry', itf, signature='wire<uint64_t>', composite_bind=True)
+
+    # Killer port
+    def o_KILLER_OUTPUT(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('killer_output', itf, signature='io')
+
+    def __i_KILLER_OUTPUT(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'killer_output', signature='io')

@@ -8,7 +8,7 @@ class Magia_iDMA_Ctrl(gvsoc.systree.Component):
 
         super().__init__(parent, name)
 
-        self.add_sources(['pulp/magia_idma_ctrl/magia_idma_ctrl.cpp'])
+        self.add_sources(['pulp/chips/magia/idma_ctrl.cpp'])
 
     def i_OFFLOAD_M(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'offload_m', signature='wire<IssOffloadInsn<uint32_t>*>')

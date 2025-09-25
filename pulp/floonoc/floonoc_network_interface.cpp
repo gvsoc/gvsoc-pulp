@@ -118,8 +118,10 @@ vp::IoReqStatus NetworkInterface::req(vp::Block *__this, vp::IoReq *req)
     // Since we handle it asynchronously, we need to start it only once its latency has been
     // reached
     req->set_latency(0); // Actually dont do that because the cluster sent them with some latency that doesnt make sense
+    //printf("[ZL-MOD] REQ LATENCY=%ld\n",req->get_latency());
     // Just enqueue it and trigger the FSM which will check if it must be processed now
-    _this->add_pending_burst(req, true, _this->clock.get_cycles() + req->get_latency(), std::make_tuple(_this->x, _this->y));
+    //_this->add_pending_burst(req, true, _this->clock.get_cycles() + req->get_latency(), std::make_tuple(_this->x, _this->y));
+    _this->add_pending_burst(req, true, _this->clock.get_cycles(), std::make_tuple(_this->x, _this->y));
 
     _this->fsm_event.enqueue(
         std::max((int64_t)1, _this->pending_bursts_timestamp.front() - _this->clock.get_cycles()));
@@ -204,7 +206,9 @@ void NetworkInterface::req_from_router(vp::IoReq *req, int from_x, int from_y)
         // Account it on the corresponding burst and notifiy the burst initator (cluster)
         this->trace.msg(vp::Trace::LEVEL_TRACE, "Received non-addr response from router (req: %p, base: 0x%x, size: 0x%x, position: (%d, %d))\n",
                         req, req->get_addr(), req->get_size(), this->x, this->y);
-        this->handle_response(req);
+        //this->handle_response(req); //ZL-MOD: why the response is handled by "this" NI and not the source NI???
+        NetworkInterface *ni = *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);
+        ni->handle_response(req);
     }
 }
 

@@ -13,7 +13,7 @@ class FractalSync(gvsoc.systree.Component):
             'level' : level,
         })
 
-        self.add_sources(['pulp/fractal_sync/fractal_sync.cpp'])
+        self.add_sources(['pulp/chips/magia/fractal_sync.cpp'])
 
 #we have 2 master ports
     def o_MASTER_EAST_WEST(self, itf: gvsoc.systree.SlaveItf):

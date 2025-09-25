@@ -17,7 +17,7 @@
 import gvsoc.systree
 import gvsoc.runner
 
-from pulp.chips.magia_base.magia_soc import MagiaSoc
+from pulp.chips.magia.soc import MagiaSoc
 
 class MagiaBoard(gvsoc.systree.Component):
     def __init__(self, parent, name:str, parser, options):
@@ -33,4 +33,4 @@ class MagiaBoard(gvsoc.systree.Component):
 class Target(gvsoc.runner.Target):
     def __init__(self, parser, options):
         super(Target, self).__init__(parser, options,
-              model=MagiaBoard, description="Magia base test board")
+              model=MagiaBoard, description="Magia board")

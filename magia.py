@@ -15,12 +15,12 @@
 #
 
 import gvsoc.runner
-from pulp.chips.magia_base.magia_board import MagiaBoard
+from pulp.chips.magia.board import MagiaBoard
 
 class Target(gvsoc.runner.Target):
     def __init__(self, parser, options):
 
-        gapy_description="Magia base test board"
+        gapy_description="Magia board"
 
         super(Target, self).__init__(parser, options,
               model=MagiaBoard)

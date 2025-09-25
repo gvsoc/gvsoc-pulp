@@ -8,7 +8,7 @@ class XifDecoder(gvsoc.systree.Component):
 
         super().__init__(parent, name)
 
-        self.add_sources(['pulp/xif_decoder/xif_decoder.cpp'])
+        self.add_sources(['pulp/chips/magia/xif_decoder.cpp'])
 
     def i_OFFLOAD_M(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'offload_m', signature='wire<IssOffloadInsn<uint32_t>*>')
