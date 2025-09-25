@@ -19,6 +19,7 @@ import gvsoc.systree
 from memory.memory import Memory
 from interco.router import Router
 from interco.interleaver import Interleaver
+from pulp.mempool.l1_remote_itf import L1_RemoteItf
 from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 import math
 
@@ -96,18 +97,18 @@ class L1_subsystem(gvsoc.systree.Component):
         remote_local_out_interfaces = []
         remote_local_in_interfaces = []
         for i in range(0, nb_remote_local_masters):
-            remote_local_out_interfaces.append(Router(self, f'remote_local_out_itf{i}', bandwidth=bandwidth, latency=2))
+            remote_local_out_interfaces.append(Router(self, f'remote_local_out_itf{i}', bandwidth=bandwidth, latency=1, \
+                                                shared_rw_bandwidth=True, synchronous=False, max_input_pending_size=4))
             remote_local_out_interfaces[i].add_mapping('output')
-            remote_local_in_interfaces.append(Router(self, f'remote_local_in_itf{i}', bandwidth=bandwidth, latency=0))
-            remote_local_in_interfaces[i].add_mapping('output')
+            remote_local_in_interfaces.append(L1_RemoteItf(self, f'remote_local_in_itf{i}', bandwidth=bandwidth, resp_latency=1))
 
         remote_group_out_interfaces = []
         remote_group_in_interfaces = []
         for i in range(0, nb_remote_group_masters):
-            remote_group_out_interfaces.append(Router(self, f'remote_group_out_itf{i}', bandwidth=bandwidth, latency=2))
+            remote_group_out_interfaces.append(Router(self, f'remote_group_out_itf{i}', bandwidth=bandwidth, latency=1, \
+                                                shared_rw_bandwidth=True, synchronous=False, max_input_pending_size=4))
             remote_group_out_interfaces[i].add_mapping('output')
-            remote_group_in_interfaces.append(Router(self, f'remote_group_in_itf{i}', bandwidth=bandwidth, latency=0))
-            remote_group_in_interfaces[i].add_mapping('output')
+            remote_group_in_interfaces.append(L1_RemoteItf(self, f'remote_group_in_itf{i}', bandwidth=bandwidth, resp_latency=1))
 
         # DMA Interface
         dma_interface = Router(self, 'dma_itf', bandwidth=axi_data_width, latency=0, shared_rw_bandwidth=True)

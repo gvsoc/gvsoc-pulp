@@ -23,7 +23,7 @@ import pulp.teranoc.l1_subsystem as l1_subsystem
 import interco.router as router
 import gvsoc.systree as st
 from pulp.snitch.sequencer import Sequencer
-from pulp.mempool.address_scrambler import AddressScrambler
+from pulp.mempool.l1_address_scrambler import L1_AddressScrambler
 
 class Tile(st.Component):
 
@@ -66,9 +66,9 @@ class Tile(st.Component):
         icache = Hierarchical_cache(self, 'shared_icache', nb_cores=nb_cores_per_tile)
 
         # Address Scrambler
-        addr_scrambler_list = []
+        l1_addr_scrambler_list = []
         for i in range(0, nb_cores_per_tile):
-            addr_scrambler_list.append(AddressScrambler(self, f'addr_scrambler{i}', \
+            l1_addr_scrambler_list.append(L1_AddressScrambler(self, f'addr_scrambler{i}', \
                                                        bypass=False, num_tiles=int(total_cores/nb_cores_per_tile), \
                                                        seq_mem_size_per_tile=512, byte_offset=2, \
                                                        num_banks_per_tile=nb_cores_per_tile*bank_factor))
@@ -78,14 +78,14 @@ class Tile(st.Component):
         for i in range(0, nb_cores_per_tile):
             ico_list.append(router.Router(self, 'ico%d' % i, bandwidth=4, latency=0))
         axi_ico = router.Router(self, 'axi_ico', bandwidth=axi_data_width, latency=1)
-        axi_ico.add_mapping('output', latency=1)
+        axi_ico.add_mapping('output')
 
         # Core Complex
         for core_id in range(0, nb_cores_per_tile):
             if fast_model:
                 self.int_cores.append(iss.SnitchFast(self, f'pe{core_id}', isa="rv32imaf",
                     core_id=group_id*nb_tiles_per_group*nb_cores_per_tile+tile_id*nb_cores_per_tile+core_id,
-                    htif=False, pulp_v2=True
+                    htif=False, pulp_v2=True, wakeup_counter=True, nb_outstanding=8
                 ))
             else:
                 self.int_cores.append(iss.Snitch(self, f'pe{core_id}', isa="rv32imaf", htif=False, \
@@ -125,7 +125,7 @@ class Tile(st.Component):
         # ICO -> AXI -> L2 Memory
         for i in range(0, nb_cores_per_tile):
             # Add default mapping for the others
-            ico_list[i].add_mapping('axi')
+            ico_list[i].add_mapping('axi', latency=4)
             self.bind(ico_list[i], 'axi', axi_ico, 'input')
 
         ###########################################################
@@ -152,7 +152,7 @@ class Tile(st.Component):
             self.bind(icache, 'flush_ack', self.int_cores[core_id], 'flush_cache_ack')
 
             # Snitch integer cores
-            self.bind(self.int_cores[core_id], 'data', addr_scrambler_list[core_id], 'input')
+            self.bind(self.int_cores[core_id], 'data', l1_addr_scrambler_list[core_id], 'input')
             self.bind(self.int_cores[core_id], 'fetch', icache, 'input_%d' % core_id)
             self.bind(self, 'loader_start', self.int_cores[core_id], 'fetchen')
             self.bind(self, 'loader_entry', self.int_cores[core_id], 'bootaddr')
@@ -160,13 +160,13 @@ class Tile(st.Component):
             if not fast_model:
                 # Snitch fp subsystems
                 # Pay attention to interactions and bandwidth between subsystem and tohost.
-                self.bind(self.fp_cores[core_id], 'data', addr_scrambler_list[core_id], 'input')
+                self.bind(self.fp_cores[core_id], 'data', l1_addr_scrambler_list[core_id], 'input')
                 # FP subsystem doesn't fetch instructions from core->ico->memory, but from integer cores acc_req.
                 self.bind(self, 'loader_start', self.fp_cores[core_id], 'fetchen')
                 self.bind(self, 'loader_entry', self.fp_cores[core_id], 'bootaddr')
 
             # Scrambler
-            self.bind(addr_scrambler_list[core_id], 'output', ico_list[core_id], 'input')
+            self.bind(l1_addr_scrambler_list[core_id], 'output', ico_list[core_id], 'input')
 
             # Use WireMaster & WireSlave
             # Add fpu sequence buffer in between int core and fp core to issue instructions

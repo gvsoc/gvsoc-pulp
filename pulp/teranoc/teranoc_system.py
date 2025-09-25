@@ -26,7 +26,7 @@ import gvsoc.systree as st
 from pulp.mempool.mempool_dma import MemPoolDma
 from elftools.elf.elffile import *
 from pulp.teranoc.teranoc_cluster import Cluster
-from pulp.mempool.ctrl_registers import CtrlRegisters
+from pulp.teranoc.ctrl_registers import CtrlRegisters
 from pulp.mempool.l2_subsystem import L2_subsystem
 
 class System(st.Component):
