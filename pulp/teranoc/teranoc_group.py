@@ -73,7 +73,7 @@ class Group(st.Component):
 
         group_remote_out_interfaces = []
         for i in range(0, nb_remote_ports):
-            itf = router.Router(self, f'group_remote_out_itf{i}', bandwidth=4, latency=0)
+            itf = router.Router(self, f'group_remote_out_itf{i}', latency=0, bandwidth=4, shared_rw_bandwidth=True)
             itf.add_mapping('output')
             group_remote_out_interfaces.append(itf)
 
@@ -92,13 +92,16 @@ class Group(st.Component):
         # Group-level AXI Interconnect
         # L2 cache rules
         l2_cache_rules = []
-        l2_cache_rules.append((0x0000000C, 0x00000010))
-        l2_cache_rules.append((0x00000008, 0x0000000C))
-        l2_cache_rules.append((0xA0000000, 0xA0001000))
         l2_cache_rules.append((0x80000000, 0x80001000))
-
+        l2_cache_rules.append((0xA0000000, 0xA0001000))
+        l2_cache_rules.append((0x00000008, 0x0000000C))
+        l2_cache_rules.append((0x0000000C, 0x00000010))
         # AXI Interconnect
         axi_ico = Hierarchical_Interco(self, 'axi_ico', enable_cache=True, cache_rules=l2_cache_rules, bandwidth=axi_data_width)
+
+        # AXI Interface
+        axi_itf = router.Router(self, 'axi_itf', bandwidth=axi_data_width, latency=2)
+        axi_itf.add_mapping('output')
 
         ################################################################
         ##########               Design Bindings              ##########
@@ -135,6 +138,9 @@ class Group(st.Component):
         for i in range(0, nb_tiles_per_group):
             self.bind(self.tile_list[i], 'axi_out', axi_ico, 'input')
 
+        # AXI Interface
+        self.bind(axi_ico, 'output', axi_itf, 'input')
+
         # DMA network(virtual, to emulate multiple backends)
         self.bind(dma_tcdm_itf, 'output', dma_tcdm_interleaver, 'input')
         for i in range(0, nb_tiles_per_group):
@@ -166,7 +172,7 @@ class Group(st.Component):
         self.bind(self, 'rocache_cfg', axi_ico, 'rocache_cfg')
 
         # AXI
-        self.bind(axi_ico, 'output', self, 'axi_out_0')
+        self.bind(axi_itf, 'output', self, 'axi_out_0')
 
         # DMA
         self.bind(self, 'dma_tcdm', dma_tcdm_itf, 'input')
