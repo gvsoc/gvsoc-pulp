@@ -15,7 +15,7 @@
 #
 
 import gvsoc.systree as st
-from pulp.chips.pulp_open.soc import Soc
+from pulp.chips.pulp_open.soc import Soc, SocAttr
 from pulp.chips.pulp_open.cluster import Cluster, get_cluster_name
 from vp.clock_domain import Clock_domain
 from utils.clock_generator import Clock_generator
@@ -24,36 +24,15 @@ import interco.router_proxy as router_proxy
 import memory.dramsys
 from gvrun.attribute import Tree, Area, Value
 
-class PulpOpenL2SharedAttr(Tree):
-    def __init__(self, parent, name):
-        super().__init__(parent, name)
-        self.nb_banks = Value(self, 'nb_banks', 4)
-        self.nb_regions = Value(self, 'nb_regions', 12)
-        self.interleaving_bits = Value(self, 'interleaving_bits', 2)
-        self.range = Area(self, 'range', 0x1C010000, 0x00180000, description='L2 shared banks')
-
-class PulpOpenL2Attr(Tree):
-    def __init__(self, parent, name):
-        super().__init__(parent, name)
-        self.range = Area(self, 'range', 0x1C000000, 0x00190000, description='L2 whole address range')
-        self.priv0 = Area(self, 'priv0', 0x1C000000, 0x00008000, description='L2 private bank 0')
-        self.priv1 = Area(self, 'priv1', 0x1C008000, 0x00008000, description='L2 private bank 1')
-        self.shared = PulpOpenL2SharedAttr(self, 'shared')
-
-class PulpOpenSocAttr(Tree):
-    def __init__(self, parent, name):
-        super().__init__(parent, name)
-        self.l2 = PulpOpenL2Attr(self, 'l2')
-
 class PulpOpenAttr(Tree):
     def __init__(self, parent):
         super().__init__(parent)
-        self.soc = PulpOpenSocAttr(self, 'soc')
+        self.soc = SocAttr(self, 'soc')
 
 
 class Pulp_open(st.Component):
 
-    def __init__(self, parent, name, parser, soc_config_file='pulp/chips/pulp_open/soc.json',
+    def __init__(self, parent, name, attr: PulpOpenAttr, parser, soc_config_file='pulp/chips/pulp_open/soc.json',
             cluster_config_file='pulp/chips/pulp_open/cluster.json', padframe_config_file='pulp/chips/pulp_open/padframe.json',
             use_ddr=False):
         super(Pulp_open, self).__init__(parent, name)
@@ -90,7 +69,7 @@ class Pulp_open(st.Component):
             clusters.append(Cluster(self, cluster_name, config_file=cluster_config_file, cid=cid))
 
         # Soc
-        soc = Soc(self, 'soc', parser, config_file=soc_config_file, chip=self, cluster=clusters[0])
+        soc = Soc(self, 'soc', attr.soc, parser, config_file=soc_config_file, chip=self, cluster=clusters[0])
 
         # Fast clock
         fast_clock = Clock_domain(self, 'fast_clock', frequency=24576063*2)

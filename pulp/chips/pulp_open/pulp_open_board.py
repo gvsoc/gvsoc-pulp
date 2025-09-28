@@ -40,7 +40,7 @@ class Pulp_open_board(st.Component):
         attr = self.set_attributes(PulpOpenAttr(self))
 
         # Pulp
-        pulp = Pulp_open(self, 'chip', parser, use_ddr=use_ddr)
+        pulp = Pulp_open(self, 'chip', attr, parser, use_ddr=use_ddr)
 
         # Flash
         hyperflash = Hyperflash(self, 'hyperflash')
