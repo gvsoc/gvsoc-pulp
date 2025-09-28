@@ -22,7 +22,7 @@ import utils.loader.loader
 import gvsoc.systree as st
 from elftools.elf.elffile import *
 import gvsoc.runner
-from gvrun.target import TargetParameter
+from gvrun.parameter import TargetParameter
 from gvrun.attribute import Tree, Area, Value
 
 
