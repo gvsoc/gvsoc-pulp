@@ -21,6 +21,7 @@ import memory.memory as memory
 import interco.router as router
 import cache.cache as cache
 import interco.interleaver as interleaver
+from pulp.chips.pulp_open.l2_subsystem import L2Subsystem, L2Attr
 import pulp.chips.pulp_open.soc_interco as soc_interco
 import pulp.chips.pulp_open.apb_soc_ctrl as apb_soc_ctrl
 import pulp.itc.itc_v1 as itc
@@ -38,8 +39,14 @@ from pulp.adv_dbg_unit.pulp_tap import Pulp_tap
 from pulp.adv_dbg_unit.riscv_tap import Riscv_tap
 from gdbserver.gdbserver import Gdbserver
 import utils.loader.loader
-from gvrun.target import TargetParameter
+from gvrun.parameter import TargetParameter
+from gvrun.attribute import Tree
 
+
+class SocAttr(Tree):
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
+        self.l2 = L2Attr(self, 'l2')
 
 class SocConf(st.Component):
     def __init__(self, property_file):
@@ -50,7 +57,7 @@ class SocConf(st.Component):
 
 class Soc(st.Component):
 
-    def __init__(self, parent, name, parser, config_file, chip, cluster):
+    def __init__(self, parent, name, attr: SocAttr, parser, config_file, chip, cluster):
         super(Soc, self).__init__(parent, name)
 
         #
@@ -132,27 +139,7 @@ class Soc(st.Component):
             bus_watchpoint = Bus_watchpoint(self, 'bus_watchpoint', fc_tohost)
 
         # L2
-        l2_priv0 = memory.Memory(self, 'l2_priv0', size=soc_conf.get_property('l2/priv0/mapping/size'))
-        l2_priv1 = memory.Memory(self, 'l2_priv1', size=soc_conf.get_property('l2/priv1/mapping/size'))
-
-        l2_shared_size = soc_conf.get_property('l2/shared/mapping/size', int)
-
-        l2_shared_nb_banks = soc_conf.get_property('l2/shared/nb_banks', int)
-        l2_shared_nb_regions = soc_conf.get_property('l2/shared/nb_regions', int)
-        cut_size = int(l2_shared_size / l2_shared_nb_regions / l2_shared_nb_banks)
-
-        for i in range(0, l2_shared_nb_regions):
-
-            l2_shared_interleaver = interleaver.Interleaver(self, 'l2_shared_%d' % i, nb_slaves=l2_shared_nb_banks, interleaving_bits=soc_conf.get_property('l2/shared/interleaving_bits'))
-
-            self.bind(soc_ico, 'l2_shared_%d' % i, l2_shared_interleaver, 'input')
-
-            for j in range(0, l2_shared_nb_banks):
-
-                cut = memory.Memory(self, 'l2_shared_%d_cut_%d' % (i, j), size=cut_size)
-
-                self.bind(l2_shared_interleaver, 'out_%d' % j, cut, 'input')
-
+        self.l2 = L2Subsystem(self, 'l2', attr.l2)
 
         # SOC EU
         soc_eu = soc_eu_module.Soc_eu(self, 'soc_eu', ref_clock_event=soc_events['soc_evt_ref_clock'], **soc_conf.get_property('peripherals/soc_eu/config'))
@@ -266,9 +253,11 @@ class Soc(st.Component):
 
         # Soc interconnect
         self.bind(soc_ico, 'apb', apb_ico, 'input')
-        self.bind(soc_ico, 'l2_priv0', l2_priv0, 'input')
-        self.bind(soc_ico, 'l2_priv1', l2_priv1, 'input')
         self.bind(soc_ico, 'axi_master', axi_ico, 'input')
+        self.bind(soc_ico, 'l2_priv0', self.l2, 'priv0')
+        self.bind(soc_ico, 'l2_priv1', self.l2, 'priv1')
+        for i in range(0, attr.l2.shared.nb_regions):
+            self.bind(soc_ico, 'l2_shared_%d' % i, self.l2, 'shared_%d' % i)
 
         # AXI
         self.bind(axi_ico, 'axi_proxy', self, 'axi_proxy')
