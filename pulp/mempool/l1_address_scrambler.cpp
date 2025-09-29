@@ -29,11 +29,11 @@
 #define GET_BITS(x, start, end) \
     (((x) >> (start)) & ((1U << ((end) - (start) + 1)) - 1))
 
-class AddressScrambler : public vp::Component
+class L1_AddressScrambler : public vp::Component
 {
 
 public:
-    AddressScrambler(vp::ComponentConf &config);
+    L1_AddressScrambler(vp::ComponentConf &config);
 
 private:
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
@@ -63,13 +63,13 @@ private:
 
 
 
-AddressScrambler::AddressScrambler(vp::ComponentConf &config)
+L1_AddressScrambler::L1_AddressScrambler(vp::ComponentConf &config)
     : vp::Component(config)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
-    this->input_itf.set_req_meth(&AddressScrambler::req);
-    this->output_itf.set_resp_meth(&AddressScrambler::response);
-    this->output_itf.set_grant_meth(&AddressScrambler::grant);
+    this->input_itf.set_req_meth(&L1_AddressScrambler::req);
+    this->output_itf.set_resp_meth(&L1_AddressScrambler::response);
+    this->output_itf.set_grant_meth(&L1_AddressScrambler::grant);
 
     this->new_slave_port("input", &this->input_itf);
     this->new_master_port("output", &this->output_itf);
@@ -90,9 +90,9 @@ AddressScrambler::AddressScrambler(vp::ComponentConf &config)
     scramble_bits = seq_per_tile_bits - constant_bits_lsb;
 }
 
-vp::IoReqStatus AddressScrambler::req(vp::Block *__this, vp::IoReq *req)
+vp::IoReqStatus L1_AddressScrambler::req(vp::Block *__this, vp::IoReq *req)
 {
-    AddressScrambler *_this = (AddressScrambler *)__this;
+    L1_AddressScrambler *_this = (L1_AddressScrambler *)__this;
 
     if (_this->bypass == false && _this->num_tiles > 1)
     {
@@ -107,23 +107,23 @@ vp::IoReqStatus AddressScrambler::req(vp::Block *__this, vp::IoReq *req)
             SET_BITS(addr_o, tile_id, _this->constant_bits_lsb, _this->constant_bits_lsb + _this->tile_id_bits - 1);
             SET_BITS(addr_o, scramble, _this->constant_bits_lsb + _this->tile_id_bits, _this->seq_total_bits - 1);
             req->set_addr(addr_o);
-            _this->trace.msg("AddressScrambler: addr_i=0x%lx, addr_o=0x%lx\n", addr_i, addr_o);
+            _this->trace.msg("L1_AddressScrambler: addr_i=0x%lx, addr_o=0x%lx\n", addr_i, addr_o);
         }
     }
 
     return _this->output_itf.req_forward(req);
 }
 
-void AddressScrambler::grant(vp::Block *__this, vp::IoReq *req)
+void L1_AddressScrambler::grant(vp::Block *__this, vp::IoReq *req)
 {
 
 }
 
-void AddressScrambler::response(vp::Block *__this, vp::IoReq *req)
+void L1_AddressScrambler::response(vp::Block *__this, vp::IoReq *req)
 {
 }
 
-unsigned int AddressScrambler::clog2(int value)
+unsigned int L1_AddressScrambler::clog2(int value)
 {
     unsigned int result = 0;
     value--;
@@ -136,5 +136,5 @@ unsigned int AddressScrambler::clog2(int value)
 
 extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
-    return new AddressScrambler(config);
+    return new L1_AddressScrambler(config);
 }

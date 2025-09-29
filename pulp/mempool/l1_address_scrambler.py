@@ -16,13 +16,13 @@
 
 import gvsoc.systree
 
-class AddressScrambler(gvsoc.systree.Component):
+class L1_AddressScrambler(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, bypass: bool = False, num_tiles: int = 1, seq_mem_size_per_tile: int = 0, byte_offset: int = 0, num_banks_per_tile: int = 0):
 
         super().__init__(parent, name)
 
-        self.add_sources(['pulp/mempool/address_scrambler.cpp'])
+        self.add_sources(['pulp/mempool/l1_address_scrambler.cpp'])
 
         self.add_properties({
             "bypass": bypass,
