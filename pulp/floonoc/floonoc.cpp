@@ -135,17 +135,77 @@ void FlooNoc::handle_request_end(vp::IoReq *req)
 
 Router *FlooNoc::get_req_router(int x, int y)
 {
-    return this->req_routers[y * this->dim_x + x];
+    Router *router = this->req_routers[y * this->dim_x + x];
+    if (router == NULL)
+    {
+        if (x == 0 && y > 0 && y < this->dim_y - 1)
+        {
+            router = this->req_routers[y*this->dim_x + (x + 1)];
+        }
+        else if (x == this->dim_x - 1 && y > 0 && y < this->dim_y - 1)
+        {
+            router = this->req_routers[y*this->dim_x + (x - 1)];
+        }
+        else if (y == 0 && x > 0 && x < this->dim_x - 1)
+        {
+            router = this->req_routers[(y + 1)*this->dim_x + x];
+        }
+        else if (y == this->dim_y - 1 && x > 0 && x < this->dim_x - 1)
+        {
+            router = this->req_routers[(y - 1)*this->dim_x + x];
+        }
+    }
+    return router;
 }
 
 Router *FlooNoc::get_rsp_router(int x, int y)
 {
-    return this->rsp_routers[y * this->dim_x + x];
+    Router *router = this->rsp_routers[y * this->dim_x + x];
+    if (router == NULL)
+    {
+        if (x == 0 && y > 0 && y < this->dim_y - 1)
+        {
+            router = this->rsp_routers[y*this->dim_x + (x + 1)];
+        }
+        else if (x == this->dim_x - 1 && y > 0 && y < this->dim_y - 1)
+        {
+            router = this->rsp_routers[y*this->dim_x + (x - 1)];
+        }
+        else if (y == 0 && x > 0 && x < this->dim_x - 1)
+        {
+            router = this->rsp_routers[(y + 1)*this->dim_x + x];
+        }
+        else if (y == this->dim_y - 1 && x > 0 && x < this->dim_x - 1)
+        {
+            router = this->rsp_routers[(y - 1)*this->dim_x + x];
+        }
+    }
+    return router;
 }
 
 Router *FlooNoc::get_wide_router(int x, int y)
 {
-    return this->wide_routers[y * this->dim_x + x];
+    Router *router = this->wide_routers[y * this->dim_x + x];
+    if (router == NULL)
+    {
+        if (x == 0 && y > 0 && y < this->dim_y - 1)
+        {
+            router = this->wide_routers[y*this->dim_x + (x + 1)];
+        }
+        else if (x == this->dim_x - 1 && y > 0 && y < this->dim_y - 1)
+        {
+            router = this->wide_routers[y*this->dim_x + (x - 1)];
+        }
+        else if (y == 0 && x > 0 && x < this->dim_x - 1)
+        {
+            router = this->wide_routers[(y + 1)*this->dim_x + x];
+        }
+        else if (y == this->dim_y - 1 && x > 0 && x < this->dim_x - 1)
+        {
+            router = this->wide_routers[(y - 1)*this->dim_x + x];
+        }
+    }
+    return router;
 }
 
 Router *FlooNoc::get_router(int x, int y, bool is_wide, bool is_write, bool is_address){

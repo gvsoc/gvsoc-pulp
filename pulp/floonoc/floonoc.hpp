@@ -71,6 +71,7 @@ public:
  */
 class FlooNoc : public vp::Component
 {
+    friend class Router;
 public:
     FlooNoc(vp::ComponentConf &config);
 

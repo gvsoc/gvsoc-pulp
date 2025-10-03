@@ -168,11 +168,11 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 // Otherwise forward to next position
                 Router *router = _this->noc->get_router(next_x, next_y, req->get_int(FlooNoc::REQ_WIDE), req->get_is_write(), req->get_int(FlooNoc::REQ_IS_ADDRESS));
 
-                if (router == NULL)
+                if (router->x == _this->x && router->y == _this->y)
                 {
                     // It is possible that we don't have any router at the destination if it is on
                     // the edge. In this case just forward it to the ni of the target
-                    _this->send_to_target_ni(req, _this->x, _this->y);
+                    _this->send_to_target_ni(req, next_x, next_y);
                 }
                 else
                 {
@@ -263,6 +263,19 @@ void Router::get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_
     {
         next_x = dest_x < this->x ? this->x - 1 : this->x + 1;
         next_y = this->y;
+        if (this->noc->req_routers[next_y * this->noc->dim_x + next_x] == NULL)
+        {
+            if ((next_x == 0 || next_x == this->noc->dim_x - 1) && next_y != dest_y)
+            {
+                next_x = this->x;
+                next_y = dest_y < this->y ? this->y - 1 : this->y + 1;
+            }
+            else if ((next_y == 0 || next_y == this->noc->dim_y - 1) && next_x != dest_x)
+            {
+                next_x = this->x;
+                next_y = next_y == 0 ? this->y + 1 : this->y - 1;
+            }
+        }
     }
 }
 
