@@ -14,7 +14,14 @@
 # limitations under the License.
 #
 
+from enum import IntEnum
 import gvsoc.systree
+
+class FlooNocDirection(IntEnum):
+    RIGHT = -4
+    LEFT = -3
+    UP = -2
+    DOWN = -1
 
 
 class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
@@ -129,9 +136,17 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         self.itf_bind(f"narrow_{name}", itf, signature='io')
 
 
+    def o_BIND(self, itf: gvsoc.systree.SlaveItf, x: int, y: int, name: str | None=None):
+        self.o_WIDE_MAP(itf, 0, 0, x, y, name)
 
-    def o_WIDE_MAP(self, itf: gvsoc.systree.SlaveItf, base: int, size: int,
-            x: int, y: int, name: str=None, rm_base: bool=False, remove_offset:int =0):
+    def o_WIDE_MAP_DIR(self, base: int, size: int, dir: FlooNocDirection, name: str | None=None,
+            rm_base: bool=False, remove_offset:int =0):
+        self.o_WIDE_MAP(None, base, size, dir, 0, name=name, rm_base=rm_base,
+            remove_offset=remove_offset)
+
+    def o_WIDE_MAP(self, itf: gvsoc.systree.SlaveItf | None, base: int, size: int,
+            x: int | FlooNocDirection, y: int | FlooNocDirection, name: str | None=None,
+            rm_base: bool=False, remove_offset:int =0):
         """Binds the output of a node to a target, associated to a memory-mapped region.
 
         Parameters
@@ -159,7 +174,9 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         if rm_base and remove_offset == 0:
             remove_offset =base
         self.__add_mapping(f"wide_{name}", base=base, size=size, x=x, y=y, remove_offset=remove_offset)
-        self.itf_bind(f"wide_{name}", itf, signature='io')
+
+        if itf is not None:
+            self.itf_bind(f"wide_{name}", itf, signature='io')
 
     def i_NARROW_INPUT(self, x: int, y: int) -> gvsoc.systree.SlaveItf:
         """Returns the input port of a node.
@@ -286,6 +303,8 @@ class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
 
     def __gen_gui_router(self, routers, name, path):
         router = gvsoc.gui.Signal(self, routers, name, path=f"{path}/req", groups=['regmap'])
+        gvsoc.gui.Signal(self, router, "size", path=f"{path}/req_size", groups=['regmap'])
+        gvsoc.gui.Signal(self, router, "is_write", path=f"{path}/req_is_write", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
         gvsoc.gui.Signal(self, router, "stalled_queue_right", path=f"{path}/stalled_queue_right", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
         gvsoc.gui.Signal(self, router, "stalled_queue_left", path=f"{path}/stalled_queue_left", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
         gvsoc.gui.Signal(self, router, "stalled_queue_up", path=f"{path}/stalled_queue_up", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
