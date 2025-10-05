@@ -25,8 +25,17 @@
 #include <array>
 #include <vp/vp.hpp>
 #include <vp/signal.hpp>
+#include "floonoc.hpp"
 
 class FlooNoc;
+
+class RouterQueue
+{
+public:
+    RouterQueue(vp::Block *parent, std::string name, vp::ClockEvent *ready_event=NULL);
+    vp::Queue queue;
+    FloonocNode *stalled_node;
+};
 
 /**
  * @brief FlooNoc router
@@ -34,26 +43,31 @@ class FlooNoc;
  * Router are the nodes of the noc which are moving internal requests from the network interface
  * to the target.
  */
-class Router : public vp::Block
+class Router : public FloonocNode
 {
 public:
     Router(FlooNoc *noc, std::string name, int x, int y, int queue_size);
+    ~Router();
 
     void reset(bool active);
 
     // This gets called by other routers or a network interface to move a request to this router
-    bool handle_request(vp::IoReq *req, int from_x, int from_y);
+    bool handle_request(FloonocNode *node, vp::IoReq *req, int from_x, int from_y) override;
     // Called by other routers or NI to unstall an output queue after an input queue became available
-    void unstall_queue(int from_x, int from_y);
+    void unstall_queue(int from_x, int from_y) override;
     // Called by NI to stall the queues in case no more request should be sent to NI
     void stall_queue(int from_x, int from_y);
+    void set_neighbour(int dir, FloonocNode *node);
+
+    // X position of this router in the grid
+    int x;
+    // Y position of this router in the grid
+    int y;
 
 private:
     // FSM event handler called when something happened and queues need to be checked to see
     // if a request should be handled.
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
-    // Called when a request has reached its destination position and should be sent to a target
-    void send_to_target_ni(vp::IoReq *req, int pos_x, int pos_y);
     // Get the position of the next router which should handle a request.
     void get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_y);
     // Get the index of the queue corresponding to a source or destination position
@@ -62,22 +76,16 @@ private:
     // queue index
     void get_pos_from_queue(int queue, int &pos_x, int &pos_y);
 
-    // Unstalls the router or network interface corresponding to the in_queue_index
-    void unstall_previous(vp::IoReq *req, int in_queue_index);
-
     // Pointer to top
     FlooNoc *noc;
     // This block trace
     vp::Trace trace;
-    // X position of this router in the grid
-    int x;
-    // Y position of this router in the grid
-    int y;
     // Size of the input queues. This limits the number of requests from the same source which can
     // be pending
     int queue_size;
     // The input queues for each direction and the local one
-    vp::Queue *input_queues[5];
+    RouterQueue *input_queues[5];
+    FloonocNode *output_nodes[5];
     // Clock event used to schedule FSM handler. This is scheduled eveytime something may need to
     // be done
     vp::ClockEvent fsm_event;
@@ -88,4 +96,6 @@ private:
     std::array<vp::Signal<bool>, 5> stalled_queues;
     // Signal used for tracing router request address
     vp::Signal<uint64_t> signal_req;
+    vp::Signal<uint64_t> signal_req_size;
+    vp::Signal<bool> signal_req_is_write;
 };

@@ -23,9 +23,19 @@
 #pragma once
 
 #include <vp/vp.hpp>
+#include <vp/itf/io.hpp>
 
 class Router;
 class NetworkInterface;
+
+
+class FloonocNode : public vp::Block
+{
+public:
+    FloonocNode(Block *parent, std::string name) : vp::Block(parent, name) {}
+    virtual void unstall_queue(int from_x, int from_y) = 0;
+    virtual bool handle_request(FloonocNode *node, vp::IoReq *req, int from_x, int from_y) = 0;
+};
 
 
 /**
@@ -73,38 +83,24 @@ class FlooNoc : public vp::Component
 {
 public:
     FlooNoc(vp::ComponentConf &config);
+    ~FlooNoc();
 
     void reset(bool active);
 
-    // Return the router at specified position
-    Router *get_req_router(int x, int y);
-    Router *get_rsp_router(int x, int y);
-    Router *get_wide_router(int x, int y);
-    // Return the router at specified position based on the request type
-    Router *get_router(int x, int y, bool is_wide, bool is_write, bool is_address);
 
-    // Return the target at specified position
-    vp::IoMaster *get_target(int x, int y);
-    // Return the network interface at specified position
-    NetworkInterface *get_network_interface(int x, int y);
     // Return the memory-mapped entry corresponding to the specified mapping. Can be used to get
     // destination coordinates associated to an address location.
     Entry *get_entry(uint64_t base, uint64_t size);
-    // Can be called to notify that an asynchronous response to a request was received. The noc
-    // will then call the initiating network interface so that it is handled by the burst.
-    void handle_request_end(vp::IoReq *req);
 
     // Internal router information is stored inside the requests.
     // These constants give the indices where the information is stored in the requests data.
     static constexpr int REQ_SRC_NI = 0;     // Pointer to network interface where the request was received
     static constexpr int REQ_BURST = 1;  // Burst received from network interface
-    static constexpr int REQ_DEST_BASE = 2;   // Base address of the destination target
     static constexpr int REQ_DEST_X = 3;      // X coordinate of the destination target
     static constexpr int REQ_DEST_Y = 4;      // Y coordinate of the destination target
-    static constexpr int REQ_NI = 5;      // When a request is stalled, this gives the network interface where to grant it
     static constexpr int REQ_WIDE = 6;        // Indicates if a request is a wide request or not. 1 for wide, 0 for narrow
     static constexpr int REQ_IS_ADDRESS = 7;     // Indicates if the request is a AR/AW request or not. 1 for address, 0 for data
-    static constexpr int REQ_NB_ARGS = 8;     // Number of request data required by this model
+    static constexpr int REQ_NB_ARGS = 9;     // Number of request data required by this model
 
     // The following constants gives the index in the queue array of the queue associated to each direction
     static constexpr int DIR_RIGHT = 0;
@@ -117,24 +113,22 @@ public:
     // this width so that the bandwidth corresponds to the width.
     uint64_t wide_width;
     uint64_t narrow_width;
+    // X dimension of the network. This includes both routers but also targets on the edges
+    int dim_x;
+    // Y dimension of the network. This includes both routers but also targets on the edges
+    int dim_y;
 
 private:
-    // Callback called when a target request is asynchronously granted after a denied error was
-    // reported
-    static void grant(vp::Block *__this, vp::IoReq *req);
-    // Callback called when a target request is asynchronously replied after a pending error was
-    // reported
-    static void response(vp::Block *__this, vp::IoReq *req);
+    FloonocNode *get_router_neighbour(std::vector<Router *> &routers, int x, int y);
+    void router_init_neighbours(Router *router, std::vector<Router *> &routers);
+    FloonocNode *get_node(std::vector<Router *> &routers, int x, int y);
 
     // This block trace
     vp::Trace trace;
     // Set of memory-mapped entries, with one for each target. They give information about each
     // target (base address, size, position)
     std::vector<Entry> entries;
-    // X dimension of the network. This includes both routers but also targets on the edges
-    int dim_x;
-    // Y dimension of the network. This includes both routers but also targets on the edges
-    int dim_y;
+    std::vector<std::string> itf_names;
     // SIze of the routers input queues. Pushing more requests than this size will block the
     // output queue of the sender.
     int router_input_queue_size;
@@ -142,9 +136,6 @@ private:
     std::vector<Router *> req_routers;
     std::vector<Router *> rsp_routers;
     std::vector<Router *> wide_routers;
-    // Array of targets of the noc, sorted by position from first line to last line. This contains
-    // both the targets on the edges and the targets at each node
-    std::vector<vp::IoMaster *> targets;
     // Array of network interfaces of the noc, sorted by position from first line to last line
     std::vector<NetworkInterface *> network_interfaces;
 };
