@@ -90,18 +90,18 @@ vp::IoReqStatus CtrlRegisters::req(vp::Block *__this, vp::IoReq *req)
         {
             _this->event_enqueue(_this->wakeup_event, _this->wakeup_latency);
         }
-        if (offset == 0x40 || offset == 0x44 || offset == 0x48 || offset == 0x4C)
+        if (offset == 0x48 || offset == 0x4C || offset == 0x50 || offset == 0x54)
         {
             IssOffloadInsn<uint32_t> insn;
-            insn.arg_a = (offset - 0x40) >> 2;
+            insn.arg_a = (offset - 0x48) >> 2;
             insn.arg_b = 0;
             insn.arg_c = value;
             _this->rocache_cfg_itf.sync(&insn);
         }
-        if (offset == 0x50 || offset == 0x54 || offset == 0x58 || offset == 0x5C)
+        if (offset == 0x58 || offset == 0x5C || offset == 0x60 || offset == 0x64)
         {
             IssOffloadInsn<uint32_t> insn;
-            insn.arg_a = (offset - 0x50) >> 2;
+            insn.arg_a = (offset - 0x58) >> 2;
             insn.arg_b = 1;
             insn.arg_c = value;
             _this->rocache_cfg_itf.sync(&insn);
