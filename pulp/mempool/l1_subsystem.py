@@ -21,6 +21,7 @@ from memory.memory import Memory
 from interco.router import Router
 from interco.interleaver import Interleaver
 from pulp.mempool.l1_remote_itf import L1_RemoteItf
+from pulp.mempool.l1_router_output_selector import L1_RouterOutputSelector
 from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 import math
 
@@ -105,29 +106,61 @@ class L1_subsystem(gvsoc.systree.Component):
             remote_sub_group_interleavers.append(Interleaver(self, f'remote_sub_group_interleaver{i}', nb_slaves=total_banks, nb_masters=1, 
                                              interleaving_bits=int(math.log2(bandwidth)), offset_translation=False))
 
+        if async_l1_interco:
+            # Remote group interleavers
+            remote_out_interface = Router(self, 'remote_out_itf', latency=1, bandwidth=bandwidth, nb_input_port=nb_pe, nb_output_port=nb_remote_masters,
+                                        synchronous=False, shared_rw_bandwidth=True, max_input_pending_size=4, external_select=True, special_mode=True)
+
+            remote_local_output_selectors = []
+            for i in range(0, nb_pe):
+                pe_selector_list = []
+                for j in range(0, nb_remote_local_masters):
+                    pe_selector_list.append(L1_RouterOutputSelector(self, f'remote_local_output_selector_core{i}_out{j}', output_id=j))
+                remote_local_output_selectors.append(pe_selector_list)
+
+            remote_sub_group_output_selectors = []
+            for i in range(0, nb_pe):
+                pe_selector_list = []
+                for j in range(0, nb_remote_sub_group_masters):
+                    pe_selector_list.append(L1_RouterOutputSelector(self, f'remote_sub_group_output_selector_core{i}_out{j}', output_id=j + nb_remote_local_masters))
+                remote_sub_group_output_selectors.append(pe_selector_list)
+
+            remote_group_output_selectors = []
+            for i in range(0, nb_pe):
+                pe_selector_list = []
+                for j in range(0, nb_remote_group_masters):
+                    pe_selector_list.append(L1_RouterOutputSelector(self, f'remote_group_output_selector_core{i}_out{j}', output_id=j + nb_remote_local_masters + nb_remote_sub_group_masters))
+                remote_group_output_selectors.append(pe_selector_list)
+        else:
+            remote_local_out_interfaces = []
+            for i in range(0, nb_remote_local_masters):
+                remote_local_out_interfaces.append(Router(self, f'remote_local_out_itf{i}', bandwidth=bandwidth, latency=1, shared_rw_bandwidth=True, \
+                                                synchronous=False, max_input_pending_size=4))
+                remote_local_out_interfaces[i].add_mapping('output')
+
+            remote_sub_group_out_interfaces = []
+            for i in range(0, nb_remote_sub_group_masters):
+                remote_sub_group_out_interfaces.append(Router(self, f'remote_sub_group_out_itf{i}', bandwidth=bandwidth, latency=1, shared_rw_bandwidth=True, \
+                                                synchronous=False, max_input_pending_size=4))
+                remote_sub_group_out_interfaces[i].add_mapping('output')
+
+            remote_group_out_interfaces = []
+            for i in range(0, nb_remote_group_masters):
+                remote_group_out_interfaces.append(Router(self, f'remote_group_out_itf{i}', bandwidth=bandwidth, latency=1, shared_rw_bandwidth=True, \
+                                                synchronous=False, max_input_pending_size=4))
+                remote_group_out_interfaces[i].add_mapping('output')
+
         #Remote interfaces
-        remote_local_out_interfaces = []
         remote_local_in_interfaces = []
         for i in range(0, nb_remote_local_masters):
-            remote_local_out_interfaces.append(Router(self, f'remote_local_out_itf{i}', bandwidth=bandwidth, latency=1, shared_rw_bandwidth=True, \
-                                            synchronous=not async_l1_interco, max_input_pending_size=4))
-            remote_local_out_interfaces[i].add_mapping('output')
             remote_local_in_interfaces.append(L1_RemoteItf(self, f'remote_local_in_itf{i}', bandwidth=bandwidth, resp_latency=1, synchronous=not async_l1_interco))
 
-        remote_sub_group_out_interfaces = []
         remote_sub_group_in_interfaces = []
         for i in range(0, nb_remote_sub_group_masters):
-            remote_sub_group_out_interfaces.append(Router(self, f'remote_sub_group_out_itf{i}', bandwidth=bandwidth, latency=1, shared_rw_bandwidth=True, \
-                                            synchronous=not async_l1_interco, max_input_pending_size=4))
-            remote_sub_group_out_interfaces[i].add_mapping('output')
             remote_sub_group_in_interfaces.append(L1_RemoteItf(self, f'remote_sub_group_in_itf{i}', bandwidth=bandwidth, resp_latency=2, synchronous=not async_l1_interco))
 
-        remote_group_out_interfaces = []
         remote_group_in_interfaces = []
         for i in range(0, nb_remote_group_masters):
-            remote_group_out_interfaces.append(Router(self, f'remote_group_out_itf{i}', bandwidth=bandwidth, latency=1, shared_rw_bandwidth=True, \
-                                            synchronous=not async_l1_interco, max_input_pending_size=4))
-            remote_group_out_interfaces[i].add_mapping('output')
             remote_group_in_interfaces.append(L1_RemoteItf(self, f'remote_group_in_itf{i}', bandwidth=bandwidth, \
                                                 resp_latency=3 if terapool else 2 if (nb_sub_groups_per_group * nb_tiles_per_sub_group) > 1 else 1, synchronous=not async_l1_interco))
 
@@ -160,14 +193,28 @@ class L1_subsystem(gvsoc.systree.Component):
             self.bind(remote_group_in_interfaces[i], 'output', remote_group_interleavers[i], 'in_0')
 
         #Remote output
-        for i in range(0, nb_remote_local_masters):
-            self.bind(remote_local_out_interfaces[i], 'output', self, f'remote_local_out{i}')
+        if async_l1_interco:
+            for i in range(0, nb_remote_local_masters):
+                for j in range(0, nb_pe):
+                    self.bind(remote_local_output_selectors[j][i], 'output', remote_out_interface, 'input' if j == 0 else f'input_{j}')
+                self.bind(remote_out_interface, 'output', self, f'remote_local_out{i}') # only one local port, so no index offset
+            for i in range(0, nb_remote_sub_group_masters):
+                for j in range(0, nb_pe):
+                    self.bind(remote_sub_group_output_selectors[j][i], 'output', remote_out_interface, 'input' if j == 0 else f'input_{j}')
+                self.bind(remote_out_interface, f'output_{i + nb_remote_local_masters}', self, f'remote_sub_group_out{i}')
+            for i in range(0, nb_remote_group_masters):
+                for j in range(0, nb_pe):
+                    self.bind(remote_group_output_selectors[j][i], 'output', remote_out_interface, 'input' if j == 0 else f'input_{j}')
+                self.bind(remote_out_interface, f'output_{i + nb_remote_local_masters + nb_remote_sub_group_masters}', self, f'remote_group_out{i}')
+        else:
+            for i in range(0, nb_remote_local_masters):
+                self.bind(remote_local_out_interfaces[i], 'output', self, f'remote_local_out{i}')
 
-        for i in range(0, nb_remote_sub_group_masters):
-            self.bind(remote_sub_group_out_interfaces[i], 'output', self, f'remote_sub_group_out{i}')
+            for i in range(0, nb_remote_sub_group_masters):
+                self.bind(remote_sub_group_out_interfaces[i], 'output', self, f'remote_sub_group_out{i}')
 
-        for i in range(0, nb_remote_group_masters):
-            self.bind(remote_group_out_interfaces[i], 'output', self, f'remote_group_out{i}')
+            for i in range(0, nb_remote_group_masters):
+                self.bind(remote_group_out_interfaces[i], 'output', self, f'remote_group_out{i}')
 
         self.bind(self, 'dma', dma_interface, 'input')
         self.bind(dma_interface, 'output', dma_interleaver, 'input')
@@ -196,14 +243,14 @@ class L1_subsystem(gvsoc.systree.Component):
                 self.bind(remove_offset, 'out_0', l1_banks[i - start_bank_id], 'input')
             elif tgt_grp_id == group_id:
                 if tgt_sg_id == sub_group_id:
-                    for local_interleaver in local_interleavers:
-                        self.bind(local_interleaver, 'out_%d' % i, remote_local_out_interfaces[0], 'input')
+                    for j, local_interleaver in enumerate(local_interleavers):
+                        self.bind(local_interleaver, 'out_%d' % i, remote_local_output_selectors[j][0] if async_l1_interco else remote_local_out_interfaces[0], 'input')
                 else:
-                    for local_interleaver in local_interleavers:
-                        self.bind(local_interleaver, 'out_%d' % i, remote_sub_group_out_interfaces[(tgt_sg_id ^ sub_group_id) - 1], 'input')
+                    for j, local_interleaver in enumerate(local_interleavers):
+                        self.bind(local_interleaver, 'out_%d' % i, remote_sub_group_output_selectors[j][(tgt_sg_id ^ sub_group_id) - 1] if async_l1_interco else remote_sub_group_out_interfaces[(tgt_sg_id ^ sub_group_id) - 1], 'input')
             else:
-                for local_interleaver in local_interleavers:
-                    self.bind(local_interleaver, 'out_%d' % i, remote_group_out_interfaces[(tgt_grp_id ^ group_id) - 1], 'input')
+                for j, local_interleaver in enumerate(local_interleavers):
+                    self.bind(local_interleaver, 'out_%d' % i, remote_group_output_selectors[j][(tgt_grp_id ^ group_id) - 1] if async_l1_interco else remote_group_out_interfaces[(tgt_grp_id ^ group_id) - 1], 'input')
 
     def i_DMA_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'dma_input', signature='io')
