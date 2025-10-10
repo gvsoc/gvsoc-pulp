@@ -73,7 +73,7 @@ class Tile(st.Component):
         for i in range(0, nb_cores_per_tile):
             l1_addr_scrambler_list.append(L1_AddressScrambler(self, f'addr_scrambler{i}', \
                                                        bypass=False, num_tiles=int(total_cores/nb_cores_per_tile), \
-                                                       seq_mem_size_per_tile=512, byte_offset=2, \
+                                                       seq_mem_size_per_tile=512*nb_cores_per_tile, byte_offset=2, \
                                                        num_banks_per_tile=nb_cores_per_tile*bank_factor))
 
         # Route
