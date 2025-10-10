@@ -16,20 +16,19 @@
 
 import gvsoc.systree
 
-class L1NocAddressConverter(gvsoc.systree.Component):
+class L2_AddressScrambler(gvsoc.systree.Component):
 
-    def __init__(self, parent: gvsoc.systree.Component, name: str, bypass: bool = False, xbar_to_noc: bool = True, byte_offset: int=2, bank_size: int = 0, num_groups: int = 0, num_tiles_per_group: int = 0, num_banks_per_tile: int = 0):
+    def __init__(self, parent: gvsoc.systree.Component, name: str, bypass: bool, l2_base_addr: int, l2_size: int, nb_banks: int, bank_width: int, interleave: int):
 
         super().__init__(parent, name)
 
-        self.add_sources(['pulp/teranoc/l1_noc_address_converter.cpp'])
+        self.add_sources(['pulp/teranoc/l2_interconnect/l2_address_scrambler.cpp'])
 
         self.add_properties({
             "bypass": bypass,
-            "xbar_to_noc": xbar_to_noc,
-            "byte_offset": byte_offset,
-            "bank_size": bank_size,
-            "num_groups": num_groups,
-            "num_tiles_per_group": num_tiles_per_group,
-            "num_banks_per_tile": num_banks_per_tile
+            "l2_base_addr": l2_base_addr,
+            "l2_size": l2_size,
+            "nb_banks": nb_banks,
+            "bank_width": bank_width,
+            "interleave": interleave
         })

@@ -24,18 +24,19 @@ from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 from interco.interleaver import Interleaver
 import math
 from pulp.teranoc.teranoc_tile import Tile
-from pulp.teranoc.l1_noc_address_converter import L1NocAddressConverter
+from pulp.teranoc.l1_interconnect.l1_noc_endpoint_router import L1NocEndpointRouter
 from pulp.mempool.hierarchical_interco import Hierarchical_Interco
 
 class Group(st.Component):
 
-    def __init__(self, parent, name, parser, group_id: int=0, nb_cores_per_tile: int=4, nb_x_groups: int=4, nb_y_groups: int=4, total_cores: int=1024, nb_remote_ports_per_tile: int=2, bank_factor: int=4, axi_data_width: int=64):
+    def __init__(self, parent, name, parser, group_id_x: int=0, group_id_y: int=0, nb_cores_per_tile: int=4, nb_x_groups: int=4, nb_y_groups: int=4, total_cores: int=1024, nb_remote_ports_per_tile: int=2, bank_factor: int=4, axi_data_width: int=64):
         super().__init__(parent, name)
 
         ################################################################
         ##########               Design Variables             ##########
         ################################################################
         # Hardware parameters
+        group_id = group_id_x * nb_y_groups + group_id_y
         nb_groups = nb_x_groups * nb_y_groups
         nb_tiles_per_group = int((total_cores/(nb_x_groups*nb_y_groups))/nb_cores_per_tile)
         nb_banks_per_tile = nb_cores_per_tile * bank_factor
@@ -47,35 +48,23 @@ class Group(st.Component):
         # TIles
         self.tile_list = []
         for i in range(0, nb_tiles_per_group):
-            self.tile_list.append(Tile(self,f'tile_{i}',parser=parser, tile_id=i, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
-                nb_tiles_per_group=nb_tiles_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor,
-                nb_remote_ports_per_tile=nb_remote_ports_per_tile, axi_data_width=axi_data_width))
+            self.tile_list.append(Tile(self,f'tile_{i}',parser=parser, tile_id=i, group_id_x=group_id_x, group_id_y=group_id_y, \
+                nb_cores_per_tile=nb_cores_per_tile, nb_tiles_per_group=nb_tiles_per_group, nb_x_groups=nb_x_groups, nb_y_groups=nb_y_groups, \
+                total_cores=total_cores, bank_factor=bank_factor, nb_remote_ports_per_tile=nb_remote_ports_per_tile, axi_data_width=axi_data_width))
 
         #Group local interconnect
         group_local_interleaver = Interleaver(self, 'group_local_interleaver', nb_slaves=nb_tiles_per_group, nb_masters=nb_tiles_per_group, 
             interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor)), offset_translation=False)
 
-        #Group Remote Address Converter
-        group_remote_output_address_converters = []
-        for i in range(0, nb_remote_ports):
-            group_remote_output_address_converters.append(L1NocAddressConverter(self, f'group_remote_output_address_converter_{i}', bypass=False, xbar_to_noc=True, byte_offset=2, bank_size=1024,
-                                                            num_groups=nb_groups, num_tiles_per_group=nb_tiles_per_group, num_banks_per_tile=bank_factor*nb_cores_per_tile))
-
-        group_remote_input_address_converters = []
-        for i in range(0, nb_remote_ports):
-            group_remote_input_address_converters.append(L1NocAddressConverter(self, f'group_remote_input_address_converter_{i}', bypass=False, xbar_to_noc=False, byte_offset=2, bank_size=1024,
-                                                            num_groups=nb_groups, num_tiles_per_group=nb_tiles_per_group, num_banks_per_tile=bank_factor*nb_cores_per_tile))
-
-        #Group Remote Slave Interconnect
-        group_remote_slave_interleavers = []
+        # L1 NoC Request Router
+        l1_noc_req_routers = []
         for i in range(0, nb_remote_ports_per_tile):
-            group_remote_slave_interleavers.append(Interleaver(self, f'group_remote_slave_interleaver_{i}', nb_slaves=nb_tiles_per_group, nb_masters=nb_tiles_per_group, interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor)), offset_translation=False))
+            l1_noc_req_routers.append(L1NocEndpointRouter(self, f'l1_noc_req_router_{i}', req_mode=True, nb_tiles_per_group=nb_tiles_per_group, num_banks_per_tile=nb_banks_per_tile, byte_offset=2))
 
-        group_remote_out_interfaces = []
-        for i in range(0, nb_remote_ports):
-            itf = router.Router(self, f'group_remote_out_itf{i}', latency=0, bandwidth=4, shared_rw_bandwidth=True)
-            itf.add_mapping('output')
-            group_remote_out_interfaces.append(itf)
+        # L1 NoC Response Router
+        l1_noc_resp_routers = []
+        for i in range(0, nb_remote_ports_per_tile):
+            l1_noc_resp_routers.append(L1NocEndpointRouter(self, f'l1_noc_resp_router_{i}', req_mode=False, nb_tiles_per_group=nb_tiles_per_group, num_banks_per_tile=nb_banks_per_tile, byte_offset=2))
 
         # DMA network(virtual, to emulate multiple backends)
         # DMA TCDM Interface
@@ -114,24 +103,15 @@ class Group(st.Component):
         for i in range(0, nb_tiles_per_group):
             self.bind(group_local_interleaver, 'out_%d' % i, self.tile_list[i], 'loc_remt_slave_in')
 
-        #Tile remote master -> Group remote output address converter
-        for i in range(0, nb_tiles_per_group):
-            for port in range(0, nb_remote_ports_per_tile):
-                self.bind(self.tile_list[i], f'grp_remt{port}_master_out', group_remote_output_address_converters[i*nb_remote_ports_per_tile+port], 'input')
-
-        #Group remote output address converter -> Group remote master
-        for i in range(0, nb_remote_ports):
-            self.bind(group_remote_output_address_converters[i], 'output', group_remote_out_interfaces[i], 'input')
-
-        #Group remote input address converter -> Group remote slave interleaver
+        # L1 noc request router -> Tile l1 noc request slave
         for i in range(0, nb_tiles_per_group):
             for j in range(0, nb_remote_ports_per_tile):
-                self.bind(group_remote_input_address_converters[i*nb_remote_ports_per_tile+j], 'output', group_remote_slave_interleavers[j], 'in_%d' % i)
+                self.bind(l1_noc_req_routers[j], f'output_{i}', self.tile_list[i], f'l1_noc_req_slv_{j}')
 
-        #Group remote slave interleaver -> Tile remote slave
+        # L1 noc response router -> Tile l1 noc response master
         for i in range(0, nb_tiles_per_group):
             for j in range(0, nb_remote_ports_per_tile):
-                self.bind(group_remote_slave_interleavers[j], f'out_%d' % i, self.tile_list[i], f'grp_remt{j}_slave_in')
+                self.bind(l1_noc_resp_routers[j], f'output_{i}', self.tile_list[i], f'l1_noc_resp_mst_{j}')
 
         # AXI Interconnect
         # Tile axi port -> axi interconnect
@@ -157,10 +137,25 @@ class Group(st.Component):
         ################################################################
         ##########               Group Interfaces             ##########
         ################################################################
-        # Remote TCDM interface between tiles to the group
-        for i in range(0, nb_remote_ports):
-            self.bind(self, f'grp_remt{i}_slave_in', group_remote_input_address_converters[i], 'input')
-            self.bind(group_remote_out_interfaces[i], 'output', self, f'grp_remt{i}_master_out')            
+        # Tile l1 noc request master -> Group l1 noc request master
+        for i in range(0, nb_tiles_per_group):
+            for port in range(0, nb_remote_ports_per_tile):
+                self.bind(self.tile_list[i], f'l1_noc_req_mst_{port}', self, f'l1_noc_req_mst_{i*nb_remote_ports_per_tile+port}')
+
+        # Tile l1 noc response slave -> Group l1 noc response slave
+        for i in range(0, nb_tiles_per_group):
+            for port in range(0, nb_remote_ports_per_tile):
+                self.bind(self.tile_list[i], f'l1_noc_resp_slv_{port}', self, f'l1_noc_resp_slv_{i*nb_remote_ports_per_tile+port}')
+
+        # Group l1 noc request slave -> l1 noc request router
+        for i in range(0, nb_tiles_per_group):
+            for port in range(0, nb_remote_ports_per_tile):
+                    self.bind(self, f'l1_noc_req_slv_{i*nb_remote_ports_per_tile+port}', l1_noc_req_routers[port], f'input_{i}')
+
+        # Group l1 noc response master -> l1 noc response router
+        for i in range(0, nb_tiles_per_group):
+            for port in range(0, nb_remote_ports_per_tile):
+                    self.bind(self, f'l1_noc_resp_mst_{i*nb_remote_ports_per_tile+port}', l1_noc_resp_routers[port], f'input_{i}')
 
         # Barrier
         # Propagate the barrier signals from the tiles to the group boundary

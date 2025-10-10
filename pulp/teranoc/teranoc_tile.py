@@ -24,10 +24,11 @@ import interco.router as router
 import gvsoc.systree as st
 from pulp.snitch.sequencer import Sequencer
 from pulp.mempool.l1_address_scrambler import L1_AddressScrambler
+from pulp.teranoc.l1_interconnect.l1_noc_itf import L1_NocItf
 
 class Tile(st.Component):
 
-    def __init__(self, parent, name, parser, tile_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_tiles_per_group: int=16, nb_groups: int=16, total_cores: int= 256, bank_factor: int=4, nb_remote_ports_per_tile: int=2, axi_data_width: int=64):
+    def __init__(self, parent, name, parser, tile_id: int=0, group_id_x: int=0, group_id_y: int=0, nb_cores_per_tile: int=4, nb_tiles_per_group: int=16, nb_x_groups: int=4, nb_y_groups: int=4, total_cores: int= 256, bank_factor: int=4, nb_remote_ports_per_tile: int=2, axi_data_width: int=64):
         super().__init__(parent, name)
 
         [args, __] = parser.parse_known_args()
@@ -39,6 +40,8 @@ class Tile(st.Component):
         ##########               Design Variables             ##########
         ################################################################
         # Hardware parameters 
+        group_id = group_id_x * nb_y_groups + group_id_y
+        nb_groups = nb_x_groups * nb_y_groups
         # global_tile_id = tile_id + group_id * nb_tiles_per_group
         Xfrep = 0
         # stack_size_per_tile = 0x800
@@ -62,6 +65,12 @@ class Tile(st.Component):
                                         nb_remote_group_masters=nb_remote_ports_per_tile, nb_pe=nb_cores_per_tile, \
                                         size=mem_size, bandwidth=4, nb_banks_per_tile=nb_cores_per_tile*bank_factor, \
                                         axi_data_width=axi_data_width)
+
+        # L1 NoC Interface
+        l1_noc_itf = L1_NocItf(self, 'l1_noc_itf', nb_req_ports=nb_remote_ports_per_tile, nb_resp_ports=nb_remote_ports_per_tile, \
+                                    tile_id=tile_id, group_id_x=group_id_x, group_id_y=group_id_y, nb_x_groups=nb_x_groups, nb_y_groups=nb_y_groups, \
+                                    byte_offset=2, num_tiles_per_group=nb_tiles_per_group, num_banks_per_tile=nb_cores_per_tile*bank_factor)
+
         # Shared icache
         icache = Hierarchical_cache(self, 'shared_icache', nb_cores=nb_cores_per_tile)
 
@@ -70,7 +79,7 @@ class Tile(st.Component):
         for i in range(0, nb_cores_per_tile):
             l1_addr_scrambler_list.append(L1_AddressScrambler(self, f'addr_scrambler{i}', \
                                                        bypass=False, num_tiles=int(total_cores/nb_cores_per_tile), \
-                                                       seq_mem_size_per_tile=512, byte_offset=2, \
+                                                       seq_mem_size_per_tile=512*nb_cores_per_tile, byte_offset=2, \
                                                        num_banks_per_tile=nb_cores_per_tile*bank_factor))
 
         # Route
@@ -117,8 +126,14 @@ class Tile(st.Component):
         self.bind(l1, 'remote_local_out0', self, 'loc_remt_master_out')
 
         for i in range(0, nb_remote_ports_per_tile):
-            self.bind(self, f'grp_remt{i}_slave_in', l1, f'remote_group_in{i}')
-            self.bind(l1, f'remote_group_out{i}', self, f'grp_remt{i}_master_out')
+            self.bind(l1_noc_itf, f'noc_req_mst_{i}', self, f'l1_noc_req_mst_{i}')
+            self.bind(self, f'l1_noc_resp_mst_{i}', l1_noc_itf, f'noc_resp_mst_{i}')
+            self.bind(self, f'l1_noc_req_slv_{i}', l1_noc_itf, f'noc_req_slv_{i}')
+            self.bind(l1_noc_itf, f'noc_resp_slv_{i}', self, f'l1_noc_resp_slv_{i}')
+
+        for i in range(0, nb_remote_ports_per_tile):
+            self.bind(l1_noc_itf, f'tcdm_req_mst_{i}', l1, f'remote_group_in{i}')
+            self.bind(l1, f'remote_group_out{i}', l1_noc_itf, f'core_req_slv_{i}')
 
         self.bind(self, 'dma_tcdm', l1, 'dma')
 

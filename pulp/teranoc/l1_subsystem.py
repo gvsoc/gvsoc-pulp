@@ -55,14 +55,6 @@ class L1_subsystem(gvsoc.systree.Component):
         #
         # Properties
         #
-
-        self.add_property('nb_pe', nb_pe)
-        self.add_property('size', size)
-        self.add_property('nb_banks_per_tile', nb_banks_per_tile)
-        self.add_property('bandwidth', bandwidth)
-        self.add_property('tile_id', tile_id)
-        self.add_property('group_id', group_id)
-
         assert nb_remote_local_masters == 1, "Only one remote local master is supported in the L1 subsystem"
         assert nb_remote_group_masters == 2, "Only two remote group masters are supported in the L1 subsystem"
         l1_bank_size = size / nb_banks_per_tile
@@ -100,7 +92,7 @@ class L1_subsystem(gvsoc.systree.Component):
             remote_local_out_interfaces.append(Router(self, f'remote_local_out_itf{i}', bandwidth=bandwidth, latency=1, \
                                                 shared_rw_bandwidth=True, synchronous=False, max_input_pending_size=4))
             remote_local_out_interfaces[i].add_mapping('output')
-            remote_local_in_interfaces.append(L1_RemoteItf(self, f'remote_local_in_itf{i}', bandwidth=bandwidth, resp_latency=1))
+            remote_local_in_interfaces.append(L1_RemoteItf(self, f'remote_local_in_itf{i}', bandwidth=bandwidth, resp_latency=1, synchronous=False))
 
         remote_group_out_interfaces = []
         remote_group_in_interfaces = []

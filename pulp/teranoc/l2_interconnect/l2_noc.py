@@ -16,9 +16,9 @@
 # Author: Yinrong Li (ETH Zurich) (yinrli@student.ethz.ch)
 
 import gvsoc.systree
-from pulp.floonoc.floonoc import FlooNoc2dMeshNarrowWide
+from pulp.teranoc.l2_interconnect.floonoc import FlooNocClusterGridNarrowWide
 
-class L2_noc(FlooNoc2dMeshNarrowWide):
+class L2_noc(FlooNocClusterGridNarrowWide):
     """
     FlooNoc instance for L2 inter-group communication
 
@@ -45,10 +45,32 @@ class L2_noc(FlooNoc2dMeshNarrowWide):
     def __init__(self, parent: gvsoc.systree.Component, name, width: int, nb_x_groups: int,
             nb_y_groups: int, ni_outstanding_reqs: int=2, router_input_queue_size: int=2):
 
-        super(L2_noc, self).__init__(parent, name, width, 0, dim_x=nb_x_groups, dim_y=nb_y_groups,
-                ni_outstanding_reqs=ni_outstanding_reqs, router_input_queue_size=router_input_queue_size)
+        super(L2_noc, self).__init__(parent, name, wide_width=width, narrow_width=0, nb_x_clusters=nb_x_groups, nb_y_clusters=nb_y_groups, \
+                                        router_input_queue_size=128, ni_outstanding_reqs=128)
 
-        for tile_x in range(0, nb_x_groups):
-            for tile_y in range(0, nb_y_groups):
-                self.add_router(tile_x, tile_y)
-                self.add_network_interface(tile_x, tile_y)
+    def add_mapping(self, base: int, size: int, x: int, y: int, name: str=None, rm_base: bool=False, remove_offset:int =0):
+        """Binds the output of a node to a target, associated to a memory-mapped region.
+
+        Parameters
+        ----------
+        itf: gvsoc.systree.SlaveItf
+            Slave interface where requests matching the memory-mapped region will be sent.
+        base: int
+            Base address of the memory-mapped region.
+        size: int
+            Size of the memory-mapped region.
+        x: int
+            X position of the target in the grid
+        y: int
+            Y position of the target in the grid
+        name: str
+            name of the mapping. Should be different for each mapping. Taken from itf component if
+            it is None
+        rm_base: bool
+            if True, the base address is substracted to the address of any request going through
+        remove_offset: int
+            Offset to remove from the address before applying the mapping
+        """
+        if rm_base and remove_offset == 0:
+            remove_offset =base
+        self._FlooNoc2dMeshNarrowWide__add_mapping(f"wide_{name}", base=base, size=size, x=x, y=y, remove_offset=remove_offset)
