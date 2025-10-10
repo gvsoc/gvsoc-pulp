@@ -18,7 +18,7 @@
 import gvsoc.systree
 
 class L1_RemoteItf(gvsoc.systree.Component):
-    def __init__(self, parent: gvsoc.systree.Component, name: str, req_latency: int=0, resp_latency: int=0, bandwidth: int=0, shared_rw_bandwidth: bool=True):
+    def __init__(self, parent: gvsoc.systree.Component, name: str, req_latency: int=0, resp_latency: int=0, bandwidth: int=0, shared_rw_bandwidth: bool=True, synchronous: bool=True):
         super(L1_RemoteItf, self).__init__(parent, name)
 
         self.add_property('bandwidth', bandwidth)
@@ -26,4 +26,7 @@ class L1_RemoteItf(gvsoc.systree.Component):
         self.add_property('resp_latency', resp_latency)
         self.add_property('shared_rw_bandwidth', shared_rw_bandwidth)
 
-        self.add_sources(['pulp/mempool/l1_remote_itf.cpp'])
+        if synchronous:
+            self.add_sources(['pulp/mempool/l1_remote_itf.cpp'])
+        else:
+            self.add_sources(['pulp/mempool/l1_remote_itf_async.cpp'])
