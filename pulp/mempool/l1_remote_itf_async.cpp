@@ -148,7 +148,7 @@ vp::IoReqStatus L1_RemoteItf::handle_req(vp::IoReq *req, int port)
         this->out_queue.push_back(req, latency > 0 ? latency - 1 : 0);
         if (latency > (this->req_latency + this->resp_latency + 1))
         {
-            this->next_req_cycle += latency - (this->req_latency + this->resp_latency + 1);
+            this->next_req_cycle += (latency - (this->req_latency + this->resp_latency));
         }
         this->fsm_event.enqueue();
     }
@@ -191,7 +191,7 @@ void L1_RemoteItf::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             _this->out_queue.push_back(req, latency > 0 ? latency - 1 : 0);
             if (latency > (_this->req_latency + _this->resp_latency + 1))
             {
-                _this->next_req_cycle += latency - (_this->req_latency + _this->resp_latency + 1);
+                _this->next_req_cycle += (latency - (_this->req_latency + _this->resp_latency));
             }
             _this->fsm_event.enqueue();
         }
