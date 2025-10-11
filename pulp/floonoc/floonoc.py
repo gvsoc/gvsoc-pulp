@@ -315,11 +315,10 @@ class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
         top = gvsoc.gui.Signal(self, parent_signal, name=self.name)
 
         routers = gvsoc.gui.Signal(self, top, name="routers")
-        for router_id in self.get_property('routers'):
-            router = gvsoc.gui.Signal(self, routers, f"router_{router_id[0]}_{router_id[1]}")
-            self.__gen_gui_router(router, "req", path=f"req_router_{router_id[0]}_{router_id[1]}")
-            self.__gen_gui_router(router, "rsp", path=f"rsp_router_{router_id[0]}_{router_id[1]}")
-            self.__gen_gui_router(router, "wide", path=f"wide_router_{router_id[0]}_{router_id[1]}")
+        for nw_name in ['req', 'rsp', 'wide']:
+            nw = gvsoc.gui.Signal(self, routers, f"{nw_name}")
+            for router_id in self.get_property('routers'):
+                self.__gen_gui_router(nw, f"{router_id[0]}_{router_id[1]}", path=f"req_router_{router_id[0]}_{router_id[1]}")
 
         nis = gvsoc.gui.Signal(self, top, name="nis")
         for ni_id in self.get_property('network_interfaces'):
