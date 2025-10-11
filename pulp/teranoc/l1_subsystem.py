@@ -77,6 +77,10 @@ class L1_subsystem(gvsoc.systree.Component):
                             latency=1, atomics=True)
             l1_banks.append(tcdm)
 
+        l1_adapters = []
+        for i in range(0, nb_banks_per_tile):
+            l1_adapters.append(L1_RemoteItf(self, 'tcdm_bank_adapter%d' % i, bandwidth=bandwidth, shared_rw_bandwidth=True, synchronous=False))
+
         # L1 interleaver (virtual)
         local_interleavers = []
         for i in range(0, nb_pe):
@@ -99,9 +103,6 @@ class L1_subsystem(gvsoc.systree.Component):
         remote_local_in_interfaces = []
         for i in range(0, nb_remote_local_masters):
             remote_local_in_interfaces.append(L1_RemoteItf(self, f'remote_local_in_itf{i}', bandwidth=bandwidth, resp_latency=1, synchronous=False))
-        remote_group_in_interfaces = []
-        for i in range(0, nb_remote_group_masters):
-            remote_group_in_interfaces.append(L1_RemoteItf(self, f'remote_group_in_itf{i}', bandwidth=bandwidth, resp_latency=1))
 
         # DMA Interface
         dma_interface = Router(self, 'dma_itf', bandwidth=axi_data_width, latency=0, shared_rw_bandwidth=True)
@@ -114,6 +115,9 @@ class L1_subsystem(gvsoc.systree.Component):
         # Bindings
         #
 
+        for i in range(0, nb_banks_per_tile):
+            self.bind(l1_adapters[i], 'output', l1_banks[i], 'input')
+
         #Core input
         for i in range(0, nb_pe):
             self.bind(self, f'pe_in{i}', local_interleavers[i], 'in_0')
@@ -124,8 +128,7 @@ class L1_subsystem(gvsoc.systree.Component):
             self.bind(remote_local_in_interfaces[i], 'output', remote_interleaver, 'in_%d' % i)
 
         for i in range(0, nb_remote_group_masters):
-            self.bind(self, f'remote_group_in{i}', remote_group_in_interfaces[i], 'input')
-            self.bind(remote_group_in_interfaces[i], 'output', remote_interleaver, 'in_%d' % (i + nb_remote_local_masters))
+            self.bind(self, f'remote_group_in{i}', remote_interleaver, 'in_%d' % (i + nb_remote_local_masters))
 
         for i in range(0, nb_pe):
             self.bind(remote_local_output_selectors[i], 'output', remote_out_interface, 'input' if i == 0 else f'input_{i}')
@@ -156,7 +159,7 @@ class L1_subsystem(gvsoc.systree.Component):
                 for j, local_interleaver in enumerate(local_interleavers):
                     self.bind(local_interleaver, 'out_%d' % i, remove_offset, 'in_%d' % j)
                 self.bind(remote_interleaver, 'out_%d' % i, remove_offset, 'in_%d' % nb_pe)
-                self.bind(remove_offset, 'out_0', l1_banks[i - start_bank_id], 'input')
+                self.bind(remove_offset, 'out_0', l1_adapters[i - start_bank_id], 'input')
             elif tgt_grp_id == group_id:
                 for j, local_interleaver in enumerate(local_interleavers):
                     self.bind(local_interleaver, 'out_%d' % i, remote_local_output_selectors[j], 'input')
