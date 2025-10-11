@@ -133,26 +133,28 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         if rm_base and remove_offset == 0:
             remove_offset =base
         self.__add_mapping(f"narrow_{name}", base=base, size=size, x=x, y=y, remove_offset=remove_offset)
-        self.itf_bind(f"narrow_{name}", itf, signature='io')
+        self.itf_bind(f"ni_narrow_{name}", itf, signature='io')
 
 
-    def o_BIND(self, itf: gvsoc.systree.SlaveItf, x: int, y: int, name: str | None=None):
-        self.o_WIDE_MAP(itf, 0, 0, x, y, name)
+    def o_WIDE_BIND(self, itf: gvsoc.systree.SlaveItf, x: int, y: int):
+        self.itf_bind(f"ni_wide_{x}_{y}", itf, signature='io')
 
-    def o_WIDE_MAP_DIR(self, base: int, size: int, dir: FlooNocDirection, name: str | None=None,
+    def o_NARROW_BIND(self, itf: gvsoc.systree.SlaveItf, x: int, y: int):
+        self.itf_bind(f"ni_narrow_{x}_{y}", itf, signature='io')
+
+    def o_MAP_DIR(self, base: int, size: int, dir: FlooNocDirection, name: str,
             rm_base: bool=False, remove_offset:int =0):
-        self.o_WIDE_MAP(None, base, size, dir, 0, name=name, rm_base=rm_base,
-            remove_offset=remove_offset)
+        if rm_base and remove_offset == 0:
+            remove_offset =base
+        self.__add_mapping(f"wide_{name}", base=base, size=size, x=dir, y=0, remove_offset=remove_offset)
 
-    def o_WIDE_MAP(self, itf: gvsoc.systree.SlaveItf | None, base: int, size: int,
-            x: int | FlooNocDirection, y: int | FlooNocDirection, name: str | None=None,
+    def o_MAP(self, base: int, size: int,
+            x: int, y: int,
             rm_base: bool=False, remove_offset:int =0):
         """Binds the output of a node to a target, associated to a memory-mapped region.
 
         Parameters
         ----------
-        itf: gvsoc.systree.SlaveItf
-            Slave interface where requests matching the memory-mapped region will be sent.
         base: int
             Base address of the memory-mapped region.
         size: int
@@ -169,14 +171,21 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         remove_offset: int
             Offset to remove from the address before applying the mapping
         """
+        if rm_base and remove_offset == 0:
+            remove_offset =base
+        self.__add_mapping(f"ni_{x}_{y}", base=base, size=size, x=x, y=y, remove_offset=remove_offset)
+
+    def o_WIDE_MAP(self, itf: gvsoc.systree.SlaveItf | None, base: int, size: int,
+            x: int | FlooNocDirection, y: int | FlooNocDirection, name: str | None=None,
+            rm_base: bool=False, remove_offset:int =0):
+        """This methods is deprecated
+        """
         if name is None:
             name = itf.component.name
         if rm_base and remove_offset == 0:
             remove_offset =base
         self.__add_mapping(f"wide_{name}", base=base, size=size, x=x, y=y, remove_offset=remove_offset)
-
-        if itf is not None:
-            self.itf_bind(f"wide_{name}", itf, signature='io')
+        self.itf_bind(f"ni_wide_{x}_{y}", itf, signature='io')
 
     def i_NARROW_INPUT(self, x: int, y: int) -> gvsoc.systree.SlaveItf:
         """Returns the input port of a node.

@@ -20,6 +20,7 @@
             Jonas Martin, ETH (martinjo@student.ethz.ch)
  */
 
+#include <string>
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 #include "floonoc.hpp"
@@ -217,19 +218,15 @@ NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y, std::string itf_n
     this->x = x;
     this->y = y;
 
-    if (itf_name != "")
-    {
-        vp::IoMaster *itf = new vp::IoMaster();
+    this->wide_output_itf.set_resp_meth(&NetworkInterface::wide_response);
+    this->wide_output_itf.set_grant_meth(&NetworkInterface::wide_grant);
+    noc->new_master_port("ni_wide_" + std::to_string(x) + "_" + std::to_string(y),
+        &this->wide_output_itf, this);
 
-        itf->set_resp_meth(&NetworkInterface::response);
-        itf->set_grant_meth(&NetworkInterface::grant);
-        noc->new_master_port(itf_name, itf, this);
-        this->target = itf;
-    }
-    else
-    {
-        this->target = NULL;
-    }
+    this->narrow_output_itf.set_resp_meth(&NetworkInterface::narrow_response);
+    this->narrow_output_itf.set_grant_meth(&NetworkInterface::narrow_grant);
+    noc->new_master_port("ni_narrow_" + std::to_string(x) + "_" + std::to_string(y),
+        &this->narrow_output_itf, this);
 
     traces.new_trace("trace", &trace, vp::DEBUG);
 
@@ -255,16 +252,28 @@ void NetworkInterface::set_router(int nw, Router *router)
 }
 
 // This gets called when a request was pending and the response is received
-void NetworkInterface::response(vp::Block *__this, vp::IoReq *req)
+void NetworkInterface::wide_response(vp::Block *__this, vp::IoReq *req)
 {
     NetworkInterface *_this = (NetworkInterface *)__this;
     _this->handle_response(req);
 }
 
+// This gets called after a request sent to a target was denied, and it is now granted
+void NetworkInterface::wide_grant(vp::Block *__this, vp::IoReq *req)
+{
+    NetworkInterface *_this = (NetworkInterface *)__this;
+    _this->grant(req);
+}
 
+// This gets called when a request was pending and the response is received
+void NetworkInterface::narrow_response(vp::Block *__this, vp::IoReq *req)
+{
+    NetworkInterface *_this = (NetworkInterface *)__this;
+    _this->handle_response(req);
+}
 
 // This gets called after a request sent to a target was denied, and it is now granted
-void NetworkInterface::grant(vp::Block *__this, vp::IoReq *req)
+void NetworkInterface::narrow_grant(vp::Block *__this, vp::IoReq *req)
 {
     NetworkInterface *_this = (NetworkInterface *)__this;
     _this->grant(req);
@@ -415,7 +424,8 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req, int fro
             // Received a address request from a router.
             // Handle it by sending it to the target network interface and then sending the response
             // packets back respecting the bandwidth of the network
-            vp::IoMaster *target = this->target;
+            bool wide = *(vp::IoReq **)req->arg_get(FlooNoc::REQ_WIDE);
+            vp::IoMaster *target = wide ? &this->wide_output_itf : &this->narrow_output_itf;
             this->trace.msg(vp::Trace::LEVEL_DEBUG,
                 "Sending request to target (req: %p, base: 0x%x, size: 0x%x)\n",
                 req, req->get_addr(), req->get_size());

@@ -97,10 +97,12 @@ public:
 private:
     // Callback called when a target request is asynchronously granted after a denied error was
     // reported
-    static void grant(vp::Block *__this, vp::IoReq *req);
+    static void wide_grant(vp::Block *__this, vp::IoReq *req);
     // Callback called when a target request is asynchronously replied after a pending error was
     // reported
-    static void response(vp::Block *__this, vp::IoReq *req);
+    static void wide_response(vp::Block *__this, vp::IoReq *req);
+    static void narrow_grant(vp::Block *__this, vp::IoReq *req);
+    static void narrow_response(vp::Block *__this, vp::IoReq *req);
     // Input method called when a narrow burst is received from the local initiator
     static vp::IoReqStatus narrow_req(vp::Block *__this, vp::IoReq *req);
     // Input method called when a wide burst is received from the local initiator
@@ -117,8 +119,8 @@ private:
     int x;
     // Y position of this network interface in the grid
     int y;
-    // Target attached to this network interface
-    vp::IoMaster *target;
+    vp::IoMaster wide_output_itf;
+    vp::IoMaster narrow_output_itf;
     // Input IO interface where wide incoming bursts are injected into the network
     vp::IoSlave wide_input_itf;
     // Input IO interface where narrow incoming bursts are injected into the network
