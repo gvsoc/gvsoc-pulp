@@ -29,9 +29,36 @@
 #define GET_BITS(x, start, end) \
     (((x) >> (start)) & ((1U << ((end) - (start) + 1)) - 1))
 
+class BandwidthLimiter;
 class L1_NocItf;
 class InputPort;
 class OutputPort;
+
+class BandwidthLimiter
+{
+public:
+    // Overall bandwidth to be respected, and global latency to be applied to each request
+    BandwidthLimiter(OutputPort *top, int64_t bandwidth, int64_t latency, bool shared_rw_bandwidth);
+    // Can be called on any request going through the limiter to add the fixed latency and impact
+    // the latency and duration with the current utilization of the limiter with respect to the
+    // bandwidth
+    void apply_bandwidth(int64_t cycles, vp::IoReq *req);
+
+private:
+    OutputPort *top;
+    // Bandwidth in bytes per cycle to be respected
+    int64_t bandwidth;
+    // Fixed latency to be added to each request
+    int64_t latency;
+    // Cyclestamp at which the next read burst can go through the limiter. Used to delay a request
+    // which arrives before this cyclestamp.
+    int64_t next_read_burst_cycle = 0;
+    // Cyclestamp at which the write read burst can go through the limiter. Used to delay a request
+    // which arrives before this cyclestamp.
+    int64_t next_write_burst_cycle = 0;
+    // Indicates whether the read and write share the bandwidth
+    bool shared_rw_bandwidth = false;
+};
 
 /**
  * @brief OutputPort
@@ -46,6 +73,7 @@ public:
     OutputPort(L1_NocItf *top, std::string name, int64_t bandwidth, int64_t latency);
     // True when a request has been denied. The port can not send requests anymore until the
     // denied request is granted. This also stall the elected input port.
+    BandwidthLimiter limiter;
     bool stalled = false;
     // When not NULL, indicates a request has been elected to be sent through this output port
     // and should be sent as soon as the bandwidth allows it. The input port can not send anymore
@@ -238,7 +266,7 @@ L1_NocItf::L1_NocItf(vp::ComponentConf &config)
         this->new_master_port("noc_resp_slv_" + std::to_string(i), output, this);
         output->set_resp_meth_muxed(&L1_NocItf::noc_resp_response, i);
         output->set_grant_meth_muxed(&L1_NocItf::noc_resp_grant, i);
-        this->noc_resp_slvs[i] = new OutputPort(this, "noc_resp_slv_" + std::to_string(i), 4, 0);
+        this->noc_resp_slvs[i] = new OutputPort(this, "noc_resp_slv_" + std::to_string(i), 4, 1);
     }
 }
 
@@ -263,13 +291,23 @@ vp::IoReqStatus L1_NocItf::noc_resp(vp::Block *__this, vp::IoReq *req, int port)
 void L1_NocItf::tcdm_req_response(vp::Block *__this, vp::IoReq *req, int id)
 {
     L1_NocItf *_this = (L1_NocItf *)__this;
-    _this->trace.fatal("L1_NocItf: tcdm_req_response should not be called\n");
+    int64_t cycles = _this->clock.get_cycles();
+    vp::IoSlave *core_resp_port = (vp::IoSlave *)req->arg_pop();
+    vp::IoReq *noc_req = (vp::IoReq *)req->arg_pop();
+    req->resp_port = core_resp_port;
+    *noc_req->arg_get(FlooNoc::REQ_DEST_X) = *noc_req->arg_get(FlooNoc::REQ_SRC_X);
+    *noc_req->arg_get(FlooNoc::REQ_DEST_Y) = *noc_req->arg_get(FlooNoc::REQ_SRC_Y);
+    _this->noc_resp_slvs[id]->limiter.apply_bandwidth(cycles, req);
+    int latency = req->get_latency();
+    _this->noc_resp_slvs[id]->out_queue.push_back(noc_req, latency > 0 ? latency - 1 : 0);
+    _this->fsm_event.enqueue();
 }
 
 void L1_NocItf::tcdm_req_grant(vp::Block *__this, vp::IoReq *req, int id)
 {
     L1_NocItf *_this = (L1_NocItf *)__this;
-    _this->trace.fatal("L1_NocItf: tcdm_req_grant should not be called\n");
+    _this->noc_req_slvs[id]->stalled = false;
+    _this->fsm_event.enqueue();
 }
 
 void L1_NocItf::noc_req_response(vp::Block *__this, vp::IoReq *req, int id)
@@ -350,7 +388,7 @@ vp::IoReqStatus L1_NocItf::handle_noc_req(vp::IoReq *req, int port)
     this->trace.msg(vp::Trace::LEVEL_TRACE, "L1_NocItf: noc_req port: %d src_x: %d src_y: %d src_tile: %d\n", port, (long)*req->arg_get(FlooNoc::REQ_SRC_X), (long)*req->arg_get(FlooNoc::REQ_SRC_Y), (long)*req->arg_get(FlooNoc::REQ_SRC_TILE));
 
     int64_t cycles = this->clock.get_cycles();
-    if (cycles < noc_req_slvs[port]->next_burst_cycle || noc_req_slvs[port]->denied_reqs.size() > 0)
+    if (!noc_req_slvs[port]->stalled && cycles < noc_req_slvs[port]->next_burst_cycle || noc_req_slvs[port]->denied_reqs.size() > 0)
     {
         noc_req_slvs[port]->denied_reqs.push(req);
         this->fsm_event.enqueue();
@@ -363,25 +401,30 @@ vp::IoReqStatus L1_NocItf::handle_noc_req(vp::IoReq *req, int port)
     this->trace.msg(vp::Trace::LEVEL_TRACE, "L1_NocItf: noc_req translate to tcdm_req addr: 0x%x size: %d opcode: %d\n", core_req->get_addr(), core_req->get_size(), core_req->get_opcode());
 
     noc_req_slvs[port]->next_burst_cycle = cycles + 1;
+    core_req->arg_push((void *)req);
+    core_req->arg_push((void *)core_resp_port);
     vp::IoReqStatus retval = this->tcdm_req_mst_itfs[port]->req(core_req);
-    core_req->resp_port = core_resp_port;
 
     if (retval == vp::IO_REQ_OK)
     {
+        core_req->arg_pop();
+        core_req->arg_pop();
+        core_req->resp_port = core_resp_port;
         *req->arg_get(FlooNoc::REQ_DEST_X) = *req->arg_get(FlooNoc::REQ_SRC_X);
         *req->arg_get(FlooNoc::REQ_DEST_Y) = *req->arg_get(FlooNoc::REQ_SRC_Y);
+        this->noc_resp_slvs[port]->limiter.apply_bandwidth(cycles, core_req);
         int latency = core_req->get_latency();
         this->noc_resp_slvs[port]->out_queue.push_back(req, latency > 0 ? latency - 1 : 0);
         if (latency > 2)
         {
-            noc_req_slvs[port]->next_burst_cycle += (latency - 1);
+            noc_req_slvs[port]->next_burst_cycle += (latency - 2);
         }
         this->fsm_event.enqueue();
         this->trace.msg(vp::Trace::LEVEL_TRACE, "L1_NocItf: noc_resp will be sent after %d cycles\n", latency);
     }
-    else
+    else if (retval == vp::IO_REQ_DENIED)
     {
-        this->trace.fatal("L1_NocItf: tcdm_req_mst_itfs should only return IO_REQ_OK\n");
+        noc_req_slvs[port]->stalled = true;
     }
     return vp::IO_REQ_OK;
 }
@@ -454,7 +497,7 @@ void L1_NocItf::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         InputPort *input = _this->noc_req_slvs[i];
         OutputPort *output = _this->noc_resp_slvs[i];
         vp::IoMaster *tcdm_itf = _this->tcdm_req_mst_itfs[i];
-        if (cycles >= input->next_burst_cycle && input->denied_reqs.size() > 0)
+        if (!input->stalled && cycles >= input->next_burst_cycle && input->denied_reqs.size() > 0)
         {
             vp::IoReq *req = input->denied_reqs.front();
             input->denied_reqs.pop();
@@ -466,25 +509,30 @@ void L1_NocItf::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             _this->trace.msg(vp::Trace::LEVEL_TRACE, "L1_NocItf fsm: noc_req translate to tcdm_req addr: 0x%x size: %d opcode: %d\n", core_req->get_addr(), core_req->get_size(), core_req->get_opcode());
 
             input->next_burst_cycle = cycles + 1;
+            core_req->arg_push((void *)req);
+            core_req->arg_push((void *)core_resp_port);
             vp::IoReqStatus retval = tcdm_itf->req(core_req);
-            core_req->resp_port = core_resp_port;
 
             if (retval == vp::IO_REQ_OK)
             {
+                core_req->arg_pop();
+                core_req->arg_pop();
+                core_req->resp_port = core_resp_port;
                 *req->arg_get(FlooNoc::REQ_DEST_X) = *req->arg_get(FlooNoc::REQ_SRC_X);
                 *req->arg_get(FlooNoc::REQ_DEST_Y) = *req->arg_get(FlooNoc::REQ_SRC_Y);
+                output->limiter.apply_bandwidth(cycles, core_req);
                 int latency = core_req->get_latency();
                 output->out_queue.push_back(req, latency > 0 ? latency - 1 : 0);
                 if (latency > 2)
                 {
-                    input->next_burst_cycle += (latency - 1);
+                    input->next_burst_cycle += (latency - 2);
                 }
                 _this->fsm_event.enqueue();
                 _this->trace.msg(vp::Trace::LEVEL_TRACE, "L1_NocItf fsm: noc_resp will be sent after %d cycles\n", latency);
             }
-            else
+            else if (retval == vp::IO_REQ_DENIED)
             {
-                _this->trace.fatal("L1_NocItf: tcdm_req_mst_itfs should only return IO_REQ_OK\n");
+                input->stalled = true;
             }
         }
         if (input->denied_reqs.size() > 0)
@@ -548,13 +596,61 @@ unsigned int L1_NocItf::clog2(int value)
 // }
 
 OutputPort::OutputPort(L1_NocItf *top, std::string name, int64_t bandwidth, int64_t latency)
-: vp::Block(top, name), out_queue(this, "out_queue")
+: vp::Block(top, name), out_queue(this, "out_queue"), limiter(this, bandwidth, latency, true)
 {
 }
 
 InputPort::InputPort(int id, std::string name, L1_NocItf *top, int64_t bandwidth, int64_t latency)
 : vp::Block(top, name), id(id), pending_size(*top, name + "/pending_size", 32, vp::SignalCommon::ResetKind::Value, 0)
 {
+}
+
+BandwidthLimiter::BandwidthLimiter(OutputPort *top, int64_t bandwidth, int64_t latency, bool shared_rw_bandwidth)
+{
+    this->top = top;
+    this->latency = latency;
+    this->bandwidth = bandwidth;
+    this->shared_rw_bandwidth = shared_rw_bandwidth;
+}
+
+void BandwidthLimiter::apply_bandwidth(int64_t cycles, vp::IoReq *req)
+{
+    uint64_t size = req->get_size();
+
+    if (this->bandwidth != 0)
+    {
+        // Bandwidth was specified
+
+        // Duration in cycles of this burst in this router according to router bandwidth
+        int64_t burst_duration = (size + this->bandwidth - 1) / this->bandwidth;
+
+        // Update burst duration
+        // This will update it only if it is bigger than the current duration, in case there is a
+        // slower router on the path
+        req->set_duration(burst_duration);
+
+        // Now we need to compute the start cycle of the burst, which is its latency.
+        // First get the cyclestamp where the router becomes available, due to previous requests
+        int64_t *next_burst_cycle = (req->get_is_write() || this->shared_rw_bandwidth) ?
+            &this->next_write_burst_cycle : &this->next_read_burst_cycle;
+        int64_t router_latency = *next_burst_cycle - cycles;
+
+        // Then compare that to the request latency and take the highest to properly delay the
+        // request in case the bandwidth is reached.
+        int64_t latency = std::max((int64_t)req->get_latency(), router_latency);
+
+        // Apply the computed latency and add the fixed one
+        req->set_latency(latency + this->latency);
+
+        // Update the bandwidth information by appending the new burst right after the previous one.
+        *next_burst_cycle = std::max(cycles, *next_burst_cycle) + burst_duration;
+
+    }
+    else
+    {
+        // No bandwidth was specified, just add the specified latency
+        req->inc_latency(this->latency);
+    }
 }
 
 extern "C" vp::Component *gv_new(vp::ComponentConf &config)
