@@ -146,14 +146,20 @@ private:
     FloonocNode *routers_stalled;
     Router *router[NW_NB];
 
-    vp::IoReq *read_pending_burst;
-    vp::IoReq *write_pending_burst;
-    int read_pending_burst_nb_req;
-    int write_pending_burst_nb_req;
-    vp::Queue pending_burst_ack_queue;
+    vp::IoReq *wide_read_pending_burst;
+    vp::IoReq *wide_write_pending_burst;
+    int wide_read_pending_burst_nb_req;
+    int wide_write_pending_burst_nb_req;
+    vp::IoReq *narrow_read_pending_burst;
+    vp::IoReq *narrow_write_pending_burst;
+    int narrow_read_pending_burst_nb_req;
+    int narrow_write_pending_burst_nb_req;
+
 
     // When initiator is stalled because max number of input pending req has been reached,
     // this give the input request which has been stalled and must be granted.
-    vp::IoReq *denied_read_req;
-    vp::IoReq *denied_write_req;
+    std::queue<vp::IoReq *>wide_denied_read_req;
+    std::queue<vp::IoReq *>wide_denied_write_req;
+    std::queue<vp::IoReq *>narrow_denied_read_req;
+    std::queue<vp::IoReq *>narrow_denied_write_req;
 };

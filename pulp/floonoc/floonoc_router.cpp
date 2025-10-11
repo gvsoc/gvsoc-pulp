@@ -74,7 +74,7 @@ bool Router::handle_request(FloonocNode *node, vp::IoReq *req, int from_x, int f
 {
     this->trace.msg(vp::Trace::LEVEL_DEBUG, "Handle request (req: %p, base: 0x%x, size: 0x%x, from: (%d, %d)\n", req, req->get_addr(), req->get_size(), from_x, from_y);
 
-    this->signal_req.set_and_release(req->get_addr());
+    this->signal_req.set_and_release(req->initiator_addr);
     this->signal_req_size.set_and_release(req->get_size());
     this->signal_req_is_write.set_and_release(req->get_is_write());
 
