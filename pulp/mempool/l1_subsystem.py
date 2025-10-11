@@ -85,6 +85,11 @@ class L1_subsystem(gvsoc.systree.Component):
                             latency=1, atomics=True)
             l1_banks.append(tcdm)
 
+        if async_l1_interco:
+            l1_adapters = []
+            for i in range(0, nb_banks_per_tile):
+                l1_adapters.append(L1_RemoteItf(self, 'tcdm_bank_adapter%d' % i, bandwidth=bandwidth, shared_rw_bandwidth=True, synchronous=False))
+
         # L1 interleaver (virtual)
         local_interleavers = []
         for i in range(0, nb_pe):
@@ -175,6 +180,10 @@ class L1_subsystem(gvsoc.systree.Component):
         # Bindings
         #
 
+        if async_l1_interco:
+            for i in range(0, nb_banks_per_tile):
+                self.bind(l1_adapters[i], 'output', l1_banks[i], 'input')
+
         #Core input
         for i in range(0, nb_pe):
             self.bind(self, f'pe_in{i}', local_interleavers[i], 'in_0')
@@ -240,7 +249,7 @@ class L1_subsystem(gvsoc.systree.Component):
                     self.bind(remote_sub_group_interleaver, 'out_%d' % i, remove_offset, 'in_0')
                 for remote_group_interleaver in remote_group_interleavers:
                     self.bind(remote_group_interleaver, 'out_%d' % i, remove_offset, 'in_0')
-                self.bind(remove_offset, 'out_0', l1_banks[i - start_bank_id], 'input')
+                self.bind(remove_offset, 'out_0', l1_adapters[i - start_bank_id] if async_l1_interco else l1_banks[i - start_bank_id], 'input')
             elif tgt_grp_id == group_id:
                 if tgt_sg_id == sub_group_id:
                     for j, local_interleaver in enumerate(local_interleavers):
