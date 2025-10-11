@@ -64,11 +64,15 @@ private:
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
     vp::IoReqStatus handle_req(vp::IoReq *req, int port);
 
+    static void grant(vp::Block *__this, vp::IoReq *req);
+    static void response(vp::Block *__this, vp::IoReq *req);
+
     // This component trace
     vp::Trace trace;
 
     std::queue<vp::IoReq *> denied_reqs;
     int64_t next_req_cycle = 0;
+    bool stalled;
     int req_latency;
 
     vp::ClockEvent fsm_event;
@@ -89,6 +93,7 @@ L1_RemoteItf::L1_RemoteItf(vp::ComponentConf &config)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
 
+    stalled = false;
     req_latency = this->get_js_config()->get_int("req_latency");
     resp_latency = this->get_js_config()->get_int("resp_latency");
     int bandwidth = this->get_js_config()->get_int("bandwidth");
@@ -97,6 +102,8 @@ L1_RemoteItf::L1_RemoteItf(vp::ComponentConf &config)
     this->resp_bw_limiter = new BandwidthLimiter(this, bandwidth, resp_latency, shared_rw_bandwidth);
 
     this->input_itf.set_req_meth(&L1_RemoteItf::req);
+    this->output_itf.set_grant_meth(&L1_RemoteItf::grant);
+    this->output_itf.set_resp_meth(&L1_RemoteItf::response);
     this->new_slave_port("input", &this->input_itf);
     this->new_master_port("output", &this->output_itf);
 
@@ -138,26 +145,47 @@ vp::IoReqStatus L1_RemoteItf::handle_req(vp::IoReq *req, int port)
     }
 
     vp::IoSlave *resp_port = req->resp_port;
+    req->arg_push((void *)resp_port);
     vp::IoReqStatus retval = this->output_itf.req(req);
-    req->resp_port = resp_port;
 
     if (retval == vp::IO_REQ_OK)
     {
+        req->arg_pop();
+        req->resp_port = resp_port;
         this->resp_bw_limiter->apply_bandwidth(cycles, req);
         int latency = req->get_latency();
         this->out_queue.push_back(req, latency > 0 ? latency - 1 : 0);
         if (latency > (this->req_latency + this->resp_latency + 1))
         {
-            this->next_req_cycle += (latency - (this->req_latency + this->resp_latency));
+            this->next_req_cycle += (latency - (this->req_latency + this->resp_latency + 1));
         }
         this->fsm_event.enqueue();
     }
-    else
+    else if(retval == vp::IO_REQ_DENIED)
     {
-        this->trace.fatal("L1_RemoteItf: target should only return OK\n");
+        this->stalled = true;
     }
 
     return vp::IO_REQ_PENDING;
+}
+
+void L1_RemoteItf::grant(vp::Block *__this, vp::IoReq *req)
+{
+    L1_RemoteItf *_this = (L1_RemoteItf *)__this;
+    _this->stalled = false;
+    _this->fsm_event.enqueue();
+}
+
+void L1_RemoteItf::response(vp::Block *__this, vp::IoReq *req)
+{
+    L1_RemoteItf *_this = (L1_RemoteItf *)__this;
+    int64_t cycles = _this->clock.get_cycles();
+    vp::IoSlave *resp_port = (vp::IoSlave *)req->arg_pop();
+    req->resp_port = resp_port;
+    _this->resp_bw_limiter->apply_bandwidth(cycles, req);
+    int latency = req->get_latency();
+    _this->out_queue.push_back(req, latency > 0 ? latency - 1 : 0);
+    _this->fsm_event.enqueue();
 }
 
 void L1_RemoteItf::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
@@ -165,7 +193,7 @@ void L1_RemoteItf::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     L1_RemoteItf *_this = (L1_RemoteItf *)__this;
     int64_t cycles = _this->clock.get_cycles();
 
-    if (cycles >= _this->next_req_cycle && _this->denied_reqs.size() > 0)
+    if (!_this->stalled && cycles >= _this->next_req_cycle && _this->denied_reqs.size() > 0)
     {
         vp::IoReq *req = _this->denied_reqs.front();
         _this->denied_reqs.pop();
@@ -181,27 +209,28 @@ void L1_RemoteItf::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         }
 
         vp::IoSlave *resp_port = req->resp_port;
+        req->arg_push((void *)resp_port);
         vp::IoReqStatus retval = _this->output_itf.req(req);
-        req->resp_port = resp_port;
 
         if (retval == vp::IO_REQ_OK)
         {
+            req->arg_pop();
+            req->resp_port = resp_port;
             _this->resp_bw_limiter->apply_bandwidth(cycles, req);
             int latency = req->get_latency();
             _this->out_queue.push_back(req, latency > 0 ? latency - 1 : 0);
             if (latency > (_this->req_latency + _this->resp_latency + 1))
             {
-                _this->next_req_cycle += (latency - (_this->req_latency + _this->resp_latency));
+                _this->next_req_cycle += (latency - (_this->req_latency + _this->resp_latency + 1));
             }
             _this->fsm_event.enqueue();
         }
-        else
+        else if(retval == vp::IO_REQ_DENIED)
         {
-            _this->trace.fatal("L1_RemoteItf: target should only return OK\n");
+            _this->stalled = true;
         }
-
     }
-    if (_this->denied_reqs.size() > 0)
+    if (!_this->stalled && _this->denied_reqs.size() > 0)
     {
         _this->fsm_event.enqueue();
     }
