@@ -182,6 +182,7 @@ void L1_RemoteItf::response(vp::Block *__this, vp::IoReq *req)
     int64_t cycles = _this->clock.get_cycles();
     vp::IoSlave *resp_port = (vp::IoSlave *)req->arg_pop();
     req->resp_port = resp_port;
+    req->reset_latency();
     _this->resp_bw_limiter->apply_bandwidth(cycles, req);
     int latency = req->get_latency();
     _this->out_queue.push_back(req, latency > 0 ? latency - 1 : 0);
