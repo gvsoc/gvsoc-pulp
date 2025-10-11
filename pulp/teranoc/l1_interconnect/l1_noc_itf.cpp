@@ -297,6 +297,7 @@ void L1_NocItf::tcdm_req_response(vp::Block *__this, vp::IoReq *req, int id)
     req->resp_port = core_resp_port;
     *noc_req->arg_get(FlooNoc::REQ_DEST_X) = *noc_req->arg_get(FlooNoc::REQ_SRC_X);
     *noc_req->arg_get(FlooNoc::REQ_DEST_Y) = *noc_req->arg_get(FlooNoc::REQ_SRC_Y);
+    req->reset_latency();
     _this->noc_resp_slvs[id]->limiter.apply_bandwidth(cycles, req);
     int latency = req->get_latency();
     _this->noc_resp_slvs[id]->out_queue.push_back(noc_req, latency > 0 ? latency - 1 : 0);
