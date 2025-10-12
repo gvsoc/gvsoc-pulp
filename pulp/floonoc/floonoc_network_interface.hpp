@@ -38,7 +38,7 @@ public:
 
     void check();
     void handle_req(vp::IoReq *req);
-    void handle_rsp(vp::IoReq *req);
+    void handle_rsp(vp::IoReq *req, bool is_address);
 
 private:
     void enqueue_router_req(vp::IoReq *req, bool is_address);

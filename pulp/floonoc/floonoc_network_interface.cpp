@@ -78,9 +78,9 @@ void NetworkQueue::handle_req(vp::IoReq *req)
     }
 }
 
-void NetworkQueue::handle_rsp(vp::IoReq *req)
+void NetworkQueue::handle_rsp(vp::IoReq *req, bool is_address)
 {
-    this->enqueue_router_req(req, false);
+    this->enqueue_router_req(req, is_address);
 }
 
 bool NetworkQueue::handle_request(FloonocNode *node, vp::IoReq *req, int from_x, int from_y)
@@ -600,11 +600,11 @@ void NetworkInterface::handle_response(vp::IoReq *req)
         *req->arg_get(FlooNoc::REQ_DEST_Y) = (void *)(long)origin_ni->y;
         if (*(bool *)req->arg_get(FlooNoc::REQ_WIDE))
         {
-            this->wide_queue.handle_rsp(req);
+            this->wide_queue.handle_rsp(req, false);
         }
         else
         {
-            this->rsp_queue.handle_rsp(req);
+            this->rsp_queue.handle_rsp(req, false);
         }
     }
     else
@@ -624,7 +624,7 @@ void NetworkInterface::handle_response(vp::IoReq *req)
             *req->arg_get(FlooNoc::REQ_SRC_NI) = NULL;
             *req->arg_get(FlooNoc::REQ_DEST_X) = (void *)(long)origin_ni->x;
             *req->arg_get(FlooNoc::REQ_DEST_Y) = (void *)(long)origin_ni->y;
-            this->rsp_queue.handle_rsp(req);
+            this->rsp_queue.handle_rsp(req, true);
         }
     }
     delete req;
