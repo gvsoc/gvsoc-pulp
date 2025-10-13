@@ -230,7 +230,8 @@ NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y, std::string itf_n
       signal_wide_req(*this, "wide_req", 64),
       req_queue(*this, "narrow", noc->narrow_width, false),
       rsp_queue(*this, "rsp", noc->narrow_width, false),
-      wide_queue(*this, "wide", noc->wide_width, true)
+      wide_queue(*this, "wide", noc->wide_width, true),
+      response_queue(this, "response_queue", &this->fsm_event)
 {
     this->noc = noc;
     this->x = x;
@@ -256,6 +257,7 @@ NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y, std::string itf_n
     noc->new_slave_port("wide_input_" + std::to_string(x) + "_" + std::to_string(y),
                         &this->wide_input_itf, this);
 
+    this->ni_outstanding_reqs = this->noc->get_js_config()->get("ni_outstanding_reqs")->get_int();
 }
 
 void NetworkInterface::set_router(int nw, Router *router)
@@ -312,6 +314,8 @@ void NetworkInterface::reset(bool active)
         this->narrow_write_pending_burst = NULL;
         this->narrow_read_pending_burst_nb_req = 0;
         this->narrow_write_pending_burst_nb_req = 0;
+        this->nb_pending_bursts[0] = 0;
+        this->nb_pending_bursts[1] = 0;
     }
 }
 
@@ -373,7 +377,8 @@ vp::IoReqStatus NetworkInterface::handle_req(vp::IoReq *req)
 
     vp::IoReq **queue;
     std::queue<vp::IoReq *> *denied_queue;
-    if (*(bool *)req->arg_get(FlooNoc::REQ_WIDE))
+    bool is_wide = *(bool *)req->arg_get(FlooNoc::REQ_WIDE);
+    if (is_wide)
     {
         queue = req->get_is_write() ? &this->wide_write_pending_burst :
                 &this->wide_read_pending_burst;
@@ -388,13 +393,14 @@ vp::IoReqStatus NetworkInterface::handle_req(vp::IoReq *req)
             &this->narrow_denied_read_req;
     }
 
-    if (*queue)
+    if (*queue || this->nb_pending_bursts[is_wide] >= this->ni_outstanding_reqs)
     {
         denied_queue->push(req);
         return vp::IO_REQ_DENIED;
     }
     else
     {
+        this->nb_pending_bursts[is_wide]++;
         *queue = req;
         if (!req->get_is_write() || !*(vp::IoReq **)req->arg_get(FlooNoc::REQ_WIDE))
         {
@@ -418,11 +424,16 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req, int fro
         this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received response from router (req: %p)\n", req);
 
         vp::IoReq *burst = *(vp::IoReq **)req->arg_get(FlooNoc::REQ_BURST);
+        bool wide = *(vp::IoReq **)req->arg_get(FlooNoc::REQ_WIDE);
 
         if (burst->get_is_write())
         {
             this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received write burst response (burst: %p)\n",
                 burst);
+            this->nb_pending_bursts[wide]--;
+
+            if (this->nb_pending_bursts[wide] < 0) abort();
+
             burst->get_resp_port()->resp(burst);
         }
         else
@@ -435,9 +446,13 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req, int fro
             if (*(int *)burst->arg_get_last() == 0)
             {
                 this->trace.msg(vp::Trace::LEVEL_DEBUG, "Finished burst (burst: %p)\n", burst);
+                this->nb_pending_bursts[wide]--;
+                if (this->nb_pending_bursts[wide] < 0) abort();
                 burst->get_resp_port()->resp(burst);
             }
         }
+
+        this->fsm_event.enqueue();
 
         delete req;
     }
@@ -468,7 +483,14 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req, int fro
             if (result == vp::IO_REQ_OK)
             {
                 NetworkInterface *ni = *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);
-                ni->handle_response(req);
+                if (req->get_latency() > 0)
+                {
+                    this->response_queue.push_back(req, req->get_latency());
+                }
+                else
+                {
+                    ni->handle_response(req);
+                }
             }
             else if (result == vp::IO_REQ_DENIED)
             {
@@ -502,6 +524,13 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     _this->rsp_queue.check();
     _this->wide_queue.check();
 
+
+
+    if (!_this->response_queue.empty())
+    {
+        _this->handle_response((vp::IoReq *)_this->response_queue.pop());
+    }
+
     if (_this->routers_stalled && !_this->target_stalled)
     {
         // If we removed a pending burst and the number of pending bursts was the maximum, notify the local router that it can send another request
@@ -534,10 +563,11 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     }
 
     // We also have to check if another burst has been denied that can now be granted
-    if (_this->wide_denied_read_req.size() > 0 && _this->wide_read_pending_burst == NULL)
+    if (_this->wide_denied_read_req.size() > 0 && _this->wide_read_pending_burst == NULL && _this->nb_pending_bursts[1] < _this->ni_outstanding_reqs)
     {
         _this->trace.msg(vp::Trace::LEVEL_TRACE, "Unstalling denied request (req: %p)\n", _this->wide_denied_read_req.front());
         vp::IoReq *req = _this->wide_denied_read_req.front();
+        _this->nb_pending_bursts[1]++;
         _this->wide_read_pending_burst = req;
         _this->wide_denied_read_req.pop();
         if (!req->get_is_write())
@@ -552,10 +582,11 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         _this->fsm_event.enqueue();
     }
 
-    if (_this->wide_denied_write_req.size() > 0 && _this->wide_write_pending_burst == NULL)
+    if (_this->wide_denied_write_req.size() > 0 && _this->wide_write_pending_burst == NULL && _this->nb_pending_bursts[1] < _this->ni_outstanding_reqs)
     {
         _this->trace.msg(vp::Trace::LEVEL_TRACE, "Unstalling denied request (req: %p)\n", _this->wide_denied_write_req.front());
         vp::IoReq *req = _this->wide_denied_write_req.front();
+        _this->nb_pending_bursts[1]++;
         _this->wide_write_pending_burst = req;
         _this->wide_denied_write_req.pop();
         if (!req->get_is_write())
@@ -571,10 +602,11 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     }
 
     // We also have to check if another burst has been denied that can now be granted
-    if (_this->narrow_denied_read_req.size() > 0 && _this->narrow_read_pending_burst == NULL)
+    if (_this->narrow_denied_read_req.size() > 0 && _this->narrow_read_pending_burst == NULL && _this->nb_pending_bursts[0] < _this->ni_outstanding_reqs)
     {
         _this->trace.msg(vp::Trace::LEVEL_TRACE, "Unstalling denied request (req: %p)\n", _this->narrow_denied_read_req.front());
         vp::IoReq *req = _this->narrow_denied_read_req.front();
+        _this->nb_pending_bursts[0]++;
         _this->narrow_read_pending_burst = req;
         _this->narrow_denied_read_req.pop();
         _this->req_queue.handle_req(req);
@@ -582,10 +614,11 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         _this->fsm_event.enqueue();
     }
 
-    if (_this->narrow_denied_write_req.size() > 0 && _this->narrow_write_pending_burst == NULL)
+    if (_this->narrow_denied_write_req.size() > 0 && _this->narrow_write_pending_burst == NULL && _this->nb_pending_bursts[0] < _this->ni_outstanding_reqs)
     {
         _this->trace.msg(vp::Trace::LEVEL_TRACE, "Unstalling denied request (req: %p)\n", _this->narrow_denied_write_req.front());
         vp::IoReq *req = _this->narrow_denied_write_req.front();
+        _this->nb_pending_bursts[0]++;
         _this->narrow_write_pending_burst = req;
         _this->narrow_denied_write_req.pop();
         _this->req_queue.handle_req(req);
@@ -593,6 +626,7 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         _this->fsm_event.enqueue();
     }
 
+    _this->response_queue.trigger_next();
 }
 
 

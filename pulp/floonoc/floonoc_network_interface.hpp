@@ -115,6 +115,7 @@ private:
     int get_rsp_nw(bool is_wide, bool is_write);
     // Pointer to top
     FlooNoc *noc;
+    int ni_outstanding_reqs;
     // X position of this network interface in the grid
     int x;
     // Y position of this network interface in the grid
@@ -162,4 +163,10 @@ private:
     std::queue<vp::IoReq *>wide_denied_write_req;
     std::queue<vp::IoReq *>narrow_denied_read_req;
     std::queue<vp::IoReq *>narrow_denied_write_req;
+
+    // Response received synchronously are put here to inject them into rsp only after latency
+    // has passed
+    vp::Queue response_queue;
+
+int nb_pending_bursts[2];
 };
