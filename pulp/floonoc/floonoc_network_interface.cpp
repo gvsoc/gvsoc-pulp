@@ -144,9 +144,16 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address)
             }
             else
             {
-                this->trace.msg(vp::Trace::LEVEL_TRACE, "Enqueue request to router (req: %p, base: 0x%x, size: 0x%x, destination: (%d, %d))\n",
-                                router_req, burst_base, size, entry->x, entry->y);
+                // Be careful to not have any request which is crossing 2 entries
+                uint64_t max_size = entry->base + entry->size - burst_base;
+                size = std::min(max_size, size);
 
+                this->trace.msg(vp::Trace::LEVEL_TRACE,
+                    "Enqueue request to router (req: %p, base: 0x%x, size: 0x%x, "
+                    "destination: (%d, %d))\n",
+                    router_req, burst_base, size, entry->x, entry->y);
+
+                router_req->set_size(size);
                 router_req->set_addr(burst_base - entry->remove_offset);
                 router_req->initiator_addr = burst_base;
                 *router_req->arg_get(FlooNoc::REQ_DEST_X) = (void *)(long)entry->x;

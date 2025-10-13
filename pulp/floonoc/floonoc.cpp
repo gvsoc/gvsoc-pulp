@@ -221,7 +221,8 @@ Entry *FlooNoc::get_entry(uint64_t base, uint64_t size)
     for (int i=0; i<this->entries.size(); i++)
     {
         Entry *entry = &this->entries[i];
-        if (base >= entry->base && base + size <= entry->base + entry->size)
+        // We allow partial entry, the network interface will take care of splitting transactions
+        if (base >= entry->base && base < entry->base + entry->size)
         {
             return entry;
         }
