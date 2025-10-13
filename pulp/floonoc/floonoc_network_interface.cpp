@@ -485,7 +485,7 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req, int fro
                 NetworkInterface *ni = *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);
                 if (req->get_latency() > 0)
                 {
-                    this->response_queue.push_back(req, req->get_latency());
+                    this->response_queue.push_delayed(req, req->get_latency());
                 }
                 else
                 {
