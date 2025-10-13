@@ -238,17 +238,23 @@ void Router::get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_
         {
             next_x = this->x;
             next_y = this->y;
+            return;
         }
-        else if (dest_x == this->x)
-        {
-            next_x = this->x;
-            next_y = dest_y < this->y ? this->y - 1 : this->y + 1;
-        }
-        else
+
+        if (dest_x != this->x)
         {
             next_x = dest_x < this->x ? this->x - 1 : this->x + 1;
             next_y = this->y;
+
+            // Only move on X if we don't hit the border unless we arrive at destination NI
+            if (next_x != 0 && next_x != this->noc->dim_x - 1 || next_y == dest_y)
+            {
+                return;
+            }
         }
+
+        next_x = this->x;
+        next_y = dest_y < this->y ? this->y - 1 : this->y + 1;
     }
 }
 

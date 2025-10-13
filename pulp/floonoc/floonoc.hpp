@@ -113,6 +113,10 @@ public:
     // this width so that the bandwidth corresponds to the width.
     uint64_t wide_width;
     uint64_t narrow_width;
+    // X dimension of the network. This includes both routers but also targets on the edges
+    int dim_x;
+    // Y dimension of the network. This includes both routers but also targets on the edges
+    int dim_y;
 
 private:
     FloonocNode *get_router_neighbour(std::vector<Router *> &routers, int x, int y);
@@ -125,10 +129,6 @@ private:
     // target (base address, size, position)
     std::vector<Entry> entries;
     std::vector<std::string> itf_names;
-    // X dimension of the network. This includes both routers but also targets on the edges
-    int dim_x;
-    // Y dimension of the network. This includes both routers but also targets on the edges
-    int dim_y;
     // SIze of the routers input queues. Pushing more requests than this size will block the
     // output queue of the sender.
     int router_input_queue_size;
