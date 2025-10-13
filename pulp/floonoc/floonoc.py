@@ -133,7 +133,7 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         if rm_base and remove_offset == 0:
             remove_offset =base
         self.__add_mapping(f"narrow_{name}", base=base, size=size, x=x, y=y, remove_offset=remove_offset)
-        self.itf_bind(f"ni_narrow_{name}", itf, signature='io')
+        self.itf_bind(f"ni_narrow_{x}_{y}", itf, signature='io')
 
 
     def o_WIDE_BIND(self, itf: gvsoc.systree.SlaveItf, x: int, y: int):
