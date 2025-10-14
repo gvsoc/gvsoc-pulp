@@ -98,7 +98,8 @@ void IDmaBeTcdm::write_burst(IdmaTransfer *transfer, uint64_t base, uint64_t siz
 uint64_t IDmaBeTcdm::get_burst_size(uint64_t base, uint64_t size)
 {
     // There is no constraint on burst size, this backend will anyway cut the burst into lines
-    return size;
+    //return size;
+    return this->width;
 }
 
 
@@ -284,9 +285,6 @@ void IDmaBeTcdm::read_line()
     // Extract line from current read burst
     uint64_t base = this->current_burst_base;
     uint64_t size = this->get_line_size(base, this->current_burst_size);
-
-    this->trace.msg(vp::Trace::LEVEL_TRACE, "Reading line from TCDM (base: 0x%lx, size: 0x%lx)\n",
-        base, size);
 
     // Prepare the IO request to TCDM
     req->prepare();

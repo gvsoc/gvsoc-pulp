@@ -117,11 +117,11 @@ vp::IoReqStatus NetworkInterface::req(vp::Block *__this, vp::IoReq *req)
     // We also need to push at which timestamp the burst can start being processed.
     // Since we handle it asynchronously, we need to start it only once its latency has been
     // reached
-    req->set_latency(0); // Actually dont do that because the cluster sent them with some latency that doesnt make sense
+    //req->set_latency(0); // Actually dont do that because the cluster sent them with some latency that doesnt make sense
     //printf("[ZL-MOD] REQ LATENCY=%ld\n",req->get_latency());
     // Just enqueue it and trigger the FSM which will check if it must be processed now
-    //_this->add_pending_burst(req, true, _this->clock.get_cycles() + req->get_latency(), std::make_tuple(_this->x, _this->y));
-    _this->add_pending_burst(req, true, _this->clock.get_cycles(), std::make_tuple(_this->x, _this->y));
+    _this->add_pending_burst(req, true, _this->clock.get_cycles() + req->get_latency(), std::make_tuple(_this->x, _this->y));
+    req->set_latency(0);
 
     _this->fsm_event.enqueue(
         std::max((int64_t)1, _this->pending_bursts_timestamp.front() - _this->clock.get_cycles()));
@@ -301,7 +301,8 @@ void NetworkInterface::handle_addr_req(void){
         req->set_opcode(burst->get_opcode());
         req->set_second_data(burst->get_second_data());
         // Get the target entry corresponding to the current base
-        Entry *entry = this->noc->get_entry(base, size);
+        //Entry *entry = this->noc->get_entry(base, size);
+        Entry *entry = this->noc->get_entry(base, size, this->x, this->y);
 
         if (entry == NULL)
         {

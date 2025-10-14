@@ -89,7 +89,8 @@ public:
     NetworkInterface *get_network_interface(int x, int y);
     // Return the memory-mapped entry corresponding to the specified mapping. Can be used to get
     // destination coordinates associated to an address location.
-    Entry *get_entry(uint64_t base, uint64_t size);
+    //Entry *get_entry(uint64_t base, uint64_t size);
+    Entry *get_entry(uint64_t base, uint64_t size, int x, int y);
     // Can be called to notify that an asynchronous response to a request was received. The noc
     // will then call the initiating network interface so that it is handled by the burst.
     void handle_request_end(vp::IoReq *req);
