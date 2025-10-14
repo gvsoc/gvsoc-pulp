@@ -15,7 +15,8 @@
  */
 
 /*
- * Author: Chi     Zhang , ETH Zurich (chizhang@iis.ee.ethz.ch)
+ * Authors: Chi     Zhang, ETH Zurich (chizhang@iis.ee.ethz.ch)
+            Lorenzo Zuolo, Chips-IT   (lorenzo.zuolo@chips.it)
  * Note:
  *      Here we only support (No Compute/ INT16 / UINT16 / FP16 ) for matrix multiply
  */
@@ -316,7 +317,7 @@ LightRedmule::LightRedmule(vp::ComponentConf &config)
     this->cycle_start       = 0;
     this->total_runtime     = 0;
     this->num_matmul        = 0;
-
+    
     this->trace.msg("[LightRedmule] Model Initialization Done!\n");
 }
 

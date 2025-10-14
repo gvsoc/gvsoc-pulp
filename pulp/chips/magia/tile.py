@@ -1,18 +1,20 @@
-#
-# Copyright (C) 2025 ETH Zurich, University of Bologna and Fondazione ChipsIT
-#
+# Copyright (C) 2025 Fondazione Chips-IT
+
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-#
+
 #     http://www.apache.org/licenses/LICENSE-2.0
-#
+
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
+
+
+
+# Authors: Lorenzo Zuolo, Chips-IT (lorenzo.zuolo@chips.it)
 
 import gvsoc.systree
 import memory.memory as memory
@@ -35,22 +37,22 @@ from pulp.chips.magia.xif_decoder import XifDecoder
 from pulp.chips.magia.idma_ctrl import Magia_iDMA_Ctrl
 
 
+
 # adapted from snitch cluster model
 # interface i_INPUT -> interleaver -> banks
 class MagiaTileTcdm(gvsoc.systree.Component):
     def __init__(self, parent, name, parser):
         super().__init__(parent, name)
 
-        # TODO: for early tests only. Move to json later
         nb_banks = MagiaArch.N_MEM_BANKS
         bank_size = MagiaArch.N_WORDS_BANK * MagiaArch.BYTES_PER_WORD
 
         # 1 master: OBI, iDMA0, iDMA1
-        L1_masters = 1
+        L1_masters = 3
         interleaver = L1_interleaver(self, 'interleaver', nb_slaves=nb_banks, nb_masters=L1_masters, interleaving_bits=2)
 
         # 3 masters: OBI
-        dma_masters = 3
+        dma_masters = 1
         dma_interleaver = DmaInterleaver(self, 'dma_interleaver', nb_master_ports=dma_masters, nb_banks=nb_banks, bank_width=4)
         
         # 1 master: redmule
@@ -102,7 +104,7 @@ class MagiaTile(gvsoc.systree.Component):
         # Data scratchpad
         l1_tcdm = MagiaTileTcdm(self, f'tile-{tid}-tcdm', parser)
 
-        # Temporary test interconnects (use obi to access TCDM), to be refined later
+        # AXI and OBI x-bars
         tile_xbar = router.Router(self, f'tile-{tid}-axi-xbar',bandwidth=4,latency=2)
         obi_xbar = router.Router(self, f'tile-{tid}-obi-xbar',bandwidth=4,latency=2)
 
@@ -110,7 +112,7 @@ class MagiaTile(gvsoc.systree.Component):
         idma_ctrl= Magia_iDMA_Ctrl(self,f'tile-{tid}-idma-ctrl')
 
         # IDMA
-        idma0 = SnitchDma(self,f'tile-{tid}-idma0',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4,transfer_queue_size=1,burst_queue_size=1)
+        idma0 = SnitchDma(self,f'tile-{tid}-idma0',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4,transfer_queue_size=1,burst_queue_size=2)
         idma1 = SnitchDma(self,f'tile-{tid}-idma1',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4,transfer_queue_size=1,burst_queue_size=1)
 
         # Redmule
@@ -118,9 +120,9 @@ class MagiaTile(gvsoc.systree.Component):
                                     tcdm_bank_width     = MagiaArch.BYTES_PER_WORD,
                                     tcdm_bank_number    = MagiaArch.N_MEM_BANKS,
                                     elem_size           = 2, #max number of bytes per element --> if FP16 then elem_size=2. This is the max number to accomodate any supported format which for now are 8bits and 16bits data types 
-                                    ce_height           = 128,
-                                    ce_width            = 32,
-                                    ce_pipe             = 3,
+                                    ce_height           = 8, # 8 in RTL
+                                    ce_width            = 8, # 24 in RTL
+                                    ce_pipe             = 1,
                                     queue_depth         = 1,
                                     loc_base            = tid*MagiaArch.L1_TILE_OFFSET)
         
@@ -224,13 +226,13 @@ class MagiaTile(gvsoc.systree.Component):
 
         # Bind: idma0
         idma0.o_AXI(tile_xbar.i_INPUT())
-        idma0.o_TCDM(l1_tcdm.i_DMA_INPUT()) #here we don't use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
+        idma0.o_TCDM(l1_tcdm.i_INPUT(1)) #here we don't use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
         idma_ctrl.o_OFFLOAD_iDMA0_AXI2OBI(idma0.i_OFFLOAD())
         idma0.o_OFFLOAD_GRANT(idma_ctrl.i_OFFLOAD_GRANT_iDMA0_AXI2OBI())
 
         # Bind: idma1
         idma1.o_AXI(tile_xbar.i_INPUT())
-        idma1.o_TCDM(l1_tcdm.i_DMA_INPUT()) #here we don't use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
+        idma1.o_TCDM(l1_tcdm.i_INPUT(2)) #here we don't use the iDMA interleaver because here iDMA is directly connected to TCDM and iDMA has it's own interleaver for TCDM access (in iDMA-BE)
         idma_ctrl.o_OFFLOAD_iDMA1_OBI2AXI(idma1.i_OFFLOAD())
         idma1.o_OFFLOAD_GRANT(idma_ctrl.i_OFFLOAD_GRANT_iDMA1_OBI2AXI())
 

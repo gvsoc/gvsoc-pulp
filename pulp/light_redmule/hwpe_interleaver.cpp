@@ -86,7 +86,7 @@ vp::IoReqStatus HWPEInterleaver::req(vp::Block *__this, vp::IoReq *req)
         uint64_t bank_offset = ((offset >> _this->offset_right_shift) << _this->offset_left_shift) +
             (offset & ((1<< _this->offset_left_shift) - 1));
 
-        // _this->trace.msg(vp::Trace::LEVEL_TRACE, "------  Send to Bank %d \n", bank_id);
+         _this->trace.msg(vp::Trace::LEVEL_TRACE, "------  Send to Bank %d with size %d\n", bank_id, bank_size);
 
         vp::IoReq * bank_req = new vp::IoReq;
 

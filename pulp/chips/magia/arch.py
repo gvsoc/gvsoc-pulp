@@ -1,3 +1,21 @@
+# Copyright (C) 2025 Fondazione Chips-IT
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+
+# Authors: Lorenzo Zuolo, Chips-IT (lorenzo.zuolo@chips.it)
+
 class MagiaArch:
     # Single tile address map from magia_tile_pkg.sv
     RESERVED_ADDR_START = 0x0000_0000
@@ -27,7 +45,6 @@ class MagiaArch:
     BYTES_PER_WORD      = 4
     TILE_CLK_FREQ       = 200 * (10 ** 6)
 
-    ENABLE_NOC          = True
     N_TILES_X           = 4
     N_TILES_Y           = 4
     NB_CLUSTERS         = N_TILES_X*N_TILES_Y
