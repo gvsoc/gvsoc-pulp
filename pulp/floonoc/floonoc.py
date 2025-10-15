@@ -146,7 +146,7 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
             rm_base: bool=False, remove_offset:int =0):
         if rm_base and remove_offset == 0:
             remove_offset =base
-        self.__add_mapping(f"wide_{name}", base=base, size=size, x=dir, y=0, remove_offset=remove_offset)
+        self.__add_mapping(f"ni_{name}", base=base, size=size, x=dir, y=0, remove_offset=remove_offset)
 
     def o_MAP(self, base: int, size: int,
             x: int, y: int,
