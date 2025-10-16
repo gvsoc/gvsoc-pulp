@@ -14,7 +14,14 @@
 # limitations under the License.
 #
 
+from enum import IntEnum
 import gvsoc.systree
+
+class FlooNocDirection(IntEnum):
+    RIGHT = -4
+    LEFT = -3
+    UP = -2
+    DOWN = -1
 
 
 class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
@@ -126,18 +133,28 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         if rm_base and remove_offset == 0:
             remove_offset =base
         self.__add_mapping(f"narrow_{name}", base=base, size=size, x=x, y=y, remove_offset=remove_offset)
-        self.itf_bind(f"narrow_{name}", itf, signature='io')
+        self.itf_bind(f"ni_narrow_{x}_{y}", itf, signature='io')
 
 
+    def o_WIDE_BIND(self, itf: gvsoc.systree.SlaveItf, x: int, y: int):
+        self.itf_bind(f"ni_wide_{x}_{y}", itf, signature='io')
 
-    def o_WIDE_MAP(self, itf: gvsoc.systree.SlaveItf, base: int, size: int,
-            x: int, y: int, name: str=None, rm_base: bool=False, remove_offset:int =0):
+    def o_NARROW_BIND(self, itf: gvsoc.systree.SlaveItf, x: int, y: int):
+        self.itf_bind(f"ni_narrow_{x}_{y}", itf, signature='io')
+
+    def o_MAP_DIR(self, base: int, size: int, dir: FlooNocDirection, name: str,
+            rm_base: bool=False, remove_offset:int =0):
+        if rm_base and remove_offset == 0:
+            remove_offset =base
+        self.__add_mapping(f"ni_{name}", base=base, size=size, x=dir, y=0, remove_offset=remove_offset)
+
+    def o_MAP(self, base: int, size: int,
+            x: int, y: int,
+            rm_base: bool=False, remove_offset:int =0):
         """Binds the output of a node to a target, associated to a memory-mapped region.
 
         Parameters
         ----------
-        itf: gvsoc.systree.SlaveItf
-            Slave interface where requests matching the memory-mapped region will be sent.
         base: int
             Base address of the memory-mapped region.
         size: int
@@ -154,12 +171,21 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         remove_offset: int
             Offset to remove from the address before applying the mapping
         """
+        if rm_base and remove_offset == 0:
+            remove_offset =base
+        self.__add_mapping(f"ni_{x}_{y}", base=base, size=size, x=x, y=y, remove_offset=remove_offset)
+
+    def o_WIDE_MAP(self, itf: gvsoc.systree.SlaveItf | None, base: int, size: int,
+            x: int | FlooNocDirection, y: int | FlooNocDirection, name: str | None=None,
+            rm_base: bool=False, remove_offset:int =0):
+        """This methods is deprecated
+        """
         if name is None:
             name = itf.component.name
         if rm_base and remove_offset == 0:
             remove_offset =base
         self.__add_mapping(f"wide_{name}", base=base, size=size, x=x, y=y, remove_offset=remove_offset)
-        self.itf_bind(f"wide_{name}", itf, signature='io')
+        self.itf_bind(f"ni_wide_{x}_{y}", itf, signature='io')
 
     def i_NARROW_INPUT(self, x: int, y: int) -> gvsoc.systree.SlaveItf:
         """Returns the input port of a node.
@@ -293,6 +319,8 @@ class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
 
     def __gen_gui_router(self, routers, name, path):
         router = gvsoc.gui.Signal(self, routers, name, path=f"{path}/req", groups=['regmap'])
+        gvsoc.gui.Signal(self, router, "size", path=f"{path}/req_size", groups=['regmap'])
+        gvsoc.gui.Signal(self, router, "is_write", path=f"{path}/req_is_write", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
         gvsoc.gui.Signal(self, router, "stalled_queue_right", path=f"{path}/stalled_queue_right", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
         gvsoc.gui.Signal(self, router, "stalled_queue_left", path=f"{path}/stalled_queue_left", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
         gvsoc.gui.Signal(self, router, "stalled_queue_up", path=f"{path}/stalled_queue_up", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
@@ -303,11 +331,10 @@ class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
         top = gvsoc.gui.Signal(self, parent_signal, name=self.name)
 
         routers = gvsoc.gui.Signal(self, top, name="routers")
-        for router_id in self.get_property('routers'):
-            router = gvsoc.gui.Signal(self, routers, f"router_{router_id[0]}_{router_id[1]}")
-            self.__gen_gui_router(router, "req", path=f"req_router_{router_id[0]}_{router_id[1]}")
-            self.__gen_gui_router(router, "rsp", path=f"rsp_router_{router_id[0]}_{router_id[1]}")
-            self.__gen_gui_router(router, "wide", path=f"wide_router_{router_id[0]}_{router_id[1]}")
+        for nw_name in ['req', 'rsp', 'wide']:
+            nw = gvsoc.gui.Signal(self, routers, f"{nw_name}")
+            for router_id in self.get_property('routers'):
+                self.__gen_gui_router(nw, f"{router_id[0]}_{router_id[1]}", path=f"{nw_name}_router_{router_id[0]}_{router_id[1]}")
 
         nis = gvsoc.gui.Signal(self, top, name="nis")
         for ni_id in self.get_property('network_interfaces'):

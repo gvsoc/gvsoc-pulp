@@ -27,8 +27,11 @@
 #include "floonoc_network_interface.hpp"
 
 Router::Router(FlooNoc *noc, std::string name, int x, int y, int queue_size)
-    : vp::Block(noc, name + std::to_string(x) + "_" + std::to_string(y)),
-      fsm_event(this, &Router::fsm_handler), signal_req(*this, "req", 64),
+    : FloonocNode(noc, name + std::to_string(x) + "_" + std::to_string(y)),
+      fsm_event(this, &Router::fsm_handler),
+      signal_req(*this, "req", 64, vp::SignalCommon::ResetKind::HighZ),
+      signal_req_size(*this, "req_size", 64, vp::SignalCommon::ResetKind::HighZ),
+      signal_req_is_write(*this, "req_is_write", 1, vp::SignalCommon::ResetKind::HighZ),
       stalled_queues{{
         vp::Signal<bool>(*this, "stalled_queue_right", 1),
         vp::Signal<bool>(*this, "stalled_queue_left", 1),
@@ -47,18 +50,33 @@ Router::Router(FlooNoc *noc, std::string name, int x, int y, int queue_size)
     // Create a queue for each direction (N, E, S, W, local)
     for (int i = 0; i < 5; i++)
     {
-        this->input_queues[i] = new vp::Queue(this, "input_queue_" + std::to_string(i),
+        this->input_queues[i] = new RouterQueue(this, "input_queue_" + std::to_string(i),
             &this->fsm_event);
 
         this->stalled_queues[i] = false;
     }
 }
 
-bool Router::handle_request(vp::IoReq *req, int from_x, int from_y)
+Router::~Router()
+{
+    for (int i = 0; i < 5; i++)
+    {
+        delete this->input_queues[i];
+    }
+}
+
+void Router::set_neighbour(int dir, FloonocNode *node)
+{
+    this->output_nodes[dir] = node;
+}
+
+bool Router::handle_request(FloonocNode *node, vp::IoReq *req, int from_x, int from_y)
 {
     this->trace.msg(vp::Trace::LEVEL_DEBUG, "Handle request (req: %p, base: 0x%x, size: 0x%x, from: (%d, %d)\n", req, req->get_addr(), req->get_size(), from_x, from_y);
 
-    this->signal_req = req->get_addr();
+    this->signal_req.set_and_release(req->initiator_addr);
+    this->signal_req_size.set_and_release(req->get_size());
+    this->signal_req_is_write.set_and_release(req->get_is_write());
 
     // Each direction has its own input queue to properly implement the round-robin
     // Get the one for the router or network interface which sent this request
@@ -67,14 +85,18 @@ bool Router::handle_request(vp::IoReq *req, int from_x, int from_y)
     this->trace.msg(vp::Trace::LEVEL_DEBUG, "Pushed request to input queue (req: %p, queue: %d)\n", req, queue_index);
 
     // And push it to the queue. The queue will automatically trigger the FSM if needed
-    vp::Queue *queue = this->input_queues[queue_index];
-    queue->push_back(req, 1); // The queue has an intrinsic delay of 1. With this additional delay, we model the fact that a real router takes 2 cycles to forward a request
-    //ZL-MOD changed from 1 to 2 to align with HW
+    RouterQueue *queue = this->input_queues[queue_index];
+    queue->queue.push_back(req, 1); // The queue has an intrinsic delay of 1. With this additional delay, we model the fact that a real router takes 2 cycles to forward a request
 
-    // We let the source enqueue one more request than what is possible to model the fact the fact
+    // We let the source enqueue one more request than what is possible to model the fact
     // the request is stalled. This will then stall the source which will not send any request there
     // anymore until we unstall it
-    return queue->size() > this->queue_size;
+    bool stalled = queue->queue.size() > this->queue_size;
+    if (stalled)
+    {
+        queue->stalled_node = node;
+    }
+    return stalled;
 }
 
 void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
@@ -97,11 +119,11 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     // Then go through the 5 input queues until we find a request which can be propagated
     for (int i = 0; i < 5; i++)
     {
-        vp::Queue *queue = _this->input_queues[in_queue_index];
-        _this->trace.msg(vp::Trace::LEVEL_TRACE, "Checking input queue (queue_index: %d, queue size: %d)\n", in_queue_index, queue->size());
-        if (!queue->empty())
+        RouterQueue *queue = _this->input_queues[in_queue_index];
+        _this->trace.msg(vp::Trace::LEVEL_TRACE, "Checking input queue (queue_index: %d, queue size: %d)\n", in_queue_index, queue->queue.size());
+        if (!queue->queue.empty())
         {
-            vp::IoReq *req = (vp::IoReq *)queue->head();
+            vp::IoReq *req = (vp::IoReq *)queue->queue.head();
 
             // Extract the destination from the request, that was filled in the network interface
             // when the request was created
@@ -147,47 +169,28 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             }
 
             // Since we now know, that the request will be propagated, remove it from the queue
-            queue->pop();
+            queue->queue.pop();
 
-            if (queue->size() == _this->queue_size) // Remember we let the source enqueue one more request than what is possible.
+            if (queue->queue.size() == _this->queue_size) // Remember we let the source enqueue one more request than what is possible.
             {
                 // In case the queue had one more element than possible, it means the output
                 // queue of the sending router is stalled. Unstall it now that we can accept
                 // one more request
-                _this->unstall_previous(req, in_queue_index);
+                queue->stalled_node->unstall_queue(_this->x, _this->y);
             }
 
-            // Now send to the next position
-            if (to_x == _this->x && to_y == _this->y)
-            {
-                // If next position is the same as the current one, it means it arrived to
-                // destination, we need to forward to the final target
-                _this->send_to_target_ni(req, _this->x, _this->y);
-            }
-            else
-            {
-                // Otherwise forward to next position
-                Router *router = _this->noc->get_router(next_x, next_y, req->get_int(FlooNoc::REQ_WIDE), req->get_is_write(), req->get_int(FlooNoc::REQ_IS_ADDRESS));
+            // Otherwise forward to next position
+            FloonocNode *node = _this->output_nodes[out_queue_id];
 
-                if (router == NULL)
-                {
-                    // It is possible that we don't have any router at the destination if it is on
-                    // the edge. In this case just forward it to the ni of the target
-                    _this->send_to_target_ni(req, _this->x, _this->y);
-                }
-                else
-                {
-                    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Forwarding request to next router (req: %p, base: 0x%x, size: 0x%x, next_position: (%d, %d), in_queue: %d)\n",
-                                     req, req->get_addr(), req->get_size(), next_x, next_y, in_queue_index);
-                    // Send the request to next router, and in case it reports that its input queue
-                    // is full, stall the corresponding output queue to make sure we stop sending
-                    // there until the queue is unstalled
-                    if (router->handle_request(req, _this->x, _this->y))
-                    {
-                        _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Stalling queue (position: (%d, %d), queue: %d)\n", _this->x, _this->y, out_queue_id);
-                        _this->stalled_queues[out_queue_id] = true;
-                    }
-                }
+            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Forwarding request to next router (req: %p, base: 0x%x, size: 0x%x, next_position: (%d, %d), in_queue: %d)\n",
+                                req, req->get_addr(), req->get_size(), next_x, next_y, in_queue_index);
+            // Send the request to next router, and in case it reports that its input queue
+            // is full, stall the corresponding output queue to make sure we stop sending
+            // there until the queue is unstalled
+            if (node->handle_request(_this, req, _this->x, _this->y))
+            {
+                _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Stalling queue (position: (%d, %d), queue: %d)\n", _this->x, _this->y, out_queue_id);
+                _this->stalled_queues[out_queue_id] = true;
             }
             _this->current_queue = in_queue_index + 1; // Always start looking from the queue after the one that has been processed last
             if (_this->current_queue == 5)
@@ -200,7 +203,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         }
         else
         {
-            if (queue->size())
+            if (queue->queue.size())
             {
                _this->fsm_event.enqueue();
             }
@@ -215,55 +218,43 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     }
 }
 
-void Router::unstall_previous(vp::IoReq *req, int in_queue_index)
-{
-    int prev_pos_x, prev_pos_y;
-    // Get the previous position out of the input queue index
-    this->get_pos_from_queue(in_queue_index, prev_pos_x, prev_pos_y);
-
-    if (prev_pos_x == this->x && prev_pos_y == this->y)
-    {
-        // If the queue corresponds to the local one (previous position is same as
-        // position), it means it was injected by a network interface
-        NetworkInterface *ni = this->noc->get_network_interface(this->x, this->y);
-        ni->unstall_queue(this->x, this->y);
-    }
-    else
-    {
-        // Otherwise it comes from a router
-        Router *router = this->noc->get_router(prev_pos_x, prev_pos_y, req->get_int(FlooNoc::REQ_WIDE), req->get_is_write(), req->get_int(FlooNoc::REQ_IS_ADDRESS));
-        router->unstall_queue(this->x, this->y);
-    }
-}
-
-
-void Router::send_to_target_ni(vp::IoReq *req, int pos_x, int pos_y)
-{
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Sending request to target NI (req: %p, position: (%d, %d))\n",
-                    req, pos_x, pos_y);
-    NetworkInterface *ni = this->noc->get_network_interface(pos_x, pos_y);
-
-    ni->req_from_router(req, pos_x, pos_y);
-}
-
 // This is determining the routes the requests will take in the network
 void Router::get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_y)
 {
-    // TODO If there is a gap in the mesh of routers this algorithm doesnt work
-    if (dest_x == this->x && dest_y == this->y)
+    if (dest_x < 0)
     {
-        next_x = this->x;
-        next_y = this->y;
-    }
-    else if (dest_x == this->x)
-    {
-        next_x = this->x;
-        next_y = dest_y < this->y ? this->y - 1 : this->y + 1;
+        switch (dest_x + 4)
+        {
+            case FlooNoc::DIR_UP: next_x = this->x; next_y = this->y + 1; break;
+            case FlooNoc::DIR_DOWN: next_x = this->x; next_y = this->y - 1; break;
+            case FlooNoc::DIR_RIGHT: next_y = this->y; next_x = this->x + 1; break;
+            case FlooNoc::DIR_LEFT: next_y = this->y; next_x = this->x - 1; break;
+        }
     }
     else
     {
-        next_x = dest_x < this->x ? this->x - 1 : this->x + 1;
-        next_y = this->y;
+        // TODO If there is a gap in the mesh of routers this algorithm doesnt work
+        if (dest_x == this->x && dest_y == this->y)
+        {
+            next_x = this->x;
+            next_y = this->y;
+            return;
+        }
+
+        if (dest_x != this->x)
+        {
+            next_x = dest_x < this->x ? this->x - 1 : this->x + 1;
+            next_y = this->y;
+
+            // Only move on X if we don't hit the border unless we arrive at destination NI
+            if (next_x != 0 && next_x != this->noc->dim_x - 1 || next_y == dest_y)
+            {
+                return;
+            }
+        }
+
+        next_x = this->x;
+        next_y = dest_y < this->y ? this->y - 1 : this->y + 1;
     }
 }
 
@@ -341,5 +332,11 @@ void Router::reset(bool active)
             this->stalled_queues[i] = false;
         }
     }
+
+}
+
+RouterQueue::RouterQueue(vp::Block *parent, std::string name, vp::ClockEvent *ready_event)
+: queue(parent, name, ready_event)
+{
 
 }
