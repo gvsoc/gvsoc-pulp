@@ -146,12 +146,14 @@ void IDmaBeAxi::enqueue_burst(uint64_t base, uint64_t size, bool is_write, IdmaT
     *req->arg_get(0) = (void *)transfer;
 
     this->pending_bursts.push(req);
+    this->pending_bursts_ack.push(req);
 
     // It case it is the first burst, set the pending base, this is used for writing bursts to know next
     // req address
     if (this->pending_bursts.size() == 1)
     {
         this->current_burst_base = this->pending_bursts.front()->get_addr();
+        this->current_burst_size = this->pending_bursts.front()->get_size();
     }
 
     // And trigger the FSM in case it needs to be processed now
@@ -270,6 +272,19 @@ void IDmaBeAxi::write_data(IdmaTransfer *transfer, uint8_t *data, uint64_t size)
     uint64_t base = this->current_burst_base;
     this->current_burst_base += size;
 
+    this->current_burst_size -= size;
+    if (this->current_burst_size == 0)
+    {
+        vp::IoReq *burst = this->pending_bursts.front();
+        this->pending_bursts.pop();
+
+        if (this->pending_bursts.size() > 0)
+        {
+            this->current_burst_base = this->pending_bursts.front()->get_addr();
+            this->current_burst_size = this->pending_bursts.front()->get_size();
+        }
+    }
+
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Write data (req: %p, base: 0x%lx, size: 0x%lx)\n",
         req, base, size);
 
@@ -278,7 +293,7 @@ void IDmaBeAxi::write_data(IdmaTransfer *transfer, uint8_t *data, uint64_t size)
     req->set_addr(base);
     req->set_size(size);
     req->set_data(data);
-    req->arg_alloc(); //ZL-MOD 22082025 fix for Floonoc
+    req->arg_alloc();
     *req->arg_get(0) = (void *)transfer;
 
     vp::IoReqStatus status = this->ico_itf.req(req);
@@ -309,7 +324,7 @@ void IDmaBeAxi::write_handle_req_end(vp::IoReq *req)
     this->be->ack_data((IdmaTransfer *)*req->arg_get(0), req->get_data(), req->get_size());
 
     // Account this chunk on the first pending burst
-    vp::IoReq *burst = this->pending_bursts.front();
+    vp::IoReq *burst = this->pending_bursts_ack.front();
     burst->set_size(burst->get_size() - req->get_size());
 
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Updating burst remaining size (burst: %p, req_size: %d, burst_size: %d)\n",
@@ -318,11 +333,7 @@ void IDmaBeAxi::write_handle_req_end(vp::IoReq *req)
     // And release it in case it is done
     if (burst->get_size() == 0)
     {
-        this->pending_bursts.pop();
-        if (this->pending_bursts.size() > 0)
-        {
-            this->current_burst_base = this->pending_bursts.front()->get_addr();
-        }
+        this->pending_bursts_ack.pop();
         this->free_bursts.push(burst);
         // Notify the backend since it may schedule another burst
         this->be->update();
