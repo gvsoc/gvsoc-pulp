@@ -112,8 +112,8 @@ class MagiaTile(gvsoc.systree.Component):
         idma_ctrl= Magia_iDMA_Ctrl(self,f'tile-{tid}-idma-ctrl')
 
         # IDMA
-        idma0 = SnitchDma(self,f'tile-{tid}-idma0',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4,transfer_queue_size=1,burst_queue_size=2)
-        idma1 = SnitchDma(self,f'tile-{tid}-idma1',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4,transfer_queue_size=1,burst_queue_size=4)
+        idma0 = SnitchDma(self,f'tile-{tid}-idma0',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4,transfer_queue_size=1,burst_queue_size=1)
+        idma1 = SnitchDma(self,f'tile-{tid}-idma1',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4,transfer_queue_size=1,burst_queue_size=1)
 
         # Redmule
         redmule = LightRedmule(self, f'tile-{tid}-redmule',

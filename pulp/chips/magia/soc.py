@@ -151,10 +151,14 @@ class MagiaSoc(gvsoc.systree.Component):
 
         # Create noc routers
         for y in range(0,MagiaArch.N_TILES_Y):
-            for x in range(0,MagiaArch.N_TILES_X+1):
+            for x in range(1,MagiaArch.N_TILES_X+1):
                 print(f"[NoC] Adding router and NI at position x={x} y={y}")
                 noc.add_router(x, y)
                 noc.add_network_interface(x, y)
+
+        for y in range(0,MagiaArch.N_TILES_Y):
+            print(f"[NoC] L2-NI at position x={0} y={y}")
+            noc.add_network_interface(0, y)
 
         # Bind clusters to noc. E.g. for 4x4
         # {1.0}----{2.0}----{3.0}----{4.0}
@@ -193,7 +197,10 @@ class MagiaSoc(gvsoc.systree.Component):
 
         for y in range(0,MagiaArch.N_TILES_Y):
             print(f"[NoC] Adding L2 at position x={0} y={y}")
-            noc.o_NARROW_MAP(l2_mem.i_INPUT(),name=f'l2-map-{y}',base=MagiaArch.L2_ADDR_START,size=MagiaArch.L2_SIZE,x=0,y=y,rm_base=True)
+            #noc.o_NARROW_MAP(l2_mem.i_INPUT(),name=f'l2-map-{y}',base=MagiaArch.L2_ADDR_START,size=MagiaArch.L2_SIZE,x=0,y=y,rm_base=True)
+            noc.o_NARROW_BIND(l2_mem.i_INPUT(), x=0, y=y)
+        
+        noc.o_MAP_DIR(base=MagiaArch.L2_ADDR_START,size=MagiaArch.L2_SIZE, dir=FlooNocDirection.LEFT,name=f'mem_left', rm_base=True)
 
         # Fractal tree routing
         for lvl in range(0,int(math.log2(MagiaArch.NB_CLUSTERS))):
