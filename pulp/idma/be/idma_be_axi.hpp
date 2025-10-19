@@ -105,7 +105,10 @@ private:
     // processed.
     std::queue<vp::IoReq *> pending_bursts;
 
+    std::queue<vp::IoReq *> pending_bursts_ack;
+
     // Current base of the first transfer. This is when a chunk of data to be written is received
     // to know the base where it should be written.
     uint64_t current_burst_base;
+    uint64_t current_burst_size;
 };
