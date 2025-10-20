@@ -155,9 +155,29 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
             NetworkInterface *ni = this->network_interfaces[y * this->dim_x + x];
             if (ni)
             {
+                // Find the closest router starting locally
                 int r_x = x, r_y = y;
-                r_x = x == 0 ? x + 1 : x == this->dim_x - 1 ? x - 1 : x;
-                r_y = y == 0 ? y + 1 : y == this->dim_y - 1 ? y - 1 : y;
+                if (this->req_routers[r_y*this->dim_x + r_x] == NULL)
+                {
+                    r_x = x + 1;
+
+                    if (this->req_routers[r_y*this->dim_x + r_x] == NULL)
+                    {
+                        r_x = x - 1;
+
+                        if (this->req_routers[r_y*this->dim_x + r_x] == NULL)
+                        {
+                            r_x = x;
+                            r_y = y + 1;
+
+                            if (this->req_routers[r_y*this->dim_x + r_x] == NULL)
+                            {
+                                r_y = y - 1;
+                            }
+                        }
+                    }
+                }
+
                 ni->set_router(NetworkInterface::NW_REQ, this->req_routers[r_y*this->dim_x + r_x]);
                 ni->set_router(NetworkInterface::NW_RSP, this->rsp_routers[r_y*this->dim_x + r_x]);
                 ni->set_router(NetworkInterface::NW_WIDE, this->wide_routers[r_y*this->dim_x + r_x]);
