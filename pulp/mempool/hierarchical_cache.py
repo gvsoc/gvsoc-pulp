@@ -50,10 +50,10 @@ class Hierarchical_cache(gvsoc.systree.Component):
         # L0 caches
         l0_caches = []
         for i in range(0, nb_cores):
-            l0_caches.append(Cache(self, 'l0_bank%d' % i, nb_sets_bits=nb_l0_sets_bits, nb_ways_bits=nb_l0_ways_bits, line_size_bits=line_size_bits, refill_latency=0, enabled=True))
+            l0_caches.append(Cache(self, 'l0_bank%d' % i, nb_sets_bits=nb_l0_sets_bits, nb_ways_bits=nb_l0_ways_bits, line_size_bits=line_size_bits, refill_latency=0, enabled=True, cache_v2=True))
 
         # L1 caches
-        l1_cache = Cache(self, 'l1', nb_sets_bits=nb_l1_sets_bits, nb_ways_bits=nb_l1_ways_bits, line_size_bits=line_size_bits, refill_latency=0, enabled=True)
+        l1_cache = Cache(self, 'l1', nb_sets_bits=nb_l1_sets_bits, nb_ways_bits=nb_l1_ways_bits, line_size_bits=line_size_bits, refill_latency=0, enabled=True, cache_v2=True)
 
         # L1 router
         l1_router = Router(self, 'l1_router', bandwidth=line_width)
