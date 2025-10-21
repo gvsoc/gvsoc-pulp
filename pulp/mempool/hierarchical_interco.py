@@ -49,7 +49,7 @@ class Hierarchical_Interco(gvsoc.systree.Component):
         line_size_bits = int(math.log2(cache_line_width))
 
         cache = Cache(self, 'cache', nb_sets_bits=nb_sets_bits, nb_ways_bits=nb_ways_bits,
-                      line_size_bits=line_size_bits, enabled=enable_cache)
+                      line_size_bits=line_size_bits, enabled=enable_cache, cache_v2=True)
 
         input_itf = Router(self, 'input_itf', bandwidth=bandwidth, latency=2)
         input_itf.add_mapping("output")
