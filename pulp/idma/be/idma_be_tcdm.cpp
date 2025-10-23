@@ -98,8 +98,7 @@ void IDmaBeTcdm::write_burst(IdmaTransfer *transfer, uint64_t base, uint64_t siz
 uint64_t IDmaBeTcdm::get_burst_size(uint64_t base, uint64_t size)
 {
     // There is no constraint on burst size, this backend will anyway cut the burst into lines
-    //return size;
-    return this->width; //ZL-MOD to constraint the burst size
+    return size;
 }
 
 

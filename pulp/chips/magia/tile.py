@@ -105,15 +105,15 @@ class MagiaTile(gvsoc.systree.Component):
         l1_tcdm = MagiaTileTcdm(self, f'tile-{tid}-tcdm', parser)
 
         # AXI and OBI x-bars
-        tile_xbar = router.Router(self, f'tile-{tid}-axi-xbar',bandwidth=4,latency=2)
-        obi_xbar = router.Router(self, f'tile-{tid}-obi-xbar',bandwidth=4,latency=2)
+        tile_xbar = router.Router(self, f'tile-{tid}-axi-xbar',bandwidth=4,latency=2,synchronous=False)
+        obi_xbar = router.Router(self, f'tile-{tid}-obi-xbar',bandwidth=4,latency=2,synchronous=False)
 
         # IDMA Controller
         idma_ctrl= Magia_iDMA_Ctrl(self,f'tile-{tid}-idma-ctrl')
 
         # IDMA
-        idma0 = SnitchDma(self,f'tile-{tid}-idma0',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4,transfer_queue_size=1,burst_queue_size=2)
-        idma1 = SnitchDma(self,f'tile-{tid}-idma1',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4,transfer_queue_size=1,burst_queue_size=4)
+        idma0 = SnitchDma(self,f'tile-{tid}-idma0',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4,transfer_queue_size=1,burst_queue_size=2,burst_size=4)
+        idma1 = SnitchDma(self,f'tile-{tid}-idma1',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4,transfer_queue_size=1,burst_queue_size=4,burst_size=4)
 
         # Redmule
         redmule = LightRedmule(self, f'tile-{tid}-redmule',

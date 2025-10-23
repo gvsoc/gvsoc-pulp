@@ -45,6 +45,9 @@ IDmaBeAxi::IDmaBeAxi(vp::Component *idma, std::string itf_name, IdmaBeProducer *
     // Get the top parameter giving the maximum number of outstanding bursts to AXI interconnect
     int burst_queue_size = idma->get_js_config()->get_int("burst_queue_size");
 
+    // Get the top parameter giving the maximum burst size for AXI transactions. TCDM will alight to this parameter
+    this->burst_size = idma->get_js_config()->get_int("burst_size");
+
     // Use it to size the array of bursts and associated timestamps
     this->bursts.resize(burst_queue_size);
     this->read_timestamps.resize(burst_queue_size);
@@ -116,6 +119,11 @@ uint64_t IDmaBeAxi::get_burst_size(uint64_t base, uint64_t size)
 {
     // First check maximum burst size
     size = std::min(size, (uint64_t)AXI_PAGE_SIZE);
+    
+    if (this->burst_size>0) {
+        //Constraint AXI burst size
+        size = std::min(size, (uint64_t)4);
+    }
 
     // Then page-crossing
     uint64_t next_page = (base + AXI_PAGE_SIZE - 1) & ~(AXI_PAGE_SIZE - 1);
