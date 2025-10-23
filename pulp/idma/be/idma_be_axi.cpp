@@ -122,7 +122,7 @@ uint64_t IDmaBeAxi::get_burst_size(uint64_t base, uint64_t size)
     
     if (this->burst_size>0) {
         //Constraint AXI burst size
-        size = std::min(size, (uint64_t)4);
+        size = std::min(size, (uint64_t)this->burst_size);
     }
 
     // Then page-crossing
