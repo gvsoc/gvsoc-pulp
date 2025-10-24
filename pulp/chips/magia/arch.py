@@ -30,9 +30,9 @@ class MagiaArch:
     L1_TILE_OFFSET      = 0x0010_0000
     L2_ADDR_START       = 0xC000_0000
     #L2_SIZE             = 0x4000_0000
-    L2_SIZE             = 0xCC02_FFFF
+    L2_SIZE             = 0x0C02_FFFF
     L2_ADDR_END         = L2_ADDR_START + L2_SIZE
-    TEST_END_ADDR_START = L2_SIZE + 1
+    TEST_END_ADDR_START = L2_ADDR_END + 1
     TEST_END_SIZE       = 0x100
     STDOUT_ADDR_START   = 0xFFFF_0004
     STDOUT_SIZE         = 0x100
@@ -45,6 +45,6 @@ class MagiaArch:
     BYTES_PER_WORD      = 4
     TILE_CLK_FREQ       = 200 * (10 ** 6)
 
-    N_TILES_X           = 4
-    N_TILES_Y           = 4
+    N_TILES_X           = 1
+    N_TILES_Y           = 1
     NB_CLUSTERS         = N_TILES_X*N_TILES_Y

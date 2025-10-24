@@ -105,8 +105,8 @@ class MagiaTile(gvsoc.systree.Component):
         l1_tcdm = MagiaTileTcdm(self, f'tile-{tid}-tcdm', parser)
 
         # AXI and OBI x-bars
-        tile_xbar = router.Router(self, f'tile-{tid}-axi-xbar',bandwidth=4,latency=2,synchronous=False)
-        obi_xbar = router.Router(self, f'tile-{tid}-obi-xbar',bandwidth=4,latency=2,synchronous=False)
+        tile_xbar = router.Router(self, f'tile-{tid}-axi-xbar',bandwidth=4,latency=2,synchronous=True)
+        obi_xbar = router.Router(self, f'tile-{tid}-obi-xbar',bandwidth=4,latency=2,synchronous=True)
 
         # IDMA Controller
         idma_ctrl= Magia_iDMA_Ctrl(self,f'tile-{tid}-idma-ctrl')
