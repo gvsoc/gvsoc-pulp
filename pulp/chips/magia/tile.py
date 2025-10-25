@@ -62,7 +62,7 @@ class MagiaTileTcdm(gvsoc.systree.Component):
         banks = []
         for i in range(nb_banks):
             # Instantiate a new memory bank
-            bank = memory.Memory(self, f'bank_{i}', atomics=True, size=bank_size, latency=1)
+            bank = memory.Memory(self, f'bank_{i}', atomics=True, size=bank_size, latency=0)
             banks.append(bank)
 
             # Bind the new bank (slave) to the interleaver (master)
@@ -120,9 +120,9 @@ class MagiaTile(gvsoc.systree.Component):
                                     tcdm_bank_width     = MagiaArch.BYTES_PER_WORD,
                                     tcdm_bank_number    = MagiaArch.N_MEM_BANKS,
                                     elem_size           = 2, #max number of bytes per element --> if FP16 then elem_size=2. This is the max number to accomodate any supported format which for now are 8bits and 16bits data types 
-                                    ce_height           = 8, # 8 in RTL
-                                    ce_width            = 8, # 24 in RTL
-                                    ce_pipe             = 1,
+                                    ce_height           = 96, # 8 in RTL
+                                    ce_width            = 64, # 24 in RTL
+                                    ce_pipe             = 0,
                                     queue_depth         = 1,
                                     loc_base            = tid*MagiaArch.L1_TILE_OFFSET)
         
