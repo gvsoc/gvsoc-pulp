@@ -194,7 +194,8 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             htif: bool=False, vlen: int=512, spatz_nb_lanes=4,
             pulp_v2: bool=False,
             nb_outstanding: int=1,
-            wakeup_counter: bool=False
+            wakeup_counter: bool=False,
+            vector_chaining: bool=False
         ):
 
         isa_instance = isa_instances.get(isa)
@@ -223,7 +224,7 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
             fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True,
             prefetcher_size=32, htif=htif, binaries=binaries, handle_misaligned=True, custom_sources=True,
-            nb_outstanding=nb_outstanding)
+            nb_outstanding=nb_outstanding, vector_chaining=vector_chaining)
 
         self.inc_spatz = inc_spatz
 
