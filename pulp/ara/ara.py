@@ -36,7 +36,7 @@ def extend_isa(isa_instance):
         else:
             insn.add_tag('vothers')
 
-def attach(component, vlen, nb_lanes, use_spatz=False, spatz_nb_ports=None):
+def attach(component, vlen, nb_lanes, use_spatz=False, spatz_nb_ports=None, vector_chaining=False):
     component.add_sources([
         "cpu/iss/src/ara/ara.cpp",
         "cpu/iss/src/ara/ara_vcompute.cpp",
