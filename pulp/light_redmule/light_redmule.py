@@ -15,6 +15,7 @@
 #
 
 # Author: Chi Zhang <chizhang@iis.ee.ethz.ch>
+#         Lorenzo Zuolo, Chips-IT <lorenzo.zuolo@chips.it>
 
 import gvsoc.systree
 
@@ -41,8 +42,11 @@ class LightRedmule(gvsoc.systree.Component):
             'tcdm_bank_width'   : tcdm_bank_width,
             'tcdm_bank_number'  : tcdm_bank_number,
             'elem_size'         : elem_size,
-            'ce_height'         : ce_height,
-            'ce_width'          : ce_width,
+            # 'ce_height'         : ce_height,
+            # 'ce_width'          : ce_width,
+            # WARNING!!! Perform a height width inversion as per Chi's suggestion. Orignal Light_RedMulE model was based on a temp RedMulE architecture. 
+            'ce_height'         : ce_width,
+            'ce_width'          : ce_height,
             'ce_pipe'           : ce_pipe,
             'queue_depth'       : queue_depth,
             'fold_tiles_mapping': fold_tiles_mapping,

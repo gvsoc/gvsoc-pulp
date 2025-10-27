@@ -120,8 +120,8 @@ class MagiaTile(gvsoc.systree.Component):
                                     tcdm_bank_width     = MagiaArch.BYTES_PER_WORD,
                                     tcdm_bank_number    = MagiaArch.N_MEM_BANKS,
                                     elem_size           = 2, #max number of bytes per element --> if FP16 then elem_size=2. This is the max number to accomodate any supported format which for now are 8bits and 16bits data types 
-                                    ce_height           = 8, # 8 in RTL
-                                    ce_width            = 8, # 24 in RTL
+                                    ce_height           = 8,
+                                    ce_width            = 8,
                                     ce_pipe             = 1,
                                     queue_depth         = 1,
                                     loc_base            = tid*MagiaArch.L1_TILE_OFFSET)
