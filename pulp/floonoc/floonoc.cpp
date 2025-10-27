@@ -161,18 +161,23 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
                 {
                     r_x = x + 1;
 
-                    if (this->req_routers[r_y*this->dim_x + r_x] == NULL)
+                    if (x == this->dim_x - 1 || this->req_routers[r_y*this->dim_x + r_x] == NULL)
                     {
                         r_x = x - 1;
 
-                        if (this->req_routers[r_y*this->dim_x + r_x] == NULL)
+                        if (x == 0 || this->req_routers[r_y*this->dim_x + r_x] == NULL)
                         {
                             r_x = x;
                             r_y = y + 1;
 
-                            if (this->req_routers[r_y*this->dim_x + r_x] == NULL)
+                            if (y >= this->dim_y - 1 || this->req_routers[r_y*this->dim_x + r_x] == NULL)
                             {
                                 r_y = y - 1;
+                                if (y == 0)
+                                {
+                                    r_x = x;
+                                    r_y = y;
+                                }
                             }
                         }
                     }

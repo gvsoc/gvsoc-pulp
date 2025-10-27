@@ -267,7 +267,9 @@ class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
         for tile_x in range(0, nb_x_clusters+2):
             for tile_y in range(0, nb_y_clusters+2):
                 # Add a NI at each node, excluding the corners, because it also (once finished) acts as an output to the targets
-                if not (tile_x == 0 and tile_y == 0) or (tile_x == 0 and tile_y == nb_y_clusters+1) or (tile_x == nb_x_clusters+1 and tile_y == 0) or (tile_x == nb_x_clusters+1 and tile_y == nb_y_clusters+1):
+                if not ((tile_x == 0 and tile_y == 0) or (tile_x == 0 and tile_y == nb_y_clusters+1) \
+                        or (tile_x == nb_x_clusters+1 and tile_y == 0) or \
+                        (tile_x == nb_x_clusters+1 and tile_y == nb_y_clusters+1)):
                     self.add_network_interface(tile_x, tile_y)
 
     def i_CLUSTER_NARROW_INPUT(self, x: int, y: int) -> gvsoc.systree.SlaveItf:

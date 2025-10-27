@@ -31,45 +31,92 @@ import math
 from pulp.snitch.sequencer import Sequencer
 from pulp.snitch.hierarchical_cache import Hierarchical_cache
 
+if os.environ.get('USE_GVRUN') is not None:
+    from gvrun.attribute import Tree, Area, Value
 
 
-class Area:
+if os.environ.get('USE_GVRUN') is None:
 
-    def __init__(self, base, size):
-        self.base = base
-        self.size = size
+    class Area:
+
+        def __init__(self, base, size):
+            self.base = base
+            self.size = size
 
 
 
-class ClusterArch:
-    def __init__(self, properties, base, first_hartid, auto_fetch=False, boot_addr=0x0000_1000):
-        self.nb_core = properties.nb_core_per_cluster
-        self.base = base
-        self.first_hartid = first_hartid
+    class ClusterArch:
+        def __init__(self, properties, base, first_hartid, auto_fetch=False, boot_addr=0x0000_1000):
+            self.nb_core = properties.nb_core_per_cluster
+            self.base = base
+            self.first_hartid = first_hartid
 
-        self.boot_addr = boot_addr
-        self.auto_fetch = auto_fetch
-        self.barrier_irq = 19
+            self.boot_addr = boot_addr
+            self.auto_fetch = auto_fetch
+            self.barrier_irq = 19
 
-        nb_masters = self.nb_core
-        if properties.use_spatz:
-            nb_masters += self.nb_core * properties.spatz_nb_lanes
-        self.tcdm          = ClusterArch.Tcdm(base, nb_masters)
-        self.peripheral    = Area( base + 0x0002_0000, 0x0001_0000)
-        self.zero_mem      = Area( base + 0x0003_0000, 0x0001_0000)
-        self.core_type = properties.core_type
-        self.use_spatz = properties.use_spatz
-        self.spatz_nb_lanes = properties.spatz_nb_lanes
-        self.isa = properties.isa
+            nb_masters = self.nb_core
+            if properties.use_spatz:
+                nb_masters += self.nb_core * properties.spatz_nb_lanes
+            self.tcdm          = ClusterArch.Tcdm(base, nb_masters)
+            self.peripheral    = Area( base + 0x0002_0000, 0x0001_0000)
+            self.zero_mem      = Area( base + 0x0003_0000, 0x0001_0000)
+            self.core_type = properties.core_type
+            self.use_spatz = properties.use_spatz
+            self.spatz_nb_lanes = properties.spatz_nb_lanes
+            self.isa = properties.isa
 
-    class Tcdm:
-        def __init__(self, base, nb_masters):
-            self.area = Area( base + 0x0000_0000, 0x0002_0000)
-            self.nb_banks_per_superbank = 8
-            self.bank_width = 8
-            self.nb_superbanks = 4
-            self.bank_size = self.area.size / self.nb_superbanks / self.nb_banks_per_superbank
-            self.nb_masters = nb_masters
+        class Tcdm:
+            def __init__(self, base, nb_masters):
+                self.area = Area( base + 0x0000_0000, 0x0002_0000)
+                self.nb_banks_per_superbank = 8
+                self.bank_width = 8
+                self.nb_superbanks = 4
+                self.bank_size = self.area.size / self.nb_superbanks / self.nb_banks_per_superbank
+                self.nb_masters = nb_masters
+
+else:
+
+    class ClusterArch(Tree):
+        def __init__(self, parent, name, base, first_hartid, auto_fetch=False,
+                boot_addr=0x0000_1000, nb_core_per_cluster=None, spatz=False, spatz_nb_lanes=4,
+                core_type='accurate', isa=None):
+            super().__init__(parent, name)
+
+            if nb_core_per_cluster is None:
+                nb_core_per_cluster = 2 if spatz else 9
+
+            if isa is None:
+                isa = 'rv32imfdcav' if spatz else 'rv32imfdca'
+
+            self.nb_core = nb_core_per_cluster
+            self.base = base
+            self.first_hartid = first_hartid
+
+            self.boot_addr = boot_addr
+            self.auto_fetch = auto_fetch
+            self.barrier_irq = 19
+
+            nb_masters = self.nb_core
+            if spatz:
+                nb_masters += self.nb_core * spatz_nb_lanes
+            self.tcdm          = ClusterArch.Tcdm(self, 'tcdm', base, nb_masters)
+            self.peripheral    = Area( self, 'peripheral', base + 0x0002_0000, 0x0001_0000, 'peripheral range')
+            self.zero_mem      = Area( self, 'zero_mem', base + 0x0003_0000, 0x0001_0000, 'zero mem range')
+            self.core_type = core_type
+            self.use_spatz = spatz
+            self.spatz_nb_lanes = spatz_nb_lanes
+            self.isa = isa
+
+        class Tcdm(Tree):
+            def __init__(self, parent, name, base, nb_masters):
+                super().__init__(parent, name)
+                self.area = Area( self, 'tcdm', base + 0x0000_0000, 0x0002_0000, 'TCDM range')
+                self.nb_banks_per_superbank = 8
+                self.bank_width = 8
+                self.nb_superbanks = 4
+                self.bank_size = self.area.size / self.nb_superbanks / self.nb_banks_per_superbank
+                self.nb_masters = nb_masters
 
 
 class SnitchClusterTcdm(gvsoc.systree.Component):
@@ -144,14 +191,16 @@ class SnitchCluster(gvsoc.systree.Component):
 
         binary = None
         binaries = []
-        if parser is not None:
-            [args, __] = parser.parse_known_args()
 
+        if os.environ.get('USE_GVRUN') is None:
             if parser is not None:
-                [args, otherArgs] = parser.parse_known_args()
-                binary = args.binary
-                if binary is not None:
-                    binaries = [binary]
+                [args, __] = parser.parse_known_args()
+
+                if parser is not None:
+                    [args, otherArgs] = parser.parse_known_args()
+                    binary = args.binary
+                    if binary is not None:
+                        binaries = [binary]
 
         for core_id in range(0, arch.nb_core):
 
@@ -291,6 +340,12 @@ class SnitchCluster(gvsoc.systree.Component):
         # Zero mem
         wide_axi.o_MAP(zero_mem.i_INPUT(), base=arch.zero_mem.base, size=arch.zero_mem.size, rm_base=True)
         narrow_axi.o_MAP(wide_axi.i_INPUT(), name='zero_mem', base=arch.zero_mem.base, size=arch.zero_mem.size, rm_base=False)
+
+        self.cores = cores
+
+    def handle_executable(self, binary):
+        for core in self.cores:
+            core.handle_executable(binary)
 
     def i_MEIP(self, core: int) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'meip_{core}', signature='wire<bool>')

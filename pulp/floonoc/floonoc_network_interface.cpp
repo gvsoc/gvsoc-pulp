@@ -262,6 +262,12 @@ NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y, std::string itf_n
 
 void NetworkInterface::set_router(int nw, Router *router)
 {
+    if (router == NULL)
+    {
+        this->trace.fatal("No router found for network interface (nw: %s)\n",
+            nw == NW_REQ ? "req" : nw == NW_RSP ? "rsp" : "wide");
+    }
+
     this->router[nw] = router;
     switch (nw)
     {

@@ -16,7 +16,6 @@
 
 import gvsoc.runner
 import gvsoc.systree
-from pulp.snitch.snitch_cluster.snitch_cluster import ClusterArch, Area, SnitchCluster
 from vp.clock_domain import Clock_domain
 import memory.dramsys
 import memory.memory
@@ -25,120 +24,193 @@ import interco.router as router
 import utils.loader.loader
 import pulp.floonoc.floonoc
 import math
+from gvrun.parameter import TargetParameter
+if os.environ.get('USE_GVRUN') is None:
+    from pulp.snitch.snitch_cluster.snitch_cluster import ClusterArch, Area, SnitchCluster
+else:
+    from gvrun.attribute import Tree, Area, Value
+    from pulp.snitch.snitch_cluster.snitch_cluster import ClusterArch, SnitchCluster
 
 
+if os.environ.get('USE_GVRUN') is None:
 
-class SnitchArchProperties:
+    class SnitchArchProperties:
 
-    def __init__(self, spatz=False):
-        self.nb_cluster              = 1
-        self.nb_core_per_cluster     = 2 if spatz else 9
-        self.hbm_size                = 0x8000_0000
-        self.hbm_type                = 'simple'
-        self.noc_type                = 'simple'
-        self.core_type               = 'accurate'
-        self.use_spatz               = spatz
-        self.spatz_nb_lanes          = 4
-        self.isa                     = 'rv32imfdcav' if spatz else 'rv32imfdca'
-
-
-    def declare_target_properties(self, target):
-
-        self.hbm_size = target.declare_user_property(
-            name='hbm_size', value=self.hbm_size, cast=int, description='Size of the HBM external memory'
-        )
-
-        self.hbm_type = target.declare_user_property(
-            name='hbm_type', value=self.hbm_type, allowed_values=['simple', 'dramsys'],
-            description='Type of the HBM external memory'
-        )
-
-        self.nb_cluster = target.declare_user_property(
-            name='soc/nb_cluster', value=self.nb_cluster, cast=int, description='Number of clusters'
-        )
-
-        self.nb_core_per_cluster = target.declare_user_property(
-            name='soc/cluster/nb_core', value=self.nb_core_per_cluster, cast=int, description='Number of cores per cluster'
-        )
-
-        self.noc_type = target.declare_user_property(
-            name='noc_type', value=self.hbm_type, allowed_values=['simple', 'floonoc'], description='Type of the NoC'
-        )
-
-        self.core_type = target.declare_user_property(
-            name='core_type', value=self.core_type, allowed_values=['accurate', 'fast'], description='Type of the snitch model'
-        )
+        def __init__(self, spatz=False):
+            self.nb_cluster              = 1
+            self.nb_core_per_cluster     = 2 if spatz else 9
+            self.hbm_size                = 0x8000_0000
+            self.hbm_type                = 'simple'
+            self.noc_type                = 'simple'
+            self.core_type               = 'accurate'
+            self.use_spatz               = spatz
+            self.spatz_nb_lanes          = 4
+            self.isa                     = 'rv32imfdcav' if spatz else 'rv32imfdca'
 
 
-class SnitchArch:
+        def declare_target_properties(self, target):
 
-    def __init__(self, target, properties=None, spatz=False):
+            self.hbm_size = target.declare_user_property(
+                name='hbm_size', value=self.hbm_size, cast=int, description='Size of the HBM external memory'
+            )
 
-        if properties is None:
-            properties = SnitchArchProperties(spatz=spatz)
+            self.hbm_type = target.declare_user_property(
+                name='hbm_type', value=self.hbm_type, allowed_values=['simple', 'dramsys'],
+                description='Type of the HBM external memory'
+            )
 
-        properties.declare_target_properties(target)
+            self.nb_cluster = target.declare_user_property(
+                name='soc/nb_cluster', value=self.nb_cluster, cast=int, description='Number of clusters'
+            )
 
-        self.chip = SnitchArch.Chip(properties)
-        self.hbm = SnitchArch.Hbm(properties)
+            self.nb_core_per_cluster = target.declare_user_property(
+                name='soc/cluster/nb_core', value=self.nb_core_per_cluster, cast=int, description='Number of cores per cluster'
+            )
 
-    class Hbm:
+            self.noc_type = target.declare_user_property(
+                name='noc_type', value=self.hbm_type, allowed_values=['simple', 'floonoc'], description='Type of the NoC'
+            )
 
-        def __init__(self, properties:SnitchArchProperties):
-            self.size = properties.hbm_size
-            self.type = properties.hbm_type
+            self.core_type = target.declare_user_property(
+                name='core_type', value=self.core_type, allowed_values=['accurate', 'fast'], description='Type of the snitch model'
+            )
 
-    class Chip:
 
-        def __init__(self, properties:SnitchArchProperties):
+    class SnitchArch:
 
-            self.soc = SnitchArch.Chip.Soc(properties)
+        def __init__(self, target, properties=None, spatz=False):
 
-        class Soc:
+            if properties is None:
+                properties = SnitchArchProperties(spatz=spatz)
+
+            properties.declare_target_properties(target)
+
+            self.chip = SnitchArch.Chip(properties)
+            self.hbm = SnitchArch.Hbm(properties)
+
+        class Hbm:
 
             def __init__(self, properties:SnitchArchProperties):
-                current_hartid = 0
+                self.size = properties.hbm_size
+                self.type = properties.hbm_type
 
-                self.bootrom      = Area( 0x0000_1000,       0x0001_0000)
-                self.hbm          = Area( 0x8000_0000,       0x8000_0000)
-                self.floonoc      = properties.noc_type == 'floonoc'
-                self.use_spatz    = properties.use_spatz
+        class Chip:
 
-                self.nb_cluster = properties.nb_cluster
+            def __init__(self, properties:SnitchArchProperties):
 
-                if properties.use_spatz:
-                    self.cluster  = Area(0x0010_0000, 0x0004_0000)
-                else:
-                    self.cluster  = Area(0x1000_0000, 0x0004_0000)
+                self.soc = SnitchArch.Chip.Soc(properties)
 
+            class Soc:
 
-                self.clusters = []
-                for id in range(0, self.nb_cluster):
-                    cluster_arch = ClusterArch(properties, self.get_cluster_base(id),
-                        current_hartid)
-                    self.clusters.append(cluster_arch)
-                    current_hartid += self.clusters[id].nb_core
+                def __init__(self, properties:SnitchArchProperties):
+                    current_hartid = 0
 
-                if self.floonoc:
-                    self.nb_x_tiles = int(math.sqrt(self.nb_cluster))
-                    self.nb_y_tiles = int(self.nb_cluster / self.nb_x_tiles)
-                    self.nb_banks = 2*self.nb_x_tiles + 2*self.nb_y_tiles
-                    self.bank_size = self.hbm.size / self.nb_banks
+                    self.bootrom      = Area( 0x0000_1000,       0x0001_0000)
+                    self.hbm          = Area( 0x8000_0000,       0x8000_0000)
+                    self.floonoc      = properties.noc_type == 'floonoc'
+                    self.use_spatz    = properties.use_spatz
+
+                    self.nb_cluster = properties.nb_cluster
+
+                    if properties.use_spatz:
+                        self.cluster  = Area(0x0010_0000, 0x0004_0000)
+                    else:
+                        self.cluster  = Area(0x1000_0000, 0x0004_0000)
 
 
-            def get_cluster_base(self, id:int):
-                return self.cluster.base + id * self.cluster.size
+                    self.clusters = []
+                    for id in range(0, self.nb_cluster):
+                        cluster_arch = ClusterArch(properties, self.get_cluster_base(id),
+                            current_hartid)
+                        self.clusters.append(cluster_arch)
+                        current_hartid += self.clusters[id].nb_core
 
-            def get_cluster(self, id: int):
-                return self.clusters[id]
+                    if self.floonoc:
+                        self.nb_x_tiles = int(math.sqrt(self.nb_cluster))
+                        self.nb_y_tiles = int(self.nb_cluster / self.nb_x_tiles)
+                        self.nb_banks = 2*self.nb_x_tiles + 2*self.nb_y_tiles
+                        self.bank_size = self.hbm.size / self.nb_banks
 
 
+                def get_cluster_base(self, id:int):
+                    return self.cluster.base + id * self.cluster.size
+
+                def get_cluster(self, id: int):
+                    return self.clusters[id]
+
+else:
+
+    class SnitchAttr(Tree):
+        def __init__(self, parent, name, nb_cluster=1, spatz=False, spatz_nb_lanes=4):
+            super().__init__(parent, name)
+
+            self.chip = SnitchAttr.Chip(self, 'chip', spatz, spatz_nb_lanes, nb_cluster)
+            self.hbm = SnitchAttr.Hbm(self, 'hbm')
+
+        class Hbm(Tree):
+
+            def __init__(self, parent, name):
+                super().__init__(parent, name)
+                self.type = 'simple'
+                self.size = 0x8000_0000
+
+        class Chip(Tree):
+
+            def __init__(self, parent, name, use_spatz, spatz_nb_lanes, nb_cluster):
+                super().__init__(parent, name)
+
+                self.soc = SnitchAttr.Chip.Soc(self, 'soc', use_spatz, spatz_nb_lanes, nb_cluster)
+
+            class Soc(Tree):
+
+                def __init__(self, parent, name, use_spatz, spatz_nb_lanes, nb_cluster):
+                    super().__init__(parent, name)
+                    current_hartid = 0
+                    noc_type = 'simple'
+
+                    self.bootrom      = Area(self, 'rom', 0x0000_1000, 0x0001_0000, description='Bootrom range')
+                    self.hbm          = Area(self, 'hbm', 0x8000_0000, 0x8000_0000, description='HBM range')
+                    self.floonoc      = noc_type == 'floonoc'
+                    self.use_spatz    = use_spatz
+
+                    self.nb_cluster = nb_cluster
+
+                    if use_spatz:
+                        self.cluster  = Area(self, 'cluster', 0x0010_0000, 0x0004_0000, description='Cluster range')
+                    else:
+                        self.cluster  = Area(self, 'cluster', 0x1000_0000, 0x0004_0000, description='Cluster range')
+
+
+                    self.clusters = []
+                    for id in range(0, self.nb_cluster):
+                        cluster_arch = ClusterArch(self, 'cluster', self.get_cluster_base(id),
+                            current_hartid, spatz=use_spatz, spatz_nb_lanes=spatz_nb_lanes)
+                        self.clusters.append(cluster_arch)
+                        current_hartid += self.clusters[id].nb_core
+
+                    if self.floonoc:
+                        self.nb_x_tiles = int(math.sqrt(self.nb_cluster))
+                        self.nb_y_tiles = int(self.nb_cluster / self.nb_x_tiles)
+                        self.nb_banks = 2*self.nb_x_tiles + 2*self.nb_y_tiles
+                        self.bank_size = self.hbm.size / self.nb_banks
+
+
+                def get_cluster_base(self, id:int):
+                    return self.cluster.base + id * self.cluster.size
+
+                def get_cluster(self, id: int):
+                    return self.clusters[id]
 
 
 class Soc(gvsoc.systree.Component):
 
     def __init__(self, parent, name, parser, arch, binary, debug_binaries):
         super().__init__(parent, name)
+
+        TargetParameter(
+            self, name='binary', value=None, description='Binary to be loaded and started',
+            cast=str
+        )
 
         entry = 0
         if binary is not None:
@@ -213,6 +285,27 @@ class Soc(gvsoc.systree.Component):
                     for core in range(0, arch.get_cluster(id).nb_core):
                         loader.o_START(clusters[id].i_MEIP(core))
 
+        # Make sure the loader is notified by any executable attached to the hieararchy of this
+        # component so that it is automatically loaded
+        self.loader = loader
+        self.clusters = clusters
+        self.register_binary_handler(self.handle_binary)
+
+    def configure(self):
+        # We configure the loader binary now int he configure steps since it is coming from
+        # a parameter which can be set either from command line or from the build process
+        binary = self.get_parameter('binary')
+        if binary is not None:
+            self.loader.set_binary(binary)
+            for cluster in self.clusters:
+                cluster.handle_executable(binary)
+
+
+    def handle_binary(self, binary):
+        # This gets called when an executable is attached to a hierarchy of components containing
+        # this one
+        self.set_parameter('binary', binary)
+
 
     def i_HBM(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'hbm', signature='io')
@@ -224,8 +317,13 @@ class Soc(gvsoc.systree.Component):
 
 class SocFlooNoc(gvsoc.systree.Component):
 
-    def __init__(self, parent, name, arch:SnitchArch.Chip.Soc, binary, debug_binaries):
+    def __init__(self, parent, name, arch, binary, debug_binaries):
         super().__init__(parent, name)
+
+        TargetParameter(
+            self, name='binary', value=None, description='Binary to be loaded and started',
+            cast=str
+        )
 
         entry = 0
         if binary is not None:
@@ -311,6 +409,23 @@ class SocFlooNoc(gvsoc.systree.Component):
             if id == 0:
                 loader.o_START(clusters[id].i_FETCHEN())
 
+        # Make sure the loader is notified by any executable attached to the hieararchy of this
+        # component so that it is automatically loaded
+        self.loader = loader
+        self.register_binary_handler(self.handle_binary)
+
+    def configure(self):
+        # We configure the loader binary now int he configure steps since it is coming from
+        # a parameter which can be set either from command line or from the build process
+        binary = self.get_parameter('binary')
+        if binary is not None:
+            self.loader.set_binary(binary)
+
+    def handle_binary(self, binary):
+        # This gets called when an executable is attached to a hierarchy of components containing
+        # this one
+        self.set_parameter('binary', binary)
+
 
     def i_HBM(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'hbm', signature='io')
@@ -321,7 +436,7 @@ class SocFlooNoc(gvsoc.systree.Component):
 
 class Snitch(gvsoc.systree.Component):
 
-    def __init__(self, parent, name:str, parser, arch:SnitchArch.Chip, binary, debug_binaries):
+    def __init__(self, parent, name:str, parser, arch, binary, debug_binaries):
         super(Snitch, self).__init__(parent, name)
 
         if arch.soc.floonoc:
@@ -341,16 +456,22 @@ class SnitchBoard(gvsoc.systree.Component):
     def __init__(self, parent, name:str, parser, options, spatz=False):
         super().__init__(parent, name, options=options)
 
-        [args, otherArgs] = parser.parse_known_args()
+        binary = None
         debug_binaries = []
-        if args.binary is not None:
-            debug_binaries.append(args.binary)
+        if os.environ.get('USE_GVRUN') is None:
+            [args, otherArgs] = parser.parse_known_args()
+            binary = args.binary
+            if binary is not None:
+                debug_binaries.append(binary)
 
         clock = Clock_domain(self, 'clock', frequency=10000000)
 
-        arch = SnitchArch(self, spatz=spatz)
+        if os.environ.get('USE_GVRUN') is None:
+            arch = SnitchArch(self, spatz=spatz)
+        else:
+            arch = SnitchAttr(self, 'snitch', spatz=spatz)
 
-        chip = Snitch(self, 'chip', parser, arch.chip, args.binary, debug_binaries)
+        chip = Snitch(self, 'chip', parser, arch.chip, binary, debug_binaries)
 
         if arch.hbm.type == 'dramsys':
             mem = memory.dramsys.Dramsys(self, 'ddr')

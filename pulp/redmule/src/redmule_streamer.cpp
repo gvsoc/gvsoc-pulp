@@ -4,7 +4,7 @@
 
 RedMule_Streamer::RedMule_Streamer(RedMule* redmule, bool is_write) {
     this->redmule = redmule;
-	
+
 	this->base_addr = 0;
 	this->tot_len   = 0;
 	this->d0_len    = 0;
@@ -36,7 +36,7 @@ void RedMule_Streamer::configure(
 	uint32_t 	d1_stride 	,
 	uint32_t	d2_len		,
 	uint32_t 	d2_stride	,
-	uint32_t	d3_stride	
+	uint32_t	d3_stride
 ) {
 	this->base_addr = base_addr	;
 	this->tot_len   = tot_len  	;
@@ -107,7 +107,7 @@ int RedMule_Streamer::rw_data(int width, void* buf, strobe_t strb) {
 
 			latency = req->get_latency();
 
-			if (!this->is_write) { 
+			if (!this->is_write) {
 				for (int i = 0; i < BYTES_PER_BANK - (offs % BYTES_PER_BANK); i++) {
 					if (strb & 0x1) {
 						* (((uint8_t *) buf) + i) = * (((uint8_t *) &tmp) + i + (offs % BYTES_PER_BANK));
@@ -116,7 +116,7 @@ int RedMule_Streamer::rw_data(int width, void* buf, strobe_t strb) {
 					strb = strb >> 1;
 				}
 			}
-		
+
 			max_latency = latency > max_latency ? latency : max_latency;
 		}
 
@@ -243,11 +243,12 @@ int RedMule_Streamer::rw_data(int width, void* buf, strobe_t strb) {
 	return (int) max_latency + 1;
 }
 
-int RedMule_Streamer::iterate(void* buf, strobe_t strb) {
+int RedMule_Streamer::iterate(void* _buf, strobe_t strb) {
 	int latency = 1;
 
 #if SRC_FMT!=DST_FMT
 
+    uint8_t *buf = (uint8_t *)_buf;
 	if (this->is_write) {
 		if (buf != NULL) {
 			for (int i = 0; i < ARRAY_HEIGHT * (PIPE_REGS + 1); i++) {		//ASSUMPTION: dst_fmt_t is greater than src_fmt_t
