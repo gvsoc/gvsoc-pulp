@@ -96,7 +96,6 @@ public:
 
 // private: ? why not private?????
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
-    //static vp::IoReqStatus core_acc_req(vp::Block *__this, vp::IoReq *req);
     // Method for offload interface, called when the core is offloading an instruction
     static void offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *insn);
     //static void offload_grant(vp::Block *__this, IssOffloadInsnGrant<iss_reg_t> *result);
@@ -121,7 +120,6 @@ public:
 
     vp::Trace           trace;
     vp::IoSlave         input_itf;
-    //vp::IoSlave         core_acc_itf;
     // Interface from which the instructions are received from the core
     vp::WireSlave<IssOffloadInsn<uint32_t> *> offload_itf;
     // Interface for granting previously stalled redmule offload
@@ -223,9 +221,7 @@ LightRedmule::LightRedmule(vp::ComponentConf &config)
     //Initialize interface
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
     this->input_itf.set_req_meth(&LightRedmule::req);
-    //this->core_acc_itf.set_req_meth(&LightRedmule::core_acc_req);
     this->new_slave_port("input", &this->input_itf);
-    //this->new_slave_port("core_acc", &this->core_acc_itf);
     this->new_master_port("tcdm", &this->tcdm_itf);
 
     // Declare offload slave interface where instructions will be offloaded
@@ -784,67 +780,6 @@ uint32_t LightRedmule::get_redmule_array_runtime(){
     runtime_pices = (runtime + runtime_unit - 1)/runtime_unit;
     return runtime_pices * runtime_unit;
 }
-
-// vp::IoReqStatus LightRedmule::core_acc_req(vp::Block *__this, vp::IoReq *req)
-// {
-//     LightRedmule *_this = (LightRedmule *)__this;
-
-//     uint64_t offset = req->get_addr();
-//     uint64_t size = req->get_size();
-//     bool is_write = req->get_is_write();
-
-//     if (offset == 0) //MNK configuraion
-//     {
-//         if (_this->state.get() == IDLE)
-//         {
-//             uint16_t * mnk_list_array = (uint16_t *)req->get_data();
-//             _this->m_size = mnk_list_array[0];
-//             _this->n_size = mnk_list_array[1];
-//             _this->k_size = mnk_list_array[2];
-//             _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set MNK addr: %d, %d, %d)\n", _this->m_size, _this->n_size, _this->k_size);
-//         }
-//     } else
-//     if (offset == 4) //XWY configuration and trigger
-//     {
-//         if (_this->state.get() == IDLE)
-//         {
-//              uint32_t * xwy_list_array = (uint32_t *)req->get_data();
-//             _this->x_addr = xwy_list_array[0];
-//             _this->w_addr = xwy_list_array[1];
-//             _this->y_addr = xwy_list_array[2];
-//             _this->z_addr = _this->y_addr;
-//             _this->compute_able = xwy_list_array[3];
-//             _this->elem_size = (_this->compute_able < 4)? 2:1;
-//             _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set XWY addr: %d, %d, %d)\n", _this->x_addr, _this->w_addr, _this->y_addr);
-
-//             /*************************
-//             *  Asynchronize Trigger  *
-//             *************************/
-//             //Sanity Check
-//             _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] redmule configuration (M-N-K): %d, %d, %d\n", _this->m_size, _this->n_size, _this->k_size);
-//             if ((_this->m_size == 0)||(_this->n_size == 0)||(_this->k_size == 0))
-//             {
-//                 _this->trace.fatal("[LightRedmule] INVALID redmule configuration (M-N-K): %d, %d, %d\n", _this->m_size, _this->n_size, _this->k_size);
-//                 return vp::IO_REQ_OK;
-//             }
-
-//             //Initilaize redmule meta data
-//             _this->init_redmule_meta_data();
-
-//             //Trigger FSM
-//             _this->state.set(PRELOAD);
-//             _this->tcdm_block_total = _this->get_preload_access_block_number();
-//             _this->fsm_counter      = 0;
-//             _this->fsm_timestamp    = 0;
-//             _this->timer_start      = _this->time.get_time();
-//             _this->cycle_start      = _this->clock.get_cycles();
-//             _this->event_enqueue(_this->fsm_event, 1);
-//         }
-
-//     }
-
-//     return vp::IO_REQ_OK;
-// }
 
 uint32_t LightRedmule::op_foramt_parser(uint32_t op_format) {
     uint32_t data_format=op_format&0x7;

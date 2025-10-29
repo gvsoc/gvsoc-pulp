@@ -81,10 +81,6 @@ class LightRedmule(gvsoc.systree.Component):
         """
         self.itf_bind('offload_grant', itf, signature='wire<IssOffloadInsnGrant<uint32_t>*>')
 
-
-    # def i_CORE_ACC(self) -> gvsoc.systree.SlaveItf:
-    #     return gvsoc.systree.SlaveItf(self, 'core_acc', signature='io')
-
     def o_TCDM(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('tcdm', itf, signature='io')
 
