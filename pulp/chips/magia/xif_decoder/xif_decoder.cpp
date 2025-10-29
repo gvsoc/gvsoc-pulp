@@ -9,7 +9,7 @@
 #include <stdint.h>
 
 #include <cpu/iss/include/offload.hpp>
-#include "fractal_sync.hpp"
+#include "../fractal_sync/fractal_sync.hpp"
 
 enum fractal_directions {
     EAST_WEST, //horizontal = 0

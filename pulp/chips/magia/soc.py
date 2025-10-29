@@ -25,8 +25,8 @@ import interco.router as router
 from pulp.chips.magia.tile import MagiaTile
 from pulp.chips.magia.arch import MagiaArch
 from pulp.floonoc.floonoc import *
-from pulp.chips.magia.fractal_sync import *
-from pulp.chips.magia.kill_module import *
+from pulp.chips.magia.fractal_sync.fractal_sync import *
+from pulp.chips.magia.kill_module.kill_module import *
 from typing import List, Dict
 import math
 

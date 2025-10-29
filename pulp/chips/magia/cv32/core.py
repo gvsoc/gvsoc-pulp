@@ -18,7 +18,7 @@
 
 import gvsoc.systree
 import cpu.iss.riscv
-from pulp.chips.magia.isa import *
+from pulp.chips.magia.cv32.isa import *
 from cpu.iss.isa_gen.isa_smallfloats import *
 
 # Tentative model of the cv32e40x adapted from pulp_cores.py
@@ -71,5 +71,5 @@ class CV32CoreTest(cpu.iss.riscv.RiscvCommon):
         # TODO check later
         self.add_c_flags([
             "-DPIPELINE_STALL_THRESHOLD=1",
-            "-DCONFIG_ISS_CORE=riscv",
+            "-DCONFIG_ISS_CORE_DIR=pulp/chips/magia/cv32",
         ])

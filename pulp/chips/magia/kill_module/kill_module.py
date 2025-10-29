@@ -35,7 +35,7 @@ class KillModule(gvsoc.systree.Component):
             'nb_cores_to_wait' : nb_cores_to_wait,
         })
 
-        self.add_sources(['pulp/chips/magia/kill_module.cpp'])
+        self.add_sources(['pulp/chips/magia/kill_module/kill_module.cpp'])
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')
