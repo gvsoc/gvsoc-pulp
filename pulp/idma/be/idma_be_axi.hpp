@@ -111,4 +111,7 @@ private:
     // to know the base where it should be written.
     uint64_t current_burst_base;
     uint64_t current_burst_size;
+
+    // Width in bytes of AXI burst.
+    int burst_size;
 };

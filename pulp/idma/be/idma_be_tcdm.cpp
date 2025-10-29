@@ -286,7 +286,7 @@ void IDmaBeTcdm::read_line()
     uint64_t size = this->get_line_size(base, this->current_burst_size);
 
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Reading line from TCDM (base: 0x%lx, size: 0x%lx)\n",
-        base, size);
+            base, size);
 
     // Prepare the IO request to TCDM
     req->prepare();

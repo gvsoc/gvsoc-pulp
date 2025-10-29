@@ -194,7 +194,7 @@ class SocFlooccamy(gvsoc.systree.Component):
             # clusters[id].o_NARROW_SOC(narrow_axi.i_INPUT())
             clusters[id].o_NARROW_SOC(narrow_wide_noc.i_CLUSTER_NARROW_INPUT(tile_x, tile_y)) # --------------------
             narrow_wide_noc.o_NARROW_MAP ( clusters[id].i_NARROW_INPUT(), base=arch.get_cluster_base(id),
-                size=arch.cluster.size,x=tile_x+1, y=tile_y+1, rm_base=False)
+                size=arch.cluster.size,x=tile_x+1, y=tile_y+1, rm_base=False) 
             narrow_axi.o_MAP ( clusters[id].i_NARROW_INPUT(), base=arch.get_cluster_base(id),
             size=arch.cluster.size, rm_base=False  )
 

@@ -22,11 +22,11 @@
 #include <vp/itf/io.hpp>
 #include <math.h>
 
-class DmaInterleaver : public vp::Component
+class HWPEInterleaver : public vp::Component
 {
 
 public:
-    DmaInterleaver(vp::ComponentConf &config);
+    HWPEInterleaver(vp::ComponentConf &config);
 
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
@@ -43,7 +43,7 @@ private:
     int bank_width;
 };
 
-DmaInterleaver::DmaInterleaver(vp::ComponentConf &config)
+HWPEInterleaver::HWPEInterleaver(vp::ComponentConf &config)
     : vp::Component(config)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
@@ -63,26 +63,21 @@ DmaInterleaver::DmaInterleaver(vp::ComponentConf &config)
         this->new_master_port("out_" + std::to_string(i), &this->output_ports[i]);
     }
 
-    this->input_port.set_req_meth(&DmaInterleaver::req);
+    this->input_port.set_req_meth(&HWPEInterleaver::req);
     this->new_slave_port("input", &this->input_port);
 }
 
-vp::IoReqStatus DmaInterleaver::req(vp::Block *__this, vp::IoReq *req)
+vp::IoReqStatus HWPEInterleaver::req(vp::Block *__this, vp::IoReq *req)
 {
-    DmaInterleaver *_this = (DmaInterleaver *)__this;
+    HWPEInterleaver *_this = (HWPEInterleaver *)__this;
     uint64_t offset = req->get_addr();
     bool is_write = req->get_is_write();
     uint64_t size = req->get_size();
     uint8_t *data = req->get_data();
-    uint8_t *second_data = req->get_second_data(); //needed for amo
-    vp::IoReqOpcode opcode = req->get_opcode(); //needed for amo
+    int max_latency = 0;
 
-    _this->trace.msg(vp::Trace::LEVEL_TRACE, "Received IO req (req 0x%p, offset: 0x%llx, size: 0x%llx, is_write: %d)\n", req, offset, size, is_write);
+    _this->trace.msg(vp::Trace::LEVEL_TRACE, "Received IO req (offset: 0x%llx, size: 0x%llx, is_write: %d)\n", offset, size, is_write);
 
-    vp::IoReq bank_req;
-
-    bank_req.init();
-    uint64_t max_delay = 0;
     while (size)
     {
         int bank_size = std::min(_this->bank_width - (offset & (_this->bank_width - 1)), size);
@@ -91,29 +86,37 @@ vp::IoReqStatus DmaInterleaver::req(vp::Block *__this, vp::IoReq *req)
         uint64_t bank_offset = ((offset >> _this->offset_right_shift) << _this->offset_left_shift) +
             (offset & ((1<< _this->offset_left_shift) - 1));
 
-        bank_req.set_addr(bank_offset);
-        bank_req.set_size(bank_size);
-        bank_req.set_data(data);
-        bank_req.set_second_data(second_data); //needed for amo
-        bank_req.set_is_write(is_write);
-        bank_req.set_opcode(opcode); //needed for amo
-        _this->trace.msg(vp::Trace::LEVEL_TRACE, "Forwarding bank request to bank %d (req x%p, offset: 0x%llx, size: 0x%llx)\n", bank_id, &bank_req, bank_offset, bank_size);
-        _this->output_ports[bank_id].req_forward(&bank_req);
-        max_delay = std::max(max_delay, bank_req.get_latency()); // Report back the maximum latency of all banks
+         _this->trace.msg(vp::Trace::LEVEL_TRACE, "------  Send to Bank %d with size %d\n", bank_id, bank_size);
+
+        vp::IoReq * bank_req = new vp::IoReq;
+
+        bank_req->init();
+        bank_req->set_addr(bank_offset);
+        bank_req->set_size(bank_size);
+        bank_req->set_data(data);
+        bank_req->set_is_write(is_write);
+
+        _this->output_ports[bank_id].req_forward(bank_req);
+
+        int latency = bank_req->get_latency();
+        max_latency = latency > max_latency ? latency : max_latency;
+
+        delete bank_req;
+
         offset += bank_size;
         size -= bank_size;
         data += bank_size;
-        bank_req.set_latency(0); // Reset the latency because we always use the same request object
     }
-    req->inc_latency(max_delay);
-    _this->trace.msg(vp::Trace::LEVEL_TRACE, "Increasing latency for req %p by %ld \n", req, max_delay);
-    // martinjo: Note: I dont think the following note is correct. The latency was previously not reported on the Core side
-    // Note that we ignore the latency reported by the bank requests since DMA is always
-    // having the priority. Ignoring the latency will just report it on the core side
+
+    if (max_latency > 0)
+    {
+        _this->trace.msg(vp::Trace::LEVEL_TRACE, "Delayed Block Access Latency is %d | original latency is %d\n", max_latency, req->get_latency());
+    }
+    req->inc_latency(max_latency);
     return vp::IoReqStatus::IO_REQ_OK;
 }
 
 extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
-    return new DmaInterleaver(config);
+    return new HWPEInterleaver(config);
 }

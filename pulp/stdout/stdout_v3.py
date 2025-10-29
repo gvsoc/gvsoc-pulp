@@ -18,14 +18,22 @@ import gvsoc.systree
 
 class Stdout(gvsoc.systree.Component):
 
-    def __init__(self, parent, name):
+    def __init__(self,
+                 parent,
+                 name,
+                 max_cluster=33,
+                 max_core_per_cluster=16,
+                 user_set_core_id=0xdeadbeef,
+                 user_set_cluster_id=0xdeadbeef):
 
         super(Stdout, self).__init__(parent, name)
 
         self.set_component('pulp.stdout.stdout_v3_impl')
         self.add_properties({
-            'max_cluster': 33,
-            'max_core_per_cluster': 16
+            'max_cluster': max_cluster,
+            'max_core_per_cluster': max_core_per_cluster,
+            'user_set_core_id' : user_set_core_id,
+            'user_set_cluster_id' : user_set_cluster_id
         })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
