@@ -19,6 +19,7 @@
 import gvsoc.systree
 import gvsoc.runner
 import os
+from pulp.chips.magia.arch import MagiaTree
 
 from pulp.chips.magia.soc import MagiaSoc
 from gvrun.parameter import TargetParameter
@@ -41,7 +42,8 @@ class MagiaBoard(gvsoc.systree.Component):
             binary = args.binary
 
         # Soc model
-        self.soc = MagiaSoc(self, 'magia-soc', parser, binary)
+        tree = MagiaTree(self, 'magia')
+        self.soc = MagiaSoc(self, 'magia-soc', tree, parser, binary)
 
     def configure(self):
         # We configure the loader binary now in the configure steps since it is coming from
