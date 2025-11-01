@@ -16,6 +16,8 @@
 
 # Authors: Lorenzo Zuolo, Chips-IT (lorenzo.zuolo@chips.it)
 
+from gvrun.attribute import Tree, Value
+
 class MagiaArch:
     # Single tile address map from magia_tile_pkg.sv
     RESERVED_ADDR_START = 0x0000_0000
@@ -47,4 +49,14 @@ class MagiaArch:
 
     N_TILES_X           = 4
     N_TILES_Y           = 4
-    NB_CLUSTERS         = N_TILES_X*N_TILES_Y
+    
+class MagiaTree(Tree):
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
+        self.n_tiles_x = Value(self, 'n_tiles_x', MagiaArch.N_TILES_X, cast=int,
+            description='Number of tiles on X dimension')
+        self.n_tiles_y = Value(self, 'n_tiles_y', MagiaArch.N_TILES_Y, cast=int,
+            description='Number of tiles on Y dimension')
+
+        self.NB_CLUSTERS = self.n_tiles_x*self.n_tiles_y
+        
