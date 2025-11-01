@@ -54,6 +54,7 @@ class MagiaSoc(gvsoc.systree.Component):
 
         # Bin Loader
         loader=utils.loader.loader.ElfLoader(self, f'loader', binary=binary)
+        self.loader = loader
 
         # Simulation engine killer
         killer=KillModule(self,'kill-module',kill_addr_base=MagiaArch.TEST_END_ADDR_START,kill_addr_size=MagiaArch.TEST_END_SIZE,nb_cores_to_wait=MagiaArch.NB_CLUSTERS)
