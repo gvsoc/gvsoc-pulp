@@ -20,6 +20,7 @@ import gvsoc.systree
 from memory.memory import Memory
 from interco.router import Router
 from interco.interleaver import Interleaver
+from pulp.mempool.l1_interconnect.l1_xbar import L1_Xbar
 from pulp.mempool.l1_remote_itf import L1_RemoteItf
 from pulp.mempool.l1_router_output_selector import L1_RouterOutputSelector
 from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
@@ -113,8 +114,8 @@ class L1_subsystem(gvsoc.systree.Component):
 
         if async_l1_interco:
             # Remote group interleavers
-            remote_out_interface = Router(self, 'remote_out_itf', latency=1, bandwidth=bandwidth, nb_input_port=nb_pe, nb_output_port=nb_remote_masters,
-                                        synchronous=False, shared_rw_bandwidth=True, max_input_pending_size=4, external_select=True, special_mode=True)
+            remote_out_interface = L1_Xbar(self, 'remote_out_itf', latency=1, bandwidth=bandwidth, nb_input_port=nb_pe, nb_output_port=nb_remote_masters,
+                                        shared_rw_bandwidth=True, max_input_pending_size=4)
 
             remote_local_output_selectors = []
             for i in range(0, nb_pe):
