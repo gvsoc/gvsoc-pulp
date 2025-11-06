@@ -22,7 +22,7 @@ class L1_AddressScrambler(gvsoc.systree.Component):
 
         super().__init__(parent, name)
 
-        self.add_sources(['pulp/mempool/l1_address_scrambler.cpp'])
+        self.add_sources(['pulp/mempool/l1_interconnect/l1_address_scrambler.cpp'])
 
         self.add_properties({
             "bypass": bypass,

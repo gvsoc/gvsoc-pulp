@@ -15,16 +15,18 @@
 #
 
 import gvsoc.systree
-from typing import List, Tuple
 
-class CacheFilter(gvsoc.systree.Component):
+class MempoolXbarSelector(gvsoc.systree.Component):
 
-    def __init__(self, parent: gvsoc.systree.Component, name: str, bypass: bool = False, cache_rules: List[Tuple[int, int]]=[], cache_latency: int=0):
+    def __init__(self, parent: gvsoc.systree.Component, name: str, interleaver_mode: bool=False, output_id: int=0, interleaving_bits: int=0, stage_bits: int=0):
 
         super().__init__(parent, name)
 
-        self.add_sources(['pulp/mempool/cache_filter.cpp'])
+        self.add_sources(['pulp/mempool/xbar/mempool_xbar_selector.cpp'])
 
-        self.add_property('bypass', bypass)
-        self.add_property('cache_rules', cache_rules)
-        self.add_property('cache_latency', cache_latency)
+        self.add_properties({
+            "interleaver_mode": interleaver_mode,
+            "output_id": output_id,
+            "interleaving_bits": interleaving_bits,
+            "stage_bits": stage_bits
+        })

@@ -19,7 +19,7 @@ import gvsoc.systree
 from typing import List, Tuple
 from cache.cache import Cache
 from interco.router import Router
-from pulp.mempool.cache_filter import CacheFilter
+from pulp.mempool.l2_interconnect.cache_filter import CacheFilter
 import math
 
 class Hierarchical_Interco(gvsoc.systree.Component):

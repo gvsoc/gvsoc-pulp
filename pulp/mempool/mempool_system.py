@@ -23,7 +23,7 @@ import interco.router as router
 import devices.uart.ns16550 as ns16550
 import utils.loader.loader
 import gvsoc.systree as st
-from pulp.mempool.mempool_dma import MemPoolDma
+from pulp.mempool.dma.mempool_dma import MemPoolDma
 from elftools.elf.elffile import *
 from pulp.mempool.mempool_cluster import Cluster
 from pulp.mempool.ctrl_registers import CtrlRegisters

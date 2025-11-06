@@ -23,7 +23,7 @@ from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 from interco.interleaver import Interleaver
 import math
 from pulp.mempool.mempool_tile import Tile
-from pulp.mempool.hierarchical_interco import Hierarchical_Interco
+from pulp.mempool.l2_interconnect.hierarchical_interco import Hierarchical_Interco
 
 class Sub_group(st.Component):
 

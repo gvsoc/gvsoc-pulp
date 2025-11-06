@@ -27,6 +27,6 @@ class L1_RemoteItf(gvsoc.systree.Component):
         self.add_property('shared_rw_bandwidth', shared_rw_bandwidth)
 
         if synchronous:
-            self.add_sources(['pulp/mempool/l1_remote_itf.cpp'])
+            self.add_sources(['pulp/mempool/l1_interconnect/l1_remote_itf.cpp'])
         else:
-            self.add_sources(['pulp/mempool/l1_remote_itf_async.cpp'])
+            self.add_sources(['pulp/mempool/l1_interconnect/l1_remote_itf_async.cpp'])

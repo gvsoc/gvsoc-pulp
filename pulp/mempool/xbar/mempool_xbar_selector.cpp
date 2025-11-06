@@ -22,11 +22,11 @@
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
 
-class L1_RouterOutputSelector : public vp::Component
+class MempoolXbarSelector : public vp::Component
 {
 
 public:
-    L1_RouterOutputSelector(vp::ComponentConf &config);
+    MempoolXbarSelector(vp::ComponentConf &config);
 
 private:
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
@@ -45,13 +45,13 @@ private:
 
 
 
-L1_RouterOutputSelector::L1_RouterOutputSelector(vp::ComponentConf &config)
+MempoolXbarSelector::MempoolXbarSelector(vp::ComponentConf &config)
     : vp::Component(config)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
-    this->input_itf.set_req_meth(&L1_RouterOutputSelector::req);
-    this->output_itf.set_resp_meth(&L1_RouterOutputSelector::response);
-    this->output_itf.set_grant_meth(&L1_RouterOutputSelector::grant);
+    this->input_itf.set_req_meth(&MempoolXbarSelector::req);
+    this->output_itf.set_resp_meth(&MempoolXbarSelector::response);
+    this->output_itf.set_grant_meth(&MempoolXbarSelector::grant);
 
     this->new_slave_port("input", &this->input_itf);
     this->new_master_port("output", &this->output_itf);
@@ -62,36 +62,36 @@ L1_RouterOutputSelector::L1_RouterOutputSelector(vp::ComponentConf &config)
     this->stage_bits = get_js_config()->get_child_int("stage_bits");
 }
 
-vp::IoReqStatus L1_RouterOutputSelector::req(vp::Block *__this, vp::IoReq *req)
+vp::IoReqStatus MempoolXbarSelector::req(vp::Block *__this, vp::IoReq *req)
 {
-    L1_RouterOutputSelector *_this = (L1_RouterOutputSelector *)__this;
+    MempoolXbarSelector *_this = (MempoolXbarSelector *)__this;
 
     if (_this->interleaver_mode)
     {
         uint64_t offset = req->get_addr();
         uint64_t output_id = (offset >> _this->interleaving_bits) & ((1 << _this->stage_bits) - 1);
         req->arg_push((void *)output_id);
-        _this->trace.msg(vp::DEBUG, "L1_RouterOutputSelector interleaver req addr: 0x%lx, output_id: %ld\n", offset, output_id);
+        _this->trace.msg(vp::DEBUG, "MempoolXbarSelector interleaver req addr: 0x%lx, output_id: %ld\n", offset, output_id);
     }
     else
     {
         req->arg_push((void *)_this->output_id);
-        _this->trace.msg(vp::DEBUG, "L1_RouterOutputSelector req addr: 0x%lx, output_id: %ld\n", req->get_addr(), _this->output_id);
+        _this->trace.msg(vp::DEBUG, "MempoolXbarSelector req addr: 0x%lx, output_id: %ld\n", req->get_addr(), _this->output_id);
     }
 
     return _this->output_itf.req_forward(req);
 }
 
-void L1_RouterOutputSelector::grant(vp::Block *__this, vp::IoReq *req)
+void MempoolXbarSelector::grant(vp::Block *__this, vp::IoReq *req)
 {
 
 }
 
-void L1_RouterOutputSelector::response(vp::Block *__this, vp::IoReq *req)
+void MempoolXbarSelector::response(vp::Block *__this, vp::IoReq *req)
 {
 }
 
 extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
-    return new L1_RouterOutputSelector(config);
+    return new MempoolXbarSelector(config);
 }

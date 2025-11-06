@@ -26,7 +26,7 @@
 #include <vp/itf/io.hpp>
 #include <vp/mapping_tree.hpp>
 
-class L1_Xbar;
+class MempoolXbar;
 class InputPort;
 
 /**
@@ -38,9 +38,9 @@ class InputPort;
 class Port
 {
 public:
-    Port(L1_Xbar *top, std::string name);
+    Port(MempoolXbar *top, std::string name);
     void log_access(uint64_t addr, uint64_t size);
-    L1_Xbar *top;
+    MempoolXbar *top;
     // Name of the port, used for logging accesses in the profiler
     std::string name;
     // Address used for logging accesses in the profiler
@@ -67,7 +67,7 @@ public:
 class OutputPort : public Port
 {
 public:
-    OutputPort(L1_Xbar *top, std::string name, int64_t bandwidth, int64_t latency);
+    OutputPort(MempoolXbar *top, std::string name, int64_t bandwidth, int64_t latency);
     // True when a request has been denied. The port can not send requests anymore until the
     // denied request is granted. This also stall the elected input port.
     bool stalled = false;
@@ -93,7 +93,7 @@ public:
 class InputPort : public Port
 {
 public:
-    InputPort(int id, std::string name, L1_Xbar *top, int64_t bandwidth, int64_t latency);
+    InputPort(int id, std::string name, MempoolXbar *top, int64_t bandwidth, int64_t latency);
     int id;
     // Queue of pending requests. Any incoming request is first pushed here. An arbitration event
     // is then executed to route these requests to output ports
@@ -128,7 +128,7 @@ public:
 class Channel : public vp::Block
 {
 public:
-    Channel(L1_Xbar *top, std::string name);
+    Channel(MempoolXbar *top, std::string name);
     // Handle an incoming request
     vp::IoReqStatus handle_req(vp::IoReq *req, int port);
     // Handle the response of a request which was sent to an output port
@@ -146,7 +146,7 @@ private:
     // Handle a request which has received its response
     void handle_req_end(vp::IoReq *req, vp::IoReqStatus status);
 
-    L1_Xbar *top;
+    MempoolXbar *top;
     // This component trace
     vp::Trace trace;
     // Array of input ports
@@ -173,12 +173,12 @@ private:
  * This models an AXI-like router that is capable of routing memory-mapped requests from an input
  * port to output ports based on the request address.
  */
-class L1_Xbar : public vp::Component
+class MempoolXbar : public vp::Component
 {
     friend class Channel;
 
 public:
-    L1_Xbar(vp::ComponentConf &conf);
+    MempoolXbar(vp::ComponentConf &conf);
 
 private:
     // Incoming requests are received here. The port indicates from which input port it is received.
@@ -217,7 +217,7 @@ private:
 
 
 
-L1_Xbar::L1_Xbar(vp::ComponentConf &config)
+MempoolXbar::MempoolXbar(vp::ComponentConf &config)
     : vp::Component(config)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
@@ -240,15 +240,15 @@ L1_Xbar::L1_Xbar(vp::ComponentConf &config)
     {
         vp::IoSlave *input = &this->input_itfs[i];
         std::string name = i == 0 ? "input" : "input_" + std::to_string(i);
-        input->set_req_meth_muxed(&L1_Xbar::req, i);
+        input->set_req_meth_muxed(&MempoolXbar::req, i);
         this->new_slave_port(name, input, this);
     }
     for (int i=0; i<this->nb_output_port; i++)
     {
         vp::IoMaster *itf = new vp::IoMaster();
         std::string name = i == 0 ? "output" : "output_" + std::to_string(i);
-        itf->set_resp_meth_muxed(&L1_Xbar::response, i);
-        itf->set_grant_meth_muxed(&L1_Xbar::grant, i);
+        itf->set_resp_meth_muxed(&MempoolXbar::response, i);
+        itf->set_grant_meth_muxed(&MempoolXbar::grant, i);
         this->output_itfs.push_back(itf);
         this->new_master_port(name, itf);
     }
@@ -264,28 +264,28 @@ L1_Xbar::L1_Xbar(vp::ComponentConf &config)
     }
 }
 
-vp::IoReqStatus L1_Xbar::req(vp::Block *__this, vp::IoReq *req, int port)
+vp::IoReqStatus MempoolXbar::req(vp::Block *__this, vp::IoReq *req, int port)
 {
-    L1_Xbar *_this = (L1_Xbar *)__this;
+    MempoolXbar *_this = (MempoolXbar *)__this;
     return _this->handle_req(req, port);
 }
 
-vp::IoReqStatus L1_Xbar::handle_req(vp::IoReq *req, int port)
+vp::IoReqStatus MempoolXbar::handle_req(vp::IoReq *req, int port)
 {
     int channel = this->shared_rw_bandwidth ? 0 : req->get_is_write();
     return this->channels[channel]->handle_req(req, port);
 }
 
-void L1_Xbar::grant(vp::Block *__this, vp::IoReq *req, int id)
+void MempoolXbar::grant(vp::Block *__this, vp::IoReq *req, int id)
 {
-    L1_Xbar *_this = (L1_Xbar *)__this;
+    MempoolXbar *_this = (MempoolXbar *)__this;
     int channel = _this->shared_rw_bandwidth ? 0 : req->get_is_write();
     _this->channels[channel]->grant(req, id);
 }
 
-void L1_Xbar::response(vp::Block *__this, vp::IoReq *req, int id)
+void MempoolXbar::response(vp::Block *__this, vp::IoReq *req, int id)
 {
-    L1_Xbar *_this = (L1_Xbar *)__this;
+    MempoolXbar *_this = (MempoolXbar *)__this;
     int channel = _this->shared_rw_bandwidth ? 0 : req->get_is_write();
     _this->channels[channel]->response(req, id);
 }
@@ -496,7 +496,7 @@ void Channel::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     }
 }
 
-Channel::Channel(L1_Xbar *top, std::string name)
+Channel::Channel(MempoolXbar *top, std::string name)
 : vp::Block(top, name), top(top), fsm_event(this, Channel::fsm_handler),
     arbiter_event(this, Channel::arbiter_handler),
     ended_reqs(this, "ended_reqs")
@@ -593,7 +593,7 @@ void Channel::handle_req_end(vp::IoReq *req, vp::IoReqStatus status)
     }
 }
 
-Port::Port(L1_Xbar *top, std::string name)
+Port::Port(MempoolXbar *top, std::string name)
 : top(top), name(name),
 log_addr(*top, name + "/addr", 64, vp::SignalCommon::ResetKind::HighZ),
 log_size(*top, name + "/size", 64, vp::SignalCommon::ResetKind::HighZ),
@@ -623,12 +623,12 @@ void Port::log_access(uint64_t addr, uint64_t size)
     this->last_logged_access = cycles;
 }
 
-OutputPort::OutputPort(L1_Xbar *top, std::string name, int64_t bandwidth, int64_t latency)
+OutputPort::OutputPort(MempoolXbar *top, std::string name, int64_t bandwidth, int64_t latency)
     : Port(top, name)
 {
 }
 
-InputPort::InputPort(int id, std::string name, L1_Xbar *top, int64_t bandwidth, int64_t latency)
+InputPort::InputPort(int id, std::string name, MempoolXbar *top, int64_t bandwidth, int64_t latency)
 : Port(top, name), id(id), pending_size(*top, name + "/pending_size", 32, vp::SignalCommon::ResetKind::Value, 0),
     pending_mapping(*top, name + "/pending_mapping", 32, vp::SignalCommon::ResetKind::Value, 0),
     arbitration_lock(*top, name + "/arbitration_lock", 1, vp::SignalCommon::ResetKind::Value, 0)
@@ -637,5 +637,5 @@ InputPort::InputPort(int id, std::string name, L1_Xbar *top, int64_t bandwidth, 
 
 extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
-    return new L1_Xbar(config);
+    return new MempoolXbar(config);
 }

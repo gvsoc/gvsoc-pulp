@@ -20,9 +20,9 @@ import gvsoc.systree
 from memory.memory import Memory
 from interco.router import Router
 from interco.interleaver import Interleaver
-from pulp.mempool.l1_interconnect.l1_xbar import L1_Xbar
-from pulp.mempool.l1_remote_itf import L1_RemoteItf
-from pulp.mempool.l1_router_output_selector import L1_RouterOutputSelector
+from pulp.mempool.xbar.mempool_xbar import MempoolXbar
+from pulp.mempool.l1_interconnect.l1_remote_itf import L1_RemoteItf
+from pulp.mempool.xbar.mempool_xbar_selector import MempoolXbarSelector
 from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 import math
 
@@ -114,28 +114,28 @@ class L1_subsystem(gvsoc.systree.Component):
 
         if async_l1_interco:
             # Remote group interleavers
-            remote_out_interface = L1_Xbar(self, 'remote_out_itf', latency=1, bandwidth=bandwidth, nb_input_port=nb_pe, nb_output_port=nb_remote_masters,
+            remote_out_interface = MempoolXbar(self, 'remote_out_itf', latency=1, bandwidth=bandwidth, nb_input_port=nb_pe, nb_output_port=nb_remote_masters,
                                         shared_rw_bandwidth=True, max_input_pending_size=4)
 
             remote_local_output_selectors = []
             for i in range(0, nb_pe):
                 pe_selector_list = []
                 for j in range(0, nb_remote_local_masters):
-                    pe_selector_list.append(L1_RouterOutputSelector(self, f'remote_local_output_selector_core{i}_out{j}', output_id=j))
+                    pe_selector_list.append(MempoolXbarSelector(self, f'remote_local_output_selector_core{i}_out{j}', output_id=j))
                 remote_local_output_selectors.append(pe_selector_list)
 
             remote_sub_group_output_selectors = []
             for i in range(0, nb_pe):
                 pe_selector_list = []
                 for j in range(0, nb_remote_sub_group_masters):
-                    pe_selector_list.append(L1_RouterOutputSelector(self, f'remote_sub_group_output_selector_core{i}_out{j}', output_id=j + nb_remote_local_masters))
+                    pe_selector_list.append(MempoolXbarSelector(self, f'remote_sub_group_output_selector_core{i}_out{j}', output_id=j + nb_remote_local_masters))
                 remote_sub_group_output_selectors.append(pe_selector_list)
 
             remote_group_output_selectors = []
             for i in range(0, nb_pe):
                 pe_selector_list = []
                 for j in range(0, nb_remote_group_masters):
-                    pe_selector_list.append(L1_RouterOutputSelector(self, f'remote_group_output_selector_core{i}_out{j}', output_id=j + nb_remote_local_masters + nb_remote_sub_group_masters))
+                    pe_selector_list.append(MempoolXbarSelector(self, f'remote_group_output_selector_core{i}_out{j}', output_id=j + nb_remote_local_masters + nb_remote_sub_group_masters))
                 remote_group_output_selectors.append(pe_selector_list)
         else:
             remote_local_out_interfaces = []
