@@ -23,7 +23,7 @@ import pulp.mempool.l1_subsystem as l1_subsystem
 import interco.router as router
 import gvsoc.systree as st
 from pulp.snitch.sequencer import Sequencer
-from pulp.mempool.l1_address_scrambler import L1_AddressScrambler
+from pulp.mempool.l1_interconnect.l1_address_scrambler import L1_AddressScrambler
 
 class Tile(st.Component):
 

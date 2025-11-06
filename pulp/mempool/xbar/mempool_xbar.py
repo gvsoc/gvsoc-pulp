@@ -16,7 +16,7 @@
 
 import gvsoc.systree
 
-class L1_Xbar(gvsoc.systree.Component):
+class MempoolXbar(gvsoc.systree.Component):
     """Interconnect router
 
     This models an AXI-like router.
@@ -89,7 +89,7 @@ class L1_Xbar(gvsoc.systree.Component):
     """
     def __init__(self, parent: gvsoc.systree.Component, name: str, latency: int=0, bandwidth: int=0,
             nb_input_port: int=1, nb_output_port: int=1, shared_rw_bandwidth: bool=False, max_input_pending_size=0):
-        super(L1_Xbar, self).__init__(parent, name)
+        super(MempoolXbar, self).__init__(parent, name)
 
         # This will store the whole set of mappings and passed to model as a dictionary
         self.add_property('mappings', {})
@@ -102,4 +102,4 @@ class L1_Xbar(gvsoc.systree.Component):
         self.add_property('nb_input_port', nb_input_port)
         self.add_property('nb_output_port', nb_output_port)
 
-        self.add_sources(['pulp/mempool/l1_interconnect/l1_xbar.cpp'])
+        self.add_sources(['pulp/mempool/xbar/mempool_xbar.cpp'])

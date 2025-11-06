@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2024 ETH Zurich and University of Bologna
+# Copyright (C) 2025 ETH Zurich and University of Bologna
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,14 +15,16 @@
 #
 
 import gvsoc.systree
+from typing import List, Tuple
 
-class MemPoolDmaCtrl(gvsoc.systree.Component):
+class CacheFilter(gvsoc.systree.Component):
 
-    def __init__(self, parent: gvsoc.systree.Component, name: str):
+    def __init__(self, parent: gvsoc.systree.Component, name: str, bypass: bool = False, cache_rules: List[Tuple[int, int]]=[], cache_latency: int=0):
 
         super().__init__(parent, name)
 
-        self.add_sources(['pulp/mempool/mempool_dma_ctrl.cpp'])
+        self.add_sources(['pulp/mempool/l2_interconnect/cache_filter.cpp'])
 
-    def i_INPUT(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'input', signature='io')
+        self.add_property('bypass', bypass)
+        self.add_property('cache_rules', cache_rules)
+        self.add_property('cache_latency', cache_latency)

@@ -16,7 +16,7 @@
 
 import gvsoc.systree
 from pulp.idma.snitch_dma import SnitchDma
-from pulp.mempool.mempool_dma_ctrl import MemPoolDmaCtrl
+from pulp.mempool.dma.mempool_dma_ctrl import MemPoolDmaCtrl
 
 class MemPoolDma(gvsoc.systree.Component):
 

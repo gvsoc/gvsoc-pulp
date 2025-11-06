@@ -24,7 +24,7 @@ from interco.interleaver import Interleaver
 import math
 from pulp.mempool.mempool_tile import Tile
 from pulp.mempool.mempool_sub_group import Sub_group
-from pulp.mempool.hierarchical_interco import Hierarchical_Interco
+from pulp.mempool.l2_interconnect.hierarchical_interco import Hierarchical_Interco
 
 class Group(st.Component):
 

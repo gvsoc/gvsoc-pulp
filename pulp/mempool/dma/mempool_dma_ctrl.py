@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2025 ETH Zurich and University of Bologna
+# Copyright (C) 2024 ETH Zurich and University of Bologna
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,17 +16,13 @@
 
 import gvsoc.systree
 
-class L1_RouterOutputSelector(gvsoc.systree.Component):
+class MemPoolDmaCtrl(gvsoc.systree.Component):
 
-    def __init__(self, parent: gvsoc.systree.Component, name: str, interleaver_mode: bool=False, output_id: int=0, interleaving_bits: int=0, stage_bits: int=0):
+    def __init__(self, parent: gvsoc.systree.Component, name: str):
 
         super().__init__(parent, name)
 
-        self.add_sources(['pulp/mempool/l1_router_output_selector.cpp'])
+        self.add_sources(['pulp/mempool/dma/mempool_dma_ctrl.cpp'])
 
-        self.add_properties({
-            "interleaver_mode": interleaver_mode,
-            "output_id": output_id,
-            "interleaving_bits": interleaving_bits,
-            "stage_bits": stage_bits
-        })
+    def i_INPUT(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'input', signature='io')
