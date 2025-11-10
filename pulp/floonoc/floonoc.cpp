@@ -35,6 +35,7 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
     this->width = get_js_config()->get("width")->get_int();
     this->dim_x = get_js_config()->get_int("dim_x");
     this->dim_y = get_js_config()->get_int("dim_y");
+    this->dim_z = get_js_config()->get_int("dim_z");
     this->router_input_queue_size = get_js_config()->get_int("router_input_queue_size");
     this->atomics = get_js_config()->get_int("atomics");
     this->collective = get_js_config()->get_int("collective");
@@ -48,7 +49,7 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
     this->interleave_bit_width = get_js_config()->get_int("interleave_bit_width");
 
     // Reserve the array for the target. We may have one target at each node.
-    this->targets.resize(this->dim_x * this->dim_y);
+    this->targets.resize(this->dim_x * this->dim_y * this->dim_z);
 
     // Go through the mappings to create one master IO interface for each target
     js::Config *mappings = get_js_config()->get("mappings");
@@ -76,20 +77,21 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
             this->entries[id].size = config->get_uint("size");
             this->entries[id].x = config->get_int("x");
             this->entries[id].y = config->get_int("y");
+            this->entries[id].z = config->get_int("z");
 
             // Once a request reaches the right position, the target will be retrieved through
             // this array indexed by the position
-            this->targets[this->entries[id].y * this->dim_x + this->entries[id].x] = itf;
+            this->targets[this->entries[id].z * this->dim_y * this->dim_x + this->entries[id].y * this->dim_x + this->entries[id].x] = itf;
 
-            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding target (name: %s, base: 0x%llx, size: 0x%llx, x: %d, y: %d)\n",
-                mapping.first.c_str(), this->entries[id].base, this->entries[id].size, this->entries[id].x, this->entries[id].y);
+            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding target (name: %s, base: 0x%llx, size: 0x%llx, x: %d, y: %d, z: %d)\n",
+                mapping.first.c_str(), this->entries[id].base, this->entries[id].size, this->entries[id].x, this->entries[id].y, this->entries[id].z);
 
             id++;
         }
     }
 
     // Create the array of networks interfaces
-    this->network_interfaces.resize(this->dim_x * this->dim_y);
+    this->network_interfaces.resize(this->dim_x * this->dim_y * this->dim_z);
     js::Config *network_interfaces = get_js_config()->get("network_interfaces");
     if (network_interfaces != NULL)
     {
@@ -97,15 +99,16 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
         {
             int x = network_interface->get_elem(0)->get_int();
             int y = network_interface->get_elem(1)->get_int();
+            int z = network_interface->get_elem(2)->get_int();
 
-            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding network interface (x: %d, y: %d)\n", x, y);
+            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding network interface (x: %d, y: %d, z: %d)\n", x, y, z);
 
-            this->network_interfaces[y*this->dim_x + x] = new NetworkInterface(this, x, y);
+            this->network_interfaces[z*this->dim_y*this->dim_x + y*this->dim_x + x] = new NetworkInterface(this, x, y, z);
         }
     }
 
     // Create the array of routers
-    this->routers.resize(this->dim_x * this->dim_y);
+    this->routers.resize(this->dim_x * this->dim_y * this->dim_z);
     js::Config *routers = get_js_config()->get("network_interfaces");
     if (routers != NULL)
     {
@@ -113,10 +116,11 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
         {
             int x = router->get_elem(0)->get_int();
             int y = router->get_elem(1)->get_int();
+            int z = router->get_elem(2)->get_int();
 
-            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding router (x: %d, y: %d)\n", x, y);
+            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding router (x: %d, y: %d, z: %d)\n", x, y, z);
 
-            this->routers[y*this->dim_x + x] = new Router(this, x, y, this->router_input_queue_size);
+            this->routers[z*this->dim_y*this->dim_x + y*this->dim_x + x] = new Router(this, x, y, this->router_input_queue_size);
         }
     }
 }
@@ -150,23 +154,23 @@ void FlooNoc::handle_request_end(vp::IoReq *req)
 
 
 
-Router *FlooNoc::get_router(int x, int y)
+Router *FlooNoc::get_router(int x, int y, int z)
 {
-    return this->routers[y * this->dim_x + x];
+    return this->routers[z * this->dim_y * this->dim_x + y * this->dim_x + x];
 }
 
 
 
-NetworkInterface *FlooNoc::get_network_interface(int x, int y)
+NetworkInterface *FlooNoc::get_network_interface(int x, int y, int z)
 {
-    return this->network_interfaces[y * this->dim_x + x];
+    return this->network_interfaces[z * this->dim_y * this->dim_x + y * this->dim_x + x];
 }
 
 
 
-vp::IoMaster *FlooNoc::get_target(int x, int y)
+vp::IoMaster *FlooNoc::get_target(int x, int y, int z)
 {
-    return this->targets[y * this->dim_x + x];
+    return this->targets[z * this->dim_y * this->dim_x + y * this->dim_x + x];
 }
 
 

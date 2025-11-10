@@ -36,7 +36,7 @@ class FlooNoc;
 class NetworkInterface : public vp::Block
 {
 public:
-    NetworkInterface(FlooNoc *noc, int x, int y);
+    NetworkInterface(FlooNoc *noc, int x, int y, int z = 0);
 
     void reset(bool active);
 
@@ -44,7 +44,7 @@ public:
     void handle_response(vp::IoReq *req);
     // This gets called by a router to unstall the output queue of the network interface after
     // a request was denied because the input queue of the router was full
-    void unstall_queue(int from_x, int from_y);
+    void unstall_queue(int from_x, int from_y, int from_z = 0);
 
 private:
     // Input method called when a burst is received from the local initiator
@@ -59,6 +59,8 @@ private:
     int x;
     // Y position of this network interface in the grid
     int y;
+    // Z position of this network interface in the grid
+    int z;
     // Input IO interface where incoming burst are injected into the network
     vp::IoSlave input_itf;
     // This block trace

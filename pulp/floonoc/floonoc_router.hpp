@@ -34,12 +34,12 @@ class FlooNoc;
 class Router : public vp::Block
 {
 public:
-    Router(FlooNoc *noc, int x, int y, int queue_size);
+    Router(FlooNoc *noc, int x, int y, int queue_size, int z = 0);
 
     void reset(bool active);
 
     // This gets called by other routers or a network interface to move a requet to this router
-    bool handle_request(vp::IoReq *req, int from_x, int from_y);
+    bool handle_request(vp::IoReq *req, int from_x, int from_y, int from_z = 0);
     // This gets called by the top noc to grant a a request denied by a target
     void grant(vp::IoReq *req);
 
@@ -48,18 +48,18 @@ private:
     // if a request should be handled.
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
     // Called when a request has reached its destination position and should be sent to a target
-    void send_to_target(vp::IoReq *req, int pos_x, int pos_y);
+    void send_to_target(vp::IoReq *req, int pos_x, int pos_y, int pos_z = 0);
     // Called when a request has collective operation
-    void handle_collective(vp::IoReq *req, uint8_t collective_type, int pos_x, int pos_y);
+    void handle_collective(vp::IoReq *req, uint8_t collective_type, int pos_x, int pos_y, int pos_z = 0);
     // Get the position of the next router which should handle a request.
-    void get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_y);
+    void get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_y, int dest_z, int &next_z);
     // Get the index of the queue corresponding to a source or destination position
-    int get_req_queue(int from_x, int from_y);
+    int get_req_queue(int from_x, int from_y, int from_z = 0);
     // Return the source or destination position which corresponds to a source or destination
     // queue index
-    void get_pos_from_queue(int queue, int &pos_x, int &pos_y);
+    void get_pos_from_queue(int queue, int &pos_x, int &pos_y, int &pos_z);
     // Called by other routers to unstall an output queue after an input queue became available
-    void unstall_queue(int from_x, int from_y);
+    void unstall_queue(int from_x, int from_y, int from_z);
 
     // Pointer to top
     FlooNoc *noc;
@@ -69,11 +69,13 @@ private:
     int x;
     // Y position of this router in the grid
     int y;
+    // Z position of this router in the grid
+    int z;
     // Size of the input queues. This limits the number of requests from the same source which can
     // be pending
     int queue_size;
     // The input queues for each direction and the local one
-    vp::Queue *input_queues[5];
+    vp::Queue *input_queues[7];
     // Clock event used to schedule FSM handler. This is scheduled eveytime something may need to
     // be done
     vp::ClockEvent fsm_event;
@@ -81,9 +83,9 @@ private:
     int current_queue;
     // State of the output queues, true if it is stalled and nothing can be sent to it anymore
     // until it is unstalled.
-    bool stalled_queues[5];
+    bool stalled_queues[7];
     // The pending queue for collective generated requests
-    std::queue<vp::IoReq *> *collective_generated_queues[5];
-    void collective_analyze(vp::IoReq * req, std::queue<int> * queue, int router_x, int router_y);
-    void collective_generate(vp::IoReq * req, std::queue<int> * queue, int router_x, int router_y);
+    std::queue<vp::IoReq *> *collective_generated_queues[7];
+    void collective_analyze(vp::IoReq * req, std::queue<int> * queue, int router_x, int router_y, int router_z);
+    void collective_generate(vp::IoReq * req, std::queue<int> * queue, int router_x, int router_y, int router_z);
 };

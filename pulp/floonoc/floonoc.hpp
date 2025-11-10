@@ -44,6 +44,8 @@ public:
     int x;
     // Y position of the target where requests to this mapping should be forwarded
     int y;
+    // Z position of the target where requests to this mapping should be forwarded (3D NoC only)
+    int z;
 };
 
 
@@ -74,11 +76,11 @@ public:
     void reset(bool active);
 
     // Return the router at specified position
-    Router *get_router(int x, int y);
+    Router *get_router(int x, int y, int z = 0);
     // Return the target at specified position
-    vp::IoMaster *get_target(int x, int y);
+    vp::IoMaster *get_target(int x, int y, int z = 0);
     // Return the network interface at specified position
-    NetworkInterface *get_network_interface(int x, int y);
+    NetworkInterface *get_network_interface(int x, int y, int z = 0);
     // Return the memory-mapped entry corresponding to the specified mapping. Can be used to get
     // destination coordinates associated to an address location.
     Entry *get_entry(uint64_t base, uint64_t size);
@@ -103,7 +105,10 @@ public:
     static constexpr int REQ_COL_MASK = 12;   // [Collective Only] The col mask for collecitive primitives
     static constexpr int REQ_PEND_KIDS = 13;   // [Collective Only] How many kids to be waited for response
     static constexpr int REQ_MOMENTUM = 14;      // [Collective Only] Tree direction
-    static constexpr int REQ_NB_ARGS = 15;    // Number of request data required by this model
+    static constexpr int REQ_DEST_Z = 15;      // Z coordinate of the destination target
+    static constexpr int REQ_SRC_Z = 16;      // Z coordinate of the destination target
+    static constexpr int REQ_LAY_MASK = 17;   // [Collective Only] The layer mask for collecitive primitives
+    static constexpr int REQ_NB_ARGS = 18;    // Number of request data required by this model
 
     // The following constants gives the index in the queue array of the queue associated to each direction
     static constexpr int DIR_RIGHT = 0;
@@ -111,6 +116,9 @@ public:
     static constexpr int DIR_UP   = 2;
     static constexpr int DIR_DOWN = 3;
     static constexpr int DIR_LOCAL = 4;
+    // 3D extension directions
+    static constexpr int DIR_ZPLUS = 5;
+    static constexpr int DIR_ZMINUS = 6;
 
     // [Collective Only]
     static constexpr int MOMENTUM_RIGHT = 0;
@@ -118,6 +126,9 @@ public:
     static constexpr int MOMENTUM_UP    = 2;
     static constexpr int MOMENTUM_DOWN  = 3;
     static constexpr int MOMENTUM_ZERO  = 4;
+    // TODO: What is momentum? How to z extend?
+    static constexpr int MOMENTUM_ZPLUS  = 5;
+    static constexpr int MOMENTUM_ZMINUS = 6;
 
     // Width in bytes of the noc. This is used to split incoming bursts into internal requests of
     // this width so that the bandwidth corresponds to the width.
@@ -145,6 +156,8 @@ public:
     int dim_x;
     // Y dimension of the network. This includes both routers but also targets on the edges
     int dim_y;
+    // Z dimension of the network. This includes both routers but also targets on the edges
+    int dim_z;
 
 private:
     // Callback called when a target request is asynchronously granted after a denied error was

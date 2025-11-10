@@ -27,19 +27,20 @@
 
 
 
-NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y)
-    : vp::Block(noc, "ni_" + std::to_string(x) + "_" + std::to_string(y)),
+NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y, int z)
+    : vp::Block(noc, "ni_" + std::to_string(x) + "_" + std::to_string(y)  + "_" + std::to_string(z)),
     fsm_event(this, &NetworkInterface::fsm_handler)
 {
     this->noc = noc;
     this->x = x;
     this->y = y;
+    this->z = z;
 
     traces.new_trace("trace", &trace, vp::DEBUG);
 
     // Network interface input port
     this->input_itf.set_req_meth(&NetworkInterface::req);
-    noc->new_slave_port("input_" + std::to_string(x) + "_"  + std::to_string(y),
+    noc->new_slave_port("input_" + std::to_string(x) + "_"  + std::to_string(y) + "_" + std::to_string(z),
         &this->input_itf, this);
 
     // Create one req for each possible outstanding req.
@@ -65,7 +66,7 @@ void NetworkInterface::reset(bool active)
 
 
 
-void NetworkInterface::unstall_queue(int from_x, int from_y)
+void NetworkInterface::unstall_queue(int from_x, int from_y, int from_z)
 {
     // The request which was previously denied has been granted. Unstall the output queue
     // and schedule the FSM handler to check if something has to be done
@@ -111,6 +112,7 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         // Get base from current burst
         uint64_t base = _this->pending_burst_base;
 
+        // TODO: How should this work in 3D?
         // We apply the HBM node aliasing
         if (_this->noc->edge_node_alias > 1)
         {
@@ -250,18 +252,20 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             req->set_addr(base - entry->base);
             *req->arg_get(FlooNoc::REQ_DEST_X) = (void *)(long)entry->x;
             *req->arg_get(FlooNoc::REQ_DEST_Y) = (void *)(long)entry->y;
+            *req->arg_get(FlooNoc::REQ_DEST_Z) = (void *)(long)entry->z;
             *req->arg_get(FlooNoc::REQ_SRC_X) = (void *)(long)_this->x;
             *req->arg_get(FlooNoc::REQ_SRC_Y) = (void *)(long)_this->y;
+            *req->arg_get(FlooNoc::REQ_SRC_Z) = (void *)(long)_this->z;
 
             // And forward to the first router which is at the same position as the network
             // interface
-            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Injecting request to noc (req: %p, base: 0x%llx, size: 0x%x, op_code: %0d, destination: (%d, %d))\n",
-                req, base, size, req->get_opcode(), entry->x, entry->y);
+            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Injecting request to noc (req: %p, base: 0x%llx, size: 0x%x, op_code: %0d, destination: (%d, %d, %d))\n",
+                req, base, size, req->get_opcode(), entry->x, entry->y, entry->z);
 
             // Noe that the router may not grant tje request if its input queue is full.
             // In this case we must stall the network interface
-            Router *router = _this->noc->get_router(_this->x, _this->y);
-            _this->stalled = router->handle_request(req, _this->x, _this->y);
+            Router *router = _this->noc->get_router(_this->x, _this->y, _this->z);
+            _this->stalled = router->handle_request(req, _this->x, _this->y, _this->z);
         }
 
         // Since we processed a burst, we need to check again in the next cycle if there is
