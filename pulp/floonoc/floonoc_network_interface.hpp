@@ -38,7 +38,7 @@ class FlooNoc;
 class NetworkInterface : public vp::Block
 {
 public:
-    NetworkInterface(FlooNoc *noc, int x, int y);
+    NetworkInterface(FlooNoc *noc, int x, int y, int z = 0);
 
     void reset(bool active);
 
@@ -46,14 +46,16 @@ public:
     void handle_response(vp::IoReq *req);
     // This gets called by a router to unstall the output queue of the network interface after
     // a request was denied because the input queue of the router was full
-    void unstall_queue(int from_x, int from_y);
+    void unstall_queue(int from_x, int from_y, int from_z = 0);
 
     // This gets called by a router when the destination is reached and the request is sent from the router to the network interface
-    void req_from_router(vp::IoReq *req, int pos_x, int pos_y);
+    void req_from_router(vp::IoReq *req, int pos_x, int pos_y, int pos_z = 0);
     // Can be used to retrieve the x coordinate of the network interface
     int get_x();
     // Can be used to retrieve the y coordinate of the network interface
     int get_y();
+    // Can be used to retrieve the z coordinate of the network interface
+    int get_z();
     // This gets called by the top noc to grant a a request denied by a target
     void grant(vp::IoReq *req);
 private:
@@ -73,13 +75,15 @@ private:
     // This gets called to remove the current pending burst and also remove all related information from the other queues
     void remove_pending_burst(void);
     // This gets called to add a new pending burst to the queue
-    void add_pending_burst(vp::IoReq *burst, bool isaddr, int64_t timestamp, std::tuple<int, int> origin_pos);
+    void add_pending_burst(vp::IoReq *burst, bool isaddr, int64_t timestamp, std::tuple<int, int, int> origin_pos);
     // Pointer to top
     FlooNoc *noc;
     // X position of this network interface in the grid
     int x;
     // Y position of this network interface in the grid
     int y;
+    // Z position of this network interface in the grid
+    int z;
     // Target attached to this network interface
     vp::IoMaster *target;
     // Maxinum number of pending input requests before the initiator is stalled
@@ -100,7 +104,7 @@ private:
     // into account the burst latency.
     std::queue<int64_t> pending_bursts_timestamp;
     // Also store the origin position of the burst to know where to send the response requests
-    std::queue<std::tuple<int, int>> pending_bursts_origin_pos;
+    std::queue<std::tuple<int, int, int>> pending_bursts_origin_pos;
     // Current base address of the burst currently being processed. It is used to update the address
     // of the internal requests send to the routers to process the burst
     uint64_t pending_burst_base;

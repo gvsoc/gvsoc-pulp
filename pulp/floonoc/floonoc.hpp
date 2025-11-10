@@ -45,6 +45,8 @@ public:
     int x;
     // Y position of the target where requests to this mapping should be forwarded
     int y;
+    // Z position of the target where requests to this mapping should be forwarded (3D NoC only)
+    int z;
     // Offset to be removed when request is forwarded
     uint64_t remove_offset;
 };
@@ -77,16 +79,16 @@ public:
     void reset(bool active);
 
     // Return the router at specified position
-    Router *get_req_router(int x, int y);
-    Router *get_rsp_router(int x, int y);
-    Router *get_wide_router(int x, int y);
+    Router *get_req_router(int x, int y, int z = 0);
+    Router *get_rsp_router(int x, int y, int z = 0);
+    Router *get_wide_router(int x, int y, int z = 0);
     // Return the router at specified position based on the request type
-    Router *get_router(int x, int y, bool is_wide, bool is_write, bool is_address);
+    Router *get_router(int x, int y, bool is_wide, bool is_write, bool is_address, int z = 0);
 
     // Return the target at specified position
-    vp::IoMaster *get_target(int x, int y);
+    vp::IoMaster *get_target(int x, int y, int z = 0);
     // Return the network interface at specified position
-    NetworkInterface *get_network_interface(int x, int y);
+    NetworkInterface *get_network_interface(int x, int y, int z = 0);
     // Return the memory-mapped entry corresponding to the specified mapping. Can be used to get
     // destination coordinates associated to an address location.
     Entry *get_entry(uint64_t base, uint64_t size);
@@ -104,7 +106,10 @@ public:
     static constexpr int REQ_NI = 5;      // When a request is stalled, this gives the network interface where to grant it
     static constexpr int REQ_WIDE = 6;        // Indicates if a request is a wide request or not. 1 for wide, 0 for narrow
     static constexpr int REQ_IS_ADDRESS = 7;     // Indicates if the request is a AR/AW request or not. 1 for address, 0 for data
-    static constexpr int REQ_NB_ARGS = 8;     // Number of request data required by this model
+    // 3D extension indices
+    static constexpr int REQ_DEST_Z = 8;      // Z coordinate of the destination target
+    static constexpr int REQ_NB_ARGS = 9;     // Number of request data required by this model
+
 
     // The following constants gives the index in the queue array of the queue associated to each direction
     static constexpr int DIR_RIGHT = 0;
@@ -112,6 +117,9 @@ public:
     static constexpr int DIR_UP   = 2;
     static constexpr int DIR_DOWN = 3;
     static constexpr int DIR_LOCAL = 4;
+    // 3D extension directions
+    static constexpr int DIR_ZPLUS = 5;
+    static constexpr int DIR_ZMINUS = 6;
 
     // Width in bytes of the noc. This is used to split incoming bursts into internal requests of
     // this width so that the bandwidth corresponds to the width.
@@ -135,6 +143,8 @@ private:
     int dim_x;
     // Y dimension of the network. This includes both routers but also targets on the edges
     int dim_y;
+    // Y dimension of the network. This includes both routers but also targets on the edges
+    int dim_z;
     // SIze of the routers input queues. Pushing more requests than this size will block the
     // output queue of the sender.
     int router_input_queue_size;

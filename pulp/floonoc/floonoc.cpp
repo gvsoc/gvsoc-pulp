@@ -36,10 +36,11 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
     this->narrow_width = get_js_config()->get("narrow_width")->get_int();
     this->dim_x = get_js_config()->get_int("dim_x");
     this->dim_y = get_js_config()->get_int("dim_y");
+    this->dim_z = get_js_config()->get_int("dim_z");
     this->router_input_queue_size = get_js_config()->get_int("router_input_queue_size");
 
     // Reserve the array for the target. We may have one target at each node.
-    this->targets.resize(this->dim_x * this->dim_y);
+    this->targets.resize(this->dim_x * this->dim_y * this->dim_z);
 
     // Go through the mappings to create one master IO interface for each target
     js::Config *mappings = get_js_config()->get("mappings");
@@ -67,21 +68,22 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
             this->entries[id].size = config->get_uint("size");
             this->entries[id].x = config->get_int("x");
             this->entries[id].y = config->get_int("y");
+            this->entries[id].z = config->get_int("z");
             this->entries[id].remove_offset = config->get_uint("remove_offset");
 
             // Once a request reaches the right position, the target will be retrieved through
             // this array indexed by the position
-            this->targets[this->entries[id].y * this->dim_x + this->entries[id].x] = itf;
+            this->targets[this->entries[id].z * this->dim_y * this->dim_x + this->entries[id].y * this->dim_x + this->entries[id].x] = itf;
 
-            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding target (name: %s, base: 0x%x, size: 0x%x, x: %d, y: %d, remove_offset: 0x%x)\n",
-                mapping.first.c_str(), this->entries[id].base, this->entries[id].size, this->entries[id].x, this->entries[id].y, this->entries[id].remove_offset);
+            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding target (name: %s, base: 0x%x, size: 0x%x, x: %d, y: %d, z: %d, remove_offset: 0x%x)\n",
+                mapping.first.c_str(), this->entries[id].base, this->entries[id].size, this->entries[id].x, this->entries[id].y, this->entries[id].z, this->entries[id].remove_offset);
 
             id++;
         }
     }
 
     // Create the array of networks interfaces
-    this->network_interfaces.resize(this->dim_x * this->dim_y);
+    this->network_interfaces.resize(this->dim_x * this->dim_y * this->dim_z);
     js::Config *network_interfaces = get_js_config()->get("network_interfaces");
     if (network_interfaces != NULL)
     {
@@ -89,17 +91,18 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
         {
             int x = network_interface->get_elem(0)->get_int();
             int y = network_interface->get_elem(1)->get_int();
+            int z = network_interface->get_elem(2)->get_int();
 
-            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding network interface (x: %d, y: %d)\n", x, y);
+            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding network interface (x: %d, y: %d, z: %d)\n", x, y, z);
 
-            this->network_interfaces[y*this->dim_x + x] = new NetworkInterface(this, x, y);
+            this->network_interfaces[z*this->dim_y*this->dim_x + y*this->dim_x + x] = new NetworkInterface(this, x, y, z);
         }
     }
 
     // Create the array of routers
-    this->req_routers.resize(this->dim_x * this->dim_y);
-    this->rsp_routers.resize(this->dim_x * this->dim_y);
-    this->wide_routers.resize(this->dim_x * this->dim_y);
+    this->req_routers.resize(this->dim_x * this->dim_y * this->dim_z);
+    this->rsp_routers.resize(this->dim_x * this->dim_y * this->dim_z);
+    this->wide_routers.resize(this->dim_x * this->dim_y * this->dim_z);
 
 
     js::Config *routers = get_js_config()->get("routers");
@@ -109,12 +112,13 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
         {
             int x = router->get_elem(0)->get_int();
             int y = router->get_elem(1)->get_int();
+            int z = router->get_elem(2)->get_int();
 
-            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding routers (req, rsp and wide) (x: %d, y: %d)\n", x, y);
+            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding routers (req, rsp and wide) (x: %d, y: %d, z: %d)\n", x, y, z);
 
-            this->req_routers[y*this->dim_x + x] = new Router(this,"req_router_", x, y, this->router_input_queue_size);
-            this->rsp_routers[y*this->dim_x + x] = new Router(this, "rsp_router_", x, y, this->router_input_queue_size);
-            this->wide_routers[y*this->dim_x + x] = new Router(this, "wide_router_", x, y, this->router_input_queue_size);
+            this->req_routers[z*this->dim_y*this->dim_x + y*this->dim_x + x] = new Router(this,"req_router_", x, y, this->router_input_queue_size, z);
+            this->rsp_routers[z*this->dim_y*this->dim_x + y*this->dim_x + x] = new Router(this, "rsp_router_", x, y, this->router_input_queue_size, z);
+            this->wide_routers[z*this->dim_y*this->dim_x + y*this->dim_x + x] = new Router(this, "wide_router_", x, y, this->router_input_queue_size, z);
         }
     }
 }
@@ -133,47 +137,47 @@ void FlooNoc::handle_request_end(vp::IoReq *req)
 
 
 
-Router *FlooNoc::get_req_router(int x, int y)
+Router *FlooNoc::get_req_router(int x, int y, int z)
 {
-    return this->req_routers[y * this->dim_x + x];
+    return this->req_routers[z * this->dim_y * this->dim_x + y * this->dim_x + x];
 }
 
-Router *FlooNoc::get_rsp_router(int x, int y)
+Router *FlooNoc::get_rsp_router(int x, int y, int z)
 {
-    return this->rsp_routers[y * this->dim_x + x];
+    return this->rsp_routers[z * this->dim_y * this->dim_x + y * this->dim_x + x];
 }
 
-Router *FlooNoc::get_wide_router(int x, int y)
+Router *FlooNoc::get_wide_router(int x, int y, int z)
 {
-    return this->wide_routers[y * this->dim_x + x];
+    return this->wide_routers[z * this->dim_y * this->dim_x + y * this->dim_x + x];
 }
 
-Router *FlooNoc::get_router(int x, int y, bool is_wide, bool is_write, bool is_address){
+Router *FlooNoc::get_router(int x, int y, bool is_wide, bool is_write, bool is_address, int z){
     if (is_wide){
         if (is_address && !is_write){ // Wide AR are mapped to req routers
-            return this->get_req_router(x, y);
+            return this->get_req_router(x, y, z);
         } else {
-            return this->get_wide_router(x, y); // All other wide are mapped to wide routers
+            return this->get_wide_router(x, y, z); // All other wide are mapped to wide routers
         }
     } else {
         if (!is_write && !is_address){ // Narrow R are mapped to rsp routers
-            return this->get_rsp_router(x, y);
+            return this->get_rsp_router(x, y, z);
         } else {
-            return this->get_req_router(x, y); // All other narrow are mapped to req routers
+            return this->get_req_router(x, y, z); // All other narrow are mapped to req routers
         }
     }
 }
 
-NetworkInterface *FlooNoc::get_network_interface(int x, int y)
+NetworkInterface *FlooNoc::get_network_interface(int x, int y, int z)
 {
-    return this->network_interfaces[y * this->dim_x + x];
+    return this->network_interfaces[z * this->dim_y * this->dim_x + y * this->dim_x + x];
 }
 
 
 
-vp::IoMaster *FlooNoc::get_target(int x, int y)
+vp::IoMaster *FlooNoc::get_target(int x, int y, int z)
 {
-    return this->targets[y * this->dim_x + x];
+    return this->targets[z * this->dim_y * this->dim_x + y * this->dim_x + x];
 }
 
 

@@ -26,15 +26,17 @@
 #include "floonoc_router.hpp"
 #include "floonoc_network_interface.hpp"
 
-Router::Router(FlooNoc *noc, std::string name, int x, int y, int queue_size)
-    : vp::Block(noc, name + std::to_string(x) + "_" + std::to_string(y)),
+Router::Router(FlooNoc *noc, std::string name, int x, int y, int queue_size, int z)
+    : vp::Block(noc, name + std::to_string(x) + "_" + std::to_string(y) + "_" + std::to_string(z)),
       fsm_event(this, &Router::fsm_handler), signal_req(*this, "req", 64),
       stalled_queues{{
         vp::Signal<bool>(*this, "stalled_queue_right", 1),
         vp::Signal<bool>(*this, "stalled_queue_left", 1),
         vp::Signal<bool>(*this, "stalled_queue_up", 1),
         vp::Signal<bool>(*this, "stalled_queue_down", 1),
-        vp::Signal<bool>(*this, "stalled_queue_local", 1)
+        vp::Signal<bool>(*this, "stalled_queue_local", 1),
+        vp::Signal<bool>(*this, "stalled_queue_zplus", 1),
+        vp::Signal<bool>(*this, "stalled_queue_zminus", 1)
       }}
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
@@ -42,10 +44,11 @@ Router::Router(FlooNoc *noc, std::string name, int x, int y, int queue_size)
     this->noc = noc;
     this->x = x;
     this->y = y;
+    this->z = z;
     this->queue_size = queue_size;
 
-    // Create a queue for each direction (N, E, S, W, local)
-    for (int i = 0; i < 5; i++)
+    // Create a queue for each direction (N, E, S, W, local, ZPLUS, ZMINUS)
+    for (int i = 0; i < 7; i++)
     {
         this->input_queues[i] = new vp::Queue(this, "input_queue_" + std::to_string(i),
             &this->fsm_event);
@@ -54,15 +57,15 @@ Router::Router(FlooNoc *noc, std::string name, int x, int y, int queue_size)
     }
 }
 
-bool Router::handle_request(vp::IoReq *req, int from_x, int from_y)
+bool Router::handle_request(vp::IoReq *req, int from_x, int from_y, int from_z)
 {
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Handle request (req: %p, base: 0x%x, size: 0x%x, from: (%d, %d)\n", req, req->get_addr(), req->get_size(), from_x, from_y);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Handle request (req: %p, base: 0x%x, size: 0x%x, from: (%d, %d, %d)\n", req, req->get_addr(), req->get_size(), from_x, from_y, from_z);
 
     this->signal_req = req->get_addr();
 
     // Each direction has its own input queue to properly implement the round-robin
     // Get the one for the router or network interface which sent this request
-    int queue_index = this->get_req_queue(from_x, from_y);
+    int queue_index = this->get_req_queue(from_x, from_y, from_z);
 
     this->trace.msg(vp::Trace::LEVEL_DEBUG, "Pushed request to input queue (req: %p, queue: %d)\n", req, queue_index);
 
@@ -92,9 +95,9 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     // {
     //     _this->current_queue = 0;
     // }
-    bool output_full[5] = {false}; // Used to make sure we only send a single request per cycle to each direction
-    // Then go through the 5 input queues until we find a request which can be propagated
-    for (int i = 0; i < 5; i++)
+    bool output_full[7] = {false}; // Used to make sure we only send a single request per cycle to each direction
+    // Then go through the 7 input queues until we find a request which can be propagated
+    for (int i = 0; i < 7; i++)
     {
         vp::Queue *queue = _this->input_queues[in_queue_index];
         _this->trace.msg(vp::Trace::LEVEL_TRACE, "Checking input queue (queue_index: %d, queue size: %d)\n", in_queue_index, queue->size());
@@ -106,16 +109,17 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             // when the request was created
             int to_x = req->get_int(FlooNoc::REQ_DEST_X);
             int to_y = req->get_int(FlooNoc::REQ_DEST_Y);
+            int to_z = req->get_int(FlooNoc::REQ_DEST_Z);
 
             // Get the next position in the grid. This takes care of deciding which path is taken
             // to go to the destination
-            int next_x, next_y;
-            _this->get_next_router_pos(to_x, to_y, next_x, next_y);
-            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Resolved next position (req: %p, dest: (%d, %d), next_position: (%d, %d))\n",
-                             req, to_x, to_y, next_x, next_y);
+            int next_x, next_y, next_z;
+            _this->get_next_router_pos(to_x, to_y, to_z, next_x, next_y, next_z);
+            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "(%d, %d, %d): Resolved next position (req: %p, dest: (%d, %d, %d), next_position: (%d, %d, %d))\n",
+                             _this->x, _this->y, _this->z, req, to_x, to_y, to_z, next_x, next_y, next_z);
 
             // Get output queue ID from next position
-            int out_queue_id = _this->get_req_queue(next_x, next_y);
+            int out_queue_id = _this->get_req_queue(next_x, next_y, next_z);
 
             // Only send one request per cycle to the same output
             if (output_full[out_queue_id])
@@ -123,7 +127,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 _this->trace.msg(vp::Trace::LEVEL_TRACE, "Output queue is full, skipping (out queue: %d)\n", out_queue_id);
                 _this->fsm_event.enqueue(); // Check again in next cycle
                 in_queue_index += 1;
-                if (in_queue_index == 5)
+                if (in_queue_index == 7)
                 {
                     in_queue_index = 0;
                 }
@@ -138,7 +142,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 _this->trace.msg(vp::Trace::LEVEL_TRACE, "Output queue is stalled, skipping (out queue: %d)\n", out_queue_id);
                 // Don't enque here because the stalled router will notifiy once it is unstalled
                 in_queue_index += 1;
-                if (in_queue_index == 5)
+                if (in_queue_index == 7)
                 {
                     in_queue_index = 0;
                 }
@@ -157,39 +161,39 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             }
 
             // Now send to the next position
-            if (to_x == _this->x && to_y == _this->y)
+            if (to_x == _this->x && to_y == _this->y && to_z == _this->z)
             {
                 // If next position is the same as the current one, it means it arrived to
                 // destination, we need to forward to the final target
-                _this->send_to_target_ni(req, _this->x, _this->y);
+                _this->send_to_target_ni(req, _this->x, _this->y, _this->z);
             }
             else
             {
                 // Otherwise forward to next position
-                Router *router = _this->noc->get_router(next_x, next_y, req->get_int(FlooNoc::REQ_WIDE), req->get_is_write(), req->get_int(FlooNoc::REQ_IS_ADDRESS));
+                Router *router = _this->noc->get_router(next_x, next_y, req->get_int(FlooNoc::REQ_WIDE), req->get_is_write(), req->get_int(FlooNoc::REQ_IS_ADDRESS), next_z);
 
                 if (router == NULL)
                 {
                     // It is possible that we don't have any router at the destination if it is on
                     // the edge. In this case just forward it to the ni of the target
-                    _this->send_to_target_ni(req, _this->x, _this->y);
+                    _this->send_to_target_ni(req, _this->x, _this->y, _this->z);
                 }
                 else
                 {
-                    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Forwarding request to next router (req: %p, base: 0x%x, size: 0x%x, next_position: (%d, %d), in_queue: %d)\n",
-                                     req, req->get_addr(), req->get_size(), next_x, next_y, in_queue_index);
+                    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Forwarding request to next router (req: %p, base: 0x%x, size: 0x%x, next_position: (%d, %d, %d), in_queue: %d)\n",
+                                     req, req->get_addr(), req->get_size(), next_x, next_y, next_z, in_queue_index);
                     // Send the request to next router, and in case it reports that its input queue
                     // is full, stall the corresponding output queue to make sure we stop sending
                     // there until the queue is unstalled
-                    if (router->handle_request(req, _this->x, _this->y))
+                    if (router->handle_request(req, _this->x, _this->y, _this->z))
                     {
-                        _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Stalling queue (position: (%d, %d), queue: %d)\n", _this->x, _this->y, out_queue_id);
+                        _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Stalling queue (position: (%d, %d, %d), queue: %d)\n", _this->x, _this->y, _this->z, out_queue_id);
                         _this->stalled_queues[out_queue_id] = true;
                     }
                 }
             }
             _this->current_queue = in_queue_index + 1; // Always start looking from the queue after the one that has been processed last
-            if (_this->current_queue == 5)
+            if (_this->current_queue == 7)
             {
                 _this->current_queue = 0;
             }
@@ -207,7 +211,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
         // Go to next input queue
         in_queue_index += 1;
-        if (in_queue_index == 5)
+        if (in_queue_index == 7)
         {
             in_queue_index = 0;
         }
@@ -216,105 +220,139 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
 void Router::unstall_previous(vp::IoReq *req, int in_queue_index)
 {
-    int prev_pos_x, prev_pos_y;
+    int prev_pos_x, prev_pos_y, prev_pos_z;
     // Get the previous position out of the input queue index
-    this->get_pos_from_queue(in_queue_index, prev_pos_x, prev_pos_y);
+    this->get_pos_from_queue(in_queue_index, prev_pos_x, prev_pos_y, prev_pos_z);
 
-    if (prev_pos_x == this->x && prev_pos_y == this->y)
+    if (prev_pos_x == this->x && prev_pos_y == this->y && prev_pos_z == this->z)
     {
         // If the queue corresponds to the local one (previous position is same as
         // position), it means it was injected by a network interface
-        NetworkInterface *ni = this->noc->get_network_interface(this->x, this->y);
-        ni->unstall_queue(this->x, this->y);
+        NetworkInterface *ni = this->noc->get_network_interface(this->x, this->y, this->z);
+        ni->unstall_queue(this->x, this->y, this->z);
     }
     else
     {
         // Otherwise it comes from a router
-        Router *router = this->noc->get_router(prev_pos_x, prev_pos_y, req->get_int(FlooNoc::REQ_WIDE), req->get_is_write(), req->get_int(FlooNoc::REQ_IS_ADDRESS));
-        router->unstall_queue(this->x, this->y);
+        Router *router = this->noc->get_router(prev_pos_x, prev_pos_y, req->get_int(FlooNoc::REQ_WIDE), req->get_is_write(), req->get_int(FlooNoc::REQ_IS_ADDRESS), prev_pos_z);
+        router->unstall_queue(this->x, this->y, this->z);
     }
 }
 
 
-void Router::send_to_target_ni(vp::IoReq *req, int pos_x, int pos_y)
+void Router::send_to_target_ni(vp::IoReq *req, int pos_x, int pos_y, int pos_z)
 {
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Sending request to target NI (req: %p, position: (%d, %d))\n",
-                    req, pos_x, pos_y);
-    NetworkInterface *ni = this->noc->get_network_interface(pos_x, pos_y);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Sending request to target NI (req: %p, position: (%d, %d, %d))\n",
+                    req, pos_x, pos_y, pos_z);
+    NetworkInterface *ni = this->noc->get_network_interface(pos_x, pos_y, pos_z);
 
-    ni->req_from_router(req, pos_x, pos_y);
+    ni->req_from_router(req, pos_x, pos_y, pos_z);
 }
 
 // This is determining the routes the requests will take in the network
-void Router::get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_y)
+// TODO: is moving in Z->X->Y coordinate order the best choice? Easiest to extend for now.
+void Router::get_next_router_pos(int dest_x, int dest_y, int dest_z, int &next_x, int &next_y, int &next_z)
 {
     // TODO If there is a gap in the mesh of routers this algorithm doesnt work
-    if (dest_x == this->x && dest_y == this->y)
+    if (dest_x == this->x && dest_y == this->y && dest_z == this->z)
     {
+        next_z = this->z;
         next_x = this->x;
         next_y = this->y;
     }
-    else if (dest_x == this->x)
+    // We reached the Z and X destination, but not Y: move along Y
+    else if (dest_z == this->z && dest_x == this->x)
     {
+        next_z = this->z;
         next_x = this->x;
         next_y = dest_y < this->y ? this->y - 1 : this->y + 1;
     }
+    // We reached the Z destination, but not X or Y: move along X first
+    else if (dest_z == this->z)
+    {
+        next_z = this->z;
+        next_x = dest_x < this->x ? this->x - 1 : this->x + 1;
+        next_y = this->y;
+    }
+    // We haven't even reached the Z destination: move along Z
     else
     {
-        next_x = dest_x < this->x ? this->x - 1 : this->x + 1;
+        next_z = dest_z < this->z ? this->z - 1 : this->z + 1;
+        next_x = this->x;
         next_y = this->y;
     }
 }
 
-void Router::unstall_queue(int from_x, int from_y)
+void Router::unstall_queue(int from_x, int from_y, int from_z)
 {
     // This gets called when an output queue gets unstalled because the denied request gets granted.
     // Just unstall the queue and trigger the fsm, in case we can now send a new request
-    int queue = this->get_req_queue(from_x, from_y);
-    this->trace.msg(vp::Trace::LEVEL_TRACE, "Unstalling queue (position: (%d, %d), queue: %d)\n", from_x, from_y, queue);
+    int queue = this->get_req_queue(from_x, from_y, from_z);
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Unstalling queue (position: (%d, %d, %d), queue: %d)\n", from_x, from_y, from_z, queue);
     this->stalled_queues[queue] = false;
     // And check in next cycle if another request can be sent
     this->fsm_event.enqueue();
 }
 
-void Router::stall_queue(int from_x, int from_y)
+void Router::stall_queue(int from_x, int from_y, int from_z)
 {
-    int queue = this->get_req_queue(from_x, from_y);
-    this->trace.msg(vp::Trace::LEVEL_TRACE, "Stalling queue (position: (%d, %d), queue: %d)\n", from_x, from_y, queue);
+    int queue = this->get_req_queue(from_x, from_y, from_z);
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Stalling queue (position: (%d, %d, %d), queue: %d)\n", from_x, from_y, from_z, queue);
     this->stalled_queues[queue] = true;
 }
 
-void Router::get_pos_from_queue(int queue, int &pos_x, int &pos_y)
+void Router::get_pos_from_queue(int queue, int &pos_x, int &pos_y, int &pos_z)
 {
     switch (queue)
     {
     case FlooNoc::DIR_RIGHT:
         pos_x = this->x + 1;
         pos_y = this->y;
+        pos_z = this->z;
         break;
     case FlooNoc::DIR_LEFT:
         pos_x = this->x - 1;
         pos_y = this->y;
+        pos_z = this->z;
         break;
     case FlooNoc::DIR_UP:
         pos_x = this->x;
         pos_y = this->y + 1;
+        pos_z = this->z;
         break;
     case FlooNoc::DIR_DOWN:
         pos_x = this->x;
         pos_y = this->y - 1;
+        pos_z = this->z;
         break;
     case FlooNoc::DIR_LOCAL:
         pos_x = this->x;
         pos_y = this->y;
+        pos_z = this->z;
+        break;
+    case FlooNoc::DIR_ZPLUS:
+        pos_x = this->x;
+        pos_y = this->y;
+        pos_z = this->z + 1;
+        break;
+    case FlooNoc::DIR_ZMINUS:
+        pos_x = this->x;
+        pos_y = this->y;
+        pos_z = this->z - 1;
         break;
     }
 }
 
-int Router::get_req_queue(int from_x, int from_y)
+// TODO: I am not quite sure I understand the logic for how this function is used yet.
+// Implement what I assume will do Z->X->Y routing for now.
+int Router::get_req_queue(int from_x, int from_y, int from_z)
 {
     int queue_index = 0;
-    if (from_x != this->x)
+    if (from_z != this->z)
+    {
+        queue_index = from_z < this->z ? FlooNoc::DIR_ZMINUS : FlooNoc::DIR_ZPLUS;
+    }
+    else if (from_x != this->x)
     {
         queue_index = from_x < this->x ? FlooNoc::DIR_LEFT : FlooNoc::DIR_RIGHT;
     }
@@ -335,7 +373,7 @@ void Router::reset(bool active)
     if (active)
     {
         this->current_queue = 0;
-        for (int i = 0; i < 5; i++)
+        for (int i = 0; i < 7; i++)
         {
             this->stalled_queues[i] = false;
         }

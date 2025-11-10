@@ -22,6 +22,7 @@
 #include "test0.hpp"
 #include "test1.hpp"
 #include "test2.hpp"
+#include "test3d.hpp"
 
 #define CYCLES_ERROR 0.01f
 
@@ -32,11 +33,12 @@ Testbench::Testbench(vp::ComponentConf &config)
 
     this->nb_cluster_x = this->get_js_config()->get_int("nb_cluster_x");
     this->nb_cluster_y = this->get_js_config()->get_int("nb_cluster_y");
+    this->nb_cluster_z = this->get_js_config()->get_int("nb_cluster_z");
 
     this->cluster_base = this->get_js_config()->get_uint("cluster_base");
     this->cluster_size = this->get_js_config()->get_uint("cluster_size");
 
-    int nb_cluster = this->nb_cluster_x*this->nb_cluster_y;
+    int nb_cluster = this->nb_cluster_x*this->nb_cluster_y*this->nb_cluster_z;
 
     this->noc_ni_itf.resize(nb_cluster);
     this->generator_control_itf.resize(nb_cluster);
@@ -46,25 +48,30 @@ Testbench::Testbench(vp::ComponentConf &config)
     {
         for (int y=0; y<this->nb_cluster_y; y++)
         {
-            int cid = y*this->nb_cluster_x + x;
+            for (int z=0; z<this->nb_cluster_z; z++)
+            {
+                int cid = z*this->nb_cluster_y*this->nb_cluster_x + y*this->nb_cluster_x + x;
 
-            this->new_master_port(
-                "generator_control_" + std::to_string(x) + "_" + std::to_string(y),
-                &this->generator_control_itf[cid]);
+                this->new_master_port(
+                    "generator_control_" + std::to_string(x) + "_" + std::to_string(y) + "_" +  std::to_string(z),
+                    &this->generator_control_itf[cid]);
 
-            this->new_master_port(
-                "receiver_control_" + std::to_string(x) + "_" + std::to_string(y),
-                &this->receiver_control_itf[cid]);
+                this->new_master_port(
+                    "receiver_control_" + std::to_string(x) + "_" + std::to_string(y) + "_" +  std::to_string(z),
+                    &this->receiver_control_itf[cid]);
 
-            this->new_master_port(
-                "noc_ni_" + std::to_string(x) + "_" + std::to_string(y),
-                &this->noc_ni_itf[cid]);
+                this->new_master_port(
+                    "noc_ni_" + std::to_string(x) + "_" + std::to_string(y) + "_" +  std::to_string(z),
+                    &this->noc_ni_itf[cid]);
+            }
+
         }
     }
 
     this->tests.push_back(new Test0(this));
     this->tests.push_back(new Test1(this));
     this->tests.push_back(new Test2(this));
+    this->tests.push_back(new Test3D(this));
 }
 
 void Testbench::reset(bool active)
@@ -89,29 +96,29 @@ void Testbench::exec_next_test()
     }
 }
 
-int Testbench::get_cluster_id(int x, int y)
+int Testbench::get_cluster_id(int x, int y, int z)
 {
-    return this->nb_cluster_x * y + x;
+    return z*this->nb_cluster_y*this->nb_cluster_x + this->nb_cluster_x * y + x;
 }
 
-uint64_t Testbench::get_cluster_base(int x, int y)
+uint64_t Testbench::get_cluster_base(int x, int y, int z)
 {
-    return this->cluster_base + this->cluster_size * this->get_cluster_id(x, y);
+    return this->cluster_base + this->cluster_size * this->get_cluster_id(x, y, z);
 }
 
-vp::IoMaster *Testbench::get_noc_ni_itf(int x, int y)
+vp::IoMaster *Testbench::get_noc_ni_itf(int x, int y, int z)
 {
-    return &this->noc_ni_itf[this->get_cluster_id(x, y)];
+    return &this->noc_ni_itf[this->get_cluster_id(x, y, z)];
 }
 
-TrafficGeneratorConfigMaster *Testbench::get_generator(int x, int y)
+TrafficGeneratorConfigMaster *Testbench::get_generator(int x, int y, int z)
 {
-    return &this->generator_control_itf[this->get_cluster_id(x, y)];
+    return &this->generator_control_itf[this->get_cluster_id(x, y, z)];
 }
 
-TrafficReceiverConfigMaster *Testbench::get_receiver(int x, int y)
+TrafficReceiverConfigMaster *Testbench::get_receiver(int x, int y, int z)
 {
-    return &this->receiver_control_itf[this->get_cluster_id(x, y)];
+    return &this->receiver_control_itf[this->get_cluster_id(x, y, z)];
 }
 
 void Testbench::test_end(int status)

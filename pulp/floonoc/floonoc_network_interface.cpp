@@ -26,25 +26,26 @@
 #include "floonoc_router.hpp"
 #include "floonoc_network_interface.hpp"
 
-NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y)
-    : vp::Block(noc, "ni_" + std::to_string(x) + "_" + std::to_string(y)),
+NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y, int z)
+    : vp::Block(noc, "ni_" + std::to_string(x) + "_" + std::to_string(y)  + "_" + std::to_string(z)),
       fsm_event(this, &NetworkInterface::fsm_handler), signal_narrow_req(*this, "narrow_req", 64),
       signal_wide_req(*this, "wide_req", 64)
 {
     this->noc = noc;
     this->x = x;
     this->y = y;
-    this->target = noc->get_target(x, y);
+    this->z = z;
+    this->target = noc->get_target(x, y, z);
     this->ni_outstanding_reqs = this->noc->get_js_config()->get("ni_outstanding_reqs")->get_int();
 
     traces.new_trace("trace", &trace, vp::DEBUG);
 
     // Network interface input port
     this->narrow_input_itf.set_req_meth(&NetworkInterface::narrow_req);
-    noc->new_slave_port("narrow_input_" + std::to_string(x) + "_" + std::to_string(y),
+    noc->new_slave_port("narrow_input_" + std::to_string(x) + "_" + std::to_string(y) + "_" + std::to_string(z),
                         &this->narrow_input_itf, this);
     this->wide_input_itf.set_req_meth(&NetworkInterface::wide_req);
-    noc->new_slave_port("wide_input_" + std::to_string(x) + "_" + std::to_string(y),
+    noc->new_slave_port("wide_input_" + std::to_string(x) + "_" + std::to_string(y) + "_" + std::to_string(z),
                         &this->wide_input_itf, this);
 
 }
@@ -76,11 +77,16 @@ int NetworkInterface::get_y()
     return this->y;
 }
 
-void NetworkInterface::unstall_queue(int from_x, int from_y)
+int NetworkInterface::get_z()
+{
+    return this->z;
+}
+
+void NetworkInterface::unstall_queue(int from_x, int from_y, int from_z)
 {
     // The request which was previously denied has been granted. Unstall the output queue
     // and schedule the FSM handler to check if something has to be done
-    this->trace.msg(vp::Trace::LEVEL_TRACE, "Unstalling queue (position: (%d, %d), queue: %d)\n", from_x, from_y);
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Unstalling queue (position: (%d, %d, %d), queue: %d)\n", from_x, from_y, from_z);
     this->stalled = false;
     this->fsm_event.enqueue();
 }
@@ -119,7 +125,7 @@ vp::IoReqStatus NetworkInterface::req(vp::Block *__this, vp::IoReq *req)
     // reached
     req->set_latency(0); // Actually dont do that because the cluster sent them with some latency that doesnt make sense
     // Just enqueue it and trigger the FSM which will check if it must be processed now
-    _this->add_pending_burst(req, true, _this->clock.get_cycles() + req->get_latency(), std::make_tuple(_this->x, _this->y));
+    _this->add_pending_burst(req, true, _this->clock.get_cycles() + req->get_latency(), std::make_tuple(_this->x, _this->y, _this->z));
 
     _this->fsm_event.enqueue(
         std::max((int64_t)1, _this->pending_bursts_timestamp.front() - _this->clock.get_cycles()));
@@ -138,7 +144,7 @@ vp::IoReqStatus NetworkInterface::req(vp::Block *__this, vp::IoReq *req)
 }
 
 
-void NetworkInterface::req_from_router(vp::IoReq *req, int from_x, int from_y)
+void NetworkInterface::req_from_router(vp::IoReq *req, int from_x, int from_y, int from_z)
 {
     NetworkInterface *origin_ni = *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);
 
@@ -153,8 +159,8 @@ void NetworkInterface::req_from_router(vp::IoReq *req, int from_x, int from_y)
         // Handle it by sending it to the target network interface and then sending the response packets back respecting the bandwidth of the network
         vp::IoReq *burst = *(vp::IoReq **)req->arg_get(FlooNoc::REQ_BURST); // The burst that was stored in the request
         vp::IoMaster *target = this->target;
-        this->trace.msg(vp::Trace::LEVEL_DEBUG, "Sending request to target (target name: %s)(req: %p, base: 0x%x, size: 0x%x, position: (%d, %d))\n",
-                        target->get_name().c_str(), req, req->get_addr(), req->get_size(), this->x, this->y);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "Sending request to target (target name: %s)(req: %p, base: 0x%x, size: 0x%x, position: (%d, %d, %d))\n",
+                        target->get_name().c_str(), req, req->get_addr(), req->get_size(), this->x, this->y, this->z);
         // This does the actual operation(read, write or atomic operation) on the target
         // Note: Memory is read/written already here. The backward path is only used to get the delay of the network.
         vp::IoReqStatus result = target->req(req);
@@ -176,7 +182,7 @@ void NetworkInterface::req_from_router(vp::IoReq *req, int from_x, int from_y)
         if(!burst->get_is_write()){
             // If the burst is a read burst, we need to send the data back to the origin
             // For a write nothing needs to be done. The sending NI will take care of it
-            this->add_pending_burst(burst, false, 0, std::make_tuple(origin_ni->get_x(), origin_ni->get_y()));
+            this->add_pending_burst(burst, false, 0, std::make_tuple(origin_ni->get_x(), origin_ni->get_y(), origin_ni->get_z()));
             // Enqueue the FSM event to process the burst by sending the data back
             this->fsm_event.enqueue();
 
@@ -192,9 +198,9 @@ void NetworkInterface::req_from_router(vp::IoReq *req, int from_x, int from_y)
         {
             // In case the access is denied, we need to stall all routers going this NI to prevent
             // any other request from arriving.
-            this->noc->get_req_router(from_x, from_y)->stall_queue(this->x, this->y);
-            this->noc->get_wide_router(from_x, from_y)->stall_queue(this->x, this->y);
-            this->noc->get_rsp_router(from_x, from_y)->stall_queue(this->x, this->y);
+            this->noc->get_req_router(from_x, from_y, from_z)->stall_queue(this->x, this->y, this->z);
+            this->noc->get_wide_router(from_x, from_y, from_z)->stall_queue(this->x, this->y, this->z);
+            this->noc->get_rsp_router(from_x, from_y, from_z)->stall_queue(this->x, this->y, this->z);
             this->routers_stalled = true;
         }
     }
@@ -202,8 +208,8 @@ void NetworkInterface::req_from_router(vp::IoReq *req, int from_x, int from_y)
     {
         // Received a data (non addr) request from a router.
         // Account it on the corresponding burst and notifiy the burst initator (cluster)
-        this->trace.msg(vp::Trace::LEVEL_TRACE, "Received non-addr response from router (req: %p, base: 0x%x, size: 0x%x, position: (%d, %d))\n",
-                        req, req->get_addr(), req->get_size(), this->x, this->y);
+        this->trace.msg(vp::Trace::LEVEL_TRACE, "Received non-addr response from router (req: %p, base: 0x%x, size: 0x%x, position: (%d, %d, %d))\n",
+                        req, req->get_addr(), req->get_size(), this->x, this->y, this->z);
         this->handle_response(req);
     }
 }
@@ -232,9 +238,9 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         !_this->target_stalled)
     {
         // If we removed a pending burst and the number of pending bursts was the maximum, notify the local router that it can send another request
-        _this->noc->get_req_router(_this->x, _this->y)->unstall_queue(_this->x, _this->y);
-        _this->noc->get_wide_router(_this->x, _this->y)->unstall_queue(_this->x, _this->y);
-        _this->noc->get_rsp_router(_this->x, _this->y)->unstall_queue(_this->x, _this->y);
+        _this->noc->get_req_router(_this->x, _this->y, _this->z)->unstall_queue(_this->x, _this->y, _this->z);
+        _this->noc->get_wide_router(_this->x, _this->y, _this->z)->unstall_queue(_this->x, _this->y, _this->z);
+        _this->noc->get_rsp_router(_this->x, _this->y, _this->z)->unstall_queue(_this->x, _this->y, _this->z);
         _this->routers_stalled = false;
     }
 
@@ -260,7 +266,7 @@ void NetworkInterface::remove_pending_burst(void)
 }
 
 
-void NetworkInterface::add_pending_burst(vp::IoReq *burst, bool isaddr, int64_t timestamp, std::tuple<int, int> origin_pos){
+void NetworkInterface::add_pending_burst(vp::IoReq *burst, bool isaddr, int64_t timestamp, std::tuple<int, int, int> origin_pos){
     this->pending_bursts.push(burst);
     this->pending_burst_isaddr.push(isaddr);
     this->pending_bursts_timestamp.push(timestamp);
@@ -312,21 +318,22 @@ void NetworkInterface::handle_addr_req(void){
         }
         else
         {
-            this->trace.msg(vp::Trace::LEVEL_TRACE, "Sending addr request to router (req: %p, base: 0x%x, size: 0x%x, destination: (%d, %d))\n",
-                            req, base, size, entry->x, entry->y);
+            this->trace.msg(vp::Trace::LEVEL_TRACE, "Sending addr request to router (req: %p, base: 0x%x, size: 0x%x, destination: (%d, %d, %d))\n",
+                            req, base, size, entry->x, entry->y, entry->z);
 
             req->set_addr(base - entry->remove_offset);
             *req->arg_get(FlooNoc::REQ_DEST_X) = (void *)(long)entry->x;
             *req->arg_get(FlooNoc::REQ_DEST_Y) = (void *)(long)entry->y;
+            *req->arg_get(FlooNoc::REQ_DEST_Z) = (void *)(long)entry->z;
 
             // Note that the router may not grant the request if its input queue is full.
             // In this case we must stall the network interface
-            Router *router = this->noc->get_router(this->x, this->y, wide, req->get_is_write(), true);
+            Router *router = this->noc->get_router(this->x, this->y, wide, req->get_is_write(), true, this->z);
 
-            this->stalled = router->handle_request(req, this->x, this->y);
+            this->stalled = router->handle_request(req, this->x, this->y, this->z);
             if (this->stalled)
             {
-                this->trace.msg(vp::Trace::LEVEL_TRACE, "Stalling network interface (position: (%d, %d))\n", this->x, this->y);
+                this->trace.msg(vp::Trace::LEVEL_TRACE, "Stalling network interface (position: (%d, %d))\n", this->x, this->y, this->z);
             }
 
             if (req->get_is_write())
@@ -334,7 +341,7 @@ void NetworkInterface::handle_addr_req(void){
                 // Modifiy the burst so it is no longer an address request and will get handled as a data request in the next cycle
                 this->trace.msg(vp::Trace::LEVEL_TRACE, "Modifying burst to be a data request\n");
                 this->pending_burst_isaddr.front() = false;
-                this->pending_bursts_origin_pos.front() = std::make_tuple(entry->x, entry->y); // This is actually where the data will be sent back. TODO Rename this variable
+                this->pending_bursts_origin_pos.front() = std::make_tuple(entry->x, entry->y, entry->z); // This is actually where the data will be sent back. TODO Rename this variable
             }
             else{
                 this->remove_pending_burst();
@@ -358,7 +365,7 @@ void NetworkInterface::handle_data_req(void){
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Handling data burst\n");
 
     vp::IoReq *burst = this->pending_bursts.front();
-    std::tuple<int, int> origin_pos = this->pending_bursts_origin_pos.front();
+    std::tuple<int, int, int> origin_pos = this->pending_bursts_origin_pos.front();
     bool wide = *(bool *)burst->arg_get(FlooNoc::REQ_WIDE);
 
     // If we handle the burst for the first time, we need to store the base, data and size
@@ -401,8 +408,10 @@ void NetworkInterface::handle_data_req(void){
     // Store information in the request which will be needed by the routers and the target
     int src_x = std::get<0>(origin_pos);
     int src_y = std::get<1>(origin_pos);
+    int src_z = std::get<2>(origin_pos);
     *req->arg_get(FlooNoc::REQ_DEST_X) = (void *)(long)src_x;
     *req->arg_get(FlooNoc::REQ_DEST_Y) = (void *)(long)src_y;
+    *req->arg_get(FlooNoc::REQ_DEST_Z) = (void *)(long)src_z;
 
 
     // Update the current burst for next request
@@ -419,18 +428,18 @@ void NetworkInterface::handle_data_req(void){
 
     // And forward to the first router which is at the same position as the network
     // interface
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Sending data request to router (req: %p, base: %x, size: %x, destination: (%d, %d))\n",
-                    req, req->get_addr(), size, src_x, src_y);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Sending data request to router (req: %p, base: %x, size: %x, destination: (%d, %d, %d))\n",
+                    req, req->get_addr(), size, src_x, src_y, src_z);
     // Note that the router may not grant the request if its input queue is full.
     // In this case we must stall the network interface
 
-    Router *router = this->noc->get_router(this->x, this->y, wide, req->get_is_write(), false);
+    Router *router = this->noc->get_router(this->x, this->y, wide, req->get_is_write(), false, this->z);
 
-    this->stalled = router->handle_request(req, this->x, this->y);
+    this->stalled = router->handle_request(req, this->x, this->y, this->z);
 
     if (this->stalled)
     {
-        this->trace.msg(vp::Trace::LEVEL_TRACE, "Stalling network interface (position: (%d, %d))\n", this->x, this->y);
+        this->trace.msg(vp::Trace::LEVEL_TRACE, "Stalling network interface (position: (%d, %d, %d))\n", this->x, this->y, this->z);
     }
 
     // Check in next cycle if there is something to do
