@@ -39,7 +39,6 @@ from pulp.adv_dbg_unit.pulp_tap import Pulp_tap
 from pulp.adv_dbg_unit.riscv_tap import Riscv_tap
 from gdbserver.gdbserver import Gdbserver
 import utils.loader.loader
-from gvrun.parameter import TargetParameter
 from gvrun.attribute import Tree
 
 
@@ -74,11 +73,6 @@ class Soc(st.Component):
         udma_conf = self.load_property_file(udma_conf_path)
         fc_events = soc_conf.get_property('peripherals/fc_itc/irq')
 
-        TargetParameter(
-            self, name='binary', value=None, description='Binary to be loaded and started',
-            cast=str
-        )
-
         #
         # Components
         #
@@ -91,6 +85,7 @@ class Soc(st.Component):
                 binary = args.binary
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary)
+        self.loader = loader
 
         # Debug ROM
         debug_rom = memory.Memory(self, 'debug_rom',
@@ -105,6 +100,7 @@ class Soc(st.Component):
 
         # FC
         fc = iss.FcCore(self, 'fc')
+        self.fc = fc
 
         # FC ITC
         fc_itc = itc.Itc_v1(self, 'fc_itc')
@@ -346,25 +342,8 @@ class Soc(st.Component):
         # Pulp TAP
         self.bind(pulp_tap, 'io', soc_ico, 'debug')
 
-        # Make sure the loader is notified by any executable attached to the hieararchy of this
-        # component so that it is automatically loaded
-        self.loader = loader
-        self.register_binary_handler(self.handle_binary)
-
     def gen_gtkw_conf(self, tree, traces):
         if tree.get_view() == 'overview':
             self.vcd_group(skip=True)
         else:
             self.vcd_group(skip=False)
-
-    def configure(self):
-        # We configure the loader binary now int he configure steps since it is coming from
-        # a parameter which can be set either from command line or from the build process
-        binary = self.get_parameter('binary')
-        if binary is not None:
-            self.loader.set_binary(binary)
-
-    def handle_binary(self, binary):
-        # This gets called when an executable is attached to a hierarchy of components containing
-        # this one
-        self.set_parameter('binary', binary)

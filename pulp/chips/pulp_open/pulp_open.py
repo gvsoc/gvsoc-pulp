@@ -23,6 +23,7 @@ from pulp.padframe.padframe_v1 import Padframe
 import interco.router_proxy as router_proxy
 import memory.dramsys
 from gvrun.attribute import Tree, Area, Value
+from gvrun.parameter import TargetParameter
 
 class PulpOpenAttr(Tree):
     def __init__(self, parent):
@@ -36,6 +37,11 @@ class Pulp_open(st.Component):
             cluster_config_file='pulp/chips/pulp_open/cluster.json', padframe_config_file='pulp/chips/pulp_open/padframe.json',
             use_ddr=False):
         super(Pulp_open, self).__init__(parent, name)
+
+        TargetParameter(
+            self, name='binary', value=None, description='Binary to be loaded and started',
+            cast=str
+        )
 
         #
         # Properties
@@ -67,9 +73,11 @@ class Pulp_open(st.Component):
         for cid in range(0, nb_cluster):
             cluster_name = get_cluster_name(cid)
             clusters.append(Cluster(self, cluster_name, config_file=cluster_config_file, cid=cid))
+        self.clusters = clusters
 
         # Soc
         soc = Soc(self, 'soc', attr.soc, parser, config_file=soc_config_file, chip=self, cluster=clusters[0])
+        self.soc = soc
 
         # Fast clock
         fast_clock = Clock_domain(self, 'fast_clock', frequency=24576063*2)
@@ -169,6 +177,25 @@ class Pulp_open(st.Component):
         self.bind(soc, 'axi_proxy', axi_proxy, 'input')
         if use_ddr:
             self.bind(soc, 'ddr', ddr, 'input')
+
+        # Make sure we are notified by any executable attached to the hieararchy of this
+        # component so that it is automatically loaded
+        self.register_binary_handler(self.handle_binary)
+
+    def configure(self):
+        # We configure the loader binary now int he configure steps since it is coming from
+        # a parameter which can be set either from command line or from the build process
+        binary = self.get_parameter('binary')
+        if binary is not None:
+            self.soc.loader.set_binary(binary)
+            self.soc.fc.handle_executable(binary)
+            for cluster in self.clusters:
+                cluster.handle_executable(binary)
+
+    def handle_binary(self, binary):
+        # This gets called when an executable is attached to a hierarchy of components containing
+        # this one
+        self.set_parameter('binary', binary)
 
 
     def gen_gtkw_conf(self, tree, traces):

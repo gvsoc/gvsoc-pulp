@@ -109,6 +109,7 @@ class Cluster(st.Component):
         pes = []
         for i in range(0, nb_pe):
             pes.append(iss.ClusterCore(self, 'pe%d' % i, cluster_id=cid, core_id=i))
+        self.cores = pes
 
         # Icache
         icache = Hierarchical_cache(self, 'icache', cluster_conf.get_property('icache/config'))
@@ -336,3 +337,7 @@ class Cluster(st.Component):
             self.vcd_group(skip=True)
         else:
             self.vcd_group(skip=False)
+
+    def handle_executable(self, binary):
+        for core in self.cores:
+            core.handle_executable(binary)
