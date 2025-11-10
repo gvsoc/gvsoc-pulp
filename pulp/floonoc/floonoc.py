@@ -46,9 +46,12 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
     router_input_queue_size: int
         Size of the routers input queues. This gives the number of requests which can be buffered
         before the source output queue is stalled.
+    dim_Z: int
+        The Z dimension of the grid. This should also include targets on the borders.
     """
     def __init__(self, parent: gvsoc.systree.Component, name, narrow_width: int, wide_width:int,
-            dim_x: int, dim_y:int, ni_outstanding_reqs: int=8, router_input_queue_size: int=2):
+            dim_x: int, dim_y:int, ni_outstanding_reqs: int=8, router_input_queue_size: int=2
+            dim_z: int = 1):
         super().__init__(parent, name)
 
         self.add_sources([
@@ -66,8 +69,9 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         self.add_property('dim_x', dim_x)
         self.add_property('dim_y', dim_y)
         self.add_property('router_input_queue_size', router_input_queue_size)
+        self.add_property('is_3d', (dim_z > 1))
 
-    def __add_mapping(self, name: str, base: int, size: int, x: int, y: int, remove_offset:int =0):
+    def __add_mapping(self, name: str, base: int, size: int, x: int, y: int, remove_offset:int =0, z: int = 1):
         self.get_property('mappings')[name] =  {'base': base, 'size': size, 'x': x, 'y': y, 'remove_offset':remove_offset}
 
     def add_router(self, x: int, y: int):
@@ -79,10 +83,12 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
             X position of the router in the grid
         y: int
             Y position of the router in the grid
+        z: int
+            Z position of the router in the grid
         """
-        self.get_property('routers').append([x, y])
+        self.get_property('routers').append([x, y, z])
 
-    def add_network_interface(self, x: int, y: int):
+    def add_network_interface(self, x: int, y: int, z: int = 1):
         """Instantiate a network interface in the grid.
 
         A network interface should be instantiated at every node where a burst can be injected,
@@ -94,11 +100,13 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
             X position of the network interface in the grid
         y: int
             Y position of the network interface in the grid
+        z: int
+            Z position of the network interface in the grid
         """
-        self.get_property('network_interfaces').append([x, y])
+        self.get_property('network_interfaces').append([x, y, z])
 
     def o_NARROW_MAP(self, itf: gvsoc.systree.SlaveItf, base: int, size: int,
-            x: int, y: int, name: str=None, rm_base: bool=False, remove_offset:int =0):
+            x: int, y: int, name: str=None, rm_base: bool=False, remove_offset:int =0, z: int = 1):
         """Binds the output of a node to a target, associated to a memory-mapped region.
 
         Parameters
@@ -120,18 +128,20 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
             if True, the base address is substracted to the address of any request going through
         remove_offset: int
             Offset to remove from the address before applying the mapping
+        z: int
+            Z position of the target in the grid
         """
         if name is None:
             name = itf.component.name
         if rm_base and remove_offset == 0:
             remove_offset =base
-        self.__add_mapping(f"narrow_{name}", base=base, size=size, x=x, y=y, remove_offset=remove_offset)
+        self.__add_mapping(f"narrow_{name}", base=base, size=size, x=x, y=y, z=z remove_offset=remove_offset)
         self.itf_bind(f"narrow_{name}", itf, signature='io')
 
 
 
     def o_WIDE_MAP(self, itf: gvsoc.systree.SlaveItf, base: int, size: int,
-            x: int, y: int, name: str=None, rm_base: bool=False, remove_offset:int =0):
+            x: int, y: int, name: str=None, rm_base: bool=False, remove_offset:int =0, z: int = 1):
         """Binds the output of a node to a target, associated to a memory-mapped region.
 
         Parameters
@@ -153,15 +163,17 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
             if True, the base address is substracted to the address of any request going through
         remove_offset: int
             Offset to remove from the address before applying the mapping
+        z: int
+            Z position of the target in the grid
         """
         if name is None:
             name = itf.component.name
         if rm_base and remove_offset == 0:
             remove_offset =base
-        self.__add_mapping(f"wide_{name}", base=base, size=size, x=x, y=y, remove_offset=remove_offset)
+        self.__add_mapping(f"wide_{name}", base=base, size=size, x=x, y=y, z=z, remove_offset=remove_offset)
         self.itf_bind(f"wide_{name}", itf, signature='io')
 
-    def i_NARROW_INPUT(self, x: int, y: int) -> gvsoc.systree.SlaveItf:
+    def i_NARROW_INPUT(self, x: int, y: int, z: int = 1) -> gvsoc.systree.SlaveItf:
         """Returns the input port of a node.
 
         Requests can be injected to the noc using this interface. The noc will then
@@ -173,15 +185,17 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
             The x position of the node in the grid
         y: int
             The y position of the node in the grid
+        z: int
+            The z position of the node in the grid
 
         Returns
         ----------
         gvsoc.systree.SlaveItf
             The slave interface
         """
-        return gvsoc.systree.SlaveItf(self, f'narrow_input_{x}_{y}', signature='io')
+        return gvsoc.systree.SlaveItf(self, f'narrow_input_{x}_{y}' + (f'_{z}' if z > 1 else ''), signature='io')
 
-    def i_WIDE_INPUT(self, x: int, y: int) -> gvsoc.systree.SlaveItf:
+    def i_WIDE_INPUT(self, x: int, y: int, z: int = 1) -> gvsoc.systree.SlaveItf:
         """Returns the input port of a node.
 
         Requests can be injected to the noc using this interface. The noc will then
@@ -192,14 +206,16 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         x: int
             The x position of the node in the grid
         y: int
-            The y position of the node in the grid
+            The y position of the node in the gri
+        z: int
+            The z position of the node in the grid
 
         Returns
         ----------
         gvsoc.systree.SlaveItf
             The slave interface
         """
-        return gvsoc.systree.SlaveItf(self, f'wide_input_{x}_{y}', signature='io')
+        return gvsoc.systree.SlaveItf(self, f'wide_input_{x}_{y}'  + (f'_{z}' if z > 1 else ''), signature='io')
 
 
 
@@ -212,7 +228,7 @@ class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
     It contains:
      - a central part made of one cluster, one router and one network interface at each node
      - a border of targets
-    If the grid contains X by Y clusters, the whole grid is X+2 by Y+2 as there are borders in each
+    If the grid contains X by Y by Z clusters, the whole base grid is X+2 by Y+2 as there are borders in each
     direction for the targets.
 
     Attributes
@@ -228,9 +244,11 @@ class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
         Number of clusters on the X direction. This should not include the targets on the borders.
     nb_y_clusters: int
         Number of clusters on the Y direction. This should not include the targets on the borders.
+    nb_z_clusters: int
+        Number of clusters on the Z direction. This should not include the targets on the borders.
     """
     def __init__(self, parent: gvsoc.systree.Component, name, wide_width: int,narrow_width:int, nb_x_clusters: int,
-            nb_y_clusters, router_input_queue_size=2, ni_outstanding_reqs: int=2):
+            nb_y_clusters, router_input_queue_size=2, ni_outstanding_reqs: int=2, nb_z_clusters: int = 1):
         # The total grid contains 1 more node on each direction for the targets
         super().__init__(parent, name, wide_width=wide_width, narrow_width=narrow_width, dim_x=nb_x_clusters+2, dim_y=nb_y_clusters+2, router_input_queue_size=router_input_queue_size, ni_outstanding_reqs=ni_outstanding_reqs)
 

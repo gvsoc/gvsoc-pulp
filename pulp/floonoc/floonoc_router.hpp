@@ -42,25 +42,26 @@ public:
     void reset(bool active);
 
     // This gets called by other routers or a network interface to move a request to this router
-    bool handle_request(vp::IoReq *req, int from_x, int from_y);
+    bool handle_request(vp::IoReq *req, int from_x, int from_y, int from_z = 0);
     // Called by other routers or NI to unstall an output queue after an input queue became available
-    void unstall_queue(int from_x, int from_y);
+    void unstall_queue(int from_x, int from_y, int from_z = 0);
     // Called by NI to stall the queues in case no more request should be sent to NI
-    void stall_queue(int from_x, int from_y);
+    void stall_queue(int from_x, int from_y, int from_z = 0);
 
 private:
     // FSM event handler called when something happened and queues need to be checked to see
     // if a request should be handled.
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
     // Called when a request has reached its destination position and should be sent to a target
-    void send_to_target_ni(vp::IoReq *req, int pos_x, int pos_y);
+    void send_to_target_ni(vp::IoReq *req, int pos_x, int pos_y, int pos_z = 0);
     // Get the position of the next router which should handle a request.
-    void get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_y);
+    void get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_y, int dest_z, int &next_z);
     // Get the index of the queue corresponding to a source or destination position
-    int get_req_queue(int from_x, int from_y);
+    int get_req_queue(int from_x, int from_y, int from_z = 0);
     // Return the source or destination position which corresponds to a source or destination
     // queue index
-    void get_pos_from_queue(int queue, int &pos_x, int &pos_y);
+    // TODO: How to handle default reference? make internal field?
+    void get_pos_from_queue(int queue, int &pos_x, int &pos_y, int &pos_z);
 
     // Unstalls the router or network interface corresponding to the in_queue_index
     void unstall_previous(vp::IoReq *req, int in_queue_index);
@@ -73,6 +74,8 @@ private:
     int x;
     // Y position of this router in the grid
     int y;
+    // Z position of this router in the grid
+    int z;
     // Size of the input queues. This limits the number of requests from the same source which can
     // be pending
     int queue_size;
