@@ -34,7 +34,7 @@ class Pulp_open(st.Component):
 
     def __init__(self, parent, name, attr: PulpOpenAttr, parser, soc_config_file='pulp/chips/pulp_open/soc.json',
             cluster_config_file='pulp/chips/pulp_open/cluster.json', padframe_config_file='pulp/chips/pulp_open/padframe.json',
-            use_ddr=False):
+            use_ddr=False, pulpnn=False):
         super(Pulp_open, self).__init__(parent, name)
 
         #
@@ -66,10 +66,10 @@ class Pulp_open(st.Component):
         clusters = []
         for cid in range(0, nb_cluster):
             cluster_name = get_cluster_name(cid)
-            clusters.append(Cluster(self, cluster_name, config_file=cluster_config_file, cid=cid))
+            clusters.append(Cluster(self, cluster_name, config_file=cluster_config_file, cid=cid, pulpnn=pulpnn))
 
         # Soc
-        soc = Soc(self, 'soc', attr.soc, parser, config_file=soc_config_file, chip=self, cluster=clusters[0])
+        soc = Soc(self, 'soc', attr.soc, parser, config_file=soc_config_file, chip=self, cluster=clusters[0], pulpnn=pulpnn)
 
         # Fast clock
         fast_clock = Clock_domain(self, 'fast_clock', frequency=24576063*2)
