@@ -19,15 +19,18 @@
 
 import pulp.snitch.snitch_core as iss
 from pulp.mempool.hierarchical_cache import Hierarchical_cache
+from pulp.mempool.xbar.mempool_xbar import MempoolXbar
+from pulp.mempool.l1_interconnect.l1_remote_itf import L1_RemoteItf
 import pulp.teranoc.l1_subsystem as l1_subsystem
 import interco.router as router
 import gvsoc.systree as st
 from pulp.snitch.sequencer import Sequencer
-from pulp.mempool.l1_address_scrambler import L1_AddressScrambler
+from pulp.mempool.l1_interconnect.l1_address_scrambler import L1_AddressScrambler
+from pulp.teranoc.l1_interconnect.l1_noc_itf import L1_NocItf
 
 class Tile(st.Component):
 
-    def __init__(self, parent, name, parser, tile_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_tiles_per_group: int=16, nb_groups: int=16, total_cores: int= 256, bank_factor: int=4, nb_remote_ports_per_tile: int=2, axi_data_width: int=64):
+    def __init__(self, parent, name, parser, tile_id: int=0, group_id_x: int=0, group_id_y: int=0, nb_cores_per_tile: int=4, nb_tiles_per_group: int=16, nb_x_groups: int=4, nb_y_groups: int=4, total_cores: int= 256, bank_factor: int=4, nb_remote_ports_per_tile: int=2, axi_data_width: int=64):
         super().__init__(parent, name)
 
         [args, __] = parser.parse_known_args()
@@ -39,6 +42,8 @@ class Tile(st.Component):
         ##########               Design Variables             ##########
         ################################################################
         # Hardware parameters 
+        group_id = group_id_x * nb_y_groups + group_id_y
+        nb_groups = nb_x_groups * nb_y_groups
         # global_tile_id = tile_id + group_id * nb_tiles_per_group
         Xfrep = 0
         # stack_size_per_tile = 0x800
@@ -62,23 +67,35 @@ class Tile(st.Component):
                                         nb_remote_group_masters=nb_remote_ports_per_tile, nb_pe=nb_cores_per_tile, \
                                         size=mem_size, bandwidth=4, nb_banks_per_tile=nb_cores_per_tile*bank_factor, \
                                         axi_data_width=axi_data_width)
+
+        # L1 NoC Interface
+        l1_noc_itf = L1_NocItf(self, 'l1_noc_itf', nb_req_ports=nb_remote_ports_per_tile, nb_resp_ports=nb_remote_ports_per_tile, \
+                                    tile_id=tile_id, group_id_x=group_id_x, group_id_y=group_id_y, nb_x_groups=nb_x_groups, nb_y_groups=nb_y_groups, \
+                                    byte_offset=2, num_tiles_per_group=nb_tiles_per_group, num_banks_per_tile=nb_cores_per_tile*bank_factor)
+
         # Shared icache
-        icache = Hierarchical_cache(self, 'shared_icache', nb_cores=nb_cores_per_tile)
+        icache = Hierarchical_cache(self, 'shared_icache', nb_cores=nb_cores_per_tile, synchronous=False)
 
         # Address Scrambler
         l1_addr_scrambler_list = []
         for i in range(0, nb_cores_per_tile):
             l1_addr_scrambler_list.append(L1_AddressScrambler(self, f'addr_scrambler{i}', \
                                                        bypass=False, num_tiles=int(total_cores/nb_cores_per_tile), \
-                                                       seq_mem_size_per_tile=512, byte_offset=2, \
+                                                       seq_mem_size_per_tile=512*nb_cores_per_tile, byte_offset=2, \
                                                        num_banks_per_tile=nb_cores_per_tile*bank_factor))
 
         # Route
         ico_list=[]
         for i in range(0, nb_cores_per_tile):
             ico_list.append(router.Router(self, 'ico%d' % i, bandwidth=4, latency=0))
-        axi_ico = router.Router(self, 'axi_ico', bandwidth=axi_data_width, latency=1)
+
+        core_axi_itf = L1_RemoteItf(self, 'core_axi_itf', req_latency=1, resp_latency=1, bandwidth=4, shared_rw_bandwidth=True, synchronous=False)
+        cache_axi_itf = L1_RemoteItf(self, 'cache_axi_itf', req_latency=0, resp_latency=1, bandwidth=axi_data_width, shared_rw_bandwidth=False, synchronous=False)
+        # axi_ico = MempoolXbar(self, 'axi_ico', latency=1, bandwidth=axi_data_width, nb_input_port=2, nb_output_port=1, shared_rw_bandwidth=False,
+        #                       max_input_pending_size=axi_data_width, use_selector=False)
+        axi_ico = router.Router(self, 'axi_ico', latency=1, bandwidth=axi_data_width, synchronous=False, shared_rw_bandwidth=False, max_input_pending_size=axi_data_width)
         axi_ico.add_mapping('output')
+        _ = axi_ico.i_INPUT(1)
 
         # Core Complex
         for core_id in range(0, nb_cores_per_tile):
@@ -117,16 +134,23 @@ class Tile(st.Component):
         self.bind(l1, 'remote_local_out0', self, 'loc_remt_master_out')
 
         for i in range(0, nb_remote_ports_per_tile):
-            self.bind(self, f'grp_remt{i}_slave_in', l1, f'remote_group_in{i}')
-            self.bind(l1, f'remote_group_out{i}', self, f'grp_remt{i}_master_out')
+            self.bind(l1_noc_itf, f'noc_req_mst_{i}', self, f'l1_noc_req_mst_{i}')
+            self.bind(self, f'l1_noc_resp_mst_{i}', l1_noc_itf, f'noc_resp_mst_{i}')
+            self.bind(self, f'l1_noc_req_slv_{i}', l1_noc_itf, f'noc_req_slv_{i}')
+            self.bind(l1_noc_itf, f'noc_resp_slv_{i}', self, f'l1_noc_resp_slv_{i}')
+
+        for i in range(0, nb_remote_ports_per_tile):
+            self.bind(l1_noc_itf, f'tcdm_req_mst_{i}', l1, f'remote_group_in{i}')
+            self.bind(l1, f'remote_group_out{i}', l1_noc_itf, f'core_req_slv_{i}')
 
         self.bind(self, 'dma_tcdm', l1, 'dma')
 
         # ICO -> AXI -> L2 Memory
         for i in range(0, nb_cores_per_tile):
             # Add default mapping for the others
-            ico_list[i].add_mapping('axi', latency=4)
-            self.bind(ico_list[i], 'axi', axi_ico, 'input')
+            ico_list[i].add_mapping('axi')
+            self.bind(ico_list[i], 'axi', core_axi_itf, 'input')
+        self.bind(core_axi_itf, 'output', axi_ico, 'input')
 
         ###########################################################
         #                                       |--> ROM          #
@@ -136,7 +160,8 @@ class Tile(st.Component):
         ###########################################################
 
         # Icache -> AXI
-        self.bind(icache, 'refill', axi_ico, 'input')
+        self.bind(icache, 'refill', cache_axi_itf, 'input')
+        self.bind(cache_axi_itf, 'output', axi_ico, 'input_1')
         
         # AXI -> Remote AXI port
         self.bind(axi_ico, 'output', self, 'axi_out')

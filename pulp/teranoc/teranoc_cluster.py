@@ -23,11 +23,12 @@ from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 from interco.interleaver import Interleaver
 import math
 from pulp.teranoc.teranoc_group import Group
-import pulp.teranoc.l1_noc as l1_noc
+from pulp.teranoc.l2_interconnect.l2_address_scrambler import L2_AddressScrambler
+from pulp.teranoc.l1_interconnect.l1_noc import L1_noc
 
 class Cluster(st.Component):
 
-    def __init__(self, parent, name, parser, nb_cores_per_tile: int=4, nb_x_groups: int=4, nb_y_groups: int=4, total_cores: int=1024, nb_remote_ports_per_tile: int=2, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1):
+    def __init__(self, parent, name, parser, nb_cores_per_tile: int=4, nb_x_groups: int=4, nb_y_groups: int=4, total_cores: int=1024, nb_remote_ports_per_tile: int=2, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1, l2_size: int=0x1000000, nb_l2_banks: int=16):
         super().__init__(parent, name)
 
         ################################################################
@@ -46,15 +47,23 @@ class Cluster(st.Component):
         self.group_list = []
         for i in range(0, nb_x_groups):
             for j in range(0, nb_y_groups):
-                group_id = i * nb_y_groups + j
-                self.group_list.append(Group(self,f'group_{i}_{j}',parser=parser, group_id=group_id,
+                self.group_list.append(Group(self,f'group_{i}_{j}',parser=parser, group_id_x=i, group_id_y=j,
                     nb_cores_per_tile=nb_cores_per_tile, nb_x_groups=nb_x_groups, nb_y_groups=nb_y_groups, total_cores=total_cores,
                     nb_remote_ports_per_tile=nb_remote_ports_per_tile, bank_factor=bank_factor, axi_data_width=axi_data_width))
 
-        self.l1_noc_list = []
+        self.l1_req_noc_list = []
         for i in range(0, nb_remote_ports_per_group):
-            self.l1_noc_list.append(l1_noc.L1_noc(self, f'l1_noc_{i}', width=4, nb_x_groups=nb_x_groups, nb_y_groups=nb_y_groups,
-                ni_outstanding_reqs=32, router_input_queue_size=2))
+            self.l1_req_noc_list.append(L1_noc(self, f'l1_req_noc_{i}', width=4, nb_x_groups=nb_x_groups, nb_y_groups=nb_y_groups, router_input_queue_size=2, router_output_queue_size=2))
+
+        self.l1_resp_noc_list = []
+        for i in range(0, nb_remote_ports_per_group):
+            self.l1_resp_noc_list.append(L1_noc(self, f'l1_resp_noc_{i}', width=4, nb_x_groups=nb_x_groups, nb_y_groups=nb_y_groups, router_input_queue_size=2, router_output_queue_size=2))
+
+        l2_addr_scrambler_list = []
+        for i in range(0, nb_x_groups):
+            for j in range(0, nb_y_groups):
+                for k in range(0, nb_axi_masters_per_group):
+                    l2_addr_scrambler_list.append(L2_AddressScrambler(self, f'l2_addr_scrambler_{i}_{j}_{k}', bypass=False, l2_base_addr=0x80000000, l2_size=l2_size, nb_banks=nb_l2_banks, bank_width=axi_data_width, interleave=16))
 
         # DMA TCDM Interface
         dma_tcdm_itf = router.Router(self, f'dma_tcdm_itf')
@@ -73,16 +82,28 @@ class Cluster(st.Component):
         ################################################################
         ##########               Design Bindings              ##########
         ################################################################
-
-        #Group master output -> Group slave input
+        # L1 req noc <--> Group l1 noc req interface
         for i in range(0, nb_x_groups):
             for j in range(0, nb_y_groups):
+                group_id = i * nb_y_groups + j
                 for k in range(0, nb_remote_ports_per_group):
-                    group_id = i * nb_y_groups + j
-                    base = group_id * nb_tiles_per_group * nb_cores_per_tile * bank_factor * 1024
-                    size = nb_tiles_per_group * nb_cores_per_tile * bank_factor * 1024
-                    self.group_list[group_id].o_GROUP_OUTPUT(k, self.l1_noc_list[k].i_NARROW_INPUT(i, j))
-                    self.l1_noc_list[k].o_NARROW_MAP(self.group_list[group_id].i_GROUP_INPUT(k), base=base, size=size, x=i, y=j)
+                    self.bind(self.group_list[group_id], f'l1_noc_req_mst_{k}', self.l1_req_noc_list[k], f'in_{i}_{j}')
+                    self.bind(self.l1_req_noc_list[k], f'out_{i}_{j}', self.group_list[group_id], f'l1_noc_req_slv_{k}')
+
+        # L1 resp noc <--> Group l1 noc resp interface
+        for i in range(0, nb_x_groups):
+            for j in range(0, nb_y_groups):
+                group_id = i * nb_y_groups + j
+                for k in range(0, nb_remote_ports_per_group):
+                    self.bind(self.l1_resp_noc_list[k], f'out_{i}_{j}', self.group_list[group_id], f'l1_noc_resp_mst_{k}')
+                    self.bind(self.group_list[group_id], f'l1_noc_resp_slv_{k}', self.l1_resp_noc_list[k], f'in_{i}_{j}')
+
+        # Group axi port -> L2 addr scrambler
+        for i in range(0, nb_x_groups):
+            for j in range(0, nb_y_groups):
+                group_id = i * nb_y_groups + j
+                for k in range(0, nb_axi_masters_per_group):
+                    self.bind(self.group_list[group_id], f'axi_out_{k}', l2_addr_scrambler_list[group_id*nb_axi_masters_per_group+k], 'input')
 
         # Propagate barrier signals from group to cluster boundary
         for i in range(0, nb_groups):
@@ -94,9 +115,11 @@ class Cluster(st.Component):
             self.bind(self, 'loader_start', self.group_list[i], 'loader_start')
             self.bind(self, 'loader_entry', self.group_list[i], 'loader_entry')
 
-        for i in range(0, nb_groups):
-            for j in range(0, nb_axi_masters_per_group):
-                self.bind(self.group_list[i], f'axi_out_{j}', self, 'axi_%d' % (i * nb_axi_masters_per_group + j))
+        for i in range(0, nb_x_groups):
+            for j in range(0, nb_y_groups):
+                group_id = i * nb_y_groups + j
+                for k in range(0, nb_axi_masters_per_group):
+                    self.bind(l2_addr_scrambler_list[group_id * nb_axi_masters_per_group + k], 'output', self, f'axi_{i}_{j}_{k}')
 
         for i in range(0, nb_groups):
             self.bind(self, 'rocache_cfg', self.group_list[i], 'rocache_cfg')
