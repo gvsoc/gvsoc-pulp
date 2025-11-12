@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2025 ETH Zurich and University of Bologna
+# Copyright (C) 2026 ETH Zurich and University of Bologna
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,11 +16,11 @@
 # Author: Yinrong Li (ETH Zurich) (yinrli@student.ethz.ch)
 
 import gvsoc.systree
-from pulp.floonoc.floonoc import FlooNoc2dMeshNarrowWide
+from pulp.teranoc.l1_interconnect.floonoc import FlooNoc2dMeshNarrow
 
-class L2_noc(FlooNoc2dMeshNarrowWide):
+class L1_noc(FlooNoc2dMeshNarrow):
     """
-    FlooNoc instance for L2 inter-group communication
+    FlooNoc instance for L1 inter-group communication
 
     Attributes
     ----------
@@ -43,10 +43,11 @@ class L2_noc(FlooNoc2dMeshNarrowWide):
         before the source output queue is stalled.
     """
     def __init__(self, parent: gvsoc.systree.Component, name, width: int, nb_x_groups: int,
-            nb_y_groups: int, ni_outstanding_reqs: int=2, router_input_queue_size: int=2):
-
-        super(L2_noc, self).__init__(parent, name, width, 0, dim_x=nb_x_groups, dim_y=nb_y_groups,
-                ni_outstanding_reqs=ni_outstanding_reqs, router_input_queue_size=router_input_queue_size)
+            nb_y_groups: int, router_input_queue_size: int=2, router_output_queue_size: int=2):
+        
+        super(L1_noc, self).__init__(parent, name, width, dim_x=nb_x_groups, dim_y=nb_y_groups,
+                                        router_input_queue_size=router_input_queue_size,
+                                        router_output_queue_size=router_output_queue_size)
 
         for tile_x in range(0, nb_x_groups):
             for tile_y in range(0, nb_y_groups):
