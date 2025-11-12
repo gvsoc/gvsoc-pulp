@@ -20,6 +20,7 @@ from typing import List, Tuple
 from cache.cache import Cache
 from interco.router import Router
 from pulp.mempool.l2_interconnect.cache_filter import CacheFilter
+from pulp.mempool.l1_interconnect.l1_remote_itf import L1_RemoteItf
 import math
 
 class Hierarchical_Interco(gvsoc.systree.Component):
@@ -36,7 +37,7 @@ class Hierarchical_Interco(gvsoc.systree.Component):
 
     """
 
-    def __init__(self, parent: gvsoc.systree.Component, name: str, bandwidth: int,
+    def __init__(self, parent: gvsoc.systree.Component, name: str, bandwidth: int, synchronous: bool=True,
                  nb_slaves: int=1, nb_masters: int=1, enable_cache: bool=False, cache_rules: List[Tuple[int, int]]=[],
                  cache_line_width: int=64, cache_size: int=8192, nb_cache_sets: int=2):
         super(Hierarchical_Interco, self).__init__(parent, name)
@@ -51,15 +52,24 @@ class Hierarchical_Interco(gvsoc.systree.Component):
         cache = Cache(self, 'cache', nb_sets_bits=nb_sets_bits, nb_ways_bits=nb_ways_bits,
                       line_size_bits=line_size_bits, enabled=enable_cache, cache_v2=True)
 
-        input_itf = Router(self, 'input_itf', bandwidth=bandwidth, latency=2)
+        input_itf = Router(self, 'input_itf', bandwidth=bandwidth, latency=2 if synchronous else 1, synchronous=synchronous, max_input_pending_size=bandwidth)
+        for i in range(1, nb_slaves):
+            _ = input_itf.i_INPUT(i)
         input_itf.add_mapping("output")
 
         filter = CacheFilter(self, 'filter', bypass=False, cache_rules=cache_rules)
         
-        self.bind(input_itf, 'output', filter, 'input')
+        for i in range(0, nb_slaves):
+            self.bind(self, f'input_{i}', input_itf, 'input' if i == 0 else f'input_{i}')
+
+        if synchronous:
+            self.bind(input_itf, 'output', filter, 'input')
+        else:
+            input_link_ctrl = L1_RemoteItf(self, 'input_link_ctrl', req_latency=0, resp_latency=1, bandwidth=bandwidth, shared_rw_bandwidth=False, synchronous=synchronous)
+            self.bind(input_itf, 'output', input_link_ctrl, 'input')
+            self.bind(input_link_ctrl, 'output', filter, 'input')
+
         self.bind(filter, 'cache', cache, 'input')
-        
-        self.bind(self, 'input', input_itf, 'input')
         self.bind(filter, 'bypass', self, 'output')
         self.bind(cache, 'refill', self, 'output')
         self.bind(self, 'rocache_cfg', filter, 'config')

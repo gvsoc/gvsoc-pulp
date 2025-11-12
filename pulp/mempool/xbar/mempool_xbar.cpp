@@ -203,6 +203,7 @@ private:
     int nb_output_port;
     // Router latency, not yet implemented
     int latency;
+    bool use_selector;
     // Router channels. It has 1 channel when bandwidth is shared for read and writes, or 1 for read
     // and 1 for write if it is not shared
     std::vector<Channel *> channels;
@@ -228,6 +229,7 @@ MempoolXbar::MempoolXbar(vp::ComponentConf &config)
     this->nb_output_port = this->get_js_config()->get_int("nb_output_port");
     this->shared_rw_bandwidth = this->get_js_config()->get_child_bool("shared_rw_bandwidth");
     this->max_input_pending_size = this->get_js_config()->get_child_int("max_input_pending_size");
+    this->use_selector = this->get_js_config()->get_child_bool("use_selector");
     if (this->max_input_pending_size == 0)
     {
         // If no FIFO is specified, set to max to not have any limitation
@@ -311,7 +313,11 @@ void Channel::arbiter_handler(vp::Block *__this, vp::ClockEvent *event)
                 // get its mapping the first time when it is not yet initialized
                 if (!in->arbitration_lock.get())
                 {
-                    uint64_t output_id = (uint64_t)req->arg_pop();
+                    uint64_t output_id = 0;
+                    if (_this->top->use_selector)
+                    {
+                        output_id = (uint64_t)req->arg_pop();
+                    }
                     if (output_id >= _this->top->nb_output_port)
                     {
                         _this->trace.fatal("Invalid output ID %ld\n", output_id);
@@ -364,8 +370,14 @@ void Channel::arbiter_handler(vp::Block *__this, vp::ClockEvent *event)
         _this->current_input = 0;
     }
 
-
-    _this->fsm_event.enqueue();
+    if (_this->top->latency == 1)
+    {
+        _this->fsm_event.enqueue(1);
+    }
+    else
+    {
+        _this->fsm_event.enqueue(0);
+    }
 }
 
 void Channel::grant(vp::IoReq *req, int id)
@@ -492,7 +504,14 @@ void Channel::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
     if (resched || _this->ended_reqs.has_reqs())
     {
-        _this->arbiter_event.enqueue(0);
+        if (_this->top->latency == 1)
+        {
+            _this->arbiter_event.enqueue(0);
+        }
+        else
+        {
+            _this->arbiter_event.enqueue(1);
+        }
     }
 }
 

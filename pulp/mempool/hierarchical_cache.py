@@ -22,7 +22,7 @@ import math
 
 class Hierarchical_cache(gvsoc.systree.Component):
 
-    def __init__(self, parent: gvsoc.systree.Component, name: str, nb_cores: int=0):
+    def __init__(self, parent: gvsoc.systree.Component, name: str, nb_cores: int=0, synchronous: bool=True):
 
         super(Hierarchical_cache, self).__init__(parent, name)
 
@@ -56,7 +56,7 @@ class Hierarchical_cache(gvsoc.systree.Component):
         l1_cache = Cache(self, 'l1', nb_sets_bits=nb_l1_sets_bits, nb_ways_bits=nb_l1_ways_bits, line_size_bits=line_size_bits, refill_latency=0, enabled=True, cache_v2=True)
 
         # L1 router
-        l1_router = Router(self, 'l1_router', bandwidth=line_width)
+        l1_router = Router(self, 'l1_router', bandwidth=line_width, latency=1, synchronous=synchronous, shared_rw_bandwidth=True, max_input_pending_size=line_width)
         l1_router.add_mapping('output')
 
         # Use an And to gather flush ack from all banks and report a single signal outside
