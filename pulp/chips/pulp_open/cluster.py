@@ -68,7 +68,7 @@ class Cluster(st.Component):
 
     """
 
-    def __init__(self, parent, name, config_file, cid: int=0):
+    def __init__(self, parent, name, config_file, cid: int=0, pulpnn=False):
         super(Cluster, self).__init__(parent, name)
 
         #
@@ -108,7 +108,7 @@ class Cluster(st.Component):
         # Cores
         pes = []
         for i in range(0, nb_pe):
-            pes.append(iss.ClusterCore(self, 'pe%d' % i, cluster_id=cid, core_id=i))
+            pes.append(iss.ClusterCore(self, 'pe%d' % i, cluster_id=cid, core_id=i, pulpnn=pulpnn))
 
         # Icache
         icache = Hierarchical_cache(self, 'icache', cluster_conf.get_property('icache/config'))

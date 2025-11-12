@@ -20,19 +20,32 @@ import cpu.iss.riscv
 from cpu.iss.isa_gen.isa_riscv_gen import *
 from cpu.iss.isa_gen.isa_smallfloats import *
 from cpu.iss.isa_gen.isa_pulpv2 import *
+from cpu.iss.isa_gen.isa_pulpnn import PulpNn
 
 
-def __build_fc_isa(name):
+def _build_fc_isa(name, pulpnn=False, pulpv2=True):
 
-    extensions = [ PulpV2(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ]
+    extensions = [ Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ]
+
+    if pulpv2:
+        extensions.append(PulpV2())
+
+    if pulpnn:
+        extensions.append(PulpNn())
 
     isa = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa(name, 'rv32imfc', extensions=extensions)
 
     return isa
 
-def __build_cluster_isa(name):
+def _build_cluster_isa(name, pulpnn=False, pulpv2=True):
 
-    extensions = [ PulpV2(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ]
+    extensions = [ Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ]
+
+    if pulpv2:
+        extensions.append(PulpV2())
+
+    if pulpnn:
+        extensions.append(PulpNn())
 
     isa = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa(name, 'rv32imfc', extensions=extensions)
 
@@ -42,9 +55,8 @@ def __build_cluster_isa(name):
 
 
 
-_cluster_isa = __build_cluster_isa('pulp_cluster')
-
-_fc_isa = __build_fc_isa('pulp_fc')
+_cluster_isa = None
+_fc_isa = None
 
 
 
@@ -74,15 +86,26 @@ class PulpCore(cpu.iss.riscv.RiscvCommon):
 
 class ClusterCore(PulpCore):
 
-    def __init__(self, parent, name, cluster_id: int=None, core_id: int=None):
+    def __init__(self, parent, name, cluster_id: int=None, core_id: int=None, pulpv2=True, pulpnn=True):
+
+        global _cluster_isa
+
+        if _cluster_isa is None:
+            _cluster_isa = _build_cluster_isa('pulp_cluster', pulpv2=pulpv2, pulpnn=pulpnn)
 
         super().__init__(parent, name, isa=_cluster_isa, cluster_id=cluster_id, core_id=core_id, external_pccr=True)
 
 
 
+
 class FcCore(PulpCore):
 
-    def __init__(self, parent, name, fetch_enable: bool=False, boot_addr: int=0, cluster_id: int=31):
+    def __init__(self, parent, name, fetch_enable: bool=False, boot_addr: int=0, cluster_id: int=31, pulpv2=True, pulpnn=True):
+
+        global _fc_isa
+
+        if _fc_isa is None:
+            _fc_isa = _build_fc_isa('pulp_fc', pulpv2=pulpv2, pulpnn=pulpnn)
 
         super().__init__(parent, name, isa=_fc_isa, cluster_id=cluster_id, core_id=0,
             fetch_enable=fetch_enable, boot_addr=boot_addr)
