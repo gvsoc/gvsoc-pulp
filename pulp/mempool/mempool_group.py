@@ -138,7 +138,7 @@ class Group(st.Component):
             l2_cache_rules.append((0x00000008, 0x0000000C))
             l2_cache_rules.append((0x0000000C, 0x00000010))
             # AXI Interconnect
-            axi_ico = Hierarchical_Interco(self, 'axi_ico', enable_cache=True, cache_rules=l2_cache_rules, bandwidth=axi_data_width)
+            axi_ico = Hierarchical_Interco(self, 'axi_ico', nb_slaves=nb_tiles_per_group+1, enable_cache=True, cache_rules=l2_cache_rules, bandwidth=axi_data_width)
 
         # AXI Interface
         if terapool:
@@ -200,7 +200,7 @@ class Group(st.Component):
         if not terapool:
             # Tile axi port -> axi interconnect
             for i in range(0, nb_tiles_per_group):
-                self.bind(self.tile_list[i], 'axi_out', axi_ico, 'input')
+                self.bind(self.tile_list[i], 'axi_out', axi_ico, f'input_{i}')
 
         # AXI Interface
         if terapool:
@@ -223,7 +223,7 @@ class Group(st.Component):
             for i in range(0, nb_sub_groups_per_group):
                 self.bind(dma_axi_interleaver, f'out_{i}', self.sub_group_list[i], 'dma_axi')
         else:
-            self.bind(dma_axi_itf, 'output', axi_ico, 'input')
+            self.bind(dma_axi_itf, 'output', axi_ico, f'input_{nb_tiles_per_group}')
 
         # Loader
         if terapool:

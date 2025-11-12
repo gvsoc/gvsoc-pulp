@@ -87,7 +87,7 @@ class Sub_group(st.Component):
         l2_cache_rules.append((0x0000000C, 0x00000010))
 
         # AXI Interconnect
-        axi_ico = Hierarchical_Interco(self, 'axi_ico', enable_cache=True, cache_rules=l2_cache_rules, bandwidth=axi_data_width)
+        axi_ico = Hierarchical_Interco(self, 'axi_ico', nb_slaves=nb_tiles_per_sub_group+1, enable_cache=True, cache_rules=l2_cache_rules, bandwidth=axi_data_width)
         axi_itf = router.Router(self, 'axi_itf', bandwidth=axi_data_width, latency=2)
         axi_itf.add_mapping('output')
 
@@ -115,7 +115,7 @@ class Sub_group(st.Component):
 
         #Tile axi port -> axi interconnect
         for i in range(0, nb_tiles_per_sub_group):
-           self.bind(self.tile_list[i], 'axi_out', axi_ico, 'input')
+           self.bind(self.tile_list[i], 'axi_out', axi_ico, f'input_{i}')
 
         # axi interconnect -> axi port
         self.bind(axi_ico, 'output', axi_itf, 'input')
@@ -124,7 +124,7 @@ class Sub_group(st.Component):
         self.bind(dma_tcdm_itf, 'output', dma_tcdm_interleaver, 'input')
         for i in range(0, nb_tiles_per_sub_group):
             self.bind(dma_tcdm_interleaver, f'out_{i}', self.tile_list[i], 'dma_tcdm')
-        self.bind(dma_axi_itf, 'output', axi_ico, 'input')
+        self.bind(dma_axi_itf, 'output', axi_ico, f'input_{nb_tiles_per_sub_group}')
 
         #Group loader -> Tile loader
         for i in range(0, nb_tiles_per_sub_group):
