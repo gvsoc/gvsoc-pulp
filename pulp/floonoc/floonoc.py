@@ -149,7 +149,7 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         self.__add_mapping(f"ni_{name}", base=base, size=size, x=dir, y=0, remove_offset=remove_offset)
 
     def o_MAP(self, base: int, size: int,
-            x: int, y: int,
+            x: int, y: int, name: str | None=None,
             rm_base: bool=False, remove_offset:int =0):
         """Binds the output of a node to a target, associated to a memory-mapped region.
 
@@ -173,7 +173,7 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         """
         if rm_base and remove_offset == 0:
             remove_offset =base
-        self.__add_mapping(f"ni_{x}_{y}", base=base, size=size, x=x, y=y, remove_offset=remove_offset)
+        self.__add_mapping(f"ni_{x}_{y}" if name is None else name, base=base, size=size, x=x, y=y, remove_offset=remove_offset)
 
     def o_WIDE_MAP(self, itf: gvsoc.systree.SlaveItf | None, base: int, size: int,
             x: int | FlooNocDirection, y: int | FlooNocDirection, name: str | None=None,
