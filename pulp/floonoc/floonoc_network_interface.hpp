@@ -41,7 +41,7 @@ public:
     void handle_rsp(vp::IoReq *req, bool is_address);
 
 private:
-    void enqueue_router_req(vp::IoReq *req, bool is_address);
+    void enqueue_router_req(vp::IoReq *req, bool is_address, bool is_req);
     void send_router_req();
     void unstall_queue(int from_x, int from_y) override;
     bool handle_request(FloonocNode *node, vp::IoReq *req, int from_x, int from_y) override;
