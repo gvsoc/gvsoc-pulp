@@ -69,18 +69,18 @@ void NetworkQueue::unstall_queue(int from_x, int from_y)
 void NetworkQueue::handle_req(vp::IoReq *req)
 {
     this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received %s burst from initiator (burst: %p, offset: 0x%x, size: 0x%x, is_write: %d, op: %d)\n",
-                     req->get_int(FlooNoc::REQ_WIDE) ? "wide" : "narrow", req, req->get_addr(), req->get_size(), req->get_is_write(), req->get_opcode());
+                     *(int *)req->arg_get_last(NetworkInterface::REQ_WIDE) ? "wide" : "narrow", req, req->get_addr(), req->get_size(), req->get_is_write(), req->get_opcode());
 
-    this->enqueue_router_req(req, true);
+    this->enqueue_router_req(req, true, *(int *)req->arg_get_last(NetworkInterface::REQ_WIDE), true);
     if (req->get_is_write())
     {
-        this->enqueue_router_req(req, false);
+        this->enqueue_router_req(req, false, *(int *)req->arg_get_last(NetworkInterface::REQ_WIDE), true);
     }
 }
 
 void NetworkQueue::handle_rsp(vp::IoReq *req, bool is_address)
 {
-    this->enqueue_router_req(req, is_address);
+    this->enqueue_router_req(req, is_address, *(bool *)req->arg_get(FlooNoc::REQ_WIDE), false);
 }
 
 bool NetworkQueue::handle_request(FloonocNode *node, vp::IoReq *req, int from_x, int from_y)
@@ -89,12 +89,11 @@ bool NetworkQueue::handle_request(FloonocNode *node, vp::IoReq *req, int from_x,
 }
 
 
-void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address)
+void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address, bool wide, bool is_req)
 {
     uint64_t burst_base = req->get_addr();
     uint64_t burst_size = req->get_size();
     uint8_t *burst_data = req->get_data();
-    bool wide = *(bool *)req->arg_get(FlooNoc::REQ_WIDE);
 
     while(burst_size > 0)
     {
@@ -360,7 +359,7 @@ vp::IoReqStatus NetworkInterface::narrow_req(vp::Block *__this, vp::IoReq *req)
 {
     NetworkInterface *_this = (NetworkInterface *)__this;
     _this->signal_narrow_req = req->get_addr();
-    *req->arg_get(FlooNoc::REQ_WIDE) = (void *)0;
+    *req->arg_get_last(NetworkInterface::REQ_WIDE) = (void *)0;
     return _this->handle_req(req);
 }
 
@@ -368,22 +367,22 @@ vp::IoReqStatus NetworkInterface::wide_req(vp::Block *__this, vp::IoReq *req)
 {
     NetworkInterface *_this = (NetworkInterface *)__this;
     _this->signal_wide_req = req->get_addr();
-    *req->arg_get(FlooNoc::REQ_WIDE) = (void *)1;
+    *req->arg_get_last(NetworkInterface::REQ_WIDE) = (void *)1;
     return _this->handle_req(req);
 }
 
 vp::IoReqStatus NetworkInterface::handle_req(vp::IoReq *req)
 {
     this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received request from target (req: %p, base: 0x%x, size: 0x%x, wide: %d)\n",
-        req, req->get_addr(), req->get_size(), *(vp::IoReq **)req->arg_get(FlooNoc::REQ_WIDE));
+        req, req->get_addr(), req->get_size(), *(int *)req->arg_get_last(NetworkInterface::REQ_WIDE));
 
     // We use one data in the current burst to store the remaining size and know when the
     // last internal request has been handled to notify the end of burst
-    *(int *)req->arg_get_last() = req->get_size();
+    *(int *)req->arg_get_last(NetworkInterface::REQ_REM_SIZE) = req->get_size();
 
     vp::IoReq **queue;
     std::queue<vp::IoReq *> *denied_queue;
-    bool is_wide = *(bool *)req->arg_get(FlooNoc::REQ_WIDE);
+    bool is_wide = *(int *)req->arg_get_last(NetworkInterface::REQ_WIDE);
     if (is_wide)
     {
         queue = req->get_is_write() ? &this->wide_write_pending_burst :
@@ -408,7 +407,7 @@ vp::IoReqStatus NetworkInterface::handle_req(vp::IoReq *req)
     {
         this->nb_pending_bursts[is_wide]++;
         *queue = req;
-        if (!req->get_is_write() || !*(vp::IoReq **)req->arg_get(FlooNoc::REQ_WIDE))
+        if (!req->get_is_write() || !*(int *)req->arg_get_last(NetworkInterface::REQ_WIDE))
         {
             this->req_queue.handle_req(req);
         }
@@ -438,22 +437,19 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req, int fro
                 burst);
             this->nb_pending_bursts[wide]--;
 
-            if (this->nb_pending_bursts[wide] < 0) abort();
-
             burst->get_resp_port()->resp(burst);
         }
         else
         {
             this->trace.msg(vp::Trace::LEVEL_TRACE,
                 "Reducing remaining size of burst (burst: %p, size: %d, req: %p, size %d)\n",
-                burst, *(int *)burst->arg_get_last(), req, req->get_size());
-            *(int *)burst->arg_get_last() -= req->get_size();
+                burst, *(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE), req, req->get_size());
+            *(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE) -= req->get_size();
 
-            if (*(int *)burst->arg_get_last() == 0)
+            if (*(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE) == 0)
             {
                 this->trace.msg(vp::Trace::LEVEL_DEBUG, "Finished burst (burst: %p)\n", burst);
                 this->nb_pending_bursts[wide]--;
-                if (this->nb_pending_bursts[wide] < 0) abort();
                 burst->get_resp_port()->resp(burst);
             }
         }
@@ -488,14 +484,13 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req, int fro
 
             if (result == vp::IO_REQ_OK)
             {
-                NetworkInterface *ni = *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);
                 if (req->get_latency() > 0)
                 {
                     this->response_queue.push_delayed(req, req->get_latency());
                 }
                 else
                 {
-                    ni->handle_response(req);
+                    this->handle_response(req);
                 }
             }
             else if (result == vp::IO_REQ_DENIED)
@@ -660,10 +655,10 @@ void NetworkInterface::handle_response(vp::IoReq *req)
 
         this->trace.msg(vp::Trace::LEVEL_TRACE,
             "Reducing remaining size of burst (burst: %p, size: %d, req: %p, size %d)\n",
-            burst, *(int *)burst->arg_get_last(), req, req->get_size());
-        *(int *)burst->arg_get_last() -= req->get_size();
+            burst, *(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE), req, req->get_size());
+        *(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE) -= req->get_size();
 
-        if (*(int *)burst->arg_get_last() == 0)
+        if (*(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE) == 0)
         {
             this->trace.msg(vp::Trace::LEVEL_DEBUG, "Finished burst (burst: %p)\n", burst);
             NetworkInterface *origin_ni = *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);

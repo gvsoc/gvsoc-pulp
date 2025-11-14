@@ -96,11 +96,11 @@ public:
     // These constants give the indices where the information is stored in the requests data.
     static constexpr int REQ_SRC_NI = 0;     // Pointer to network interface where the request was received
     static constexpr int REQ_BURST = 1;  // Burst received from network interface
-    static constexpr int REQ_DEST_X = 3;      // X coordinate of the destination target
-    static constexpr int REQ_DEST_Y = 4;      // Y coordinate of the destination target
-    static constexpr int REQ_WIDE = 6;        // Indicates if a request is a wide request or not. 1 for wide, 0 for narrow
-    static constexpr int REQ_IS_ADDRESS = 7;     // Indicates if the request is a AR/AW request or not. 1 for address, 0 for data
-    static constexpr int REQ_NB_ARGS = 9;     // Number of request data required by this model
+    static constexpr int REQ_DEST_X = 2;      // X coordinate of the destination target
+    static constexpr int REQ_DEST_Y = 3;      // Y coordinate of the destination target
+    static constexpr int REQ_WIDE = 4;        // Indicates if a request is a wide request or not. 1 for wide, 0 for narrow
+    static constexpr int REQ_IS_ADDRESS = 5;     // Indicates if the request is a AR/AW request or not. 1 for address, 0 for data
+    static constexpr int REQ_NB_ARGS = 6;     // Number of request data required by this model
 
     // The following constants gives the index in the queue array of the queue associated to each direction
     static constexpr int DIR_RIGHT = 0;
