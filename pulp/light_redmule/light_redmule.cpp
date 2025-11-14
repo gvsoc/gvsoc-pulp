@@ -596,10 +596,16 @@ void LightRedmule::process_iter_instruction(){
             }
             break;
         case INSTR_LOAD_W:
+            if (this->iter_w_row_ptr == 0) {
+                std::memset(this->w_buffer, 0, this->LOCAL_BUFFER_N * this->LOCAL_BUFFER_W * this->elem_size);
+            }
             std::memcpy(&(this->w_buffer[this->iter_w_row_ptr]), this->access_buffer, w_cutoff);
             this->iter_w_row_ptr += buffer_w_byte;
             break;
         case INSTR_LOAD_W_COMPUTE:
+            if (this->iter_w_row_ptr == 0) {
+                std::memset(this->w_buffer, 0, this->LOCAL_BUFFER_N * this->LOCAL_BUFFER_W * this->elem_size);
+            }
             std::memcpy(&(this->w_buffer[this->iter_w_row_ptr]), this->access_buffer, w_cutoff);
             this->process_compute();
             this->iter_w_row_ptr = 0;
