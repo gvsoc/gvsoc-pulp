@@ -41,7 +41,7 @@ public:
     void handle_rsp(vp::IoReq *req, bool is_address);
 
 private:
-    void enqueue_router_req(vp::IoReq *req, bool is_address);
+    void enqueue_router_req(vp::IoReq *req, bool is_address, bool wide);
     void send_router_req();
     void unstall_queue(int from_x, int from_y) override;
     bool handle_request(FloonocNode *node, vp::IoReq *req, int from_x, int from_y) override;
@@ -74,6 +74,9 @@ public:
     static constexpr int NW_RSP   = 1;
     static constexpr int NW_WIDE  = 2;
     static constexpr int NW_NB    = 3;
+
+    static constexpr int REQ_REM_SIZE = 0;
+    static constexpr int REQ_WIDE = 1;
 
     NetworkInterface(FlooNoc *noc, int x, int y, std::string itf_name);
 
