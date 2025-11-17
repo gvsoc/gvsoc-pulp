@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 ETH Zurich and University of Bologna
+ * Copyright (C) 2024 ETH Zurich, University of Bologna, and Fondazione Chips-IT
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 /*
  * Authors: Chi     Zhang, ETH Zurich (chizhang@iis.ee.ethz.ch)
             Lorenzo Zuolo, Chips-IT   (lorenzo.zuolo@chips.it)
+            Alex Marchioni, Chips-IT   (alex.marchioni@chips.it)
  * Note:
  *      Here we only support (No Compute/ INT16 / UINT16 / FP16 ) for matrix multiply
  */
@@ -37,20 +38,20 @@
 #include <math.h>
 
 #include <cpu/iss/include/offload.hpp>
-#include "cpu/iss/flexfloat/flexfloat.h"
+#include <cpu/iss/flexfloat/flexfloat.h>
 
 /****************************************************
 *                   Type Definition                 *
 ****************************************************/
 
-typedef union {
-    float f;
-    struct {
-        uint32_t mantissa : 23;
-        uint32_t exponent : 8;
-        uint32_t sign : 1;
-    } parts;
-} FloatBits;
+// typedef union {
+//     float f;
+//     struct {
+//         uint32_t mantissa : 23;
+//         uint32_t exponent : 8;
+//         uint32_t sign : 1;
+//     } parts;
+// } FloatBits;
 
 typedef uint8_t  fp8e4m3;
 typedef uint16_t fp16;
