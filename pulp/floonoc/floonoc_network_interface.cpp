@@ -94,7 +94,6 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address, bool is_r
     uint64_t burst_base = req->get_addr();
     uint64_t burst_size = req->get_size();
     uint8_t *burst_data = req->get_data();
-    bool wide = *(bool *)req->arg_get(FlooNoc::REQ_WIDE);
 
     while(burst_size > 0)
     {
@@ -107,7 +106,6 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address, bool is_r
         *router_req->arg_get(FlooNoc::REQ_SRC_NI) = (void *)&this->ni;
         *router_req->arg_get(FlooNoc::REQ_BURST) = (void *)req;
         *router_req->arg_get(FlooNoc::REQ_IS_ADDRESS) = (void *)is_address;
-        *router_req->arg_get(FlooNoc::REQ_WIDE) = (void *)wide;
         router_req->set_size(size);
         router_req->set_data(burst_data);
         router_req->set_addr(burst_base);
@@ -117,6 +115,8 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address, bool is_r
 
         if (is_req)
         {
+            bool wide = *(bool *)req->arg_get(IO_REQ_NB_ARGS-1);
+            *router_req->arg_get(FlooNoc::REQ_WIDE) = (void *)wide;
             if (wide)
             {
                 req->get_is_write() ? this->ni.wide_write_pending_burst_nb_req++ :
@@ -164,6 +164,7 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address, bool is_r
         else
         {
             *router_req->arg_get(FlooNoc::REQ_SRC_NI) = NULL;
+            *router_req->arg_get(FlooNoc::REQ_WIDE) = *req->arg_get(FlooNoc::REQ_WIDE);
             *router_req->arg_get(FlooNoc::REQ_DEST_X) = *req->arg_get(FlooNoc::REQ_DEST_X);
             *router_req->arg_get(FlooNoc::REQ_DEST_Y) = *req->arg_get(FlooNoc::REQ_DEST_Y);
             *router_req->arg_get(FlooNoc::REQ_BURST) = *req->arg_get(FlooNoc::REQ_BURST);
@@ -360,7 +361,7 @@ vp::IoReqStatus NetworkInterface::narrow_req(vp::Block *__this, vp::IoReq *req)
 {
     NetworkInterface *_this = (NetworkInterface *)__this;
     _this->signal_narrow_req = req->get_addr();
-    *req->arg_get(FlooNoc::REQ_WIDE) = (void *)0;
+    *(bool *)req->arg_get(IO_REQ_NB_ARGS-1) = false;
     return _this->handle_req(req);
 }
 
@@ -368,7 +369,7 @@ vp::IoReqStatus NetworkInterface::wide_req(vp::Block *__this, vp::IoReq *req)
 {
     NetworkInterface *_this = (NetworkInterface *)__this;
     _this->signal_wide_req = req->get_addr();
-    *req->arg_get(FlooNoc::REQ_WIDE) = (void *)1;
+    *(bool *)req->arg_get(IO_REQ_NB_ARGS-1) = true;
     return _this->handle_req(req);
 }
 
@@ -383,7 +384,7 @@ vp::IoReqStatus NetworkInterface::handle_req(vp::IoReq *req)
 
     vp::IoReq **queue;
     std::queue<vp::IoReq *> *denied_queue;
-    bool is_wide = *(bool *)req->arg_get(FlooNoc::REQ_WIDE);
+    bool is_wide = *(bool *)req->arg_get(IO_REQ_NB_ARGS-1);
     if (is_wide)
     {
         queue = req->get_is_write() ? &this->wide_write_pending_burst :
@@ -408,7 +409,7 @@ vp::IoReqStatus NetworkInterface::handle_req(vp::IoReq *req)
     {
         this->nb_pending_bursts[is_wide]++;
         *queue = req;
-        if (!req->get_is_write() || !*(vp::IoReq **)req->arg_get(FlooNoc::REQ_WIDE))
+        if (!req->get_is_write() || !is_wide)
         {
             this->req_queue.handle_req(req);
         }
