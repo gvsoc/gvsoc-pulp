@@ -488,14 +488,13 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req, int fro
 
             if (result == vp::IO_REQ_OK)
             {
-                NetworkInterface *ni = *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);
                 if (req->get_latency() > 0)
                 {
                     this->response_queue.push_delayed(req, req->get_latency());
                 }
                 else
                 {
-                    ni->handle_response(req);
+                    this->handle_response(req);
                 }
             }
             else if (result == vp::IO_REQ_DENIED)
