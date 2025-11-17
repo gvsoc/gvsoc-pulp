@@ -29,6 +29,11 @@ vp_model_compile_definitions(
 
 if(DEFINED ENV{XTENSOR_INCLUDE_DIR})
     vp_model_compile_options(NAME pulp.neureka.neureka OPTIONS -I$ENV{XTENSOR_INCLUDE_DIR})
+else()
+    vp_model_include_directories(
+        NAME pulp.neureka.neureka
+        DIRECTORY "xtensor/include"
+        )
 endif()
 
 if(DEFINED ENV{XTL_INCLUDE_DIR})
