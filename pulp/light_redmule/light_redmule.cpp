@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 ETH Zurich and University of Bologna
+ * Copyright (C) 2024 ETH Zurich, University of Bologna, and Fondazione Chips-IT
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 /*
  * Authors: Chi     Zhang, ETH Zurich (chizhang@iis.ee.ethz.ch)
             Lorenzo Zuolo, Chips-IT   (lorenzo.zuolo@chips.it)
+            Alex Marchioni, Chips-IT   (alex.marchioni@chips.it)
  * Note:
  *      Here we only support (No Compute/ INT16 / UINT16 / FP16 ) for matrix multiply
  */
@@ -37,19 +38,20 @@
 #include <math.h>
 
 #include <cpu/iss/include/offload.hpp>
+#include <cpu/iss/flexfloat/flexfloat.h>
 
 /****************************************************
 *                   Type Definition                 *
 ****************************************************/
 
-typedef union {
-    float f;
-    struct {
-        uint32_t mantissa : 23;
-        uint32_t exponent : 8;
-        uint32_t sign : 1;
-    } parts;
-} FloatBits;
+// typedef union {
+//     float f;
+//     struct {
+//         uint32_t mantissa : 23;
+//         uint32_t exponent : 8;
+//         uint32_t sign : 1;
+//     } parts;
+// } FloatBits;
 
 typedef uint8_t  fp8e4m3;
 typedef uint16_t fp16;
@@ -583,6 +585,9 @@ void LightRedmule::process_iter_instruction(){
     uint32_t buffer_yz_byte = this->ce_height * this->ce_width * (this->ce_pipe + 1) * this->elem_size;
     switch(this->iter_instruction) {
         case INSTR_LOAD_Y:
+            if (this->iter_y_row_ptr == 0) {
+                std::memset(this->y_buffer_preload, 0, this->LOCAL_BUFFER_H * this->LOCAL_BUFFER_W * this->elem_size);
+            }
             std::memcpy(&(this->y_buffer_preload[this->iter_y_row_ptr]), this->access_buffer, y_cutoff);
             if (this->y_acc_block == 0)
             {
@@ -592,10 +597,16 @@ void LightRedmule::process_iter_instruction(){
             }
             break;
         case INSTR_LOAD_W:
+            if (this->iter_w_row_ptr == 0) {
+                std::memset(this->w_buffer, 0, this->LOCAL_BUFFER_N * this->LOCAL_BUFFER_W * this->elem_size);
+            }
             std::memcpy(&(this->w_buffer[this->iter_w_row_ptr]), this->access_buffer, w_cutoff);
             this->iter_w_row_ptr += buffer_w_byte;
             break;
         case INSTR_LOAD_W_COMPUTE:
+            if (this->iter_w_row_ptr == 0) {
+                std::memset(this->w_buffer, 0, this->LOCAL_BUFFER_N * this->LOCAL_BUFFER_W * this->elem_size);
+            }
             std::memcpy(&(this->w_buffer[this->iter_w_row_ptr]), this->access_buffer, w_cutoff);
             this->process_compute();
             this->iter_w_row_ptr = 0;
@@ -604,6 +615,9 @@ void LightRedmule::process_iter_instruction(){
             std::memset(this->w_buffer, 0, this->ce_width * (this->ce_pipe + 1) * this->bandwidth);
             break;
         case INSTR_LOAD_X:
+            if (this->iter_x_row_ptr == 0) {
+                std::memset(this->x_buffer, 0, ce_height * this->bandwidth);
+            }
             std::memcpy(&(this->x_buffer[this->iter_x_row_ptr]), this->access_buffer, x_cutoff);
             if (this->x_acc_block == 0)
             {
@@ -1365,101 +1379,116 @@ void matmul_int16(int16_t * z, int16_t * y, int16_t * x, int16_t * w, uint16_t m
 // that accumulated across multiple conversions (like in FMA loops).
 // -----------------------------------------------------------------------------
 
-fp16 float_to_fp16(float f)
-{
-    uint32_t f_bits;
-    memcpy(&f_bits, &f, sizeof(f));
+// fp16 float_to_fp16(float f)
+// {
+//     uint32_t f_bits;
+//     memcpy(&f_bits, &f, sizeof(f));
 
-    uint32_t sign = (f_bits >> 16) & 0x8000u;
-    int32_t  exp  = ((f_bits >> 23) & 0xFF) - 127 + 15;
-    uint32_t mant = f_bits & 0x007FFFFFu;
+//     uint32_t sign = (f_bits >> 16) & 0x8000u;
+//     int32_t  exp  = ((f_bits >> 23) & 0xFF) - 127 + 15;
+//     uint32_t mant = f_bits & 0x007FFFFFu;
 
-    if (exp <= 0) {
-        // Subnormal or zero
-        if (exp < -10) {
-            // Too small -> underflow to zero
-            return sign;
-        }
-        // Add implicit leading 1 and shift to create subnormal
-        mant = (mant | 0x00800000u) >> (1 - exp);
-        // Round-to-nearest-even
-        if (mant & 0x00001000u)
-            mant += 0x00002000u;
-        return sign | (mant >> 13);
-    } 
-    else if (exp >= 0x1F) {
-        // Overflow -> Inf or NaN
-        if ((f_bits & 0x7FFFFFu) != 0)
-            return sign | 0x7E00u; // NaN
-        return sign | 0x7C00u;     // +Inf / -Inf
-    }
+//     if (exp <= 0) {
+//         // Subnormal or zero
+//         if (exp < -10) {
+//             // Too small -> underflow to zero
+//             return sign;
+//         }
+//         // Add implicit leading 1 and shift to create subnormal
+//         mant = (mant | 0x00800000u) >> (1 - exp);
+//         // Round-to-nearest-even
+//         if (mant & 0x00001000u)
+//             mant += 0x00002000u;
+//         return sign | (mant >> 13);
+//     } 
+//     else if (exp >= 0x1F) {
+//         // Overflow -> Inf or NaN
+//         if ((f_bits & 0x7FFFFFu) != 0)
+//             return sign | 0x7E00u; // NaN
+//         return sign | 0x7C00u;     // +Inf / -Inf
+//     }
 
-    // Normal number: add rounding before truncating
-    mant = mant + 0x00001000u;
+//     // Normal number: add rounding before truncating
+//     mant = mant + 0x00001000u;
 
-    // Handle rounding overflow in mantissa
-    if (mant & 0x00800000u) {
-        mant = 0;
-        exp += 1;
-    }
+//     // Handle rounding overflow in mantissa
+//     if (mant & 0x00800000u) {
+//         mant = 0;
+//         exp += 1;
+//     }
 
-    // Overflow after rounding -> Inf
-    if (exp >= 0x1F)
-        return sign | 0x7C00u;
+//     // Overflow after rounding -> Inf
+//     if (exp >= 0x1F)
+//         return sign | 0x7C00u;
 
-    // Compose final 16-bit result
-    return sign | ((exp & 0x1F) << 10) | (mant >> 13);
-}
+//     // Compose final 16-bit result
+//     return sign | ((exp & 0x1F) << 10) | (mant >> 13);
+// }
 
-float fp16_to_float(fp16 h)
-{
-    uint16_t h_exp = (h & 0x7C00u);
-    uint16_t h_sig = (h & 0x03FFu);
-    uint32_t f_sgn = ((uint32_t)h & 0x8000u) << 16;
-    uint32_t f_exp;
-    uint32_t f_sig;
+// float fp16_to_float(fp16 h)
+// {
+//     uint16_t h_exp = (h & 0x7C00u);
+//     uint16_t h_sig = (h & 0x03FFu);
+//     uint32_t f_sgn = ((uint32_t)h & 0x8000u) << 16;
+//     uint32_t f_exp;
+//     uint32_t f_sig;
 
-    if (h_exp == 0x0000u) {
-        // Zero or subnormal number
-        if (h_sig == 0) {
-            // ±0
-            f_exp = 0;
-            f_sig = 0;
-        } else {
-            // Subnormal -> normalize it
-            int shift = 0;
-            while ((h_sig & 0x0400u) == 0) {
-                h_sig <<= 1;
-                shift++;
-            }
-            h_sig &= 0x03FFu;
-            f_exp = (127 - 15 - shift) << 23;
-            f_sig = ((uint32_t)h_sig) << 13;
-        }
-    } else if (h_exp == 0x7C00u) {
-        // Inf or NaN
-        f_exp = 0xFFu << 23;
-        f_sig = ((uint32_t)h_sig) << 13;
-    } else {
-        // Normalized number
-        uint32_t exp = ((h_exp >> 10) & 0x1Fu);
-        f_exp = (exp + (127 - 15)) << 23;
-        f_sig = ((uint32_t)h_sig) << 13;
-    }
+//     if (h_exp == 0x0000u) {
+//         // Zero or subnormal number
+//         if (h_sig == 0) {
+//             // ±0
+//             f_exp = 0;
+//             f_sig = 0;
+//         } else {
+//             // Subnormal -> normalize it
+//             int shift = 0;
+//             while ((h_sig & 0x0400u) == 0) {
+//                 h_sig <<= 1;
+//                 shift++;
+//             }
+//             h_sig &= 0x03FFu;
+//             f_exp = (127 - 15 - shift) << 23;
+//             f_sig = ((uint32_t)h_sig) << 13;
+//         }
+//     } else if (h_exp == 0x7C00u) {
+//         // Inf or NaN
+//         f_exp = 0xFFu << 23;
+//         f_sig = ((uint32_t)h_sig) << 13;
+//     } else {
+//         // Normalized number
+//         uint32_t exp = ((h_exp >> 10) & 0x1Fu);
+//         f_exp = (exp + (127 - 15)) << 23;
+//         f_sig = ((uint32_t)h_sig) << 13;
+//     }
 
-    uint32_t f_bits = f_sgn | f_exp | f_sig;
-    float f;
-    memcpy(&f, &f_bits, sizeof(f));
-    return f;
-}
+//     uint32_t f_bits = f_sgn | f_exp | f_sig;
+//     float f;
+//     memcpy(&f, &f_bits, sizeof(f));
+//     return f;
+// }
+
+// // Fused multiply-add for FP16
+// fp16 fp16_fma(fp16 a, fp16 b, fp16 c) {
+//     float fa = fp16_to_float(a);
+//     float fb = fp16_to_float(b);
+//     float fc = fp16_to_float(c);
+//     float result = (fa * fb) + fc;
+//     return float_to_fp16(result);
+// }
 
 // Fused multiply-add for FP16
 fp16 fp16_fma(fp16 a, fp16 b, fp16 c) {
-    float fa = fp16_to_float(a);
-    float fb = fp16_to_float(b);
-    float fc = fp16_to_float(c);
-    float result = (fa * fb) + fc;
-    return float_to_fp16(result);
+    flexfloat_t ff_a, ff_b, ff_c, ff_res; 
+    flexfloat_desc_t env = (flexfloat_desc_t){5, 10}; 
+    ff_init(&ff_a, env); 
+    ff_init(&ff_b, env); 
+    ff_init(&ff_c, env); 
+    ff_init(&ff_res, env); 
+    flexfloat_set_bits(&ff_a, a); 
+    flexfloat_set_bits(&ff_b, b); 
+    flexfloat_set_bits(&ff_c, c);
+    ff_fma(&ff_res, &ff_a, &ff_b, &ff_c); 
+    return (fp16)flexfloat_get_bits(&ff_res);
 }
 
 void matmul_fp16(fp16 * z, fp16 * y, fp16 * x, fp16 * w, uint16_t m_size, uint16_t n_size, uint16_t k_size){
