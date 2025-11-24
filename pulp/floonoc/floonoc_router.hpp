@@ -37,7 +37,7 @@ class FlooNoc;
 class Router : public vp::Block
 {
 public:
-    Router(FlooNoc *noc, std::string name, int x, int y, int queue_size);
+    Router(FlooNoc *noc, std::string name, int x, int y, int queue_size, int z = 0);
 
     void reset(bool active);
 
@@ -80,7 +80,7 @@ private:
     // be pending
     int queue_size;
     // The input queues for each direction and the local one
-    vp::Queue *input_queues[5];
+    vp::Queue *input_queues[7];
     // Clock event used to schedule FSM handler. This is scheduled eveytime something may need to
     // be done
     vp::ClockEvent fsm_event;
@@ -88,7 +88,7 @@ private:
     int current_queue;
     // State of the output queues, true if it is stalled and nothing can be sent to it anymore
     // until it is unstalled.
-    std::array<vp::Signal<bool>, 5> stalled_queues;
+    std::array<vp::Signal<bool>, 7> stalled_queues;
     // Signal used for tracing router request address
     vp::Signal<uint64_t> signal_req;
 };

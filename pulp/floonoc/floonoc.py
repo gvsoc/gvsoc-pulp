@@ -50,7 +50,7 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         The Z dimension of the grid. This should also include targets on the borders.
     """
     def __init__(self, parent: gvsoc.systree.Component, name, narrow_width: int, wide_width:int,
-            dim_x: int, dim_y:int, ni_outstanding_reqs: int=8, router_input_queue_size: int=2
+            dim_x: int, dim_y:int, ni_outstanding_reqs: int=8, router_input_queue_size: int=2,
             dim_z: int = 1):
         super().__init__(parent, name)
 
@@ -68,13 +68,14 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         self.add_property('wide_width', wide_width)
         self.add_property('dim_x', dim_x)
         self.add_property('dim_y', dim_y)
+        self.add_property('dim_z', dim_z)
         self.add_property('router_input_queue_size', router_input_queue_size)
         self.add_property('is_3d', (dim_z > 1))
 
-    def __add_mapping(self, name: str, base: int, size: int, x: int, y: int, remove_offset:int =0, z: int = 1):
-        self.get_property('mappings')[name] =  {'base': base, 'size': size, 'x': x, 'y': y, 'remove_offset':remove_offset}
+    def __add_mapping(self, name: str, base: int, size: int, x: int, y: int, remove_offset:int =0, z: int = 0):
+        self.get_property('mappings')[name] =  {'base': base, 'size': size, 'x': x, 'y': y, 'z': z, 'remove_offset':remove_offset}
 
-    def add_router(self, x: int, y: int):
+    def add_router(self, x: int, y: int, z: int = 0):
         """Instantiate a router in the grid.
 
         Parameters
@@ -88,7 +89,7 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         """
         self.get_property('routers').append([x, y, z])
 
-    def add_network_interface(self, x: int, y: int, z: int = 1):
+    def add_network_interface(self, x: int, y: int, z: int = 0):
         """Instantiate a network interface in the grid.
 
         A network interface should be instantiated at every node where a burst can be injected,
@@ -106,7 +107,7 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         self.get_property('network_interfaces').append([x, y, z])
 
     def o_NARROW_MAP(self, itf: gvsoc.systree.SlaveItf, base: int, size: int,
-            x: int, y: int, name: str=None, rm_base: bool=False, remove_offset:int =0, z: int = 1):
+            x: int, y: int, name: str=None, rm_base: bool=False, remove_offset:int =0, z: int = 0):
         """Binds the output of a node to a target, associated to a memory-mapped region.
 
         Parameters
@@ -135,13 +136,13 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
             name = itf.component.name
         if rm_base and remove_offset == 0:
             remove_offset =base
-        self.__add_mapping(f"narrow_{name}", base=base, size=size, x=x, y=y, z=z remove_offset=remove_offset)
+        self.__add_mapping(f"narrow_{name}", base=base, size=size, x=x, y=y, z=z, remove_offset=remove_offset)
         self.itf_bind(f"narrow_{name}", itf, signature='io')
 
 
 
     def o_WIDE_MAP(self, itf: gvsoc.systree.SlaveItf, base: int, size: int,
-            x: int, y: int, name: str=None, rm_base: bool=False, remove_offset:int =0, z: int = 1):
+            x: int, y: int, name: str=None, rm_base: bool=False, remove_offset:int =0, z: int = 0):
         """Binds the output of a node to a target, associated to a memory-mapped region.
 
         Parameters
@@ -173,7 +174,7 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         self.__add_mapping(f"wide_{name}", base=base, size=size, x=x, y=y, z=z, remove_offset=remove_offset)
         self.itf_bind(f"wide_{name}", itf, signature='io')
 
-    def i_NARROW_INPUT(self, x: int, y: int, z: int = 1) -> gvsoc.systree.SlaveItf:
+    def i_NARROW_INPUT(self, x: int, y: int, z: int = 0) -> gvsoc.systree.SlaveItf:
         """Returns the input port of a node.
 
         Requests can be injected to the noc using this interface. The noc will then
@@ -193,9 +194,9 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         gvsoc.systree.SlaveItf
             The slave interface
         """
-        return gvsoc.systree.SlaveItf(self, f'narrow_input_{x}_{y}' + (f'_{z}' if z > 1 else ''), signature='io')
+        return gvsoc.systree.SlaveItf(self, f'narrow_input_{x}_{y}_{z}', signature='io')
 
-    def i_WIDE_INPUT(self, x: int, y: int, z: int = 1) -> gvsoc.systree.SlaveItf:
+    def i_WIDE_INPUT(self, x: int, y: int, z: int = 0) -> gvsoc.systree.SlaveItf:
         """Returns the input port of a node.
 
         Requests can be injected to the noc using this interface. The noc will then
@@ -206,7 +207,7 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         x: int
             The x position of the node in the grid
         y: int
-            The y position of the node in the gri
+            The y position of the node in the grid
         z: int
             The z position of the node in the grid
 
@@ -215,7 +216,7 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         gvsoc.systree.SlaveItf
             The slave interface
         """
-        return gvsoc.systree.SlaveItf(self, f'wide_input_{x}_{y}'  + (f'_{z}' if z > 1 else ''), signature='io')
+        return gvsoc.systree.SlaveItf(self, f'wide_input_{x}_{y}_{z}', signature='io')
 
 
 
@@ -246,23 +247,26 @@ class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
         Number of clusters on the Y direction. This should not include the targets on the borders.
     nb_z_clusters: int
         Number of clusters on the Z direction. This should not include the targets on the borders.
+
+    TODO: How should we handle Z>0 periphery? For now, assume there are no NIs here.
     """
     def __init__(self, parent: gvsoc.systree.Component, name, wide_width: int,narrow_width:int, nb_x_clusters: int,
             nb_y_clusters, router_input_queue_size=2, ni_outstanding_reqs: int=2, nb_z_clusters: int = 1):
         # The total grid contains 1 more node on each direction for the targets
-        super().__init__(parent, name, wide_width=wide_width, narrow_width=narrow_width, dim_x=nb_x_clusters+2, dim_y=nb_y_clusters+2, router_input_queue_size=router_input_queue_size, ni_outstanding_reqs=ni_outstanding_reqs)
+        super().__init__(parent, name, wide_width=wide_width, narrow_width=narrow_width, dim_x=nb_x_clusters+2, dim_y=nb_y_clusters+2, dim_z=nb_z_clusters, router_input_queue_size=router_input_queue_size, ni_outstanding_reqs=ni_outstanding_reqs)
 
-        for tile_x in range(0, nb_x_clusters):
-            for tile_y in range(0, nb_y_clusters):
-                # Add 1 as clusters, routers and network_interfaces are in the central part
-                self.add_router(tile_x+1, tile_y+1) # Add a router at each cluster
+        for tile_z in range(0, nb_z_clusters):
+            for tile_x in range(0, nb_x_clusters):
+                for tile_y in range(0, nb_y_clusters):
+                    # Add 1 as clusters, routers and network_interfaces are in the central part
+                    self.add_router(tile_x+1, tile_y+1, tile_z) # Add a router at each cluster
         for tile_x in range(0, nb_x_clusters+2):
             for tile_y in range(0, nb_y_clusters+2):
-                # Add a NI at each node, excluding the corners, because it also (once finished) acts as an output to the targets
+                # Add a NI at each z=0 node, excluding the corners, because it also (once finished) acts as an output to the targets
                 if not (tile_x == 0 and tile_y == 0) or (tile_x == 0 and tile_y == nb_y_clusters+1) or (tile_x == nb_x_clusters+1 and tile_y == 0) or (tile_x == nb_x_clusters+1 and tile_y == nb_y_clusters+1):
-                    self.add_network_interface(tile_x, tile_y)
+                    self.add_network_interface(tile_x, tile_y, z=0)
 
-    def i_CLUSTER_NARROW_INPUT(self, x: int, y: int) -> gvsoc.systree.SlaveItf:
+    def i_CLUSTER_NARROW_INPUT(self, x: int, y: int, z: int = 0) -> gvsoc.systree.SlaveItf:
         """Returns the input port of a cluster tile.
 
         The cluster can inject requests to the noc using this interface. The noc will then
@@ -274,15 +278,17 @@ class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
             The x position of the cluster in the grid
         y: int
             The y position of the cluster in the grid
+        z: int
+            The z position of the cluster in the grid
 
         Returns
         ----------
         gvsoc.systree.SlaveItf
             The slave interface
         """
-        return self.i_NARROW_INPUT(x+1, y+1)
+        return self.i_NARROW_INPUT(x+1, y+1, z)
 
-    def i_CLUSTER_WIDE_INPUT(self, x: int, y: int) -> gvsoc.systree.SlaveItf:
+    def i_CLUSTER_WIDE_INPUT(self, x: int, y: int, z: int = 0) -> gvsoc.systree.SlaveItf:
         """Returns the input port of a cluster tile.
 
         The cluster can inject requests to the noc using this interface. The noc will then
@@ -294,13 +300,15 @@ class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
             The x position of the cluster in the grid
         y: int
             The y position of the cluster in the grid
+        z: int
+            The z position of the cluster in the grid
 
         Returns
         ----------
         gvsoc.systree.SlaveItf
             The slave interface
         """
-        return self.i_WIDE_INPUT(x+1, y+1)
+        return self.i_WIDE_INPUT(x+1, y+1, z)
 
     def __gen_gui_router(self, routers, name, path):
         router = gvsoc.gui.Signal(self, routers, name, path=f"{path}/req", groups=['regmap'])
@@ -309,22 +317,24 @@ class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
         gvsoc.gui.Signal(self, router, "stalled_queue_up", path=f"{path}/stalled_queue_up", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
         gvsoc.gui.Signal(self, router, "stalled_queue_down", path=f"{path}/stalled_queue_down", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
         gvsoc.gui.Signal(self, router, "stalled_queue_local", path=f"{path}/stalled_queue_local", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+        gvsoc.gui.Signal(self, router, "stalled_queue_zplus", path=f"{path}/stalled_queue_zplus", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+        gvsoc.gui.Signal(self, router, "stalled_queue_zminus", path=f"{path}/stalled_queue_zminus", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
 
     def gen_gui(self, parent_signal):
         top = gvsoc.gui.Signal(self, parent_signal, name=self.name)
 
         routers = gvsoc.gui.Signal(self, top, name="routers")
         for router_id in self.get_property('routers'):
-            router = gvsoc.gui.Signal(self, routers, f"router_{router_id[0]}_{router_id[1]}")
-            self.__gen_gui_router(router, "req", path=f"req_router_{router_id[0]}_{router_id[1]}")
-            self.__gen_gui_router(router, "rsp", path=f"rsp_router_{router_id[0]}_{router_id[1]}")
-            self.__gen_gui_router(router, "wide", path=f"wide_router_{router_id[0]}_{router_id[1]}")
+            router = gvsoc.gui.Signal(self, routers, f"router_{router_id[0]}_{router_id[1]}_{router_id[2]}")
+            self.__gen_gui_router(router, "req", path=f"req_router_{router_id[0]}_{router_id[1]}_{router_id[2]}")
+            self.__gen_gui_router(router, "rsp", path=f"rsp_router_{router_id[0]}_{router_id[1]}_{router_id[2]}")
+            self.__gen_gui_router(router, "wide", path=f"wide_router_{router_id[0]}_{router_id[1]}_{router_id[2]}")
 
         nis = gvsoc.gui.Signal(self, top, name="nis")
         for ni_id in self.get_property('network_interfaces'):
-            ni = gvsoc.gui.Signal(self, nis, f"ni_{ni_id[0]}_{ni_id[1]}")
-            gvsoc.gui.Signal(self, ni, "narrow_req", path=f"ni_{ni_id[0]}_{ni_id[1]}/narrow_req", groups=['regmap'])
-            gvsoc.gui.Signal(self, ni, "wide_req", path=f"ni_{ni_id[0]}_{ni_id[1]}/wide_req", groups=['regmap'])
+            ni = gvsoc.gui.Signal(self, nis, f"ni_{ni_id[0]}_{ni_id[1]}_{ni_id[2]}")
+            gvsoc.gui.Signal(self, ni, "narrow_req", path=f"ni_{ni_id[0]}_{ni_id[1]}_{ni_id[2]}/narrow_req", groups=['regmap'])
+            gvsoc.gui.Signal(self, ni, "wide_req", path=f"ni_{ni_id[0]}_{ni_id[1]}_{ni_id[2]}/wide_req", groups=['regmap'])
 
 
 

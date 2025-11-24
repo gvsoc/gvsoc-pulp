@@ -1,0 +1,716 @@
+{
+  "target": {
+    "clock": {
+      "vp_component": "vp.clock_engine_module",
+      "frequency": 100000000,
+      "factor": 1,
+      "ports": [
+        "out"
+      ]
+    },
+    "soc": {
+      "noc": {
+        "mappings": {
+          "wide_ni_0_0": {
+            "base": 2147483648,
+            "size": 16777216,
+            "x": 1,
+            "y": 1,
+            "z": 0,
+            "remove_offset": 0
+          },
+          "wide_ni_0_1": {
+            "base": 2197815296,
+            "size": 16777216,
+            "x": 1,
+            "y": 2,
+            "z": 0,
+            "remove_offset": 0
+          },
+          "wide_ni_0_2": {
+            "base": 2248146944,
+            "size": 16777216,
+            "x": 1,
+            "y": 3,
+            "z": 0,
+            "remove_offset": 0
+          },
+          "wide_ni_1_0": {
+            "base": 2164260864,
+            "size": 16777216,
+            "x": 2,
+            "y": 1,
+            "z": 0,
+            "remove_offset": 0
+          },
+          "wide_ni_1_1": {
+            "base": 2214592512,
+            "size": 16777216,
+            "x": 2,
+            "y": 2,
+            "z": 0,
+            "remove_offset": 0
+          },
+          "wide_ni_1_2": {
+            "base": 2264924160,
+            "size": 16777216,
+            "x": 2,
+            "y": 3,
+            "z": 0,
+            "remove_offset": 0
+          },
+          "wide_ni_2_0": {
+            "base": 2181038080,
+            "size": 16777216,
+            "x": 3,
+            "y": 1,
+            "z": 0,
+            "remove_offset": 0
+          },
+          "wide_ni_2_1": {
+            "base": 2231369728,
+            "size": 16777216,
+            "x": 3,
+            "y": 2,
+            "z": 0,
+            "remove_offset": 0
+          },
+          "wide_ni_2_2": {
+            "base": 2281701376,
+            "size": 16777216,
+            "x": 3,
+            "y": 3,
+            "z": 0,
+            "remove_offset": 0
+          }
+        },
+        "routers": [
+          [
+            1,
+            1,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            2,
+            1,
+            0
+          ],
+          [
+            2,
+            2,
+            0
+          ],
+          [
+            2,
+            3,
+            0
+          ],
+          [
+            3,
+            1,
+            0
+          ],
+          [
+            3,
+            2,
+            0
+          ],
+          [
+            3,
+            3,
+            0
+          ]
+        ],
+        "network_interfaces": [
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            4,
+            0
+          ],
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            1,
+            0
+          ],
+          [
+            1,
+            2,
+            0
+          ],
+          [
+            1,
+            3,
+            0
+          ],
+          [
+            1,
+            4,
+            0
+          ],
+          [
+            2,
+            0,
+            0
+          ],
+          [
+            2,
+            1,
+            0
+          ],
+          [
+            2,
+            2,
+            0
+          ],
+          [
+            2,
+            3,
+            0
+          ],
+          [
+            2,
+            4,
+            0
+          ],
+          [
+            3,
+            0,
+            0
+          ],
+          [
+            3,
+            1,
+            0
+          ],
+          [
+            3,
+            2,
+            0
+          ],
+          [
+            3,
+            3,
+            0
+          ],
+          [
+            3,
+            4,
+            0
+          ],
+          [
+            4,
+            0,
+            0
+          ],
+          [
+            4,
+            1,
+            0
+          ],
+          [
+            4,
+            2,
+            0
+          ],
+          [
+            4,
+            3,
+            0
+          ],
+          [
+            4,
+            4,
+            0
+          ]
+        ],
+        "ni_outstanding_reqs": 2,
+        "narrow_width": 8,
+        "wide_width": 8,
+        "dim_x": 5,
+        "dim_y": 5,
+        "dim_z": 1,
+        "router_input_queue_size": 2,
+        "is_3d": false,
+        "vp_component": "gen_pulp_floonoc_floonoc_cpp_16816762",
+        "ports": [
+          "wide_input_1_1_0",
+          "wide_ni_0_0",
+          "wide_input_1_2_0",
+          "wide_ni_0_1",
+          "wide_input_1_3_0",
+          "wide_ni_0_2",
+          "wide_input_2_1_0",
+          "wide_ni_1_0",
+          "wide_input_2_2_0",
+          "wide_ni_1_1",
+          "wide_input_2_3_0",
+          "wide_ni_1_2",
+          "wide_input_3_1_0",
+          "wide_ni_2_0",
+          "wide_input_3_2_0",
+          "wide_ni_2_1",
+          "wide_input_3_3_0",
+          "wide_ni_2_2"
+        ]
+      },
+      "test": {
+        "nb_cluster_x": 3,
+        "nb_cluster_y": 3,
+        "cluster_base": 2147483648,
+        "cluster_size": 16777216,
+        "vp_component": "gen_test_cpp_210360604",
+        "ports": [
+          "noc_ni_0_0",
+          "generator_control_0_0",
+          "receiver_control_0_0",
+          "noc_ni_0_1",
+          "generator_control_0_1",
+          "receiver_control_0_1",
+          "noc_ni_0_2",
+          "generator_control_0_2",
+          "receiver_control_0_2",
+          "noc_ni_1_0",
+          "generator_control_1_0",
+          "receiver_control_1_0",
+          "noc_ni_1_1",
+          "generator_control_1_1",
+          "receiver_control_1_1",
+          "noc_ni_1_2",
+          "generator_control_1_2",
+          "receiver_control_1_2",
+          "noc_ni_2_0",
+          "generator_control_2_0",
+          "receiver_control_2_0",
+          "noc_ni_2_1",
+          "generator_control_2_1",
+          "receiver_control_2_1",
+          "noc_ni_2_2",
+          "generator_control_2_2",
+          "receiver_control_2_2"
+        ]
+      },
+      "generator_0_0": {
+        "vp_component": "gen_interco_traffic_generator_cpp_24960091",
+        "ports": [
+          "output",
+          "control"
+        ]
+      },
+      "receiver_0_0": {
+        "vp_component": "gen_interco_traffic_receiver_cpp_65187684",
+        "ports": [
+          "control",
+          "input"
+        ]
+      },
+      "generator_0_1": {
+        "vp_component": "gen_interco_traffic_generator_cpp_24960091",
+        "ports": [
+          "output",
+          "control"
+        ]
+      },
+      "receiver_0_1": {
+        "vp_component": "gen_interco_traffic_receiver_cpp_65187684",
+        "ports": [
+          "control",
+          "input"
+        ]
+      },
+      "generator_0_2": {
+        "vp_component": "gen_interco_traffic_generator_cpp_24960091",
+        "ports": [
+          "output",
+          "control"
+        ]
+      },
+      "receiver_0_2": {
+        "vp_component": "gen_interco_traffic_receiver_cpp_65187684",
+        "ports": [
+          "control",
+          "input"
+        ]
+      },
+      "generator_1_0": {
+        "vp_component": "gen_interco_traffic_generator_cpp_24960091",
+        "ports": [
+          "output",
+          "control"
+        ]
+      },
+      "receiver_1_0": {
+        "vp_component": "gen_interco_traffic_receiver_cpp_65187684",
+        "ports": [
+          "control",
+          "input"
+        ]
+      },
+      "generator_1_1": {
+        "vp_component": "gen_interco_traffic_generator_cpp_24960091",
+        "ports": [
+          "output",
+          "control"
+        ]
+      },
+      "receiver_1_1": {
+        "vp_component": "gen_interco_traffic_receiver_cpp_65187684",
+        "ports": [
+          "control",
+          "input"
+        ]
+      },
+      "generator_1_2": {
+        "vp_component": "gen_interco_traffic_generator_cpp_24960091",
+        "ports": [
+          "output",
+          "control"
+        ]
+      },
+      "receiver_1_2": {
+        "vp_component": "gen_interco_traffic_receiver_cpp_65187684",
+        "ports": [
+          "control",
+          "input"
+        ]
+      },
+      "generator_2_0": {
+        "vp_component": "gen_interco_traffic_generator_cpp_24960091",
+        "ports": [
+          "output",
+          "control"
+        ]
+      },
+      "receiver_2_0": {
+        "vp_component": "gen_interco_traffic_receiver_cpp_65187684",
+        "ports": [
+          "control",
+          "input"
+        ]
+      },
+      "generator_2_1": {
+        "vp_component": "gen_interco_traffic_generator_cpp_24960091",
+        "ports": [
+          "output",
+          "control"
+        ]
+      },
+      "receiver_2_1": {
+        "vp_component": "gen_interco_traffic_receiver_cpp_65187684",
+        "ports": [
+          "control",
+          "input"
+        ]
+      },
+      "generator_2_2": {
+        "vp_component": "gen_interco_traffic_generator_cpp_24960091",
+        "ports": [
+          "output",
+          "control"
+        ]
+      },
+      "receiver_2_2": {
+        "vp_component": "gen_interco_traffic_receiver_cpp_65187684",
+        "ports": [
+          "control",
+          "input"
+        ]
+      },
+      "bindings": [
+        [
+          "generator_0_0->output",
+          "noc->wide_input_1_1_0"
+        ],
+        [
+          "test->noc_ni_0_0",
+          "noc->wide_input_1_1_0"
+        ],
+        [
+          "test->generator_control_0_0",
+          "generator_0_0->control"
+        ],
+        [
+          "test->receiver_control_0_0",
+          "receiver_0_0->control"
+        ],
+        [
+          "noc->wide_ni_0_0",
+          "receiver_0_0->input"
+        ],
+        [
+          "generator_0_1->output",
+          "noc->wide_input_1_2_0"
+        ],
+        [
+          "test->noc_ni_0_1",
+          "noc->wide_input_1_2_0"
+        ],
+        [
+          "test->generator_control_0_1",
+          "generator_0_1->control"
+        ],
+        [
+          "test->receiver_control_0_1",
+          "receiver_0_1->control"
+        ],
+        [
+          "noc->wide_ni_0_1",
+          "receiver_0_1->input"
+        ],
+        [
+          "generator_0_2->output",
+          "noc->wide_input_1_3_0"
+        ],
+        [
+          "test->noc_ni_0_2",
+          "noc->wide_input_1_3_0"
+        ],
+        [
+          "test->generator_control_0_2",
+          "generator_0_2->control"
+        ],
+        [
+          "test->receiver_control_0_2",
+          "receiver_0_2->control"
+        ],
+        [
+          "noc->wide_ni_0_2",
+          "receiver_0_2->input"
+        ],
+        [
+          "generator_1_0->output",
+          "noc->wide_input_2_1_0"
+        ],
+        [
+          "test->noc_ni_1_0",
+          "noc->wide_input_2_1_0"
+        ],
+        [
+          "test->generator_control_1_0",
+          "generator_1_0->control"
+        ],
+        [
+          "test->receiver_control_1_0",
+          "receiver_1_0->control"
+        ],
+        [
+          "noc->wide_ni_1_0",
+          "receiver_1_0->input"
+        ],
+        [
+          "generator_1_1->output",
+          "noc->wide_input_2_2_0"
+        ],
+        [
+          "test->noc_ni_1_1",
+          "noc->wide_input_2_2_0"
+        ],
+        [
+          "test->generator_control_1_1",
+          "generator_1_1->control"
+        ],
+        [
+          "test->receiver_control_1_1",
+          "receiver_1_1->control"
+        ],
+        [
+          "noc->wide_ni_1_1",
+          "receiver_1_1->input"
+        ],
+        [
+          "generator_1_2->output",
+          "noc->wide_input_2_3_0"
+        ],
+        [
+          "test->noc_ni_1_2",
+          "noc->wide_input_2_3_0"
+        ],
+        [
+          "test->generator_control_1_2",
+          "generator_1_2->control"
+        ],
+        [
+          "test->receiver_control_1_2",
+          "receiver_1_2->control"
+        ],
+        [
+          "noc->wide_ni_1_2",
+          "receiver_1_2->input"
+        ],
+        [
+          "generator_2_0->output",
+          "noc->wide_input_3_1_0"
+        ],
+        [
+          "test->noc_ni_2_0",
+          "noc->wide_input_3_1_0"
+        ],
+        [
+          "test->generator_control_2_0",
+          "generator_2_0->control"
+        ],
+        [
+          "test->receiver_control_2_0",
+          "receiver_2_0->control"
+        ],
+        [
+          "noc->wide_ni_2_0",
+          "receiver_2_0->input"
+        ],
+        [
+          "generator_2_1->output",
+          "noc->wide_input_3_2_0"
+        ],
+        [
+          "test->noc_ni_2_1",
+          "noc->wide_input_3_2_0"
+        ],
+        [
+          "test->generator_control_2_1",
+          "generator_2_1->control"
+        ],
+        [
+          "test->receiver_control_2_1",
+          "receiver_2_1->control"
+        ],
+        [
+          "noc->wide_ni_2_1",
+          "receiver_2_1->input"
+        ],
+        [
+          "generator_2_2->output",
+          "noc->wide_input_3_3_0"
+        ],
+        [
+          "test->noc_ni_2_2",
+          "noc->wide_input_3_3_0"
+        ],
+        [
+          "test->generator_control_2_2",
+          "generator_2_2->control"
+        ],
+        [
+          "test->receiver_control_2_2",
+          "receiver_2_2->control"
+        ],
+        [
+          "noc->wide_ni_2_2",
+          "receiver_2_2->input"
+        ]
+      ],
+      "components": [
+        "noc",
+        "test",
+        "generator_0_0",
+        "receiver_0_0",
+        "generator_0_1",
+        "receiver_0_1",
+        "generator_0_2",
+        "receiver_0_2",
+        "generator_1_0",
+        "receiver_1_0",
+        "generator_1_1",
+        "receiver_1_1",
+        "generator_1_2",
+        "receiver_1_2",
+        "generator_2_0",
+        "receiver_2_0",
+        "generator_2_1",
+        "receiver_2_1",
+        "generator_2_2",
+        "receiver_2_2"
+      ],
+      "ports": [
+        "clock"
+      ]
+    },
+    "gvsoc": {
+      "proxy": {
+        "enabled": false,
+        "port": 42951
+      },
+      "events": {
+        "enabled": false,
+        "include_raw": [],
+        "include_regex": [],
+        "exclude_regex": [],
+        "format": "vcd",
+        "active": false,
+        "all": true,
+        "gtkw": false,
+        "gen_gtkw": false,
+        "files": [],
+        "traces": {},
+        "tags": [
+          "overview"
+        ],
+        "use-external-dumper": null
+      },
+      "include_dirs": [
+        "/usr/scratch/kneiff/paulsc/dev/qs3d/gvrout/install/models"
+      ],
+      "runner_module": "gv.gvsoc",
+      "cycles_to_seconds": "int(max(cycles * nb_cores / 5000000, 600))",
+      "werror": true,
+      "verbose": true,
+      "debug-mode": true,
+      "launchers": {
+        "default": "gvsoc_launcher",
+        "debug": "gvsoc_launcher_debug"
+      },
+      "traces": {
+        "level": "trace",
+        "format": "long",
+        "float_hex": false,
+        "enabled": false,
+        "include_regex": [
+          ".*:log.txt"
+        ],
+        "exclude_regex": []
+      },
+      "systemc": false,
+      "wunconnected-padfun": false,
+      "memcheck": false,
+      "power": false
+    },
+    "bindings": [
+      [
+        "clock->out",
+        "soc->clock"
+      ]
+    ],
+    "components": [
+      "clock",
+      "soc"
+    ]
+  }
+}

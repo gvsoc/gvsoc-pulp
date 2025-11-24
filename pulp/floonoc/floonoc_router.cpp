@@ -26,8 +26,8 @@
 #include "floonoc_router.hpp"
 #include "floonoc_network_interface.hpp"
 
-Router::Router(FlooNoc *noc, std::string name, int x, int y, int queue_size)
-    : vp::Block(noc, name + std::to_string(x) + "_" + std::to_string(y)),
+Router::Router(FlooNoc *noc, std::string name, int x, int y, int queue_size, int z)
+    : vp::Block(noc, name + std::to_string(x) + "_" + std::to_string(y) + "_" + std::to_string(z)),
       fsm_event(this, &Router::fsm_handler), signal_req(*this, "req", 64),
       stalled_queues{{
         vp::Signal<bool>(*this, "stalled_queue_right", 1),
@@ -294,7 +294,7 @@ void Router::unstall_queue(int from_x, int from_y, int from_z)
     this->fsm_event.enqueue();
 }
 
-void Router::stall_queue(int from_x, int from_y, int from_zs)
+void Router::stall_queue(int from_x, int from_y, int from_z)
 {
     int queue = this->get_req_queue(from_x, from_y, from_z);
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Stalling queue (position: (%d, %d), queue: %d)\n", from_x, from_y, from_z, queue);

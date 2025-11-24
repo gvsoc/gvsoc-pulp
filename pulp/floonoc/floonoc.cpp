@@ -118,9 +118,9 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
 
             this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding routers (req, rsp and wide) (x: %d, y: %d, z: %d)\n", x, y, z);
 
-            this->req_routers[z*this->dim_y*this->dim_x + y*this->dim_x + x] = new Router(this,"req_router_", x, y, z, this->router_input_queue_size);
-            this->rsp_routers[z*this->dim_y*this->dim_x + y*this->dim_x + x] = new Router(this, "rsp_router_", x, y, z, this->router_input_queue_size);
-            this->wide_routers[z*this->dim_y*this->dim_x + y*this->dim_x + x] = new Router(this, "wide_router_", x, y, z, this->router_input_queue_size);
+            this->req_routers[z*this->dim_y*this->dim_x + y*this->dim_x + x] = new Router(this,"req_router_", x, y, this->router_input_queue_size, z);
+            this->rsp_routers[z*this->dim_y*this->dim_x + y*this->dim_x + x] = new Router(this, "rsp_router_", x, y, this->router_input_queue_size, z);
+            this->wide_routers[z*this->dim_y*this->dim_x + y*this->dim_x + x] = new Router(this, "wide_router_", x, y, this->router_input_queue_size, z);
         }
     }
 }

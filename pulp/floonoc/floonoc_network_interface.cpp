@@ -182,7 +182,7 @@ void NetworkInterface::req_from_router(vp::IoReq *req, int from_x, int from_y, i
         if(!burst->get_is_write()){
             // If the burst is a read burst, we need to send the data back to the origin
             // For a write nothing needs to be done. The sending NI will take care of it
-            this->add_pending_burst(burst, false, 0, std::make_tuple(origin_ni->get_x(), origin_ni->get_y(), , origin_ni->get_z()));
+            this->add_pending_burst(burst, false, 0, std::make_tuple(origin_ni->get_x(), origin_ni->get_y(), origin_ni->get_z()));
             // Enqueue the FSM event to process the burst by sending the data back
             this->fsm_event.enqueue();
 
@@ -209,7 +209,7 @@ void NetworkInterface::req_from_router(vp::IoReq *req, int from_x, int from_y, i
         // Received a data (non addr) request from a router.
         // Account it on the corresponding burst and notifiy the burst initator (cluster)
         this->trace.msg(vp::Trace::LEVEL_TRACE, "Received non-addr response from router (req: %p, base: 0x%x, size: 0x%x, position: (%d, %d, %d))\n",
-                        req, req->get_addr(), req->get_size(), this->x, this->y, , this->z);
+                        req, req->get_addr(), req->get_size(), this->x, this->y, this->z);
         this->handle_response(req);
     }
 }
@@ -266,7 +266,7 @@ void NetworkInterface::remove_pending_burst(void)
 }
 
 
-void NetworkInterface::add_pending_burst(vp::IoReq *burst, bool isaddr, int64_t timestamp, std::tuple<int, int> origin_pos){
+void NetworkInterface::add_pending_burst(vp::IoReq *burst, bool isaddr, int64_t timestamp, std::tuple<int, int, int> origin_pos){
     this->pending_bursts.push(burst);
     this->pending_burst_isaddr.push(isaddr);
     this->pending_bursts_timestamp.push(timestamp);

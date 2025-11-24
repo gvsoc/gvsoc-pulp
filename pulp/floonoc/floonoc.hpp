@@ -86,7 +86,7 @@ public:
     Router *get_router(int x, int y, bool is_wide, bool is_write, bool is_address, int z = 0);
 
     // Return the target at specified position
-    vp::IoMaster *get_target(int x, int y);
+    vp::IoMaster *get_target(int x, int y, int z = 0);
     // Return the network interface at specified position
     NetworkInterface *get_network_interface(int x, int y, int z = 0);
     // Return the memory-mapped entry corresponding to the specified mapping. Can be used to get

@@ -1,0 +1,1746 @@
+0: -1: [[34m/trace[0m] Creating components
+0: -1: [[34m/clock/trace[0m] New slave port (name: clock, port: 0x13ba278)
+0: -1: [[34m/clock/trace[0m] New slave port (name: reset, port: 0x13ba080)
+0: -1: [[34m/clock/comp [0m] New slave port (name: power_supply, port: 0x13ba128)
+0: -1: [[34m/clock/comp [0m] New slave port (name: voltage, port: 0x13ba1d0)
+0: -1: [[34m/clock/comp [0m] New master port (name: out, port: 0x13ba300)
+0: -1: [[34m/clock/comp [0m] New slave port (name: clock_in, port: 0x13ba388)
+0: -1: [[34m/trace       [0m] New component (name: clock)
+0: -1: [[34m/soc/trace   [0m] Creating components
+0: -1: [[34m/soc/noc/trace[0m] New slave port (name: clock, port: 0x13ace08)
+0: -1: [[34m/soc/noc/trace[0m] New slave port (name: reset, port: 0x13acc10)
+0: -1: [[34m/soc/noc/comp [0m] New slave port (name: power_supply, port: 0x13accb8)
+0: -1: [[34m/soc/noc/comp [0m] New slave port (name: voltage, port: 0x13acd60)
+0: -1: [[34m/soc/noc/comp [0m] New master port (name: wide_ni_0_0, port: 0x13ad6c0)
+0: -1: [[34m/soc/noc/trace[0m] Adding target (name: wide_ni_0_0, base: 0x80000000, size: 0x1000000, x: 1, y: 1, z: 0, remove_offset: 0x0)
+0: -1: [[34m/soc/noc/comp [0m] New master port (name: wide_ni_0_1, port: 0x13ad7e0)
+0: -1: [[34m/soc/noc/trace[0m] Adding target (name: wide_ni_0_1, base: 0x83000000, size: 0x1000000, x: 1, y: 2, z: 0, remove_offset: 0x0)
+0: -1: [[34m/soc/noc/comp [0m] New master port (name: wide_ni_0_2, port: 0x13ad900)
+0: -1: [[34m/soc/noc/trace[0m] Adding target (name: wide_ni_0_2, base: 0x86000000, size: 0x1000000, x: 1, y: 3, z: 0, remove_offset: 0x0)
+0: -1: [[34m/soc/noc/comp [0m] New master port (name: wide_ni_1_0, port: 0x13ada20)
+0: -1: [[34m/soc/noc/trace[0m] Adding target (name: wide_ni_1_0, base: 0x81000000, size: 0x1000000, x: 2, y: 1, z: 0, remove_offset: 0x0)
+0: -1: [[34m/soc/noc/comp [0m] New master port (name: wide_ni_1_1, port: 0x13adb40)
+0: -1: [[34m/soc/noc/trace[0m] Adding target (name: wide_ni_1_1, base: 0x84000000, size: 0x1000000, x: 2, y: 2, z: 0, remove_offset: 0x0)
+0: -1: [[34m/soc/noc/comp [0m] New master port (name: wide_ni_1_2, port: 0x13adc60)
+0: -1: [[34m/soc/noc/trace[0m] Adding target (name: wide_ni_1_2, base: 0x87000000, size: 0x1000000, x: 2, y: 3, z: 0, remove_offset: 0x0)
+0: -1: [[34m/soc/noc/comp [0m] New master port (name: wide_ni_2_0, port: 0x13add80)
+0: -1: [[34m/soc/noc/trace[0m] Adding target (name: wide_ni_2_0, base: 0x82000000, size: 0x1000000, x: 3, y: 1, z: 0, remove_offset: 0x0)
+0: -1: [[34m/soc/noc/comp [0m] New master port (name: wide_ni_2_1, port: 0x13adea0)
+0: -1: [[34m/soc/noc/trace[0m] Adding target (name: wide_ni_2_1, base: 0x85000000, size: 0x1000000, x: 3, y: 2, z: 0, remove_offset: 0x0)
+0: -1: [[34m/soc/noc/comp [0m] New master port (name: wide_ni_2_2, port: 0x13adfc0)
+0: -1: [[34m/soc/noc/trace[0m] Adding target (name: wide_ni_2_2, base: 0x88000000, size: 0x1000000, x: 3, y: 3, z: 0, remove_offset: 0x0)
+0: -1: [[34m/soc/noc/trace[0m] Adding network interface (x: 0, y: 1, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_0_1_0, port: 0x13ae708)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_0_1_0, port: 0x13ae650)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 0, y: 2, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_0_2_0, port: 0x13b0508)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_0_2_0, port: 0x13b0450)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 0, y: 3, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_0_3_0, port: 0x13b2698)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_0_3_0, port: 0x13b25e0)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 0, y: 4, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_0_4_0, port: 0x13cfb58)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_0_4_0, port: 0x13cfaa0)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 1, y: 0, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_1_0_0, port: 0x13d1de8)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_1_0_0, port: 0x13d1d30)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 1, y: 1, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_1_1_0, port: 0x13d3e88)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_1_1_0, port: 0x13d3dd0)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 1, y: 2, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_1_2_0, port: 0x13d5ff8)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_1_2_0, port: 0x13d5f40)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 1, y: 3, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_1_3_0, port: 0x13d8078)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_1_3_0, port: 0x13d7fc0)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 1, y: 4, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_1_4_0, port: 0x13da0f8)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_1_4_0, port: 0x13da040)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 2, y: 0, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_2_0_0, port: 0x13dc308)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_2_0_0, port: 0x13dc250)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 2, y: 1, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_2_1_0, port: 0x13de798)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_2_1_0, port: 0x13de6e0)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 2, y: 2, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_2_2_0, port: 0x13e0608)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_2_2_0, port: 0x13e0550)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 2, y: 3, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_2_3_0, port: 0x13e2688)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_2_3_0, port: 0x13e25d0)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 2, y: 4, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_2_4_0, port: 0x13e4708)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_2_4_0, port: 0x13e4650)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 3, y: 0, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_3_0_0, port: 0x13e6968)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_3_0_0, port: 0x13e68b0)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 3, y: 1, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_3_1_0, port: 0x13e89e8)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_3_1_0, port: 0x13e8930)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 3, y: 2, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_3_2_0, port: 0x13eaa68)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_3_2_0, port: 0x13ea9b0)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 3, y: 3, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_3_3_0, port: 0x13ecae8)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_3_3_0, port: 0x13eca30)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 3, y: 4, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_3_4_0, port: 0x13eeb68)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_3_4_0, port: 0x13eeab0)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 4, y: 0, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_4_0_0, port: 0x13f0be8)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_4_0_0, port: 0x13f0b30)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 4, y: 1, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_4_1_0, port: 0x13f3478)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_4_1_0, port: 0x13f33c0)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 4, y: 2, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_4_2_0, port: 0x13f54f8)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_4_2_0, port: 0x13f5440)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 4, y: 3, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_4_3_0, port: 0x13f7578)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_4_3_0, port: 0x13f74c0)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding network interface (x: 4, y: 4, z: 0)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: narrow_input_4_4_0, port: 0x13f95f8)
+0: -1: [[34m/soc/noc/comp                     [0m] New slave port (name: wide_input_4_4_0, port: 0x13f9540)
+0: -1: [[34m/soc/noc/trace                    [0m] Adding routers (req, rsp and wide) (x: 1, y: 1, z: 0)
+0: -1: [[34m/soc/noc/req_router_1_1_0/stalled_queue_right/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_1_1_0/stalled_queue_left/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_1_1_0/stalled_queue_up/trace    [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_1_1_0/stalled_queue_down/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_1_1_0/stalled_queue_local/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_1_1_0/stalled_queue_zplus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_1_1_0/stalled_queue_zminus/trace[0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_1_1_0/stalled_queue_right/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_1_1_0/stalled_queue_left/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_1_1_0/stalled_queue_up/trace    [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_1_1_0/stalled_queue_down/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_1_1_0/stalled_queue_local/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_1_1_0/stalled_queue_zplus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_1_1_0/stalled_queue_zminus/trace[0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_1_1_0/stalled_queue_right/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_1_1_0/stalled_queue_left/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_1_1_0/stalled_queue_up/trace    [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_1_1_0/stalled_queue_down/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_1_1_0/stalled_queue_local/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_1_1_0/stalled_queue_zplus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_1_1_0/stalled_queue_zminus/trace[0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/trace                                       [0m] Adding routers (req, rsp and wide) (x: 1, y: 2, z: 0)
+0: -1: [[34m/soc/noc/req_router_1_2_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_1_2_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_1_2_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_1_2_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_1_2_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_1_2_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_1_2_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_1_2_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_1_2_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_1_2_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_1_2_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_1_2_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_1_2_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_1_2_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_1_2_0/stalled_queue_right/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_1_2_0/stalled_queue_left/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_1_2_0/stalled_queue_up/trace    [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_1_2_0/stalled_queue_down/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_1_2_0/stalled_queue_local/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_1_2_0/stalled_queue_zplus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_1_2_0/stalled_queue_zminus/trace[0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/trace                                       [0m] Adding routers (req, rsp and wide) (x: 1, y: 3, z: 0)
+0: -1: [[34m/soc/noc/req_router_1_3_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_1_3_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_1_3_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_1_3_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_1_3_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_1_3_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_1_3_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_1_3_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_1_3_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_1_3_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_1_3_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_1_3_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_1_3_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_1_3_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_1_3_0/stalled_queue_right/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_1_3_0/stalled_queue_left/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_1_3_0/stalled_queue_up/trace    [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_1_3_0/stalled_queue_down/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_1_3_0/stalled_queue_local/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_1_3_0/stalled_queue_zplus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_1_3_0/stalled_queue_zminus/trace[0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/trace                                       [0m] Adding routers (req, rsp and wide) (x: 2, y: 1, z: 0)
+0: -1: [[34m/soc/noc/req_router_2_1_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_2_1_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_2_1_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_2_1_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_2_1_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_2_1_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_2_1_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_2_1_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_2_1_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_2_1_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_2_1_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_2_1_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_2_1_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_2_1_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_2_1_0/stalled_queue_right/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_2_1_0/stalled_queue_left/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_2_1_0/stalled_queue_up/trace    [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_2_1_0/stalled_queue_down/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_2_1_0/stalled_queue_local/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_2_1_0/stalled_queue_zplus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_2_1_0/stalled_queue_zminus/trace[0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/trace                                       [0m] Adding routers (req, rsp and wide) (x: 2, y: 2, z: 0)
+0: -1: [[34m/soc/noc/req_router_2_2_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_2_2_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_2_2_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_2_2_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_2_2_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_2_2_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_2_2_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_2_2_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_2_2_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_2_2_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_2_2_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_2_2_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_2_2_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_2_2_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_2_2_0/stalled_queue_right/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_2_2_0/stalled_queue_left/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_2_2_0/stalled_queue_up/trace    [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_2_2_0/stalled_queue_down/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_2_2_0/stalled_queue_local/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_2_2_0/stalled_queue_zplus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_2_2_0/stalled_queue_zminus/trace[0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/trace                                       [0m] Adding routers (req, rsp and wide) (x: 2, y: 3, z: 0)
+0: -1: [[34m/soc/noc/req_router_2_3_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_2_3_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_2_3_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_2_3_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_2_3_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_2_3_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_2_3_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_2_3_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_2_3_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_2_3_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_2_3_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_2_3_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_2_3_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_2_3_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_2_3_0/stalled_queue_right/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_2_3_0/stalled_queue_left/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_2_3_0/stalled_queue_up/trace    [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_2_3_0/stalled_queue_down/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_2_3_0/stalled_queue_local/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_2_3_0/stalled_queue_zplus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_2_3_0/stalled_queue_zminus/trace[0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/trace                                       [0m] Adding routers (req, rsp and wide) (x: 3, y: 1, z: 0)
+0: -1: [[34m/soc/noc/req_router_3_1_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_3_1_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_3_1_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_3_1_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_3_1_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_3_1_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_3_1_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_3_1_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_3_1_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_3_1_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_3_1_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_3_1_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_3_1_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_3_1_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_3_1_0/stalled_queue_right/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_3_1_0/stalled_queue_left/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_3_1_0/stalled_queue_up/trace    [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_3_1_0/stalled_queue_down/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_3_1_0/stalled_queue_local/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_3_1_0/stalled_queue_zplus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_3_1_0/stalled_queue_zminus/trace[0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/trace                                       [0m] Adding routers (req, rsp and wide) (x: 3, y: 2, z: 0)
+0: -1: [[34m/soc/noc/req_router_3_2_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_3_2_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_3_2_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_3_2_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_3_2_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_3_2_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_3_2_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_3_2_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_3_2_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_3_2_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_3_2_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_3_2_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_3_2_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_3_2_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_3_2_0/stalled_queue_right/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_3_2_0/stalled_queue_left/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_3_2_0/stalled_queue_up/trace    [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_3_2_0/stalled_queue_down/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_3_2_0/stalled_queue_local/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_3_2_0/stalled_queue_zplus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_3_2_0/stalled_queue_zminus/trace[0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/trace                                       [0m] Adding routers (req, rsp and wide) (x: 3, y: 3, z: 0)
+0: -1: [[34m/soc/noc/req_router_3_3_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_3_3_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_3_3_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_3_3_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_3_3_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_3_3_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/req_router_3_3_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_3_3_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_3_3_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_3_3_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_3_3_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_3_3_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_3_3_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/rsp_router_3_3_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_3_3_0/stalled_queue_right/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_3_3_0/stalled_queue_left/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_3_3_0/stalled_queue_up/trace    [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_3_3_0/stalled_queue_down/trace  [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_3_3_0/stalled_queue_local/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_3_3_0/stalled_queue_zplus/trace [0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/noc/wide_router_3_3_0/stalled_queue_zminus/trace[0m] Setting signal (value: 0x00)
+0: -1: [[34m/soc/trace                                           [0m] New component (name: noc)
+0: -1: [[34m/soc/test/trace                                      [0m] New slave port (name: clock, port: 0x14abe48)
+0: -1: [[34m/soc/test/trace                                      [0m] New slave port (name: reset, port: 0x14abc50)
+0: -1: [[34m/soc/test/comp                                       [0m] New slave port (name: power_supply, port: 0x14abcf8)
+0: -1: [[34m/soc/test/comp                                       [0m] New slave port (name: voltage, port: 0x14abda0)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: generator_control_0_0, port: 0x14ac960)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: receiver_control_0_0, port: 0x14ad190)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: noc_ni_0_0, port: 0x14ac1c0)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: generator_control_0_1, port: 0x14acc18)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: receiver_control_0_1, port: 0x14ad448)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: noc_ni_0_1, port: 0x14ac448)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: generator_control_0_2, port: 0x14aced0)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: receiver_control_0_2, port: 0x14ad700)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: noc_ni_0_2, port: 0x14ac6d0)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: generator_control_1_0, port: 0x14aca48)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: receiver_control_1_0, port: 0x14ad278)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: noc_ni_1_0, port: 0x14ac298)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: generator_control_1_1, port: 0x14acd00)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: receiver_control_1_1, port: 0x14ad530)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: noc_ni_1_1, port: 0x14ac520)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: generator_control_1_2, port: 0x14acfb8)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: receiver_control_1_2, port: 0x14ad7e8)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: noc_ni_1_2, port: 0x14ac7a8)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: generator_control_2_0, port: 0x14acb30)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: receiver_control_2_0, port: 0x14ad360)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: noc_ni_2_0, port: 0x14ac370)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: generator_control_2_1, port: 0x14acde8)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: receiver_control_2_1, port: 0x14ad618)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: noc_ni_2_1, port: 0x14ac5f8)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: generator_control_2_2, port: 0x14ad0a0)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: receiver_control_2_2, port: 0x14ad8d0)
+0: -1: [[34m/soc/test/comp                                       [0m] New master port (name: noc_ni_2_2, port: 0x14ac880)
+0: -1: [[34m/soc/trace                                           [0m] New component (name: test)
+0: -1: [[34m/soc/generator_0_0/trace                             [0m] New slave port (name: clock, port: 0x14b0588)
+0: -1: [[34m/soc/generator_0_0/trace                             [0m] New slave port (name: reset, port: 0x14b0390)
+0: -1: [[34m/soc/generator_0_0/comp                              [0m] New slave port (name: power_supply, port: 0x14b0438)
+0: -1: [[34m/soc/generator_0_0/comp                              [0m] New slave port (name: voltage, port: 0x14b04e0)
+0: -1: [[34m/soc/generator_0_0/comp                              [0m] New master port (name: output, port: 0x14b0720)
+0: -1: [[34m/soc/generator_0_0/comp                              [0m] New slave port (name: control, port: 0x14b07f8)
+0: -1: [[34m/soc/trace                                           [0m] New component (name: generator_0_0)
+0: -1: [[34m/soc/receiver_0_0/trace                              [0m] New slave port (name: clock, port: 0x14b49a8)
+0: -1: [[34m/soc/receiver_0_0/trace                              [0m] New slave port (name: reset, port: 0x14b47b0)
+0: -1: [[34m/soc/receiver_0_0/comp                               [0m] New slave port (name: power_supply, port: 0x14b4858)
+0: -1: [[34m/soc/receiver_0_0/comp                               [0m] New slave port (name: voltage, port: 0x14b4900)
+0: -1: [[34m/soc/receiver_0_0/comp                               [0m] New slave port (name: input, port: 0x14b4b40)
+0: -1: [[34m/soc/receiver_0_0/comp                               [0m] New slave port (name: control, port: 0x14b4bf8)
+0: -1: [[34m/soc/trace                                           [0m] New component (name: receiver_0_0)
+0: -1: [[34m/soc/generator_0_1/trace                             [0m] New slave port (name: clock, port: 0x14b71a8)
+0: -1: [[34m/soc/generator_0_1/trace                             [0m] New slave port (name: reset, port: 0x14b6fb0)
+0: -1: [[34m/soc/generator_0_1/comp                              [0m] New slave port (name: power_supply, port: 0x14b7058)
+0: -1: [[34m/soc/generator_0_1/comp                              [0m] New slave port (name: voltage, port: 0x14b7100)
+0: -1: [[34m/soc/generator_0_1/comp                              [0m] New master port (name: output, port: 0x14b7340)
+0: -1: [[34m/soc/generator_0_1/comp                              [0m] New slave port (name: control, port: 0x14b7418)
+0: -1: [[34m/soc/trace                                           [0m] New component (name: generator_0_1)
+0: -1: [[34m/soc/receiver_0_1/trace                              [0m] New slave port (name: clock, port: 0x14baf68)
+0: -1: [[34m/soc/receiver_0_1/trace                              [0m] New slave port (name: reset, port: 0x14bad70)
+0: -1: [[34m/soc/receiver_0_1/comp                               [0m] New slave port (name: power_supply, port: 0x14bae18)
+0: -1: [[34m/soc/receiver_0_1/comp                               [0m] New slave port (name: voltage, port: 0x14baec0)
+0: -1: [[34m/soc/receiver_0_1/comp                               [0m] New slave port (name: input, port: 0x14bb100)
+0: -1: [[34m/soc/receiver_0_1/comp                               [0m] New slave port (name: control, port: 0x14bb1b8)
+0: -1: [[34m/soc/trace                                           [0m] New component (name: receiver_0_1)
+0: -1: [[34m/soc/generator_0_2/trace                             [0m] New slave port (name: clock, port: 0x14bd728)
+0: -1: [[34m/soc/generator_0_2/trace                             [0m] New slave port (name: reset, port: 0x14bd530)
+0: -1: [[34m/soc/generator_0_2/comp                              [0m] New slave port (name: power_supply, port: 0x14bd5d8)
+0: -1: [[34m/soc/generator_0_2/comp                              [0m] New slave port (name: voltage, port: 0x14bd680)
+0: -1: [[34m/soc/generator_0_2/comp                              [0m] New master port (name: output, port: 0x14bd8c0)
+0: -1: [[34m/soc/generator_0_2/comp                              [0m] New slave port (name: control, port: 0x14bd998)
+0: -1: [[34m/soc/trace                                           [0m] New component (name: generator_0_2)
+0: -1: [[34m/soc/receiver_0_2/trace                              [0m] New slave port (name: clock, port: 0x14c1478)
+0: -1: [[34m/soc/receiver_0_2/trace                              [0m] New slave port (name: reset, port: 0x14c1280)
+0: -1: [[34m/soc/receiver_0_2/comp                               [0m] New slave port (name: power_supply, port: 0x14c1328)
+0: -1: [[34m/soc/receiver_0_2/comp                               [0m] New slave port (name: voltage, port: 0x14c13d0)
+0: -1: [[34m/soc/receiver_0_2/comp                               [0m] New slave port (name: input, port: 0x14c1610)
+0: -1: [[34m/soc/receiver_0_2/comp                               [0m] New slave port (name: control, port: 0x14c16c8)
+0: -1: [[34m/soc/trace                                           [0m] New component (name: receiver_0_2)
+0: -1: [[34m/soc/generator_1_0/trace                             [0m] New slave port (name: clock, port: 0x14c3c68)
+0: -1: [[34m/soc/generator_1_0/trace                             [0m] New slave port (name: reset, port: 0x14c3a70)
+0: -1: [[34m/soc/generator_1_0/comp                              [0m] New slave port (name: power_supply, port: 0x14c3b18)
+0: -1: [[34m/soc/generator_1_0/comp                              [0m] New slave port (name: voltage, port: 0x14c3bc0)
+0: -1: [[34m/soc/generator_1_0/comp                              [0m] New master port (name: output, port: 0x14c3e00)
+0: -1: [[34m/soc/generator_1_0/comp                              [0m] New slave port (name: control, port: 0x14c3ed8)
+0: -1: [[34m/soc/trace                                           [0m] New component (name: generator_1_0)
+0: -1: [[34m/soc/receiver_1_0/trace                              [0m] New slave port (name: clock, port: 0x14c79a8)
+0: -1: [[34m/soc/receiver_1_0/trace                              [0m] New slave port (name: reset, port: 0x14c77b0)
+0: -1: [[34m/soc/receiver_1_0/comp                               [0m] New slave port (name: power_supply, port: 0x14c7858)
+0: -1: [[34m/soc/receiver_1_0/comp                               [0m] New slave port (name: voltage, port: 0x14c7900)
+0: -1: [[34m/soc/receiver_1_0/comp                               [0m] New slave port (name: input, port: 0x14c7b40)
+0: -1: [[34m/soc/receiver_1_0/comp                               [0m] New slave port (name: control, port: 0x14c7bf8)
+0: -1: [[34m/soc/trace                                           [0m] New component (name: receiver_1_0)
+0: -1: [[34m/soc/generator_1_1/trace                             [0m] New slave port (name: clock, port: 0x14ca198)
+0: -1: [[34m/soc/generator_1_1/trace                             [0m] New slave port (name: reset, port: 0x14c9fa0)
+0: -1: [[34m/soc/generator_1_1/comp                              [0m] New slave port (name: power_supply, port: 0x14ca048)
+0: -1: [[34m/soc/generator_1_1/comp                              [0m] New slave port (name: voltage, port: 0x14ca0f0)
+0: -1: [[34m/soc/generator_1_1/comp                              [0m] New master port (name: output, port: 0x14ca330)
+0: -1: [[34m/soc/generator_1_1/comp                              [0m] New slave port (name: control, port: 0x14ca408)
+0: -1: [[34m/soc/trace                                           [0m] New component (name: generator_1_1)
+0: -1: [[34m/soc/receiver_1_1/trace                              [0m] New slave port (name: clock, port: 0x14cdee8)
+0: -1: [[34m/soc/receiver_1_1/trace                              [0m] New slave port (name: reset, port: 0x14cdcf0)
+0: -1: [[34m/soc/receiver_1_1/comp                               [0m] New slave port (name: power_supply, port: 0x14cdd98)
+0: -1: [[34m/soc/receiver_1_1/comp                               [0m] New slave port (name: voltage, port: 0x14cde40)
+0: -1: [[34m/soc/receiver_1_1/comp                               [0m] New slave port (name: input, port: 0x14ce080)
+0: -1: [[34m/soc/receiver_1_1/comp                               [0m] New slave port (name: control, port: 0x14ce138)
+0: -1: [[34m/soc/trace                                           [0m] New component (name: receiver_1_1)
+0: -1: [[34m/soc/generator_1_2/trace                             [0m] New slave port (name: clock, port: 0x14d06d8)
+0: -1: [[34m/soc/generator_1_2/trace                             [0m] New slave port (name: reset, port: 0x14d04e0)
+0: -1: [[34m/soc/generator_1_2/comp                              [0m] New slave port (name: power_supply, port: 0x14d0588)
+0: -1: [[34m/soc/generator_1_2/comp                              [0m] New slave port (name: voltage, port: 0x14d0630)
+0: -1: [[34m/soc/generator_1_2/comp                              [0m] New master port (name: output, port: 0x14d0870)
+0: -1: [[34m/soc/generator_1_2/comp                              [0m] New slave port (name: control, port: 0x14d0948)
+0: -1: [[34m/soc/trace                                           [0m] New component (name: generator_1_2)
+0: -1: [[34m/soc/receiver_1_2/trace                              [0m] New slave port (name: clock, port: 0x14d4428)
+0: -1: [[34m/soc/receiver_1_2/trace                              [0m] New slave port (name: reset, port: 0x14d4230)
+0: -1: [[34m/soc/receiver_1_2/comp                               [0m] New slave port (name: power_supply, port: 0x14d42d8)
+0: -1: [[34m/soc/receiver_1_2/comp                               [0m] New slave port (name: voltage, port: 0x14d4380)
+0: -1: [[34m/soc/receiver_1_2/comp                               [0m] New slave port (name: input, port: 0x14d45c0)
+0: -1: [[34m/soc/receiver_1_2/comp                               [0m] New slave port (name: control, port: 0x14d4678)
+0: -1: [[34m/soc/trace                                           [0m] New component (name: receiver_1_2)
+0: -1: [[34m/soc/generator_2_0/trace                             [0m] New slave port (name: clock, port: 0x14d6c18)
+0: -1: [[34m/soc/generator_2_0/trace                             [0m] New slave port (name: reset, port: 0x14d6a20)
+0: -1: [[34m/soc/generator_2_0/comp                              [0m] New slave port (name: power_supply, port: 0x14d6ac8)
+0: -1: [[34m/soc/generator_2_0/comp                              [0m] New slave port (name: voltage, port: 0x14d6b70)
+0: -1: [[34m/soc/generator_2_0/comp                              [0m] New master port (name: output, port: 0x14d6db0)
+0: -1: [[34m/soc/generator_2_0/comp                              [0m] New slave port (name: control, port: 0x14d6e88)
+0: -1: [[34m/soc/trace                                           [0m] New component (name: generator_2_0)
+0: -1: [[34m/soc/receiver_2_0/trace                              [0m] New slave port (name: clock, port: 0x14da968)
+0: -1: [[34m/soc/receiver_2_0/trace                              [0m] New slave port (name: reset, port: 0x14da770)
+0: -1: [[34m/soc/receiver_2_0/comp                               [0m] New slave port (name: power_supply, port: 0x14da818)
+0: -1: [[34m/soc/receiver_2_0/comp                               [0m] New slave port (name: voltage, port: 0x14da8c0)
+0: -1: [[34m/soc/receiver_2_0/comp                               [0m] New slave port (name: input, port: 0x14dab00)
+0: -1: [[34m/soc/receiver_2_0/comp                               [0m] New slave port (name: control, port: 0x14dabb8)
+0: -1: [[34m/soc/trace                                           [0m] New component (name: receiver_2_0)
+0: -1: [[34m/soc/generator_2_1/trace                             [0m] New slave port (name: clock, port: 0x14dd158)
+0: -1: [[34m/soc/generator_2_1/trace                             [0m] New slave port (name: reset, port: 0x14dcf60)
+0: -1: [[34m/soc/generator_2_1/comp                              [0m] New slave port (name: power_supply, port: 0x14dd008)
+0: -1: [[34m/soc/generator_2_1/comp                              [0m] New slave port (name: voltage, port: 0x14dd0b0)
+0: -1: [[34m/soc/generator_2_1/comp                              [0m] New master port (name: output, port: 0x14dd2f0)
+0: -1: [[34m/soc/generator_2_1/comp                              [0m] New slave port (name: control, port: 0x14dd3c8)
+0: -1: [[34m/soc/trace                                           [0m] New component (name: generator_2_1)
+0: -1: [[34m/soc/receiver_2_1/trace                              [0m] New slave port (name: clock, port: 0x14e3278)
+0: -1: [[34m/soc/receiver_2_1/trace                              [0m] New slave port (name: reset, port: 0x14e3080)
+0: -1: [[34m/soc/receiver_2_1/comp                               [0m] New slave port (name: power_supply, port: 0x14e3128)
+0: -1: [[34m/soc/receiver_2_1/comp                               [0m] New slave port (name: voltage, port: 0x14e31d0)
+0: -1: [[34m/soc/receiver_2_1/comp                               [0m] New slave port (name: input, port: 0x14e3410)
+0: -1: [[34m/soc/receiver_2_1/comp                               [0m] New slave port (name: control, port: 0x14e34c8)
+0: -1: [[34m/soc/trace                                           [0m] New component (name: receiver_2_1)
+0: -1: [[34m/soc/generator_2_2/trace                             [0m] New slave port (name: clock, port: 0x14e57a8)
+0: -1: [[34m/soc/generator_2_2/trace                             [0m] New slave port (name: reset, port: 0x14e55b0)
+0: -1: [[34m/soc/generator_2_2/comp                              [0m] New slave port (name: power_supply, port: 0x14e5658)
+0: -1: [[34m/soc/generator_2_2/comp                              [0m] New slave port (name: voltage, port: 0x14e5700)
+0: -1: [[34m/soc/generator_2_2/comp                              [0m] New master port (name: output, port: 0x14e5940)
+0: -1: [[34m/soc/generator_2_2/comp                              [0m] New slave port (name: control, port: 0x14e5a18)
+0: -1: [[34m/soc/trace                                           [0m] New component (name: generator_2_2)
+0: -1: [[34m/soc/receiver_2_2/trace                              [0m] New slave port (name: clock, port: 0x14e94f8)
+0: -1: [[34m/soc/receiver_2_2/trace                              [0m] New slave port (name: reset, port: 0x14e9300)
+0: -1: [[34m/soc/receiver_2_2/comp                               [0m] New slave port (name: power_supply, port: 0x14e93a8)
+0: -1: [[34m/soc/receiver_2_2/comp                               [0m] New slave port (name: voltage, port: 0x14e9450)
+0: -1: [[34m/soc/receiver_2_2/comp                               [0m] New slave port (name: input, port: 0x14e9690)
+0: -1: [[34m/soc/receiver_2_2/comp                               [0m] New slave port (name: control, port: 0x14e9748)
+0: -1: [[34m/soc/trace                                           [0m] New component (name: receiver_2_2)
+0: -1: [[34m/soc/trace                                           [0m] New slave port (name: clock, port: 0x13bb488)
+0: -1: [[34m/soc/trace                                           [0m] New slave port (name: reset, port: 0x13bb290)
+0: -1: [[34m/soc/comp                                            [0m] New slave port (name: power_supply, port: 0x13bb338)
+0: -1: [[34m/soc/comp                                            [0m] New slave port (name: voltage, port: 0x13bb3e0)
+0: -1: [[34m/soc/comp                                            [0m] Creating ports
+0: -1: [[34m/soc/comp                                            [0m] Creating port (name: clock)
+0: -1: [[34m/soc/comp                                            [0m] Creating bindings
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (generator_0_0:output -> noc:wide_input_1_1_0)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:noc_ni_0_0 -> noc:wide_input_1_1_0)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:generator_control_0_0 -> generator_0_0:control)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:receiver_control_0_0 -> receiver_0_0:control)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (noc:wide_ni_0_0 -> receiver_0_0:input)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (generator_0_1:output -> noc:wide_input_1_2_0)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:noc_ni_0_1 -> noc:wide_input_1_2_0)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:generator_control_0_1 -> generator_0_1:control)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:receiver_control_0_1 -> receiver_0_1:control)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (noc:wide_ni_0_1 -> receiver_0_1:input)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (generator_0_2:output -> noc:wide_input_1_3_0)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:noc_ni_0_2 -> noc:wide_input_1_3_0)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:generator_control_0_2 -> generator_0_2:control)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:receiver_control_0_2 -> receiver_0_2:control)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (noc:wide_ni_0_2 -> receiver_0_2:input)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (generator_1_0:output -> noc:wide_input_2_1_0)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:noc_ni_1_0 -> noc:wide_input_2_1_0)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:generator_control_1_0 -> generator_1_0:control)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:receiver_control_1_0 -> receiver_1_0:control)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (noc:wide_ni_1_0 -> receiver_1_0:input)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (generator_1_1:output -> noc:wide_input_2_2_0)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:noc_ni_1_1 -> noc:wide_input_2_2_0)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:generator_control_1_1 -> generator_1_1:control)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:receiver_control_1_1 -> receiver_1_1:control)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (noc:wide_ni_1_1 -> receiver_1_1:input)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (generator_1_2:output -> noc:wide_input_2_3_0)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:noc_ni_1_2 -> noc:wide_input_2_3_0)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:generator_control_1_2 -> generator_1_2:control)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:receiver_control_1_2 -> receiver_1_2:control)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (noc:wide_ni_1_2 -> receiver_1_2:input)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (generator_2_0:output -> noc:wide_input_3_1_0)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:noc_ni_2_0 -> noc:wide_input_3_1_0)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:generator_control_2_0 -> generator_2_0:control)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:receiver_control_2_0 -> receiver_2_0:control)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (noc:wide_ni_2_0 -> receiver_2_0:input)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (generator_2_1:output -> noc:wide_input_3_2_0)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:noc_ni_2_1 -> noc:wide_input_3_2_0)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:generator_control_2_1 -> generator_2_1:control)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:receiver_control_2_1 -> receiver_2_1:control)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (noc:wide_ni_2_1 -> receiver_2_1:input)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (generator_2_2:output -> noc:wide_input_3_3_0)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:noc_ni_2_2 -> noc:wide_input_3_3_0)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:generator_control_2_2 -> generator_2_2:control)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (test:receiver_control_2_2 -> receiver_2_2:control)
+0: -1: [[34m/soc/comp                                            [0m] Creating binding (noc:wide_ni_2_2 -> receiver_2_2:input)
+0: -1: [[34m/trace                                               [0m] New component (name: soc)
+0: -1: [[34m/trace                                               [0m] New slave port (name: clock, port: 0x13b8138)
+0: -1: [[34m/trace                                               [0m] New slave port (name: reset, port: 0x13b7f40)
+0: -1: [[34m/comp                                                [0m] New slave port (name: power_supply, port: 0x13b7fe8)
+0: -1: [[34m/comp                                                [0m] New slave port (name: voltage, port: 0x13b8090)
+0: -1: [[34m/comp                                                [0m] Creating bindings
+0: -1: [[34m/comp                                                [0m] Creating binding (clock:out -> soc:clock)
+0: -1: [[34m/comp                                                [0m] Creating final bindings
+0: -1: [[34m/clock/comp                                          [0m] Creating final bindings
+0: -1: [[34m/clock/comp                                          [0m] Creating final binding (/clock:out -> /soc:clock)
+0: -1: [[34m/soc/comp                                            [0m] Creating final bindings
+0: -1: [[34m/soc/noc/comp                                        [0m] Creating final bindings
+0: -1: [[34m/soc/noc/comp                                        [0m] Creating final binding (/soc/noc:wide_ni_2_1 -> /soc/receiver_2_1:input)
+0: -1: [[34m/soc/noc/comp                                        [0m] Creating final binding (/soc/noc:wide_ni_2_2 -> /soc/receiver_2_2:input)
+0: -1: [[34m/soc/noc/comp                                        [0m] Creating final binding (/soc/noc:wide_ni_0_1 -> /soc/receiver_0_1:input)
+0: -1: [[34m/soc/noc/comp                                        [0m] Creating final binding (/soc/noc:wide_ni_0_2 -> /soc/receiver_0_2:input)
+0: -1: [[34m/soc/noc/comp                                        [0m] Creating final binding (/soc/noc:wide_ni_1_1 -> /soc/receiver_1_1:input)
+0: -1: [[34m/soc/noc/comp                                        [0m] Creating final binding (/soc/noc:wide_ni_1_0 -> /soc/receiver_1_0:input)
+0: -1: [[34m/soc/noc/comp                                        [0m] Creating final binding (/soc/noc:wide_ni_0_0 -> /soc/receiver_0_0:input)
+0: -1: [[34m/soc/noc/comp                                        [0m] Creating final binding (/soc/noc:wide_ni_2_0 -> /soc/receiver_2_0:input)
+0: -1: [[34m/soc/noc/comp                                        [0m] Creating final binding (/soc/noc:wide_ni_1_2 -> /soc/receiver_1_2:input)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final bindings
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:noc_ni_2_2 -> /soc/noc:wide_input_3_3_0)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:receiver_control_0_2 -> /soc/receiver_0_2:control)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:noc_ni_0_2 -> /soc/noc:wide_input_1_3_0)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:noc_ni_2_0 -> /soc/noc:wide_input_3_1_0)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:generator_control_0_2 -> /soc/generator_0_2:control)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:generator_control_0_1 -> /soc/generator_0_1:control)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:noc_ni_0_1 -> /soc/noc:wide_input_1_2_0)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:generator_control_1_2 -> /soc/generator_1_2:control)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:generator_control_0_0 -> /soc/generator_0_0:control)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:noc_ni_2_1 -> /soc/noc:wide_input_3_2_0)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:generator_control_1_0 -> /soc/generator_1_0:control)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:noc_ni_1_0 -> /soc/noc:wide_input_2_1_0)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:generator_control_2_2 -> /soc/generator_2_2:control)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:generator_control_1_1 -> /soc/generator_1_1:control)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:receiver_control_1_1 -> /soc/receiver_1_1:control)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:receiver_control_2_2 -> /soc/receiver_2_2:control)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:receiver_control_0_1 -> /soc/receiver_0_1:control)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:receiver_control_1_0 -> /soc/receiver_1_0:control)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:noc_ni_1_1 -> /soc/noc:wide_input_2_2_0)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:receiver_control_1_2 -> /soc/receiver_1_2:control)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:noc_ni_0_0 -> /soc/noc:wide_input_1_1_0)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:noc_ni_1_2 -> /soc/noc:wide_input_2_3_0)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:generator_control_2_0 -> /soc/generator_2_0:control)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:receiver_control_0_0 -> /soc/receiver_0_0:control)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:generator_control_2_1 -> /soc/generator_2_1:control)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:receiver_control_2_0 -> /soc/receiver_2_0:control)
+0: -1: [[34m/soc/test/comp                                       [0m] Creating final binding (/soc/test:receiver_control_2_1 -> /soc/receiver_2_1:control)
+0: -1: [[34m/soc/generator_0_0/comp                              [0m] Creating final bindings
+0: -1: [[34m/soc/generator_0_0/comp                              [0m] Creating final binding (/soc/generator_0_0:output -> /soc/noc:wide_input_1_1_0)
+0: -1: [[34m/soc/receiver_0_0/comp                               [0m] Creating final bindings
+0: -1: [[34m/soc/generator_0_1/comp                              [0m] Creating final bindings
+0: -1: [[34m/soc/generator_0_1/comp                              [0m] Creating final binding (/soc/generator_0_1:output -> /soc/noc:wide_input_1_2_0)
+0: -1: [[34m/soc/receiver_0_1/comp                               [0m] Creating final bindings
+0: -1: [[34m/soc/generator_0_2/comp                              [0m] Creating final bindings
+0: -1: [[34m/soc/generator_0_2/comp                              [0m] Creating final binding (/soc/generator_0_2:output -> /soc/noc:wide_input_1_3_0)
+0: -1: [[34m/soc/receiver_0_2/comp                               [0m] Creating final bindings
+0: -1: [[34m/soc/generator_1_0/comp                              [0m] Creating final bindings
+0: -1: [[34m/soc/generator_1_0/comp                              [0m] Creating final binding (/soc/generator_1_0:output -> /soc/noc:wide_input_2_1_0)
+0: -1: [[34m/soc/receiver_1_0/comp                               [0m] Creating final bindings
+0: -1: [[34m/soc/generator_1_1/comp                              [0m] Creating final bindings
+0: -1: [[34m/soc/generator_1_1/comp                              [0m] Creating final binding (/soc/generator_1_1:output -> /soc/noc:wide_input_2_2_0)
+0: -1: [[34m/soc/receiver_1_1/comp                               [0m] Creating final bindings
+0: -1: [[34m/soc/generator_1_2/comp                              [0m] Creating final bindings
+0: -1: [[34m/soc/generator_1_2/comp                              [0m] Creating final binding (/soc/generator_1_2:output -> /soc/noc:wide_input_2_3_0)
+0: -1: [[34m/soc/receiver_1_2/comp                               [0m] Creating final bindings
+0: -1: [[34m/soc/generator_2_0/comp                              [0m] Creating final bindings
+0: -1: [[34m/soc/generator_2_0/comp                              [0m] Creating final binding (/soc/generator_2_0:output -> /soc/noc:wide_input_3_1_0)
+0: -1: [[34m/soc/receiver_2_0/comp                               [0m] Creating final bindings
+0: -1: [[34m/soc/generator_2_1/comp                              [0m] Creating final bindings
+0: -1: [[34m/soc/generator_2_1/comp                              [0m] Creating final binding (/soc/generator_2_1:output -> /soc/noc:wide_input_3_2_0)
+0: -1: [[34m/soc/receiver_2_1/comp                               [0m] Creating final bindings
+0: -1: [[34m/soc/generator_2_2/comp                              [0m] Creating final bindings
+0: -1: [[34m/soc/generator_2_2/comp                              [0m] Creating final binding (/soc/generator_2_2:output -> /soc/noc:wide_input_3_3_0)
+0: -1: [[34m/soc/receiver_2_2/comp                               [0m] Creating final bindings
+0: -1: [[34m/comp                                                [0m] Reset (active: 1)
+0: 0: [[34m/clock/comp                                          [0m] Reset (active: 1)
+0: 0: [[34m/soc/comp                                            [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/comp                                        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_0_1_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_0_1_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_0_1_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_0_1_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_0_2_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_0_2_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_0_2_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_0_2_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_0_3_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_0_3_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_0_3_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_0_3_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_0_4_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_0_4_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_0_4_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_0_4_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_1_0_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_1_0_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_1_0_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_1_0_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_1_1_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_1_1_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_1_1_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_1_1_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_1_2_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_1_2_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_1_2_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_1_2_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_1_3_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_1_3_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_1_3_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_1_3_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_1_4_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_1_4_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_1_4_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_1_4_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_2_0_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_2_0_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_2_0_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_2_0_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_2_1_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_2_1_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_2_1_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_2_1_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_2_2_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_2_2_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_2_2_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_2_2_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_2_3_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_2_3_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_2_3_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_2_3_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_2_4_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_2_4_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_2_4_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_2_4_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_3_0_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_3_0_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_3_0_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_3_0_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_3_1_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_3_1_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_3_1_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_3_1_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_3_2_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_3_2_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_3_2_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_3_2_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_3_3_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_3_3_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_3_3_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_3_3_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_3_4_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_3_4_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_3_4_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_3_4_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_4_0_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_4_0_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_4_0_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_4_0_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_4_1_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_4_1_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_4_1_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_4_1_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_4_2_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_4_2_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_4_2_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_4_2_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_4_3_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_4_3_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_4_3_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_4_3_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_4_4_0/trace                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/ni_4_4_0/narrow_req/trace                   [0m] Release register
+0: 0: [[34m/soc/noc/ni_4_4_0/wide_req/trace                     [0m] Release register
+0: 0: [[34m/soc/noc/ni_4_4_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/req_router_1_1_0/trace                      [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_1_0/input_queue_0/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_1_0/input_queue_1/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_1_0/input_queue_2/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_1_0/input_queue_3/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_1_0/input_queue_4/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_1_0/input_queue_5/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_1_0/input_queue_6/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_1_0/stalled_queue_right/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_1_0/stalled_queue_left/trace   [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_1_0/stalled_queue_up/trace     [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_1_0/stalled_queue_down/trace   [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_1_0/stalled_queue_local/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_1_0/stalled_queue_zplus/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_1_0/stalled_queue_zminus/trace [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_1_0/req/trace                  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_1_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_1_1_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_1_1_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_1_1_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_1_1_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_1_1_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_1_1_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/trace                      [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/input_queue_0/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/input_queue_1/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/input_queue_2/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/input_queue_3/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/input_queue_4/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/input_queue_5/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/input_queue_6/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/stalled_queue_right/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/stalled_queue_left/trace   [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/stalled_queue_up/trace     [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/stalled_queue_down/trace   [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/stalled_queue_local/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/stalled_queue_zplus/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/stalled_queue_zminus/trace [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/req/trace                  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/trace                     [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/input_queue_0/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/input_queue_1/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/input_queue_2/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/input_queue_3/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/input_queue_4/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/input_queue_5/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/input_queue_6/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/stalled_queue_right/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_1_0/stalled_queue_left/trace  [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_1_0/stalled_queue_up/trace    [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_1_0/stalled_queue_down/trace  [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_1_0/stalled_queue_local/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_1_0/stalled_queue_zplus/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_1_0/stalled_queue_zminus/trace[0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_1_0/req/trace                 [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_1_0/stalled_queue_right/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/stalled_queue_left/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/stalled_queue_up/trace    [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/stalled_queue_down/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/stalled_queue_local/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/stalled_queue_zplus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/stalled_queue_zminus/trace[0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_1_2_0/trace                      [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_2_0/input_queue_0/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_2_0/input_queue_1/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_2_0/input_queue_2/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_2_0/input_queue_3/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_2_0/input_queue_4/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_2_0/input_queue_5/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_2_0/input_queue_6/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_2_0/stalled_queue_right/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_2_0/stalled_queue_left/trace   [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_2_0/stalled_queue_up/trace     [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_2_0/stalled_queue_down/trace   [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_2_0/stalled_queue_local/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_2_0/stalled_queue_zplus/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_2_0/stalled_queue_zminus/trace [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_2_0/req/trace                  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_2_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_1_2_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_1_2_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_1_2_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_1_2_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_1_2_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_1_2_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/trace                      [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/input_queue_0/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/input_queue_1/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/input_queue_2/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/input_queue_3/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/input_queue_4/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/input_queue_5/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/input_queue_6/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/stalled_queue_right/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/stalled_queue_left/trace   [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/stalled_queue_up/trace     [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/stalled_queue_down/trace   [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/stalled_queue_local/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/stalled_queue_zplus/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/stalled_queue_zminus/trace [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/req/trace                  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/trace                     [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/input_queue_0/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/input_queue_1/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/input_queue_2/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/input_queue_3/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/input_queue_4/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/input_queue_5/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/input_queue_6/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/stalled_queue_right/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_2_0/stalled_queue_left/trace  [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_2_0/stalled_queue_up/trace    [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_2_0/stalled_queue_down/trace  [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_2_0/stalled_queue_local/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_2_0/stalled_queue_zplus/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_2_0/stalled_queue_zminus/trace[0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_2_0/req/trace                 [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_2_0/stalled_queue_right/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/stalled_queue_left/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/stalled_queue_up/trace    [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/stalled_queue_down/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/stalled_queue_local/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/stalled_queue_zplus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/stalled_queue_zminus/trace[0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_1_3_0/trace                      [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_3_0/input_queue_0/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_3_0/input_queue_1/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_3_0/input_queue_2/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_3_0/input_queue_3/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_3_0/input_queue_4/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_3_0/input_queue_5/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_3_0/input_queue_6/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_1_3_0/stalled_queue_right/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_3_0/stalled_queue_left/trace   [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_3_0/stalled_queue_up/trace     [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_3_0/stalled_queue_down/trace   [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_3_0/stalled_queue_local/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_3_0/stalled_queue_zplus/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_3_0/stalled_queue_zminus/trace [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_3_0/req/trace                  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_1_3_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_1_3_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_1_3_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_1_3_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_1_3_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_1_3_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_1_3_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/trace                      [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/input_queue_0/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/input_queue_1/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/input_queue_2/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/input_queue_3/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/input_queue_4/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/input_queue_5/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/input_queue_6/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/stalled_queue_right/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/stalled_queue_left/trace   [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/stalled_queue_up/trace     [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/stalled_queue_down/trace   [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/stalled_queue_local/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/stalled_queue_zplus/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/stalled_queue_zminus/trace [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/req/trace                  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/trace                     [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/input_queue_0/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/input_queue_1/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/input_queue_2/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/input_queue_3/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/input_queue_4/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/input_queue_5/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/input_queue_6/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/stalled_queue_right/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_3_0/stalled_queue_left/trace  [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_3_0/stalled_queue_up/trace    [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_3_0/stalled_queue_down/trace  [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_3_0/stalled_queue_local/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_3_0/stalled_queue_zplus/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_3_0/stalled_queue_zminus/trace[0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_3_0/req/trace                 [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_1_3_0/stalled_queue_right/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/stalled_queue_left/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/stalled_queue_up/trace    [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/stalled_queue_down/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/stalled_queue_local/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/stalled_queue_zplus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/stalled_queue_zminus/trace[0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_2_1_0/trace                      [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_1_0/input_queue_0/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_1_0/input_queue_1/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_1_0/input_queue_2/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_1_0/input_queue_3/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_1_0/input_queue_4/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_1_0/input_queue_5/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_1_0/input_queue_6/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_1_0/stalled_queue_right/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_1_0/stalled_queue_left/trace   [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_1_0/stalled_queue_up/trace     [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_1_0/stalled_queue_down/trace   [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_1_0/stalled_queue_local/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_1_0/stalled_queue_zplus/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_1_0/stalled_queue_zminus/trace [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_1_0/req/trace                  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_1_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_2_1_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_2_1_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_2_1_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_2_1_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_2_1_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_2_1_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/trace                      [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/input_queue_0/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/input_queue_1/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/input_queue_2/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/input_queue_3/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/input_queue_4/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/input_queue_5/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/input_queue_6/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/stalled_queue_right/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/stalled_queue_left/trace   [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/stalled_queue_up/trace     [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/stalled_queue_down/trace   [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/stalled_queue_local/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/stalled_queue_zplus/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/stalled_queue_zminus/trace [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/req/trace                  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/trace                     [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/input_queue_0/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/input_queue_1/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/input_queue_2/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/input_queue_3/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/input_queue_4/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/input_queue_5/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/input_queue_6/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/stalled_queue_right/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_1_0/stalled_queue_left/trace  [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_1_0/stalled_queue_up/trace    [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_1_0/stalled_queue_down/trace  [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_1_0/stalled_queue_local/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_1_0/stalled_queue_zplus/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_1_0/stalled_queue_zminus/trace[0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_1_0/req/trace                 [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_1_0/stalled_queue_right/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/stalled_queue_left/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/stalled_queue_up/trace    [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/stalled_queue_down/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/stalled_queue_local/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/stalled_queue_zplus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/stalled_queue_zminus/trace[0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_2_2_0/trace                      [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_2_0/input_queue_0/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_2_0/input_queue_1/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_2_0/input_queue_2/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_2_0/input_queue_3/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_2_0/input_queue_4/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_2_0/input_queue_5/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_2_0/input_queue_6/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_2_0/stalled_queue_right/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_2_0/stalled_queue_left/trace   [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_2_0/stalled_queue_up/trace     [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_2_0/stalled_queue_down/trace   [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_2_0/stalled_queue_local/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_2_0/stalled_queue_zplus/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_2_0/stalled_queue_zminus/trace [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_2_0/req/trace                  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_2_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_2_2_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_2_2_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_2_2_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_2_2_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_2_2_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_2_2_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/trace                      [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/input_queue_0/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/input_queue_1/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/input_queue_2/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/input_queue_3/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/input_queue_4/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/input_queue_5/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/input_queue_6/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/stalled_queue_right/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/stalled_queue_left/trace   [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/stalled_queue_up/trace     [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/stalled_queue_down/trace   [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/stalled_queue_local/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/stalled_queue_zplus/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/stalled_queue_zminus/trace [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/req/trace                  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/trace                     [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/input_queue_0/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/input_queue_1/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/input_queue_2/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/input_queue_3/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/input_queue_4/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/input_queue_5/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/input_queue_6/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/stalled_queue_right/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_2_0/stalled_queue_left/trace  [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_2_0/stalled_queue_up/trace    [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_2_0/stalled_queue_down/trace  [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_2_0/stalled_queue_local/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_2_0/stalled_queue_zplus/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_2_0/stalled_queue_zminus/trace[0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_2_0/req/trace                 [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_2_0/stalled_queue_right/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/stalled_queue_left/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/stalled_queue_up/trace    [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/stalled_queue_down/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/stalled_queue_local/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/stalled_queue_zplus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/stalled_queue_zminus/trace[0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_2_3_0/trace                      [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_3_0/input_queue_0/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_3_0/input_queue_1/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_3_0/input_queue_2/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_3_0/input_queue_3/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_3_0/input_queue_4/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_3_0/input_queue_5/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_3_0/input_queue_6/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_2_3_0/stalled_queue_right/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_3_0/stalled_queue_left/trace   [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_3_0/stalled_queue_up/trace     [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_3_0/stalled_queue_down/trace   [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_3_0/stalled_queue_local/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_3_0/stalled_queue_zplus/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_3_0/stalled_queue_zminus/trace [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_3_0/req/trace                  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_2_3_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_2_3_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_2_3_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_2_3_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_2_3_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_2_3_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_2_3_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/trace                      [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/input_queue_0/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/input_queue_1/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/input_queue_2/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/input_queue_3/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/input_queue_4/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/input_queue_5/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/input_queue_6/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/stalled_queue_right/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/stalled_queue_left/trace   [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/stalled_queue_up/trace     [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/stalled_queue_down/trace   [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/stalled_queue_local/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/stalled_queue_zplus/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/stalled_queue_zminus/trace [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/req/trace                  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/trace                     [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/input_queue_0/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/input_queue_1/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/input_queue_2/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/input_queue_3/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/input_queue_4/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/input_queue_5/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/input_queue_6/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/stalled_queue_right/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_3_0/stalled_queue_left/trace  [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_3_0/stalled_queue_up/trace    [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_3_0/stalled_queue_down/trace  [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_3_0/stalled_queue_local/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_3_0/stalled_queue_zplus/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_3_0/stalled_queue_zminus/trace[0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_3_0/req/trace                 [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_2_3_0/stalled_queue_right/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/stalled_queue_left/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/stalled_queue_up/trace    [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/stalled_queue_down/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/stalled_queue_local/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/stalled_queue_zplus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/stalled_queue_zminus/trace[0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_3_1_0/trace                      [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_1_0/input_queue_0/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_1_0/input_queue_1/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_1_0/input_queue_2/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_1_0/input_queue_3/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_1_0/input_queue_4/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_1_0/input_queue_5/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_1_0/input_queue_6/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_1_0/stalled_queue_right/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_1_0/stalled_queue_left/trace   [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_1_0/stalled_queue_up/trace     [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_1_0/stalled_queue_down/trace   [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_1_0/stalled_queue_local/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_1_0/stalled_queue_zplus/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_1_0/stalled_queue_zminus/trace [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_1_0/req/trace                  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_1_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_3_1_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_3_1_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_3_1_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_3_1_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_3_1_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_3_1_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/trace                      [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/input_queue_0/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/input_queue_1/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/input_queue_2/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/input_queue_3/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/input_queue_4/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/input_queue_5/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/input_queue_6/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/stalled_queue_right/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/stalled_queue_left/trace   [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/stalled_queue_up/trace     [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/stalled_queue_down/trace   [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/stalled_queue_local/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/stalled_queue_zplus/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/stalled_queue_zminus/trace [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/req/trace                  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/trace                     [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/input_queue_0/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/input_queue_1/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/input_queue_2/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/input_queue_3/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/input_queue_4/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/input_queue_5/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/input_queue_6/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/stalled_queue_right/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_1_0/stalled_queue_left/trace  [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_1_0/stalled_queue_up/trace    [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_1_0/stalled_queue_down/trace  [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_1_0/stalled_queue_local/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_1_0/stalled_queue_zplus/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_1_0/stalled_queue_zminus/trace[0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_1_0/req/trace                 [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_1_0/stalled_queue_right/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/stalled_queue_left/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/stalled_queue_up/trace    [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/stalled_queue_down/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/stalled_queue_local/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/stalled_queue_zplus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/stalled_queue_zminus/trace[0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_3_2_0/trace                      [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_2_0/input_queue_0/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_2_0/input_queue_1/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_2_0/input_queue_2/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_2_0/input_queue_3/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_2_0/input_queue_4/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_2_0/input_queue_5/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_2_0/input_queue_6/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_2_0/stalled_queue_right/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_2_0/stalled_queue_left/trace   [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_2_0/stalled_queue_up/trace     [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_2_0/stalled_queue_down/trace   [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_2_0/stalled_queue_local/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_2_0/stalled_queue_zplus/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_2_0/stalled_queue_zminus/trace [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_2_0/req/trace                  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_2_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_3_2_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_3_2_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_3_2_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_3_2_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_3_2_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_3_2_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/trace                      [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/input_queue_0/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/input_queue_1/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/input_queue_2/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/input_queue_3/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/input_queue_4/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/input_queue_5/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/input_queue_6/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/stalled_queue_right/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/stalled_queue_left/trace   [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/stalled_queue_up/trace     [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/stalled_queue_down/trace   [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/stalled_queue_local/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/stalled_queue_zplus/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/stalled_queue_zminus/trace [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/req/trace                  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/trace                     [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/input_queue_0/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/input_queue_1/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/input_queue_2/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/input_queue_3/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/input_queue_4/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/input_queue_5/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/input_queue_6/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/stalled_queue_right/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_2_0/stalled_queue_left/trace  [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_2_0/stalled_queue_up/trace    [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_2_0/stalled_queue_down/trace  [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_2_0/stalled_queue_local/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_2_0/stalled_queue_zplus/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_2_0/stalled_queue_zminus/trace[0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_2_0/req/trace                 [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_2_0/stalled_queue_right/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/stalled_queue_left/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/stalled_queue_up/trace    [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/stalled_queue_down/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/stalled_queue_local/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/stalled_queue_zplus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/stalled_queue_zminus/trace[0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_3_3_0/trace                      [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_3_0/input_queue_0/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_3_0/input_queue_1/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_3_0/input_queue_2/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_3_0/input_queue_3/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_3_0/input_queue_4/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_3_0/input_queue_5/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_3_0/input_queue_6/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/req_router_3_3_0/stalled_queue_right/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_3_0/stalled_queue_left/trace   [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_3_0/stalled_queue_up/trace     [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_3_0/stalled_queue_down/trace   [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_3_0/stalled_queue_local/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_3_0/stalled_queue_zplus/trace  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_3_0/stalled_queue_zminus/trace [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_3_0/req/trace                  [0m] Release register
+0: 0: [[34m/soc/noc/req_router_3_3_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_3_3_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_3_3_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_3_3_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_3_3_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_3_3_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/req_router_3_3_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/trace                      [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/input_queue_0/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/input_queue_1/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/input_queue_2/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/input_queue_3/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/input_queue_4/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/input_queue_5/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/input_queue_6/trace        [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/stalled_queue_right/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/stalled_queue_left/trace   [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/stalled_queue_up/trace     [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/stalled_queue_down/trace   [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/stalled_queue_local/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/stalled_queue_zplus/trace  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/stalled_queue_zminus/trace [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/req/trace                  [0m] Release register
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/stalled_queue_right/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/stalled_queue_left/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/stalled_queue_up/trace     [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/stalled_queue_down/trace   [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/stalled_queue_local/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/stalled_queue_zplus/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/stalled_queue_zminus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/trace                     [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/input_queue_0/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/input_queue_1/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/input_queue_2/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/input_queue_3/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/input_queue_4/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/input_queue_5/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/input_queue_6/trace       [0m] Reset (active: 1)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/stalled_queue_right/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_3_0/stalled_queue_left/trace  [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_3_0/stalled_queue_up/trace    [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_3_0/stalled_queue_down/trace  [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_3_0/stalled_queue_local/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_3_0/stalled_queue_zplus/trace [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_3_0/stalled_queue_zminus/trace[0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_3_0/req/trace                 [0m] Release register
+0: 0: [[34m/soc/noc/wide_router_3_3_0/stalled_queue_right/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/stalled_queue_left/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/stalled_queue_up/trace    [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/stalled_queue_down/trace  [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/stalled_queue_local/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/stalled_queue_zplus/trace [0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/stalled_queue_zminus/trace[0m] Setting signal (value: 0x00)
+0: 0: [[34m/soc/test/comp                                       [0m] Reset (active: 1)
+0: 0: [[34m/soc/test/test0/trace                                [0m] Reset (active: 1)
+0: 0: [[34m/soc/test/Test1/trace                                [0m] Reset (active: 1)
+0: 0: [[34m/soc/test/Test2/trace                                [0m] Reset (active: 1)
+0: 0: [[34m/soc/generator_0_0/comp                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/generator_0_0/free_reqs/trace                   [0m] Reset (active: 1)
+0: 0: [[34m/soc/generator_0_0/send_size/trace                   [0m] Release register
+0: 0: [[34m/soc/generator_0_0/pending_size/trace                [0m] Release register
+0: 0: [[34m/soc/generator_0_0/stalled/trace                     [0m] Release register
+0: 0: [[34m/soc/generator_0_0/busy/trace                        [0m] Release register
+0: 0: [[34m/soc/generator_0_0/req_addr/trace                    [0m] Release register
+0: 0: [[34m/soc/generator_0_0/req_size/trace                    [0m] Release register
+0: 0: [[34m/soc/generator_0_0/req_is_write/trace                [0m] Release register
+0: 0: [[34m/soc/receiver_0_0/comp                               [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_0_0/pending_reqs/trace                 [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_0_0/ready_reqs/trace                   [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_0_0/stalled/trace                      [0m] Release register
+0: 0: [[34m/soc/receiver_0_0/req_addr/trace                     [0m] Release register
+0: 0: [[34m/soc/generator_0_1/comp                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/generator_0_1/free_reqs/trace                   [0m] Reset (active: 1)
+0: 0: [[34m/soc/generator_0_1/send_size/trace                   [0m] Release register
+0: 0: [[34m/soc/generator_0_1/pending_size/trace                [0m] Release register
+0: 0: [[34m/soc/generator_0_1/stalled/trace                     [0m] Release register
+0: 0: [[34m/soc/generator_0_1/busy/trace                        [0m] Release register
+0: 0: [[34m/soc/generator_0_1/req_addr/trace                    [0m] Release register
+0: 0: [[34m/soc/generator_0_1/req_size/trace                    [0m] Release register
+0: 0: [[34m/soc/generator_0_1/req_is_write/trace                [0m] Release register
+0: 0: [[34m/soc/receiver_0_1/comp                               [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_0_1/pending_reqs/trace                 [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_0_1/ready_reqs/trace                   [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_0_1/stalled/trace                      [0m] Release register
+0: 0: [[34m/soc/receiver_0_1/req_addr/trace                     [0m] Release register
+0: 0: [[34m/soc/generator_0_2/comp                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/generator_0_2/free_reqs/trace                   [0m] Reset (active: 1)
+0: 0: [[34m/soc/generator_0_2/send_size/trace                   [0m] Release register
+0: 0: [[34m/soc/generator_0_2/pending_size/trace                [0m] Release register
+0: 0: [[34m/soc/generator_0_2/stalled/trace                     [0m] Release register
+0: 0: [[34m/soc/generator_0_2/busy/trace                        [0m] Release register
+0: 0: [[34m/soc/generator_0_2/req_addr/trace                    [0m] Release register
+0: 0: [[34m/soc/generator_0_2/req_size/trace                    [0m] Release register
+0: 0: [[34m/soc/generator_0_2/req_is_write/trace                [0m] Release register
+0: 0: [[34m/soc/receiver_0_2/comp                               [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_0_2/pending_reqs/trace                 [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_0_2/ready_reqs/trace                   [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_0_2/stalled/trace                      [0m] Release register
+0: 0: [[34m/soc/receiver_0_2/req_addr/trace                     [0m] Release register
+0: 0: [[34m/soc/generator_1_0/comp                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/generator_1_0/free_reqs/trace                   [0m] Reset (active: 1)
+0: 0: [[34m/soc/generator_1_0/send_size/trace                   [0m] Release register
+0: 0: [[34m/soc/generator_1_0/pending_size/trace                [0m] Release register
+0: 0: [[34m/soc/generator_1_0/stalled/trace                     [0m] Release register
+0: 0: [[34m/soc/generator_1_0/busy/trace                        [0m] Release register
+0: 0: [[34m/soc/generator_1_0/req_addr/trace                    [0m] Release register
+0: 0: [[34m/soc/generator_1_0/req_size/trace                    [0m] Release register
+0: 0: [[34m/soc/generator_1_0/req_is_write/trace                [0m] Release register
+0: 0: [[34m/soc/receiver_1_0/comp                               [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_1_0/pending_reqs/trace                 [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_1_0/ready_reqs/trace                   [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_1_0/stalled/trace                      [0m] Release register
+0: 0: [[34m/soc/receiver_1_0/req_addr/trace                     [0m] Release register
+0: 0: [[34m/soc/generator_1_1/comp                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/generator_1_1/free_reqs/trace                   [0m] Reset (active: 1)
+0: 0: [[34m/soc/generator_1_1/send_size/trace                   [0m] Release register
+0: 0: [[34m/soc/generator_1_1/pending_size/trace                [0m] Release register
+0: 0: [[34m/soc/generator_1_1/stalled/trace                     [0m] Release register
+0: 0: [[34m/soc/generator_1_1/busy/trace                        [0m] Release register
+0: 0: [[34m/soc/generator_1_1/req_addr/trace                    [0m] Release register
+0: 0: [[34m/soc/generator_1_1/req_size/trace                    [0m] Release register
+0: 0: [[34m/soc/generator_1_1/req_is_write/trace                [0m] Release register
+0: 0: [[34m/soc/receiver_1_1/comp                               [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_1_1/pending_reqs/trace                 [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_1_1/ready_reqs/trace                   [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_1_1/stalled/trace                      [0m] Release register
+0: 0: [[34m/soc/receiver_1_1/req_addr/trace                     [0m] Release register
+0: 0: [[34m/soc/generator_1_2/comp                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/generator_1_2/free_reqs/trace                   [0m] Reset (active: 1)
+0: 0: [[34m/soc/generator_1_2/send_size/trace                   [0m] Release register
+0: 0: [[34m/soc/generator_1_2/pending_size/trace                [0m] Release register
+0: 0: [[34m/soc/generator_1_2/stalled/trace                     [0m] Release register
+0: 0: [[34m/soc/generator_1_2/busy/trace                        [0m] Release register
+0: 0: [[34m/soc/generator_1_2/req_addr/trace                    [0m] Release register
+0: 0: [[34m/soc/generator_1_2/req_size/trace                    [0m] Release register
+0: 0: [[34m/soc/generator_1_2/req_is_write/trace                [0m] Release register
+0: 0: [[34m/soc/receiver_1_2/comp                               [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_1_2/pending_reqs/trace                 [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_1_2/ready_reqs/trace                   [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_1_2/stalled/trace                      [0m] Release register
+0: 0: [[34m/soc/receiver_1_2/req_addr/trace                     [0m] Release register
+0: 0: [[34m/soc/generator_2_0/comp                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/generator_2_0/free_reqs/trace                   [0m] Reset (active: 1)
+0: 0: [[34m/soc/generator_2_0/send_size/trace                   [0m] Release register
+0: 0: [[34m/soc/generator_2_0/pending_size/trace                [0m] Release register
+0: 0: [[34m/soc/generator_2_0/stalled/trace                     [0m] Release register
+0: 0: [[34m/soc/generator_2_0/busy/trace                        [0m] Release register
+0: 0: [[34m/soc/generator_2_0/req_addr/trace                    [0m] Release register
+0: 0: [[34m/soc/generator_2_0/req_size/trace                    [0m] Release register
+0: 0: [[34m/soc/generator_2_0/req_is_write/trace                [0m] Release register
+0: 0: [[34m/soc/receiver_2_0/comp                               [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_2_0/pending_reqs/trace                 [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_2_0/ready_reqs/trace                   [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_2_0/stalled/trace                      [0m] Release register
+0: 0: [[34m/soc/receiver_2_0/req_addr/trace                     [0m] Release register
+0: 0: [[34m/soc/generator_2_1/comp                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/generator_2_1/free_reqs/trace                   [0m] Reset (active: 1)
+0: 0: [[34m/soc/generator_2_1/send_size/trace                   [0m] Release register
+0: 0: [[34m/soc/generator_2_1/pending_size/trace                [0m] Release register
+0: 0: [[34m/soc/generator_2_1/stalled/trace                     [0m] Release register
+0: 0: [[34m/soc/generator_2_1/busy/trace                        [0m] Release register
+0: 0: [[34m/soc/generator_2_1/req_addr/trace                    [0m] Release register
+0: 0: [[34m/soc/generator_2_1/req_size/trace                    [0m] Release register
+0: 0: [[34m/soc/generator_2_1/req_is_write/trace                [0m] Release register
+0: 0: [[34m/soc/receiver_2_1/comp                               [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_2_1/pending_reqs/trace                 [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_2_1/ready_reqs/trace                   [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_2_1/stalled/trace                      [0m] Release register
+0: 0: [[34m/soc/receiver_2_1/req_addr/trace                     [0m] Release register
+0: 0: [[34m/soc/generator_2_2/comp                              [0m] Reset (active: 1)
+0: 0: [[34m/soc/generator_2_2/free_reqs/trace                   [0m] Reset (active: 1)
+0: 0: [[34m/soc/generator_2_2/send_size/trace                   [0m] Release register
+0: 0: [[34m/soc/generator_2_2/pending_size/trace                [0m] Release register
+0: 0: [[34m/soc/generator_2_2/stalled/trace                     [0m] Release register
+0: 0: [[34m/soc/generator_2_2/busy/trace                        [0m] Release register
+0: 0: [[34m/soc/generator_2_2/req_addr/trace                    [0m] Release register
+0: 0: [[34m/soc/generator_2_2/req_size/trace                    [0m] Release register
+0: 0: [[34m/soc/generator_2_2/req_is_write/trace                [0m] Release register
+0: 0: [[34m/soc/receiver_2_2/comp                               [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_2_2/pending_reqs/trace                 [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_2_2/ready_reqs/trace                   [0m] Reset (active: 1)
+0: 0: [[34m/soc/receiver_2_2/stalled/trace                      [0m] Release register
+0: 0: [[34m/soc/receiver_2_2/req_addr/trace                     [0m] Release register
+0: -1: [[34m/comp                                                [0m] Reset (active: 0)
+0: 0: [[34m/clock/comp                                          [0m] Reset (active: 0)
+0: 0: [[34m/soc/comp                                            [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/comp                                        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_0_1_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_0_1_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_0_2_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_0_2_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_0_3_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_0_3_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_0_4_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_0_4_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_1_0_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_1_0_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_1_1_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_1_1_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_1_2_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_1_2_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_1_3_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_1_3_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_1_4_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_1_4_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_2_0_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_2_0_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_2_1_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_2_1_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_2_2_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_2_2_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_2_3_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_2_3_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_2_4_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_2_4_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_3_0_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_3_0_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_3_1_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_3_1_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_3_2_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_3_2_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_3_3_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_3_3_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_3_4_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_3_4_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_4_0_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_4_0_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_4_1_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_4_1_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_4_2_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_4_2_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_4_3_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_4_3_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/ni_4_4_0/trace                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/ni_4_4_0/trace                              [0m] Resetting network interface
+0: 0: [[34m/soc/noc/req_router_1_1_0/trace                      [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_1_0/input_queue_0/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_1_0/input_queue_1/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_1_0/input_queue_2/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_1_0/input_queue_3/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_1_0/input_queue_4/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_1_0/input_queue_5/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_1_0/input_queue_6/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/trace                      [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/input_queue_0/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/input_queue_1/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/input_queue_2/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/input_queue_3/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/input_queue_4/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/input_queue_5/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_1_0/input_queue_6/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/trace                     [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/input_queue_0/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/input_queue_1/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/input_queue_2/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/input_queue_3/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/input_queue_4/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/input_queue_5/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_1_0/input_queue_6/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_2_0/trace                      [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_2_0/input_queue_0/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_2_0/input_queue_1/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_2_0/input_queue_2/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_2_0/input_queue_3/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_2_0/input_queue_4/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_2_0/input_queue_5/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_2_0/input_queue_6/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/trace                      [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/input_queue_0/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/input_queue_1/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/input_queue_2/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/input_queue_3/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/input_queue_4/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/input_queue_5/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_2_0/input_queue_6/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/trace                     [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/input_queue_0/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/input_queue_1/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/input_queue_2/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/input_queue_3/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/input_queue_4/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/input_queue_5/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_2_0/input_queue_6/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_3_0/trace                      [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_3_0/input_queue_0/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_3_0/input_queue_1/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_3_0/input_queue_2/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_3_0/input_queue_3/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_3_0/input_queue_4/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_3_0/input_queue_5/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_1_3_0/input_queue_6/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/trace                      [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/input_queue_0/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/input_queue_1/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/input_queue_2/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/input_queue_3/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/input_queue_4/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/input_queue_5/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_1_3_0/input_queue_6/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/trace                     [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/input_queue_0/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/input_queue_1/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/input_queue_2/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/input_queue_3/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/input_queue_4/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/input_queue_5/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_1_3_0/input_queue_6/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_1_0/trace                      [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_1_0/input_queue_0/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_1_0/input_queue_1/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_1_0/input_queue_2/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_1_0/input_queue_3/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_1_0/input_queue_4/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_1_0/input_queue_5/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_1_0/input_queue_6/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/trace                      [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/input_queue_0/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/input_queue_1/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/input_queue_2/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/input_queue_3/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/input_queue_4/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/input_queue_5/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_1_0/input_queue_6/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/trace                     [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/input_queue_0/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/input_queue_1/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/input_queue_2/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/input_queue_3/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/input_queue_4/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/input_queue_5/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_1_0/input_queue_6/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_2_0/trace                      [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_2_0/input_queue_0/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_2_0/input_queue_1/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_2_0/input_queue_2/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_2_0/input_queue_3/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_2_0/input_queue_4/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_2_0/input_queue_5/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_2_0/input_queue_6/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/trace                      [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/input_queue_0/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/input_queue_1/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/input_queue_2/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/input_queue_3/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/input_queue_4/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/input_queue_5/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_2_0/input_queue_6/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/trace                     [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/input_queue_0/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/input_queue_1/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/input_queue_2/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/input_queue_3/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/input_queue_4/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/input_queue_5/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_2_0/input_queue_6/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_3_0/trace                      [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_3_0/input_queue_0/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_3_0/input_queue_1/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_3_0/input_queue_2/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_3_0/input_queue_3/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_3_0/input_queue_4/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_3_0/input_queue_5/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_2_3_0/input_queue_6/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/trace                      [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/input_queue_0/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/input_queue_1/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/input_queue_2/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/input_queue_3/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/input_queue_4/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/input_queue_5/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_2_3_0/input_queue_6/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/trace                     [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/input_queue_0/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/input_queue_1/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/input_queue_2/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/input_queue_3/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/input_queue_4/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/input_queue_5/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_2_3_0/input_queue_6/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_1_0/trace                      [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_1_0/input_queue_0/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_1_0/input_queue_1/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_1_0/input_queue_2/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_1_0/input_queue_3/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_1_0/input_queue_4/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_1_0/input_queue_5/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_1_0/input_queue_6/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/trace                      [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/input_queue_0/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/input_queue_1/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/input_queue_2/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/input_queue_3/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/input_queue_4/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/input_queue_5/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_1_0/input_queue_6/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/trace                     [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/input_queue_0/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/input_queue_1/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/input_queue_2/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/input_queue_3/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/input_queue_4/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/input_queue_5/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_1_0/input_queue_6/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_2_0/trace                      [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_2_0/input_queue_0/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_2_0/input_queue_1/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_2_0/input_queue_2/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_2_0/input_queue_3/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_2_0/input_queue_4/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_2_0/input_queue_5/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_2_0/input_queue_6/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/trace                      [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/input_queue_0/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/input_queue_1/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/input_queue_2/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/input_queue_3/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/input_queue_4/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/input_queue_5/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_2_0/input_queue_6/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/trace                     [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/input_queue_0/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/input_queue_1/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/input_queue_2/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/input_queue_3/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/input_queue_4/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/input_queue_5/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_2_0/input_queue_6/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_3_0/trace                      [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_3_0/input_queue_0/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_3_0/input_queue_1/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_3_0/input_queue_2/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_3_0/input_queue_3/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_3_0/input_queue_4/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_3_0/input_queue_5/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/req_router_3_3_0/input_queue_6/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/trace                      [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/input_queue_0/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/input_queue_1/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/input_queue_2/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/input_queue_3/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/input_queue_4/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/input_queue_5/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/rsp_router_3_3_0/input_queue_6/trace        [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/trace                     [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/input_queue_0/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/input_queue_1/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/input_queue_2/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/input_queue_3/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/input_queue_4/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/input_queue_5/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/noc/wide_router_3_3_0/input_queue_6/trace       [0m] Reset (active: 0)
+0: 0: [[34m/soc/test/comp                                       [0m] Reset (active: 0)
+0: 0: [[34m/soc/test/test0/trace                                [0m] Reset (active: 0)
+0: 0: [[34m/soc/test/Test1/trace                                [0m] Reset (active: 0)
+0: 0: [[34m/soc/test/Test2/trace                                [0m] Reset (active: 0)
+0: 0: [[34m/soc/generator_0_0/comp                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/generator_0_0/free_reqs/trace                   [0m] Reset (active: 0)
+0: 0: [[34m/soc/receiver_0_0/comp                               [0m] Reset (active: 0)
+0: 0: [[34m/soc/receiver_0_0/pending_reqs/trace                 [0m] Reset (active: 0)
+0: 0: [[34m/soc/receiver_0_0/ready_reqs/trace                   [0m] Reset (active: 0)
+0: 0: [[34m/soc/generator_0_1/comp                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/generator_0_1/free_reqs/trace                   [0m] Reset (active: 0)
+0: 0: [[34m/soc/receiver_0_1/comp                               [0m] Reset (active: 0)
+0: 0: [[34m/soc/receiver_0_1/pending_reqs/trace                 [0m] Reset (active: 0)
+0: 0: [[34m/soc/receiver_0_1/ready_reqs/trace                   [0m] Reset (active: 0)
+0: 0: [[34m/soc/generator_0_2/comp                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/generator_0_2/free_reqs/trace                   [0m] Reset (active: 0)
+0: 0: [[34m/soc/receiver_0_2/comp                               [0m] Reset (active: 0)
+0: 0: [[34m/soc/receiver_0_2/pending_reqs/trace                 [0m] Reset (active: 0)
+0: 0: [[34m/soc/receiver_0_2/ready_reqs/trace                   [0m] Reset (active: 0)
+0: 0: [[34m/soc/generator_1_0/comp                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/generator_1_0/free_reqs/trace                   [0m] Reset (active: 0)
+0: 0: [[34m/soc/receiver_1_0/comp                               [0m] Reset (active: 0)
+0: 0: [[34m/soc/receiver_1_0/pending_reqs/trace                 [0m] Reset (active: 0)
+0: 0: [[34m/soc/receiver_1_0/ready_reqs/trace                   [0m] Reset (active: 0)
+0: 0: [[34m/soc/generator_1_1/comp                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/generator_1_1/free_reqs/trace                   [0m] Reset (active: 0)
+0: 0: [[34m/soc/receiver_1_1/comp                               [0m] Reset (active: 0)
+0: 0: [[34m/soc/receiver_1_1/pending_reqs/trace                 [0m] Reset (active: 0)
+0: 0: [[34m/soc/receiver_1_1/ready_reqs/trace                   [0m] Reset (active: 0)
+0: 0: [[34m/soc/generator_1_2/comp                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/generator_1_2/free_reqs/trace                   [0m] Reset (active: 0)
+0: 0: [[34m/soc/receiver_1_2/comp                               [0m] Reset (active: 0)
+0: 0: [[34m/soc/receiver_1_2/pending_reqs/trace                 [0m] Reset (active: 0)
+0: 0: [[34m/soc/receiver_1_2/ready_reqs/trace                   [0m] Reset (active: 0)
+0: 0: [[34m/soc/generator_2_0/comp                              [0m] Reset (active: 0)
+0: 0: [[34m/soc/generator_2_0/free_reqs/trace                   [0m] Reset (active: 0)
+0: 0: [[34m/soc/receiver_2_0/comp                               [0m] Reset (active: 0)
+0: 0: [[34m/soc/receiver_2_0/pending_reqs/trace                 [0m] Reset (active: 0)
+0: 0: [[34m/soc/receiver_2_0/ready_reqs/trace                   [0m] Reset (active: 0
