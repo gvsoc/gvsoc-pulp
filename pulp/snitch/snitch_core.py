@@ -195,7 +195,9 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             pulp_v2: bool=False,
             nb_outstanding: int=1,
             wakeup_counter: bool=False,
-            vector_chaining: bool=False
+            vector_chaining: bool=False,
+            single_regfile: bool=False,
+            ssr: bool=True
         ):
 
         isa_instance = isa_instances.get(isa)
@@ -208,7 +210,10 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
                 extensions = [ Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ]
 
                 if not inc_spatz:
-                    extensions += [Rv32ssr(), Rv32frep()]
+                    extensions += [Rv32frep()]
+                    if ssr:
+                        extensions += [Rv32ssr()]
+
 
             isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
                 extensions=extensions)
@@ -224,7 +229,7 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
             fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True,
             prefetcher_size=32, htif=htif, binaries=binaries, handle_misaligned=True, custom_sources=True,
-            nb_outstanding=nb_outstanding, vector_chaining=vector_chaining)
+            nb_outstanding=nb_outstanding, vector_chaining=vector_chaining, single_regfile=single_regfile)
 
         self.inc_spatz = inc_spatz
 
@@ -233,6 +238,9 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
 
         if wakeup_counter:
             self.add_c_flags([f'-DCONFIG_GVSOC_ISS_EXEC_WAKEUP_COUNTER=1'])
+
+        if ssr:
+            self.add_c_flags([f'-DCONFIG_GVSOC_ISS_SSR=1'])
 
         self.add_c_flags([
             "-DPIPELINE_STAGES=1",
@@ -255,9 +263,13 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
                 "cpu/iss/src/snitch_fast/sequencer.cpp",
             ])
 
+        if ssr:
+            self.add_sources([
+                "cpu/iss/src/snitch_fast/ssr.cpp",
+            ])
+
         self.add_sources([
             "cpu/iss/src/snitch_fast/snitch.cpp",
-            "cpu/iss/src/snitch_fast/ssr.cpp",
             "cpu/iss/src/snitch_fast/fpu_lsu.cpp",
             "cpu/iss/src/prefetch/prefetch_single_line.cpp",
             "cpu/iss/src/csr.cpp",
