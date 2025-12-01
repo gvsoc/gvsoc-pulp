@@ -27,24 +27,23 @@ using namespace std::placeholders;
 Neureka::Neureka(vp::ComponentConf &config)
     : vp::Component(config)
 {
-    // FIXME these parameters might be settable through config, later...
-    this->TP_IN           = 32;
-    this->TP_IN_S         = 28;
-    this->TP_OUT          = 32;
-    this->QA_IN           = 8;
-    this->QA_OUT          = 8;
-    this->H_SIZE          = 6;
-    this->W_SIZE          = 6;
+    this->TP_IN           = this->get_js_config()->get_child_int("tp_in");
+    this->TP_IN_S         = this->get_js_config()->get_child_int("tp_in_s");
+    this->TP_OUT          = this->get_js_config()->get_child_int("tp_out");
+    this->QA_IN           = this->get_js_config()->get_child_int("qa_in");
+    this->QA_OUT          = this->get_js_config()->get_child_int("qa_out");
+    this->H_SIZE          = this->get_js_config()->get_child_int("h_size");
+    this->W_SIZE          = this->get_js_config()->get_child_int("w_size");
     this->NR_COLUMN       = this->H_SIZE*this->W_SIZE;
-    this->COLUMN_SIZE     = 9;
-    this->BLOCK_SIZE      = 32;
-    this->F_BUFFER_SIZE   = 8;
-    this->FILTER_SIZE     = 3;
-    this->SHIFT_CYCLES    = 2;
-    this->OVERHEAD_LD_1X1 = 19;
-    this->OVERHEAD_LD_3X3 = 31;
-    this->OVERHEAD_MV     = 17;
-    this->QUANT_PER_CYCLE = 4;
+    this->COLUMN_SIZE     = this->get_js_config()->get_child_int("column_size");
+    this->BLOCK_SIZE      = this->get_js_config()->get_child_int("block_size");
+    this->F_BUFFER_SIZE   = this->get_js_config()->get_child_int("f_buffer_size");
+    this->FILTER_SIZE     = this->get_js_config()->get_child_int("filter_size");
+    this->SHIFT_CYCLES    = this->get_js_config()->get_child_int("shift_cycles");
+    this->OVERHEAD_LD_1X1 = this->get_js_config()->get_child_int("overhead_ld_1x1");
+    this->OVERHEAD_LD_3X3 = this->get_js_config()->get_child_int("overhead_ld_3x3");
+    this->OVERHEAD_MV     = this->get_js_config()->get_child_int("overhead_mv");
+    this->QUANT_PER_CYCLE = this->get_js_config()->get_child_int("quant_per_cycle");
 
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
     this->new_reg("fsm_state", &this->state, 32);//public in hpp
