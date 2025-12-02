@@ -11,7 +11,8 @@ build:
 all: build
 
 run: $(WORK_DIR)
-	$(GVSOC_BIN) --target-dir=$(CURDIR) --target=test --work-dir=$(WORK_DIR) run $(runner_args) --trace-level=trace  --verbose=debug --trace=.*:log.txt
+	$(GVSOC_BIN) --debug-mode --target-dir=$(CURDIR) --target=test --work-dir=$(WORK_DIR) run $(runner_args) --trace-level=trace  --verbose=debug --trace=.*:log.txt
+	#$(GVSOC_BIN) --debug-mode --gdb --target-dir=$(CURDIR) --target=test --work-dir=$(WORK_DIR) run $(runner_args) --trace-level=trace  --verbose=debug --trace=.*:log.txt
 
 $(WORK_DIR):
 	mkdir -p $(WORK_DIR)

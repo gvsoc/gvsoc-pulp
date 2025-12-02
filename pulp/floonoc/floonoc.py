@@ -248,7 +248,7 @@ class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
     nb_z_clusters: int
         Number of clusters on the Z direction. This should not include the targets on the borders.
 
-    TODO: How should we handle Z>0 periphery? For now, assume there are no NIs here.
+    TODO: How should we handle Z>0 periphery? For now, assume there are always NIs here.
     """
     def __init__(self, parent: gvsoc.systree.Component, name, wide_width: int,narrow_width:int, nb_x_clusters: int,
             nb_y_clusters, router_input_queue_size=2, ni_outstanding_reqs: int=2, nb_z_clusters: int = 1):
@@ -260,11 +260,12 @@ class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
                 for tile_y in range(0, nb_y_clusters):
                     # Add 1 as clusters, routers and network_interfaces are in the central part
                     self.add_router(tile_x+1, tile_y+1, tile_z) # Add a router at each cluster
-        for tile_x in range(0, nb_x_clusters+2):
-            for tile_y in range(0, nb_y_clusters+2):
-                # Add a NI at each z=0 node, excluding the corners, because it also (once finished) acts as an output to the targets
-                if not (tile_x == 0 and tile_y == 0) or (tile_x == 0 and tile_y == nb_y_clusters+1) or (tile_x == nb_x_clusters+1 and tile_y == 0) or (tile_x == nb_x_clusters+1 and tile_y == nb_y_clusters+1):
-                    self.add_network_interface(tile_x, tile_y, z=0)
+        for tile_z in range(0, nb_z_clusters):
+            for tile_x in range(0, nb_x_clusters+2):
+                for tile_y in range(0, nb_y_clusters+2):
+                    # Add a NI at each z=0 node, excluding the corners, because it also (once finished) acts as an output to the targets
+                    if not (tile_x == 0 and tile_y == 0) or (tile_x == 0 and tile_y == nb_y_clusters+1) or (tile_x == nb_x_clusters+1 and tile_y == 0) or (tile_x == nb_x_clusters+1 and tile_y == nb_y_clusters+1):
+                        self.add_network_interface(tile_x, tile_y, tile_z)
 
     def i_CLUSTER_NARROW_INPUT(self, x: int, y: int, z: int = 0) -> gvsoc.systree.SlaveItf:
         """Returns the input port of a cluster tile.

@@ -55,7 +55,7 @@ private:
     // Called when a request has reached its destination position and should be sent to a target
     void send_to_target_ni(vp::IoReq *req, int pos_x, int pos_y, int pos_z = 0);
     // Get the position of the next router which should handle a request.
-    void get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_y, int dest_z, int &next_z);
+    void get_next_router_pos(int dest_x, int dest_y, int dest_z, int &next_x, int &next_y, int &next_z);
     // Get the index of the queue corresponding to a source or destination position
     int get_req_queue(int from_x, int from_y, int from_z = 0);
     // Return the source or destination position which corresponds to a source or destination

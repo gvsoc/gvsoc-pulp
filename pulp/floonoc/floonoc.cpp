@@ -91,12 +91,11 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
         {
             int x = network_interface->get_elem(0)->get_int();
             int y = network_interface->get_elem(1)->get_int();
-            // TODO: Somehow make this optional
             int z = network_interface->get_elem(2)->get_int();
 
             this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding network interface (x: %d, y: %d, z: %d)\n", x, y, z);
 
-            this->network_interfaces[z*this->dim_y*this->dim_x + y*this->dim_x + x] = new NetworkInterface(this, x, y);
+            this->network_interfaces[z*this->dim_y*this->dim_x + y*this->dim_x + x] = new NetworkInterface(this, x, y, z);
         }
     }
 
@@ -113,7 +112,6 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
         {
             int x = router->get_elem(0)->get_int();
             int y = router->get_elem(1)->get_int();
-            // TODO: as above, make parametric!
             int z = router->get_elem(2)->get_int();
 
             this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding routers (req, rsp and wide) (x: %d, y: %d, z: %d)\n", x, y, z);

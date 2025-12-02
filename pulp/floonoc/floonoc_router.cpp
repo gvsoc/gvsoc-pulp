@@ -115,8 +115,8 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             // to go to the destination
             int next_x, next_y, next_z;
             _this->get_next_router_pos(to_x, to_y, to_z, next_x, next_y, next_z);
-            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Resolved next position (req: %p, dest: (%d, %d), next_position: (%d, %d))\n",
-                             req, to_x, to_y, next_x, next_y, next_z);
+            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "(%d, %d, %d): Resolved next position (req: %p, dest: (%d, %d, %d), next_position: (%d, %d, %d))\n",
+                             _this->x, _this->y, _this->z, req, to_x, to_y, to_z, next_x, next_y, next_z);
 
             // Get output queue ID from next position
             int out_queue_id = _this->get_req_queue(next_x, next_y, next_z);
@@ -187,7 +187,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                     // there until the queue is unstalled
                     if (router->handle_request(req, _this->x, _this->y, _this->z))
                     {
-                        _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Stalling queue (position: (%d, %d), queue: %d)\n", _this->x, _this->y, out_queue_id);
+                        _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Stalling queue (position: (%d, %d, %d), queue: %d)\n", _this->x, _this->y, _this->z, out_queue_id);
                         _this->stalled_queues[out_queue_id] = true;
                     }
                 }
@@ -242,16 +242,16 @@ void Router::unstall_previous(vp::IoReq *req, int in_queue_index)
 
 void Router::send_to_target_ni(vp::IoReq *req, int pos_x, int pos_y, int pos_z)
 {
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Sending request to target NI (req: %p, position: (%d, %d %d))\n",
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Sending request to target NI (req: %p, position: (%d, %d, %d))\n",
                     req, pos_x, pos_y, pos_z);
     NetworkInterface *ni = this->noc->get_network_interface(pos_x, pos_y, pos_z);
 
-    ni->req_from_router(req, pos_x, pos_y);
+    ni->req_from_router(req, pos_x, pos_y, pos_z);
 }
 
 // This is determining the routes the requests will take in the network
 // TODO: is moving in Z->X->Y coordinate order the best choice? Easiest to extend for now.
-void Router::get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_y, int dest_z, int &next_z)
+void Router::get_next_router_pos(int dest_x, int dest_y, int dest_z, int &next_x, int &next_y, int &next_z)
 {
     // TODO If there is a gap in the mesh of routers this algorithm doesnt work
     if (dest_x == this->x && dest_y == this->y && dest_z == this->z)
@@ -297,7 +297,7 @@ void Router::unstall_queue(int from_x, int from_y, int from_z)
 void Router::stall_queue(int from_x, int from_y, int from_z)
 {
     int queue = this->get_req_queue(from_x, from_y, from_z);
-    this->trace.msg(vp::Trace::LEVEL_TRACE, "Stalling queue (position: (%d, %d), queue: %d)\n", from_x, from_y, from_z, queue);
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Stalling queue (position: (%d, %d, %d), queue: %d)\n", from_x, from_y, from_z, queue);
     this->stalled_queues[queue] = true;
 }
 

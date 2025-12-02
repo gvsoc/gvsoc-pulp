@@ -34,7 +34,7 @@ NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y, int z)
     this->noc = noc;
     this->x = x;
     this->y = y;
-    this->y = z;
+    this->z = z;
     this->target = noc->get_target(x, y, z);
     this->ni_outstanding_reqs = this->noc->get_js_config()->get("ni_outstanding_reqs")->get_int();
 
