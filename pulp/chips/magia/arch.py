@@ -59,4 +59,16 @@ class MagiaTree(Tree):
             description='Number of tiles on Y dimension')
 
         self.NB_CLUSTERS = self.n_tiles_x*self.n_tiles_y
-        
+
+class MagiaDSE:
+    SOC_L2_LATENCY              = 2
+    TILE_ICACHE_REFILL_LATENCY  = 2
+    TILE_TCDM_LATENCY           = 1
+    TILE_AXI_XBAR_LATENCY       = 2
+    TILE_AXI_XBAR_SYNC          = False
+    TILE_OBI_XBAR_LATENCY       = 2
+    TILE_OBI_XBAR_SYNC          = True
+    TILE_IDMA0_BQUEUE_SIZE      = 2
+    TILE_IDMA0_B_SIZE           = 4
+    TILE_IDMA1_BQUEUE_SIZE      = 2
+    TILE_IDMA1_B_SIZE           = 8

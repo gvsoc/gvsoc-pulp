@@ -22,11 +22,11 @@ import vp.clock_domain
 import utils.loader.loader
 import interco.router as router
 
-from pulp.chips.magia.tile import MagiaTile
-from pulp.chips.magia.arch import *
+from pulp.chips.magia_v2.tile import MagiaV2Tile
+from pulp.chips.magia_v2.arch import *
 from pulp.floonoc.floonoc import *
-from pulp.chips.magia.fractal_sync.fractal_sync import *
-from pulp.chips.magia.kill_module.kill_module import *
+from pulp.chips.magia_v2.fractal_sync.fractal_sync import *
+from pulp.chips.magia_v2.kill_module.kill_module import *
 from typing import List, Dict
 import math
 
@@ -48,18 +48,15 @@ def calculate_north_south(n, tiling):
     south = north + tiling
     return north, south
 
-class MagiaSoc(gvsoc.systree.Component):
-    def __init__(self, parent, name, tree, parser, binary):
+class MagiaV2Soc(gvsoc.systree.Component):
+    def __init__(self, parent, name, parser, binary):
         super().__init__(parent, name)
-
-        self.set_attributes(tree)
 
         # Bin Loader
         loader=utils.loader.loader.ElfLoader(self, f'loader', binary=binary)
-        self.loader = loader
 
         # Simulation engine killer
-        killer=KillModule(self,'kill-module',kill_addr_base=MagiaArch.TEST_END_ADDR_START,kill_addr_size=MagiaArch.TEST_END_SIZE,nb_cores_to_wait=tree.NB_CLUSTERS)
+        killer=KillModule(self,'kill-module',kill_addr_base=MagiaArch.TEST_END_ADDR_START,kill_addr_size=MagiaArch.TEST_END_SIZE,nb_cores_to_wait=MagiaArch.NB_CLUSTERS)
 
         # Single clock domain
         clock = vp.clock_domain.Clock_domain(self, 'tile-clock',
@@ -67,9 +64,9 @@ class MagiaSoc(gvsoc.systree.Component):
         clock.o_CLOCK(self.i_CLOCK())
 
         # Create Tiles
-        cluster:List[MagiaTile] = []
-        for id in range(0,tree.NB_CLUSTERS):
-            cluster.append(MagiaTile(self, f'magia-tile-{id}', tree, parser, id))
+        cluster:List[MagiaV2Tile] = []
+        for id in range(0,MagiaArch.NB_CLUSTERS):
+            cluster.append(MagiaV2Tile(self, f'magia-tile-{id}', parser, id))
 
         l2_mem = memory.Memory(self, f'L2-mem', size=MagiaArch.L2_SIZE,latency=MagiaDSE.SOC_L2_LATENCY)
 
@@ -84,11 +81,11 @@ class MagiaSoc(gvsoc.systree.Component):
         # Y direction
 
         # Init matrix:
-        tile_matrix: List[List[int]] = [[0 for _ in range(tree.n_tiles_x)] for _ in range(tree.n_tiles_y)]
+        tile_matrix: List[List[int]] = [[0 for _ in range(MagiaArch.N_TILES_X)] for _ in range(MagiaArch.N_TILES_Y)]
         # Populate matrix
         id=0
-        for y in range(0,tree.n_tiles_y):
-            for x in range(0,tree.n_tiles_x):
+        for y in range(0,MagiaArch.N_TILES_Y):
+            for x in range(0,MagiaArch.N_TILES_X):
                 tile_matrix[y][x] = id
                 id = id +1
 
@@ -106,7 +103,7 @@ class MagiaSoc(gvsoc.systree.Component):
         fsync_center_v: Dict[int, List[FractalSync]] = {} # center fsync used by v-tree
         # Place horizontal-vertical fsyncs
         lvl=0
-        for n_fractal in n_fract_per_lvl(tree.NB_CLUSTERS):
+        for n_fractal in n_fract_per_lvl(MagiaArch.NB_CLUSTERS):
             if lvl == 0:
                 print(f"Placing {n_fractal*2} fsync in h+v tree at level {lvl}")
                 for n in range(0,int(n_fractal/2)):
@@ -134,8 +131,8 @@ class MagiaSoc(gvsoc.systree.Component):
 
         # Place neighbour fsyncs (here level is always 0) only for achitectures > 2x2
         n_fractal_neighbour=0
-        if tree.NB_CLUSTERS >= 4:
-            n_fractal_neighbour=(((tree.n_tiles_x)//2) - 1)*(tree.n_tiles_y)
+        if MagiaArch.NB_CLUSTERS >= 4:
+            n_fractal_neighbour=(((MagiaArch.N_TILES_X)//2) - 1)*(MagiaArch.N_TILES_Y)
             print(f"Placing {n_fractal_neighbour*2} neighbour fsync at level 0")
             for n_fractal in range(0,n_fractal_neighbour):
                 fsync_neighbour_east_west.append(FractalSync(self,f'fsync_east_west_nb_id_{n_fractal}',level=0))
@@ -146,20 +143,20 @@ class MagiaSoc(gvsoc.systree.Component):
         noc = FlooNoc2dMeshNarrowWide(self,
                                     name='magia-noc',
                                     narrow_width=4,
-                                    wide_width=4,
+                                    wide_width=32,
                                     ni_outstanding_reqs=8, #need to double check this with RTL
                                     router_input_queue_size=4, #need to double check this with RTL
-                                    dim_x=tree.n_tiles_x+1, dim_y=tree.n_tiles_y)
+                                    dim_x=MagiaArch.N_TILES_X+1, dim_y=MagiaArch.N_TILES_Y)
         
 
         # Create noc routers
-        for y in range(0,tree.n_tiles_y):
-            for x in range(1,tree.n_tiles_x+1):
+        for y in range(0,MagiaArch.N_TILES_Y):
+            for x in range(1,MagiaArch.N_TILES_X+1):
                 print(f"[NoC] Adding router and NI at position x={x} y={y}")
                 noc.add_router(x, y)
                 noc.add_network_interface(x, y)
 
-        for y in range(0,tree.n_tiles_y):
+        for y in range(0,MagiaArch.N_TILES_Y):
             print(f"[NoC] L2-NI at position x={0} y={y}")
             noc.add_network_interface(0, y)
 
@@ -177,12 +174,16 @@ class MagiaSoc(gvsoc.systree.Component):
         #     12        13       14       15                        
 
         id = 0
-        for y in range(0,tree.n_tiles_y):
-            for x in range(1,tree.n_tiles_x+1):
+        for y in range(0,MagiaArch.N_TILES_Y):
+            for x in range(1,MagiaArch.N_TILES_X+1):
                 print(f"[NoC] Adding cluster {id} at position x={x} y={y}")
                 cluster[id].o_KILLER_OUTPUT(killer.i_INPUT())
                 cluster[id].o_NARROW_OUTPUT(noc.i_NARROW_INPUT(x,y))
-                noc.o_NARROW_MAP(cluster[id].i_NARROW_INPUT(),name=f'tile-{id}-l1-mem',base=MagiaArch.L1_ADDR_START+(id*MagiaArch.L1_TILE_OFFSET),size=MagiaArch.L1_SIZE,x=x,y=y,rm_base=False)
+                if not MagiaArch.USE_NARROW_WIDE:
+                    noc.o_NARROW_MAP(cluster[id].i_NARROW_INPUT(),name=f'tile-{id}-l1-mem',base=MagiaArch.L1_ADDR_START+(id*MagiaArch.L1_TILE_OFFSET),size=MagiaArch.L1_SIZE,x=x,y=y,rm_base=False)
+                else:
+                    cluster[id].o_WIDE_OUTPUT(noc.i_WIDE_INPUT(x,y))
+                    noc.o_WIDE_MAP(cluster[id].i_WIDE_INPUT(),name=f'tile-{id}-l1-mem',base=MagiaArch.L1_ADDR_START+(id*MagiaArch.L1_TILE_OFFSET),size=MagiaArch.L1_SIZE,x=x,y=y,rm_base=False,remove_offset=(id*MagiaArch.L1_TILE_OFFSET))
                 id += 1
 
         # Bind memory to noc
@@ -198,15 +199,16 @@ class MagiaSoc(gvsoc.systree.Component):
         # {0.3}----{1.3}----{2.3}----{3.3}----{4.3}
         #     L2       12        13       14       15
 
-        for y in range(0,tree.n_tiles_y):
+        for y in range(0,MagiaArch.N_TILES_Y):
             print(f"[NoC] Adding L2 at position x={0} y={y}")
-            #noc.o_NARROW_MAP(l2_mem.i_INPUT(),name=f'l2-map-{y}',base=MagiaArch.L2_ADDR_START,size=MagiaArch.L2_SIZE,x=0,y=y,rm_base=True)
             noc.o_NARROW_BIND(l2_mem.i_INPUT(), x=0, y=y)
+            if MagiaArch.USE_NARROW_WIDE:
+                noc.o_WIDE_BIND(l2_mem.i_INPUT(), x=0, y=y)
         
         noc.o_MAP_DIR(base=MagiaArch.L2_ADDR_START,size=MagiaArch.L2_SIZE, dir=FlooNocDirection.LEFT,name=f'mem_left', rm_base=True)
 
         # Fractal tree routing
-        for lvl in range(0,int(math.log2(tree.NB_CLUSTERS))):
+        for lvl in range(0,int(math.log2(MagiaArch.NB_CLUSTERS))):
             # level 0 is a special level connecting the tiles
             if lvl == 0:
                 print("Current level is ", lvl)
@@ -280,12 +282,12 @@ class MagiaSoc(gvsoc.systree.Component):
                             print(f"Connection tile-id {id} to fsync_neighbour_nord_sud_{n} NORD INPUT port")
                             cluster[id].o_SLAVE_NORD_SUD_NEIGHBOUR_FRACTAL(fsync_neighbour_nord_sud[n].i_SLAVE_NORD())
                             fsync_neighbour_nord_sud[n].o_SLAVE_NORD(cluster[id].i_SLAVE_NORD_SUD_NEIGHBOUR_FRACTAL())
-                            print(f"Connection tile-id {id+tree.n_tiles_x} to fsync_neighbour_nord_sud_{n} SUD INPUT port")
-                            cluster[id+tree.n_tiles_x].o_SLAVE_NORD_SUD_NEIGHBOUR_FRACTAL(fsync_neighbour_nord_sud[n].i_SLAVE_SUD())
-                            fsync_neighbour_nord_sud[n].o_SLAVE_SUD(cluster[id+tree.n_tiles_x].i_SLAVE_NORD_SUD_NEIGHBOUR_FRACTAL())
+                            print(f"Connection tile-id {id+MagiaArch.N_TILES_X} to fsync_neighbour_nord_sud_{n} SUD INPUT port")
+                            cluster[id+MagiaArch.N_TILES_X].o_SLAVE_NORD_SUD_NEIGHBOUR_FRACTAL(fsync_neighbour_nord_sud[n].i_SLAVE_SUD())
+                            fsync_neighbour_nord_sud[n].o_SLAVE_SUD(cluster[id+MagiaArch.N_TILES_X].i_SLAVE_NORD_SUD_NEIGHBOUR_FRACTAL())
                             n=n+1
     
-            elif (lvl == 1) and (lvl<(int(math.log2(tree.NB_CLUSTERS))-1)): #this is another special level as from now on we leave the nord-sud naming and we move to a more abstract form
+            elif (lvl == 1) and (lvl<(int(math.log2(MagiaArch.NB_CLUSTERS))-1)): #this is another special level as from now on we leave the nord-sud naming and we move to a more abstract form
                 print("Current level is ", lvl)
                 # note. Center fsync on odd levels host also the vertical tree
                 for n in range(0,len(fsync_center_hv[lvl])):
@@ -305,7 +307,7 @@ class MagiaSoc(gvsoc.systree.Component):
                     fsync_east[n].o_MASTER_EAST_WEST(fsync_center_hv[lvl][n].i_SLAVE_EAST())
                     fsync_center_hv[lvl][n].o_SLAVE_EAST(fsync_east[n].i_MASTER_EAST_WEST())
             
-            elif (lvl > 1) and (lvl<(int(math.log2(tree.NB_CLUSTERS))-1)): # intermediate levels
+            elif (lvl > 1) and (lvl<(int(math.log2(MagiaArch.NB_CLUSTERS))-1)): # intermediate levels
                 print("Current level is ", lvl)
                 if lvl % 2 == 0: #fractal in even levels are not shared between H-tree and V-tree and use EAST WEST ports (H-tree) and NORD SUD ports (V-tree)
                     n_prev=0
@@ -390,7 +392,7 @@ class MagiaSoc(gvsoc.systree.Component):
                     fsync_root.o_SLAVE_EAST(fsync_center_v[lvl-1][1].i_MASTER_EAST_WEST())
 
         # Bind loader
-        for id in range(0,tree.NB_CLUSTERS):
+        for id in range(0,MagiaArch.NB_CLUSTERS):
             if (id == 0):
                 loader.o_OUT(cluster[id].i_LOADER()) #only cluster connected to the corner loads the elf
             loader.o_START(cluster[id].i_FETCHEN())
