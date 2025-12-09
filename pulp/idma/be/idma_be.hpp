@@ -185,6 +185,15 @@ public:
      * by the source backend protocol.
      */
     virtual void ack_data(uint8_t *data, int size) = 0;
+
+#ifdef ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
+    /**
+     * @brief Get collective operation of current transfer
+     */
+    virtual uint64_t get_collective_type() = 0;
+    virtual uint16_t get_collective_row_mask() = 0;
+    virtual uint16_t get_collective_col_mask() = 0;
+#endif //ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
 };
 
 
@@ -221,10 +230,16 @@ public:
     bool is_ready_to_accept_data() override;
     void write_data(uint8_t *data, uint64_t size) override;
     void ack_data(uint8_t *data, int size) override;
+#ifdef ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
+    uint64_t get_collective_type() override;
+    uint16_t get_collective_row_mask() override;
+    uint16_t get_collective_col_mask() override;
+#endif //ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
 
 private:
     // FSM handler, called to check if any action should be taken after something was updated
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
+    static void transfer_regulation_handler(vp::Block *__this, vp::ClockEvent *event);
     // Returne backend protocol corresponding to the specified range
     IdmaBeConsumer *get_be_consumer(uint64_t base, uint64_t size, bool is_read);
     // Pointer to middle-end, used to interact with it
@@ -233,6 +248,7 @@ private:
     vp::Trace trace;
     // Block FSM event, used to trigger all checks after something has been updated
     vp::ClockEvent fsm_event;
+    vp::ClockEvent transfer_regulation_event;
     // Current transfer being processed. This transfer is kept active until all bursts
     // have been delegated to backend protocols.
     IdmaTransfer *current_transfer;
@@ -253,7 +269,9 @@ private:
     IdmaBeConsumer *current_transfer_dst_be;
     // Queue of pending transfers, whose bursts have already been sent. They need to be kept
     // since we need transfer information when bursts are back from memory
+    std::queue<IdmaTransfer *> regulation_queue;
     std::queue<IdmaTransfer *> transfer_queue;
+    std::queue<IdmaTransfer *> transfer_ack_queue;
     // Backend for local area
     IdmaBeConsumer *loc_be_read;
     IdmaBeConsumer *loc_be_write;

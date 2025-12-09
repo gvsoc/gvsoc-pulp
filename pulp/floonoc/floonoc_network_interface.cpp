@@ -90,7 +90,7 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         // In case the burst is being handled for the first time, initialize the current burst
         if (_this->pending_burst_size == 0)
         {
-            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Start handling burst (burst: %p, base: 0x%x, size: 0x%x, is_write: %d)\n",
+            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Start handling burst (burst: %p, base: 0x%llx, size: 0x%x, is_write: %d)\n",
                 burst, burst->get_addr(), burst->get_size(), burst->get_is_write());
 
             // By default, we consider the whole burst as valid. In one of the burst request is\
@@ -111,6 +111,59 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         // Get base from current burst
         uint64_t base = _this->pending_burst_base;
 
+        // We apply the HBM node aliasing
+        if (_this->noc->edge_node_alias > 1)
+        {
+            Entry *test_entry = _this->noc->get_entry(base, 1);
+            if (test_entry == NULL) _this->trace.fatal("[NoC Edge Alias] Cannot find entry for base 0x%llx \n",base);
+            if (test_entry->x == 0)
+            {
+                //west edge
+                uint64_t node_id = _this->y - 1;
+                uint64_t alias_offset = 1;
+                alias_offset = alias_offset << _this->noc->edge_node_alias_start_bit;
+                base += alias_offset * (node_id % _this->noc->edge_node_alias);
+                _this->trace.msg(vp::Trace::LEVEL_DEBUG, "[NoC Edge Alias] West edge node %d alias to 0x%llx \n", node_id, base);
+            } else if (test_entry->x == _this->noc->dim_x - 1)
+            {
+                //east edge
+                uint64_t node_id = _this->y - 1;
+                uint64_t alias_offset = 1;
+                alias_offset = alias_offset << _this->noc->edge_node_alias_start_bit;
+                base += alias_offset * (node_id % _this->noc->edge_node_alias);
+                _this->trace.msg(vp::Trace::LEVEL_DEBUG, "[NoC Edge Alias] East edge node %d alias to 0x%llx \n", node_id, base);
+            } else if (test_entry->y == 0)
+            {
+                //south edge
+                uint64_t node_id = _this->x - 1;
+                uint64_t alias_offset = 1;
+                alias_offset = alias_offset << _this->noc->edge_node_alias_start_bit;
+                base += alias_offset * (node_id % _this->noc->edge_node_alias);
+                _this->trace.msg(vp::Trace::LEVEL_DEBUG, "[NoC Edge Alias] South edge node %d alias to 0x%llx \n", node_id, base);
+            } else if (test_entry->y == _this->noc->dim_y - 1)
+            {
+                //north edge
+                uint64_t node_id = _this->x - 1;
+                uint64_t alias_offset = 1;
+                alias_offset = alias_offset << _this->noc->edge_node_alias_start_bit;
+                base += alias_offset * (node_id % _this->noc->edge_node_alias);
+                _this->trace.msg(vp::Trace::LEVEL_DEBUG, "[NoC Edge Alias] North edge node %d alias to 0x%llx \n", node_id, base);
+            }
+
+        }
+
+        //If support interleaving
+        if (_this->noc->interleave_enable && base >= _this->noc->interleave_region_base && base < _this->noc->interleave_region_base + _this->noc->interleave_region_size)
+        {
+            uint32_t mask = ((1 << _this->noc->interleave_bit_width) - 1);
+            uint32_t range1 = (base >> _this->noc->interleave_granularity) & mask;
+            uint32_t range2 = (base >> _this->noc->interleave_bit_start) & mask;
+            base &= ~(mask << _this->noc->interleave_granularity);
+            base &= ~(mask << _this->noc->interleave_bit_start);
+            base |= (range1 << _this->noc->interleave_bit_start);
+            base |= (range2 << _this->noc->interleave_granularity);
+        }
+
         // Size must be at max the noc width to respect the bandwidth
         uint64_t size = std::min(_this->noc->width, _this->pending_burst_size);
         // And must not cross a page to fall into one target
@@ -130,6 +183,32 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         req->set_size(size);
         req->set_data(_this->pending_burst_data);
         req->set_is_write(burst->get_is_write());
+        if (_this->noc->atomics)
+        {
+            req->set_opcode(burst->get_opcode());
+            req->set_second_data(burst->get_second_data());
+        }
+
+        //Deal with collective primitives
+        *req->arg_get(FlooNoc::REQ_PARENT) = (void *)0;
+        *req->arg_get(FlooNoc::REQ_COLL_TYPE) = (void *)0;
+        *req->arg_get(FlooNoc::REQ_ROW_MASK) = (void *)0;
+        *req->arg_get(FlooNoc::REQ_COL_MASK) = (void *)0;
+        *req->arg_get(FlooNoc::REQ_PEND_KIDS) = (void *)0;
+        *req->arg_get(FlooNoc::REQ_MOMENTUM) = (void *)FlooNoc::MOMENTUM_ZERO;
+        if (_this->noc->collective)
+        {
+            uint8_t collective_type = burst->get_payload()[0];
+            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "[Collective] preload[0] of burst %d\n",collective_type);
+            if (collective_type>0 && collective_type<8)
+            {
+                uint8_t row_mask = burst->get_payload()[1];
+                uint8_t col_mask = burst->get_payload()[2];
+                req->set_int(FlooNoc::REQ_COLL_TYPE, collective_type);
+                req->set_int(FlooNoc::REQ_ROW_MASK, row_mask);
+                req->set_int(FlooNoc::REQ_COL_MASK, col_mask);
+            }
+        }
 
         // Get the target entry corresponding to the current base
         Entry *entry = _this->noc->get_entry(base, size);
@@ -137,7 +216,7 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         {
             // If any request of the burst is invalid because no target was found, make the whole
             // burst invalid.
-            _this->trace.force_warning("No entry found for burst (base: 0x%x, size: 0x%x)",
+            _this->trace.force_warning("No entry found for burst (base: 0x%llx, size: 0x%x)",
                 base, size);
             burst->status = vp::IO_REQ_INVALID;
 
@@ -171,11 +250,13 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             req->set_addr(base - entry->base);
             *req->arg_get(FlooNoc::REQ_DEST_X) = (void *)(long)entry->x;
             *req->arg_get(FlooNoc::REQ_DEST_Y) = (void *)(long)entry->y;
+            *req->arg_get(FlooNoc::REQ_SRC_X) = (void *)(long)_this->x;
+            *req->arg_get(FlooNoc::REQ_SRC_Y) = (void *)(long)_this->y;
 
             // And forward to the first router which is at the same position as the network
             // interface
-            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Injecting request to noc (req: %p, base: 0x%x, size: 0x%x, destination: (%d, %d))\n",
-                req, base, size, entry->x, entry->y);
+            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Injecting request to noc (req: %p, base: 0x%llx, size: 0x%x, op_code: %0d, destination: (%d, %d))\n",
+                req, base, size, req->get_opcode(), entry->x, entry->y);
 
             // Noe that the router may not grant tje request if its input queue is full.
             // In this case we must stall the network interface
@@ -232,7 +313,7 @@ vp::IoReqStatus NetworkInterface::req(vp::Block *__this, vp::IoReq *req)
     uint8_t *data = req->get_data();
     uint64_t size = req->get_size();
 
-    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received burst (burst: %p, offset: 0x%x, size: 0x%x, is_write: %d, op: %d)\n",
+    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received burst (burst: %p, offset: 0x%llx, size: 0x%x, is_write: %d, op: %d)\n",
         req, offset, size, req->get_is_write(), req->get_opcode());
 
     // Just enqueue it and trigger the FSM which will check if it must be processed now

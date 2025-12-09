@@ -27,7 +27,8 @@ IDmaBe::IDmaBe(vp::Component *idma, IdmaTransferProducer *me,
     IdmaBeConsumer *loc_be_read, IdmaBeConsumer *loc_be_write,
     IdmaBeConsumer *ext_be_read, IdmaBeConsumer *ext_be_write)
 :   Block(idma, "be"),
-    fsm_event(this, &IDmaBe::fsm_handler)
+    fsm_event(this, &IDmaBe::fsm_handler),
+    transfer_regulation_event(this, &IDmaBe::transfer_regulation_handler)
 {
     // Middle-end and backend protocols will be used later for interaction
     this->me = me;
@@ -59,23 +60,55 @@ IdmaBeConsumer *IDmaBe::get_be_consumer(uint64_t base, uint64_t size, bool is_re
 // no active transfer
 void IDmaBe::enqueue_transfer(IdmaTransfer *transfer)
 {
-    this->trace.msg(vp::Trace::LEVEL_TRACE, "Queueing burst (burst: %p, src: 0x%x, dst: 0x%x, size: 0x%x)\n",
-        transfer, transfer->src, transfer->dst, transfer->size);
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Queueing burst (burst: %p, src: 0x%llx, dst: 0x%llx, size: 0x%x) | regulation_queue depth = %d\n",
+        transfer, transfer->src, transfer->dst, transfer->size,  this->regulation_queue.size());
 
-    // Push the transfer into the queue, we will need it later when the bursts are coming back
-    // from memory. We will remove it from the queue when the transfer is fully done
-    this->transfer_queue.push(transfer);
+    this->regulation_queue.push(transfer);
+    this->transfer_regulation_event.enqueue();
+}
 
-    // Extract information abouth the transfer
-    this->current_transfer = transfer;
-    this->current_transfer_size = transfer->size;
-    transfer->ack_size = transfer->size;
-    this->current_transfer_src = transfer->src;
-    this->current_transfer_dst = transfer->dst;
-    this->current_transfer_src_be = this->get_be_consumer(transfer->src, transfer->size, true);
-    this->current_transfer_dst_be = this->get_be_consumer(transfer->dst, transfer->size, false);
+void IDmaBe::transfer_regulation_handler(vp::Block *__this, vp::ClockEvent *event)
+{
+    IDmaBe *_this = (IDmaBe *)__this;
 
-    this->fsm_event.enqueue();
+    _this->trace.msg(vp::Trace::LEVEL_TRACE, "[transfer_regulation_handler] invoke\n");
+
+    if (!_this->regulation_queue.empty())
+    {
+        IdmaTransfer *wait_txn = _this->regulation_queue.front();
+        IdmaBeConsumer *wait_txn_src_be = _this->get_be_consumer(wait_txn->src, wait_txn->size, true);
+
+        if (!_this->transfer_ack_queue.empty() && (_this->current_transfer_src_be != wait_txn_src_be))
+        {
+            _this->trace.msg(vp::Trace::LEVEL_TRACE, "[transfer_regulation_handler] Src Conflict\n");
+            return;
+        }
+
+         _this->trace.msg(vp::Trace::LEVEL_TRACE, "[transfer_regulation_handler] Forward Transfer\n");
+
+        // Push the transfer into the queue, we will need it later when the bursts are coming back
+        // from memory. We will remove it from the queue when the transfer is fully done
+        IdmaTransfer *transfer = wait_txn;
+        _this->regulation_queue.pop();
+        _this->transfer_queue.push(transfer);
+        _this->transfer_ack_queue.push(transfer);
+
+        // Extract information abouth the transfer
+        _this->current_transfer = transfer;
+        _this->current_transfer_size = transfer->size;
+        transfer->ack_size = transfer->size;
+        _this->current_transfer_src = transfer->src;
+        _this->current_transfer_dst = transfer->dst;
+        _this->current_transfer_src_be = _this->get_be_consumer(transfer->src, transfer->size, true);
+        _this->current_transfer_dst_be = _this->get_be_consumer(transfer->dst, transfer->size, false);
+
+        _this->fsm_event.enqueue();
+
+        if (!_this->regulation_queue.empty())
+        {
+            _this->transfer_regulation_event.enqueue();
+        }
+    }
 }
 
 
@@ -85,6 +118,22 @@ bool IDmaBe::can_accept_transfer()
     return this->current_transfer_size == 0;
 }
 
+#ifdef ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
+uint64_t IDmaBe::get_collective_type()
+{
+    return this->current_transfer->parent->collective_type;
+}
+
+uint16_t IDmaBe::get_collective_row_mask()
+{
+    return this->current_transfer->parent->collective_row_mask;
+}
+
+uint16_t IDmaBe::get_collective_col_mask()
+{
+    return this->current_transfer->parent->collective_col_mask;
+}
+#endif //ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
 
 
 void IDmaBe::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
@@ -142,7 +191,7 @@ void IDmaBe::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 void IDmaBe::update()
 {
     // Check if any action should be taken in the next cycle from the FSM handler
-    this->fsm_event.enqueue();
+    this->transfer_regulation_event.enqueue();
 }
 
 
@@ -169,6 +218,11 @@ void IDmaBe::write_data(uint8_t *data, uint64_t size)
     transfer->dst += size;
     transfer->size -= size;
 
+    if (transfer->size == 0)
+    {
+        this->transfer_queue.pop();
+    }
+
     // And forward data.
     // Note that the source backend already checked that the destination was ready by calling
     // our is_ready_to_accept_data method
@@ -181,7 +235,7 @@ void IDmaBe::write_data(uint8_t *data, uint64_t size)
 void IDmaBe::ack_data(uint8_t *data, int size)
 {
     // Get the source backend protocol for the first transfer
-    IdmaTransfer *transfer = this->transfer_queue.front();
+    IdmaTransfer *transfer = this->transfer_ack_queue.front();
     IdmaBeConsumer *src_be = this->get_be_consumer(transfer->src, transfer->size, true);
 
     // And acknowledge the data to it so that the data can be freed
@@ -199,8 +253,12 @@ void IDmaBe::ack_data(uint8_t *data, int size)
         this->trace.msg(vp::Trace::LEVEL_TRACE, "Finished burst (transfer: %p)\n", transfer);
 
         // And if so, remove it and notify the middle end
-        this->transfer_queue.pop();
+        this->transfer_ack_queue.pop();
         this->me->ack_transfer(transfer);
+        if (this->transfer_ack_queue.empty())
+        {
+            this->transfer_regulation_event.enqueue();
+        }
     }
 }
 

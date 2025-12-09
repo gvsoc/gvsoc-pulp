@@ -46,6 +46,12 @@ IDmaFeXdma::IDmaFeXdma(vp::Component *idma, IdmaTransferConsumer *me)
 
     // Declare offload master interface for granting blocked transfers
     idma->new_master_port("offload_grant", &this->offload_grant_itf, this);
+
+    // track transfer time
+    this->transfer_start_time = 0;
+    this->num_inflight_transfer = 0;
+    this->total_idma_used_time = 0;
+    this->TxnList = "";
 }
 
 
@@ -87,19 +93,20 @@ void IDmaFeXdma::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *insn)
             _this->reps.set(insn->arg_a);
             break;
         case 0b0000011:
-            _this->trace.msg(vp::Trace::LEVEL_TRACE, "Received dmcpy operation (config: 0x%lx, size: 0x%lx)\n",
-                insn->arg_b, insn->arg_a);
-            insn->result = _this->enqueue_copy(insn->arg_b, insn->arg_a, insn->granted);
+            _this->trace.msg(vp::Trace::LEVEL_TRACE, "Received dmcpy collectve operation (config: 0x%lx, size: 0x%lx)\n",
+                ((insn->opcode >> 20) & 0b11111), insn->arg_a);
+            insn->result = _this->enqueue_copy(0b00000, insn->arg_a, insn->granted, ((insn->opcode >> 20) & 0b11111));
             break;
         case 0b0000101:
-            // _this->trace.msg(vp::Trace::LEVEL_TRACE, "Received dmstat operation (status: 0x%lx)\n",
-            //     insn->arg_b);
-            insn->result = _this->get_status(insn->arg_b);
+            _this->collective_row_mask = (insn->arg_b) >> 0;
+            _this->collective_col_mask = (insn->arg_b) >> 16;
+            _this->trace.msg(vp::Trace::LEVEL_TRACE, "Received dmmask operation (row mask: 0x%lx, col mask: 0x%lx)\n", _this->collective_row_mask, _this->collective_col_mask);
+            insn->result = insn->arg_b;
             break;
         case 0b0000010:
             _this->trace.msg(vp::Trace::LEVEL_TRACE, "Received dmcpy operation (config: 0x%lx, size: 0x%lx)\n",
                 insn->arg_b, insn->arg_a);
-            insn->result = _this->enqueue_copy(insn->arg_b, insn->arg_a, insn->granted);
+            insn->result = _this->enqueue_copy(insn->arg_b, insn->arg_a, insn->granted, 0);
             break;
         case 0b0000100:
             // _this->trace.msg(vp::Trace::LEVEL_TRACE, "Received dmstat operation (status: 0x%lx)\n",
@@ -126,13 +133,30 @@ uint32_t IDmaFeXdma::get_status(uint32_t status)
 
 
 
-uint32_t IDmaFeXdma::enqueue_copy(uint32_t config, uint32_t size, bool &granted)
+uint32_t IDmaFeXdma::enqueue_copy(uint32_t config, uint32_t size, bool &granted, uint32_t collective_type)
 {
     // Allocate transfer ID
     uint32_t transfer_id = this->next_transfer_id.get();
     this->next_transfer_id.set(transfer_id + 1);
 
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Allocated transfer ID (id: %d)\n", transfer_id);
+    std::stringstream ss;
+    if (config == 0)
+    {
+        ss << "| Txn " << transfer_id << " = {type: 1D, src: 0x" << std::hex << this->src.get() \
+        << ", dst: 0x" << std::hex << this->dst.get() << ", size: 0x"<< std::hex << size << " }";
+    } else {
+        ss << "| Txn " << transfer_id << " = {type: 2D, src: 0x" << std::hex << this->src.get() << ", src_stride: 0x" << std::hex << this->src_stride.get() \
+        << ", dst: 0x" << std::hex << this->dst.get() << ", dst_stride: 0x" << std::hex << this->dst_stride.get() \
+        << ", repeats: 0x" << std::hex << this->reps.get() << ", size: 0x"<< std::hex << size << " }";
+    }
+
+    this->TxnList += ss.str();
+    if (this->num_inflight_transfer == 0)
+    {
+        this->transfer_start_time = this->time.get_time();
+    }
+    this->num_inflight_transfer += 1;
 
     // Allocate a new transfer and fill it from registers
     IdmaTransfer *transfer = new IdmaTransfer();
@@ -143,6 +167,11 @@ uint32_t IDmaFeXdma::enqueue_copy(uint32_t config, uint32_t size, bool &granted)
     transfer->dst_stride = this->dst_stride.get();
     transfer->reps = this->reps.get();
     transfer->config = config;
+#ifdef ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
+    transfer->collective_type = collective_type;
+    transfer->collective_row_mask = this->collective_row_mask;
+    transfer->collective_col_mask = this->collective_col_mask;
+#endif //ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
 
     // Check if middle end can accept a new transfer
     if (this->me->can_accept_transfer())
@@ -170,6 +199,13 @@ uint32_t IDmaFeXdma::enqueue_copy(uint32_t config, uint32_t size, bool &granted)
 void IDmaFeXdma::ack_transfer(IdmaTransfer *transfer)
 {
     this->completed_id.inc(1);
+    this->num_inflight_transfer -= 1;
+    if (this->num_inflight_transfer == 0)
+    {
+        this->total_idma_used_time += (this->time.get_time() - this->transfer_start_time)/1000;
+        this->trace.msg("[iDMA] Finished : %0d ns ---> %0d ns | period = %0d ns | runtime = %0d ns %s\n", (this->transfer_start_time/1000), (this->time.get_time()/1000), (this->time.get_time() - this->transfer_start_time)/1000, this->total_idma_used_time, this->TxnList.c_str());
+        this->TxnList = "";
+    }
     delete transfer;
 }
 

@@ -411,6 +411,30 @@
             name: "ICACHE_PREFETCH_ENABLE",
             desc: "Enable instruction prefetching."
         }]
+    },
+    {
+        name: "NM_CONFIG",
+        desc: "Structured-sparsity format configuration register",
+        swaccess: "rw",
+        hwaccess: "hrw",
+        resval: "0",
+        fields: [
+            {
+                bits: "3:0",
+                name: "Format_N",
+                desc: "N value in N:M format (1, 2, 3, 4, 8)"
+            },
+            {
+                bits: "7:4",
+                name: "Format_M",
+                desc: "M value in N:M format (2, 4, 8, 16)"
+            },
+            {
+                bits: "31:8",
+                name: "RESERVED",
+                desc: "Reserved bits"
+            }
+        ]
     }
     ]
 }

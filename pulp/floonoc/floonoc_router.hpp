@@ -49,6 +49,8 @@ private:
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
     // Called when a request has reached its destination position and should be sent to a target
     void send_to_target(vp::IoReq *req, int pos_x, int pos_y);
+    // Called when a request has collective operation
+    void handle_collective(vp::IoReq *req, uint8_t collective_type, int pos_x, int pos_y);
     // Get the position of the next router which should handle a request.
     void get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_y);
     // Get the index of the queue corresponding to a source or destination position
@@ -80,4 +82,8 @@ private:
     // State of the output queues, true if it is stalled and nothing can be sent to it anymore
     // until it is unstalled.
     bool stalled_queues[5];
+    // The pending queue for collective generated requests
+    std::queue<vp::IoReq *> *collective_generated_queues[5];
+    void collective_analyze(vp::IoReq * req, std::queue<int> * queue, int router_x, int router_y);
+    void collective_generate(vp::IoReq * req, std::queue<int> * queue, int router_x, int router_y);
 };

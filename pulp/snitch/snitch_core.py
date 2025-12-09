@@ -86,20 +86,29 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
     def __init__(self,
             parent,
             name,
-            isa: str='rv32imafdc',
+            isa: str='rv32imafd',
             misa: int=None,
             binaries: list=[],
             fetch_enable: bool=False,
             boot_addr: int=0,
             inc_spatz: bool=False,
+            spatz_num_vlsu: int=4,
+            spatz_num_fpu: int=4,
+            spatz_vlsu_bw: int=32,
+            spatz_vreg_gather_eff: float=1.0,
             core_id: int=0,
             htif: bool=False):
 
         isa_instance = isa_instances.get(isa)
 
         if isa_instances.get(isa) is None:
-            isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
-                extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ] )
+            if inc_spatz:
+                isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
+                    extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux(), Rv32redmule(), Rv32v() ] )
+            else:
+                isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
+                    extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux(), Rv32redmule() ] )
+                pass
             add_latencies(isa_instance)
             isa_instances[isa] = isa_instance
 
@@ -146,9 +155,17 @@ class Snitch(cpu.iss.riscv.RiscvCommon):
             self.add_sources([
                 "cpu/iss/src/spatz.cpp",
             ])
+            self.add_c_flags(['-DCONFIG_GVSOC_ISS_INC_SPATZ=1'])
+            self.add_c_flags([f'-DCONFIG_GVSOC_ISS_SPATZ_VLSU={spatz_num_vlsu}'])
+            self.add_c_flags([f'-DCONFIG_GVSOC_ISS_SPATZ_FPU={spatz_num_fpu}'])
+            self.add_c_flags([f'-DCONFIG_GVSOC_ISS_SPATZ_VLSU_BW={spatz_vlsu_bw}'])
+            self.add_c_flags([f'-DCONFIG_GVSOC_ISS_SPATZ_VREG_GATHER_EFF={spatz_vreg_gather_eff}'])
 
     def o_BARRIER_REQ(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('barrier_req', itf, signature='wire<bool>')
+
+    def o_REDMULE(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('redmule_itf', itf, signature='io')
 
 
 class SnitchBare(cpu.iss.riscv.RiscvCommon):
@@ -156,7 +173,7 @@ class SnitchBare(cpu.iss.riscv.RiscvCommon):
     def __init__(self,
             parent,
             name,
-            isa: str='rv32imafdc',
+            isa: str='rv32imafd',
             misa: int=None,
             binaries: list=[],
             fetch_enable: bool=False,
@@ -197,19 +214,28 @@ class Snitch_fp_ss(cpu.iss.riscv.RiscvCommon):
     def __init__(self,
             parent,
             name,
-            isa: str='rv32imafdc',
+            isa: str='rv32imafd',
             misa: int=None,
             binaries: list=[],
             fetch_enable: bool=False,
             boot_addr: int=0,
             inc_spatz: bool=False,
+            spatz_num_vlsu: int=4,
+            spatz_num_fpu: int=4,
+            spatz_vlsu_bw: int=32,
+            spatz_vreg_gather_eff: float=1.0,
             core_id: int=0,
             timed: bool=False,
             htif: bool=False):
 
-
-        isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_fp_ss_" + isa, isa,
-            extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ] )
+        if inc_spatz:
+            isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_fp_ss_" + isa, isa,
+                extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux(), Rv32redmule(), Rv32v() ] )
+        else:
+            isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_fp_ss_" + isa, isa,
+                extensions=[ Rv32ssr(), Rv32frep(), Xdma(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux(), Rv32redmule() ] )
+            pass
+            
 
         add_latencies(isa_instance)
 
@@ -254,6 +280,11 @@ class Snitch_fp_ss(cpu.iss.riscv.RiscvCommon):
             self.add_sources([
                 "cpu/iss/src/spatz.cpp",
             ])
+            self.add_c_flags(['-DCONFIG_GVSOC_ISS_INC_SPATZ=1'])
+            self.add_c_flags([f'-DCONFIG_GVSOC_ISS_SPATZ_VLSU={spatz_num_vlsu}'])
+            self.add_c_flags([f'-DCONFIG_GVSOC_ISS_SPATZ_FPU={spatz_num_fpu}'])
+            self.add_c_flags([f'-DCONFIG_GVSOC_ISS_SPATZ_VLSU_BW={spatz_vlsu_bw}'])
+            self.add_c_flags([f'-DCONFIG_GVSOC_ISS_SPATZ_VREG_GATHER_EFF={spatz_vreg_gather_eff}'])
 
     def o_BARRIER_REQ(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('barrier_req', itf, signature='wire<bool>')
@@ -266,7 +297,7 @@ class Spatz(cpu.iss.riscv.RiscvCommon):
     def __init__(self,
             parent,
             name,
-            isa: str='rv32imafdc',
+            isa: str='rv32imafd',
             misa: int=None,
             binaries: list=[],
             fetch_enable: bool=False,

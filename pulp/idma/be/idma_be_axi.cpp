@@ -93,6 +93,18 @@ void IDmaBeAxi::reset(bool active)
         {
             this->pending_bursts.pop();
         }
+        while(this->write_axi_sending_bursts.size() > 0)
+        {
+            this->write_axi_sending_bursts.pop();
+        }
+        while(this->issued_axi_burst_order_list.size() > 0)
+        {
+            this->issued_axi_burst_order_list.pop();
+        }
+        while(this->OoO_responses_waiting_list.size() > 0)
+        {
+            this->OoO_responses_waiting_list.pop_front();
+        }
 
         // And put back them all as free
         for (vp::IoReq &req: this->bursts)
@@ -141,13 +153,18 @@ void IDmaBeAxi::enqueue_burst(uint64_t base, uint64_t size, bool is_write)
     req->set_addr(base);
     req->set_size(size);
 
+    IDmaBeAxiWriteBurstInfo info;
+    info.base = base;
+    info.size = size;
+
     this->pending_bursts.push(req);
+    this->write_axi_sending_bursts.push(info);
 
     // It case it is the first burst, set the pending base, this is used for writing bursts to know next
     // req address
-    if (this->pending_bursts.size() == 1)
+    if (this->write_axi_sending_bursts.size() == 1)
     {
-        this->current_burst_base = this->pending_bursts.front()->get_addr();
+        this->current_burst_base = this->write_axi_sending_bursts.front().base;
     }
 
     // And trigger the FSM in case it needs to be processed now
@@ -178,9 +195,16 @@ void IDmaBeAxi::send_read_burst_to_axi()
 
     // Reinit timings
     req->prepare();
+#ifdef ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
+    uint8_t * payload_ptr = req->get_payload();
+    payload_ptr[0] = (uint8_t) this->be->get_collective_type();
+    payload_ptr[1] = (uint8_t) this->be->get_collective_row_mask();
+    payload_ptr[2] = (uint8_t) this->be->get_collective_col_mask();
+#endif
 
     // Send to AXI interface
     vp::IoReqStatus status = this->ico_itf.req(req);
+    this->issued_axi_burst_order_list.push(req);
 
     if (status == vp::IoReqStatus::IO_REQ_OK)
     {
@@ -206,10 +230,55 @@ void IDmaBeAxi::read_handle_req_end(vp::IoReq *req)
 {
     // Remember at which timestamp the burst must be notified
     this->read_timestamps[req->id] = this->clock.get_cycles() + req->get_latency();
-    // Queue the requests, they will be notified in order.
-    this->read_waiting_bursts.push(req);
-    // Enqueue fsm event at desired timestamp in case the event is not already enqueued before
-    this->fsm_event.enqueue(std::max(req->get_latency(), (uint64_t)1));
+
+    // Push to OoO_responses_waiting_list
+    this->OoO_responses_waiting_list.push_back(req);
+
+    // Check OoO_responses_waiting_list and order them to read_waiting_bursts
+    std::list<vp::IoReq *>::iterator OoO_iter;
+    while(true){
+        if (this->issued_axi_burst_order_list.size() == 0)
+        {
+            if (this->OoO_responses_waiting_list.size() != 0)
+            {
+                this->trace.msg(vp::Trace::LEVEL_WARNING, "[iDMA ROB] OoO_responses_waiting_list has remaining entry but issued_axi_burst_order_list size is 0\n");
+            } else {
+                break;
+            }
+        }
+
+        if (this->OoO_responses_waiting_list.size() == 0)
+        {
+            break;
+        }
+
+        int matched = 0;
+        vp::IoReq *req_to_check = this->issued_axi_burst_order_list.front();
+        for (OoO_iter = this->OoO_responses_waiting_list.begin(); OoO_iter != this->OoO_responses_waiting_list.end(); ++OoO_iter)
+        {
+            vp::IoReq *req_responsed = *OoO_iter;
+            if (req_to_check == req_responsed)
+            {
+                matched = 1;
+                break;
+            }
+        }
+
+        if (matched == 0)
+        {
+            break;
+        }
+
+        this->issued_axi_burst_order_list.pop();
+        this->read_waiting_bursts.push(req_to_check);
+        this->OoO_responses_waiting_list.erase(OoO_iter);
+    }
+
+    // Enqueue FSM when read_waiting_bursts is not empty
+    if (this->read_waiting_bursts.size() != 0)
+    {
+        this->fsm_event.enqueue(1);
+    }
 }
 
 
@@ -263,7 +332,18 @@ void IDmaBeAxi::write_data(uint8_t *data, uint64_t size)
     vp::IoReq *req = new vp::IoReq();
 
     uint64_t base = this->current_burst_base;
+
+    //next burst base
     this->current_burst_base += size;
+    this->write_axi_sending_bursts.front().size -= size;
+    if (this->write_axi_sending_bursts.front().size == 0)
+    {
+        this->write_axi_sending_bursts.pop();
+        if (this->write_axi_sending_bursts.size() > 0)
+        {
+            this->current_burst_base = this->write_axi_sending_bursts.front().base;
+        }
+    }
 
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Write data (req: %p, base: 0x%lx, size: 0x%lx)\n",
         req, base, size);
@@ -273,6 +353,12 @@ void IDmaBeAxi::write_data(uint8_t *data, uint64_t size)
     req->set_addr(base);
     req->set_size(size);
     req->set_data(data);
+#ifdef ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
+    uint8_t * payload_ptr = req->get_payload();
+    payload_ptr[0] = (uint8_t) this->be->get_collective_type();
+    payload_ptr[1] = (uint8_t) this->be->get_collective_row_mask();
+    payload_ptr[2] = (uint8_t) this->be->get_collective_col_mask();
+#endif //ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
 
     vp::IoReqStatus status = this->ico_itf.req(req);
     if (status == vp::IoReqStatus::IO_REQ_OK)
@@ -312,10 +398,6 @@ void IDmaBeAxi::write_handle_req_end(vp::IoReq *req)
     if (burst->get_size() == 0)
     {
         this->pending_bursts.pop();
-        if (this->pending_bursts.size() > 0)
-        {
-            this->current_burst_base = this->pending_bursts.front()->get_addr();
-        }
         this->free_bursts.push(burst);
         // Notify the backend since it may schedule another burst
         this->be->update();
@@ -357,29 +439,37 @@ void IDmaBeAxi::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
     // In case we have pending read bursts waiting for pushing data, only do it if the backend
     // is ready to accept the data in case the destination is not ready
-    if (_this->read_waiting_bursts.size() != 0 && _this->be->is_ready_to_accept_data())
+    if (_this->read_waiting_bursts.size() != 0 )
     {
-        vp::IoReq *req = _this->read_waiting_bursts.front();
-
-        // Push the data only once the timestamp has expired to take into account the latency
-        // returned when the data was read
-        if (_this->read_timestamps[req->id] <= _this->clock.get_cycles())
+        if (_this->be->is_ready_to_accept_data())
         {
-            // Move the burst to a different queue so that we can free the request when it is
-            // acknowledge
-            _this->read_waiting_bursts.pop();
-            _this->read_bursts_waiting_ack.push(req);
+            vp::IoReq *req = _this->read_waiting_bursts.front();
 
-            // Send the data
-            _this->be->write_data(req->get_data(), req->get_size());
+            // Push the data only once the timestamp has expired to take into account the latency
+            // returned when the data was read
+            if (_this->read_timestamps[req->id] <= _this->clock.get_cycles())
+            {
+                // Move the burst to a different queue so that we can free the request when it is
+                // acknowledge
+                _this->read_waiting_bursts.pop();
+                _this->read_bursts_waiting_ack.push(req);
 
-            // Trigger again the FSM since we may continue with another transfer
-            _this->fsm_event.enqueue();
+                // Send the data
+                _this->be->write_data(req->get_data(), req->get_size());
+
+                // Trigger again the FSM since we may continue with another transfer
+                _this->fsm_event.enqueue();
+            }
+            else
+            {
+                // Otherwise check again when timetamp is reached
+                _this->fsm_event.enqueue(_this->read_timestamps[req->id] - _this->clock.get_cycles());
+            }
         }
         else
         {
-            // Otherwise check again when timetamp is reached
-            _this->fsm_event.enqueue(_this->read_timestamps[req->id] - _this->clock.get_cycles());
+            // Enqueue FSM when read_waiting_bursts is not empty
+            _this->fsm_event.enqueue(1);
         }
     }
 }

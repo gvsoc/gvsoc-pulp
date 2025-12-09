@@ -95,7 +95,15 @@ public:
     static constexpr int REQ_DEST_Y = 4;      // Y coordinate of the destination target
     static constexpr int REQ_ROUTER = 5;      // When a request is stalled, this gives the router where to grant it
     static constexpr int REQ_QUEUE = 6;       // When a request is stalled, this gives the queue where to grant it
-    static constexpr int REQ_NB_ARGS = 7;     // Number of request data required by this model
+    static constexpr int REQ_SRC_X = 7;       // X coordinate of the source target
+    static constexpr int REQ_SRC_Y = 8;       // Y coordinate of the source target
+    static constexpr int REQ_PARENT = 9;      // [Collective Only] If it is a request from a router internally
+    static constexpr int REQ_COLL_TYPE = 10;      // [Collective Only] If it is a request from a router internally
+    static constexpr int REQ_ROW_MASK = 11;   // [Collective Only] The row mask for collecitive primitives
+    static constexpr int REQ_COL_MASK = 12;   // [Collective Only] The col mask for collecitive primitives
+    static constexpr int REQ_PEND_KIDS = 13;   // [Collective Only] How many kids to be waited for response
+    static constexpr int REQ_MOMENTUM = 14;      // [Collective Only] Tree direction
+    static constexpr int REQ_NB_ARGS = 15;    // Number of request data required by this model
 
     // The following constants gives the index in the queue array of the queue associated to each direction
     static constexpr int DIR_RIGHT = 0;
@@ -104,9 +112,39 @@ public:
     static constexpr int DIR_DOWN = 3;
     static constexpr int DIR_LOCAL = 4;
 
+    // [Collective Only]
+    static constexpr int MOMENTUM_RIGHT = 0;
+    static constexpr int MOMENTUM_LEFT  = 1;
+    static constexpr int MOMENTUM_UP    = 2;
+    static constexpr int MOMENTUM_DOWN  = 3;
+    static constexpr int MOMENTUM_ZERO  = 4;
+
     // Width in bytes of the noc. This is used to split incoming bursts into internal requests of
     // this width so that the bandwidth corresponds to the width.
     uint64_t width;
+
+    // Whether Support Atomics
+    bool atomics;
+
+    // Whether Support Collective
+    bool collective;
+
+    // Whether Support HBM node aliasing
+    uint64_t edge_node_alias;
+    uint64_t edge_node_alias_start_bit;
+
+    // Whether Support Interleaving
+    uint64_t interleave_enable;
+    uint64_t interleave_region_base;
+    uint64_t interleave_region_size;
+    uint64_t interleave_granularity;
+    uint64_t interleave_bit_start;
+    uint64_t interleave_bit_width;
+
+    // X dimension of the network. This includes both routers but also targets on the edges
+    int dim_x;
+    // Y dimension of the network. This includes both routers but also targets on the edges
+    int dim_y;
 
 private:
     // Callback called when a target request is asynchronously granted after a denied error was
@@ -121,10 +159,6 @@ private:
     // Set of memory-mapped entries, with one for each target. They give information about each
     // target (base address, size, position)
     std::vector<Entry> entries;
-    // X dimension of the network. This includes both routers but also targets on the edges
-    int dim_x;
-    // Y dimension of the network. This includes both routers but also targets on the edges
-    int dim_y;
     // SIze of the routers input queues. Pushing more requests than this size will block the
     // output queue of the sender.
     int router_input_queue_size;

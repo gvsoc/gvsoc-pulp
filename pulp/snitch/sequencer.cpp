@@ -21,7 +21,7 @@
  */
 
 // Temporary workaround to let this component include ISS headers
-#include <../../../../isa_snitch_rv32imfdvca.hpp>
+#include <../../../../isa_snitch_rv32imfdva.hpp>
 
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
