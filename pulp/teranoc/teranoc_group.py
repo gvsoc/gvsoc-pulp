@@ -20,7 +20,6 @@
 import gvsoc.systree
 import gvsoc.systree as st
 import interco.router as router
-from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 from interco.interleaver import Interleaver
 import math
 from pulp.teranoc.teranoc_tile import Tile
@@ -67,16 +66,8 @@ class Group(st.Component):
             l1_noc_resp_routers.append(L1NocEndpointRouter(self, f'l1_noc_resp_router_{i}', req_mode=False, nb_tiles_per_group=nb_tiles_per_group, num_banks_per_tile=nb_banks_per_tile, byte_offset=2))
 
         # DMA network(virtual, to emulate multiple backends)
-        # DMA TCDM Interface
-        dma_tcdm_itf = router.Router(self, f'dma_tcdm_itf', bandwidth=axi_data_width)
-        dma_tcdm_itf.add_mapping('output')
-
         # DMA TCDM Interleaver
-        dma_tcdm_interleaver = DmaInterleaver(self, f'dma_tcdm_interleaver', nb_master_ports=1, nb_banks=nb_tiles_per_group, bank_width=nb_banks_per_tile*4)
-
-        # DMA AXI Interface
-        dma_axi_itf = router.Router(self, f'dma_axi_itf', bandwidth=axi_data_width)
-        dma_axi_itf.add_mapping('output')
+        dma_tcdm_interleaver = Interleaver(self, 'dma_tcdm_interleaver', nb_slaves=nb_tiles_per_group, nb_masters=1, interleaving_bits=int(math.log2(nb_banks_per_tile*4)), offset_translation=False)
 
         # Group-level AXI Interconnect
         # L2 cache rules
@@ -86,7 +77,7 @@ class Group(st.Component):
         l2_cache_rules.append((0x00000008, 0x0000000C))
         l2_cache_rules.append((0x0000000C, 0x00000010))
         # AXI Interconnect
-        axi_ico = Hierarchical_Interco(self, 'axi_ico', synchronous=False, nb_slaves=nb_tiles_per_group, enable_cache=True, cache_rules=l2_cache_rules, bandwidth=axi_data_width)
+        axi_ico = Hierarchical_Interco(self, 'axi_ico', synchronous=False, nb_slaves=nb_tiles_per_group+1, enable_cache=True, cache_rules=l2_cache_rules, bandwidth=axi_data_width)
 
         # AXI Interface
         axi_itf = router.Router(self, 'axi_itf', bandwidth=axi_data_width, latency=2)
@@ -122,11 +113,8 @@ class Group(st.Component):
         self.bind(axi_ico, 'output', axi_itf, 'input')
 
         # DMA network(virtual, to emulate multiple backends)
-        self.bind(dma_tcdm_itf, 'output', dma_tcdm_interleaver, 'input')
         for i in range(0, nb_tiles_per_group):
             self.bind(dma_tcdm_interleaver, f'out_{i}', self.tile_list[i], 'dma_tcdm')
-
-        self.bind(dma_axi_itf, 'output', axi_ico, 'input')
 
         # Loader
         #Group loader -> Tile loader
@@ -170,8 +158,8 @@ class Group(st.Component):
         self.bind(axi_itf, 'output', self, 'axi_out_0')
 
         # DMA
-        self.bind(self, 'dma_tcdm', dma_tcdm_itf, 'input')
-        self.bind(self, 'dma_axi', dma_axi_itf, 'input')
+        self.bind(self, 'dma_tcdm', dma_tcdm_interleaver, 'in_0')
+        self.bind(self, 'dma_axi', axi_ico, f'input_{nb_tiles_per_group}')
 
     def i_GROUP_INPUT(self, port: int) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'grp_remt{port}_slave_in', signature='io')

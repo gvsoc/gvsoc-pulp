@@ -23,7 +23,7 @@ import interco.router as router
 import devices.uart.ns16550 as ns16550
 import utils.loader.loader
 import gvsoc.systree as st
-from pulp.mempool.dma.mempool_dma import MemPoolDma
+from pulp.mempool.dma.mempool_dma_top import MemPoolDmaTop
 from elftools.elf.elffile import *
 from interco.converter import Converter
 from pulp.teranoc.teranoc_cluster import Cluster
@@ -50,6 +50,7 @@ class System(st.Component):
 
         nb_groups = nb_x_groups * nb_y_groups
         nb_axi_masters = nb_axi_masters_per_group * nb_groups
+        nb_banks_per_group = (total_cores // nb_groups) * bank_factor
         l2_bank_size = l2_size // nb_l2_banks
 
         ################################################################
@@ -78,7 +79,8 @@ class System(st.Component):
         uart = ns16550.Ns16550(self, 'uart')
 
         # DMA
-        dma = MemPoolDma(self, 'dma', loc_base=0x0, loc_size=0x400000, tcdm_width=total_cores*bank_factor*4)
+        dma = MemPoolDmaTop(self, 'dma', loc_base=0x0, loc_size=0x400000, burst_size=4*nb_banks_per_group, tcdm_width=4*nb_banks_per_group,
+                            nb_groups=nb_groups, nb_dmas_per_group=1, be_width=4*nb_banks_per_group)
 
         # Binary Loader
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x80000000)
@@ -238,13 +240,11 @@ class System(st.Component):
 
         #DMA data
         #To emulate distributed backends in groups
-        # self.bind(dma, 'axi_read', mempool_cluster, 'dma_axi')
-        # self.bind(dma, 'axi_write', mempool_cluster, 'dma_axi')
-        # DMA via L2 interconnect not implemented yet
-        self.bind(dma, 'axi_read', loader_router, 'input')
-        self.bind(dma, 'axi_write', loader_router, 'input')
-        self.bind(dma, 'tcdm_read', mempool_cluster, 'dma_tcdm')
-        self.bind(dma, 'tcdm_write', mempool_cluster, 'dma_tcdm')
+        for i in range(nb_groups):
+            self.bind(dma, f'axi_read_{i}_0', mempool_cluster, f'dma_axi_{i}')
+            self.bind(dma, f'axi_write_{i}_0', mempool_cluster, f'dma_axi_{i}')
+            self.bind(dma, f'tcdm_read_{i}_0', mempool_cluster, f'dma_tcdm_{i}')
+            self.bind(dma, f'tcdm_write_{i}_0', mempool_cluster, f'dma_tcdm_{i}')
 
 class TeranocSystem(st.Component):
 
