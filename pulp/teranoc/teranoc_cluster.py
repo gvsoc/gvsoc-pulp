@@ -19,8 +19,6 @@
 
 import interco.router as router
 import gvsoc.systree as st
-from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
-from interco.interleaver import Interleaver
 import math
 from pulp.teranoc.teranoc_group import Group
 from pulp.teranoc.l2_interconnect.l2_address_scrambler import L2_AddressScrambler
@@ -64,20 +62,6 @@ class Cluster(st.Component):
             for j in range(0, nb_y_groups):
                 for k in range(0, nb_axi_masters_per_group):
                     l2_addr_scrambler_list.append(L2_AddressScrambler(self, f'l2_addr_scrambler_{i}_{j}_{k}', bypass=False, l2_base_addr=0x80000000, l2_size=l2_size, nb_banks=nb_l2_banks, bank_width=axi_data_width, interleave=16))
-
-        # DMA TCDM Interface
-        dma_tcdm_itf = router.Router(self, f'dma_tcdm_itf')
-        dma_tcdm_itf.add_mapping('output')
-
-        # DMA TCDM Interleaver
-        dma_tcdm_interleaver = DmaInterleaver(self, f'dma_tcdm_interleaver', nb_master_ports=1, nb_banks=nb_groups, bank_width=nb_banks_per_group*4)
-
-        # DMA AXI Interface
-        dma_axi_itf = router.Router(self, f'dma_axi_itf')
-        dma_axi_itf.add_mapping('output')
-
-        # DMA AXI Interleaver
-        dma_axi_interleaver = Interleaver(self, f'dma_axi_interleaver', nb_masters=1, nb_slaves=nb_groups, interleaving_bits=int(math.log2(nb_banks_per_group*4)), offset_translation=False)
 
         ################################################################
         ##########               Design Bindings              ##########
@@ -124,14 +108,8 @@ class Cluster(st.Component):
         for i in range(0, nb_groups):
             self.bind(self, 'rocache_cfg', self.group_list[i], 'rocache_cfg')
 
-        self.bind(self, 'dma_tcdm', dma_tcdm_itf, 'input')
-        self.bind(dma_tcdm_itf, 'output', dma_tcdm_interleaver, 'input')
-        
-        for i in range(0, nb_groups):
-            self.bind(dma_tcdm_interleaver, f'out_{i}', self.group_list[i], 'dma_tcdm')
-
-        self.bind(self, 'dma_axi', dma_axi_itf, 'input')
-        self.bind(dma_axi_itf, 'output', dma_axi_interleaver, 'in_0')
-
-        for i in range(0, nb_groups):
-            self.bind(dma_axi_interleaver, f'out_{i}', self.group_list[i], 'dma_axi')
+        for i in range(0, nb_x_groups):
+            for j in range(0, nb_y_groups):
+                group_id = i * nb_y_groups + j
+                self.bind(self, f'dma_tcdm_{group_id}', self.group_list[group_id], 'dma_tcdm')
+                self.bind(self, f'dma_axi_{group_id}', self.group_list[group_id], 'dma_axi')
