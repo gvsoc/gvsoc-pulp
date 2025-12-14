@@ -16,6 +16,8 @@
 
 # Authors: Lorenzo Zuolo, Chips-IT (lorenzo.zuolo@chips.it)
 
+from gvrun.attribute import Tree, Value
+
 class MagiaArch:
     # Single tile address map from magia_tile_pkg.sv
     REDMULE_CTRL_ADDR_START = 0x0000_0100
@@ -59,17 +61,28 @@ class MagiaArch:
 
     N_TILES_X           = 4
     N_TILES_Y           = 4
-    NB_CLUSTERS         = N_TILES_X*N_TILES_Y
 
     USE_NARROW_WIDE     = False
 
+class MagiaTree(Tree):
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
+        self.n_tiles_x = Value(self, 'n_tiles_x', MagiaArch.N_TILES_X, cast=int,
+            description='Number of tiles on X dimension')
+        self.n_tiles_y = Value(self, 'n_tiles_y', MagiaArch.N_TILES_Y, cast=int,
+            description='Number of tiles on Y dimension')
+
+        self.NB_CLUSTERS = self.n_tiles_x*self.n_tiles_y
+
 class MagiaDSE:
-    SOC_L2_LATENCY          = 0
-    TILE_AXI_XBAR_LATENCY   = 2
-    TILE_AXI_XBAR_SYNC      = False
-    TILE_OBI_XBAR_LATENCY   = 2
-    TILE_OBI_XBAR_SYNC      = True
-    TILE_IDMA0_BQUEUE_SIZE  = 1
-    TILE_IDMA0_B_SIZE       = 8
-    TILE_IDMA1_BQUEUE_SIZE  = 2
-    TILE_IDMA1_B_SIZE       = 4
+    SOC_L2_LATENCY              = 2
+    TILE_ICACHE_REFILL_LATENCY  = 2
+    TILE_TCDM_LATENCY           = 1
+    TILE_AXI_XBAR_LATENCY       = 2
+    TILE_AXI_XBAR_SYNC          = False
+    TILE_OBI_XBAR_LATENCY       = 2
+    TILE_OBI_XBAR_SYNC          = True
+    TILE_IDMA0_BQUEUE_SIZE      = 2
+    TILE_IDMA0_B_SIZE           = 4
+    TILE_IDMA1_BQUEUE_SIZE      = 2
+    TILE_IDMA1_B_SIZE           = 8

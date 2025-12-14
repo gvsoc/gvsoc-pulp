@@ -20,7 +20,6 @@ import gvsoc.systree
 import memory.memory as memory
 import vp.clock_domain
 import utils.loader.loader
-import interco.router as router
 
 from pulp.chips.magia.tile import MagiaTile
 from pulp.chips.magia.arch import *

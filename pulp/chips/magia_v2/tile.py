@@ -23,7 +23,6 @@ import interco.router as router
 import gdbserver.gdbserver
 from pulp.stdout.stdout_v3 import Stdout
 
-import pulp.cpu.iss.pulp_cores as iss
 from pulp.cluster.l1_interleaver import L1_interleaver
 from pulp.light_redmule.hwpe_interleaver import HWPEInterleaver
 from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
@@ -62,7 +61,7 @@ class MagiaTileTcdm(gvsoc.systree.Component):
         banks = []
         for i in range(nb_banks):
             # Instantiate a new memory bank
-            bank = memory.Memory(self, f'bank_{i}', atomics=True, size=bank_size, latency=0)
+            bank = memory.Memory(self, f'bank_{i}', atomics=True, size=bank_size, latency=MagiaDSE.TILE_TCDM_LATENCY)
             banks.append(bank)
 
             # Bind the new bank (slave) to the interleaver (master)
@@ -120,7 +119,7 @@ class MagiaV2Tile(gvsoc.systree.Component):
         json_data = json.dumps(event_unit_json)
         return json.loads(json_data)
 
-    def __init__(self, parent, name, parser, tid: int=0):
+    def __init__(self, parent, name, tree, parser, tid: int=0):
         super().__init__(parent, name)
         
         # Core model from pulp cores
@@ -176,7 +175,7 @@ class MagiaV2Tile(gvsoc.systree.Component):
         event_unit = Event_unit(self, f'tile-{tid}-event-unit', self.get_property('event_unit/config'))
 
         # UART
-        stdout = Stdout(self, f'tile-{tid}-stdout',max_cluster=MagiaArch.NB_CLUSTERS,max_core_per_cluster=1,user_set_core_id=0,user_set_cluster_id=tid)
+        stdout = Stdout(self, f'tile-{tid}-stdout',max_cluster=tree.NB_CLUSTERS,max_core_per_cluster=1,user_set_core_id=0,user_set_cluster_id=tid)
 
         # Bind: cv32 core data -> obi interconnect
         core_cv32.o_DATA(obi_xbar.i_INPUT())
@@ -223,7 +222,7 @@ class MagiaV2Tile(gvsoc.systree.Component):
                         base=MagiaArch.L1_ADDR_START+(tid*MagiaArch.L1_TILE_OFFSET),
                         size=MagiaArch.L1_SIZE, rm_base=False, remove_offset=(tid*MagiaArch.L1_TILE_OFFSET))
             # Bind obi xbar so that it can communicate with tile xbar to get access to remote tiles l1 and reserved mem
-            for tile_id in range(0,MagiaArch.NB_CLUSTERS):
+            for tile_id in range(0,tree.NB_CLUSTERS):
                 if (tile_id!=tid): #skip yourself
                     obi_xbar.o_MAP(tile_xbar.i_INPUT(), name=f'obi2axi-off-tile-{tile_id}-l1-mem',
                             base=MagiaArch.L1_ADDR_START+(tile_id*MagiaArch.L1_TILE_OFFSET),
@@ -233,7 +232,7 @@ class MagiaV2Tile(gvsoc.systree.Component):
                             base=MagiaArch.L1_ADDR_START+(tid*MagiaArch.L1_TILE_OFFSET),
                             size=MagiaArch.L1_SIZE, rm_base=False)
             # Bind tile xbar so that it can communicate with remote tiles l1 and reserved mem
-            for tile_id in range(0,MagiaArch.NB_CLUSTERS):
+            for tile_id in range(0,tree.NB_CLUSTERS):
                 if (tile_id!=tid): #skip yourself
                     tile_xbar.o_MAP(self.__i_NARROW_OUTPUT(), name=f'axi-to-off-tile-{tile_id}-l1-mem',
                             base=MagiaArch.L1_ADDR_START+(tile_id*MagiaArch.L1_TILE_OFFSET),

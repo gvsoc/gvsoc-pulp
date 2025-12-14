@@ -20,9 +20,12 @@ import gvsoc.runner
 from pulp.chips.magia_v2.board import MagiaV2Board
 
 class Target(gvsoc.runner.Target):
-    def __init__(self, parser, options):
 
-        gapy_description="Magia v2 (memory mapped) board"
+    gapy_description="Magia v2 (memory mapped) board"
+    model = MagiaV2Board
+    name = "magia_v2"
+
+    def __init__(self, parser, options=None, name=None):
 
         super(Target, self).__init__(parser, options,
               model=MagiaV2Board)

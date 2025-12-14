@@ -22,7 +22,6 @@ import interco.router as router
 import gdbserver.gdbserver
 from pulp.stdout.stdout_v3 import Stdout
 
-import pulp.cpu.iss.pulp_cores as iss
 from pulp.cluster.l1_interleaver import L1_interleaver
 from pulp.light_redmule.hwpe_interleaver import HWPEInterleaver
 from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
