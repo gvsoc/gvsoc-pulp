@@ -22,13 +22,19 @@ def extend_isa(isa_instance):
     # For now only load/stores are assigned to vlsu
     vle_pattern = re.compile(r'^(vle\d+\.v)$')
     vse_pattern = re.compile(r'^(vse\d+\.v)$')
+    vlse_pattern = re.compile(r'^(vlse\d+\.v)$')
+    vsse_pattern = re.compile(r'^(vsse\d+\.v)$')
     vslide_pattern = re.compile(r'.*slide.*|.*vmv.*')
     vsetvli_pattern = re.compile(r'.*vset.*')
     for insn in isa_instance.get_isa('v').get_insns():
-        if vle_pattern.match(insn.label) is not None:
+        if vle_pattern.match(insn.label) is not None or vlse_pattern.match(insn.label) is not None:
             insn.add_tag('vload')
-        elif vse_pattern.match(insn.label) is not None:
+            if vlse_pattern.match(insn.label) is not None:
+                insn.add_tag('vload_strided')
+        elif vse_pattern.match(insn.label) is not None or vsse_pattern.match(insn.label) is not None:
             insn.add_tag('vstore')
+            if vsse_pattern.match(insn.label) is not None:
+                insn.add_tag('vstore_strided')
         elif vslide_pattern.match(insn.label) is not None:
             insn.add_tag('vslide')
         elif vsetvli_pattern.match(insn.label) is not None:
