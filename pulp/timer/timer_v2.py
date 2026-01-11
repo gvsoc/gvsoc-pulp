@@ -14,6 +14,7 @@
 # limitations under the License.
 #
 
+import os
 import gvsoc.systree as st
 
 class Timer(st.Component):
@@ -23,3 +24,8 @@ class Timer(st.Component):
         super(Timer, self).__init__(parent, name)
 
         self.set_component('pulp.timer.timer_v2_impl')
+
+    def target_gen(self, builddir: str):
+        src_path = os.path.dirname(os.path.abspath(__file__))
+        self.regmap_gen(f'{src_path}/timer_v2.md', f'{src_path}/archi', 'timer_v2',
+            headers=['regfields', 'gvsoc', 'regs'])
