@@ -103,15 +103,15 @@ vp::IoReqStatus NetworkInterface::req(vp::Block *__this, vp::IoReq *req)
 
     if (_this->stalled)
     {
-        _this->fsm_event.enqueue();
+        // _this->fsm_event.enqueue();
 
-        if (_this->denied_req)
-        {
-            _this->trace.fatal("A request is already pending in the network interface while it is stalled (req: %p, denied_req: %p)\n",
-                             req, _this->denied_req);
-            return vp::IO_REQ_DENIED;
-        }
-        _this->denied_req = req;
+        // if (_this->denied_req)
+        // {
+        //     _this->trace.fatal("A request is already pending in the network interface while it is stalled (req: %p, denied_req: %p)\n",
+        //                      req, _this->denied_req);
+        //     return vp::IO_REQ_DENIED;
+        // }
+        // _this->denied_req = req;
         return vp::IO_REQ_DENIED;
     }
     else
