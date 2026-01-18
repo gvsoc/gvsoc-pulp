@@ -3,7 +3,8 @@
  */
 
 /*
- * Copyright (C) 2020 GreenWaves Technologies
+ * Copyright (C) 2022 GreenWaves Technologies, SAS, ETH Zurich and
+ *                    University of Bologna
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +24,12 @@
 
 #if !defined(LANGUAGE_ASSEMBLY) && !defined(__ASSEMBLER__)
 
+#ifndef ARCHI_READ
+#define ARCHI_READ(base, offset) (*(volatile unsigned int *)(long)((base) + (offset)))
+#endif
+#ifndef ARCHI_WRITE
+#define ARCHI_WRITE(base, offset, val_) (*(volatile unsigned int *)(long)((base) + (offset)) = val_)
+#endif
 
 #endif
 

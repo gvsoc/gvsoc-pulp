@@ -16,6 +16,7 @@
 
 import os
 import gvsoc.systree as st
+from gvsoc.systree import IoAccuracy
 from pulp.chips.pulp_open.pulp_open import Pulp_open
 from devices.hyperbus.hyperflash import Hyperflash
 from devices.spiflash.spiflash import Spiflash
@@ -33,7 +34,7 @@ class Pulp_open_board(st.Component):
 
     def __init__(self, parent, name, parser, options, use_ddr=False, pulpnn=False):
 
-        super(Pulp_open_board, self).__init__(parent, name, options=options)
+        super(Pulp_open_board, self).__init__(parent, name, options=options, io_accuracy=IoAccuracy.ACCURATE)
 
         self.set_target_name('pulp-open')
 

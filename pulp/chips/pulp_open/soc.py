@@ -41,6 +41,7 @@ from gdbserver.gdbserver import Gdbserver
 import utils.loader.loader
 from gvrun.parameter import TargetParameter
 from gvrun.attribute import Tree
+from gvsoc.systree import IoAccuracy
 
 
 class SocAttr(Tree):
@@ -193,7 +194,7 @@ class Soc(st.Component):
         self.bind(periph_clock, 'out', udma, 'periph_clock')
 
         # FC
-        self.bind(fc, 'fetch', fc_icache, 'input_0')
+        self.bind(fc, 'fetch', fc_icache, 'input')
         self.bind(fc, 'irq_ack', fc_itc, 'irq_ack')
         if soc_conf.get_property('fc/riscv_fesvr_tohost_addr') is not None:
             self.bind(fc, 'data', bus_watchpoint, 'input')
@@ -230,26 +231,28 @@ class Soc(st.Component):
         self.bind(soc_ctrl, 'bootaddr', fc, 'bootaddr')
         self.bind(self, 'bootsel', soc_ctrl, 'bootsel')
         self.bind(soc_ctrl, 'confreg_soc', pulp_tap, 'confreg_soc')
-        self.bind(pulp_tap, 'confreg_ext', soc_ctrl, 'confreg_ext')
+        if self.get_io_accuracy() != IoAccuracy.ACCURATE:
+            self.bind(pulp_tap, 'confreg_ext', soc_ctrl, 'confreg_ext')
 
         # APB
         apb_ico_mappings = soc_conf.get_property('apb_ico/mappings')
         apb_ico.add_property('mappings', apb_ico_mappings)
-        self.bind(apb_ico, 'stdout', stdout, 'input')
-        self.bind(apb_ico, 'fc_icache_ctrl', fc_icache_ctrl, 'input')
-        self.bind(apb_ico, 'apb_soc_ctrl', soc_ctrl, 'input')
-        self.bind(apb_ico, 'soc_eu', soc_eu, 'input')
-        self.bind(apb_ico, 'gpio', gpio, 'input')
-        self.bind(apb_ico, 'udma', udma, 'input')
-        self.bind(apb_ico, 'fc_itc', fc_itc, 'input')
-        self.bind(apb_ico, 'fc_dbg_unit', riscv_tap, 'input')
-        self.bind(apb_ico, 'pmu', self, 'pmu_input')
-        self.bind(apb_ico, 'debug_rom', debug_rom, 'input')
-        self.bind(apb_ico, 'fll_soc', fll_soc, 'input')
-        self.bind(apb_ico, 'fll_periph', fll_periph, 'input')
-        self.bind(apb_ico, 'fll_cluster', fll_cluster, 'input')
-        self.bind(apb_ico, 'fc_timer', timer, 'input')
-        self.bind(apb_ico, 'fc_timer_1', timer_1, 'input')
+        if self.get_io_accuracy() != IoAccuracy.ACCURATE:
+            self.bind(apb_ico, 'stdout', stdout, 'input')
+            self.bind(apb_ico, 'fc_icache_ctrl', fc_icache_ctrl, 'input')
+            self.bind(apb_ico, 'apb_soc_ctrl', soc_ctrl, 'input')
+            self.bind(apb_ico, 'soc_eu', soc_eu, 'input')
+            self.bind(apb_ico, 'gpio', gpio, 'input')
+            self.bind(apb_ico, 'udma', udma, 'input')
+            self.bind(apb_ico, 'fc_itc', fc_itc, 'input')
+            self.bind(apb_ico, 'fc_dbg_unit', riscv_tap, 'input')
+            self.bind(apb_ico, 'pmu', self, 'pmu_input')
+            self.bind(apb_ico, 'debug_rom', debug_rom, 'input')
+            self.bind(apb_ico, 'fll_soc', fll_soc, 'input')
+            self.bind(apb_ico, 'fll_periph', fll_periph, 'input')
+            self.bind(apb_ico, 'fll_cluster', fll_cluster, 'input')
+            self.bind(apb_ico, 'fc_timer', timer, 'input')
+            self.bind(apb_ico, 'fc_timer_1', timer_1, 'input')
 
         # Soc interconnect
         self.bind(soc_ico, 'apb', apb_ico, 'input')
@@ -260,10 +263,11 @@ class Soc(st.Component):
             self.bind(soc_ico, 'l2_shared_%d' % i, self.l2, 'shared_%d' % i)
 
         # AXI
-        self.bind(axi_ico, 'axi_proxy', self, 'axi_proxy')
-        axi_ico.add_mapping('axi_proxy', base=0x20000000, size=0x10000000)
-        self.bind(soc_ico, 'axi_proxy', axi_ico, 'input')
-        self.bind(soc_ico, 'ddr', axi_ico, 'input')
+        if self.get_io_accuracy() != IoAccuracy.ACCURATE:
+            self.bind(axi_ico, 'axi_proxy', self, 'axi_proxy')
+            axi_ico.add_mapping('axi_proxy', base=0x20000000, size=0x10000000)
+            self.bind(soc_ico, 'axi_proxy', axi_ico, 'input')
+            self.bind(soc_ico, 'ddr', axi_ico, 'input')
 
         axi_ico.add_mapping('ddr', base=0x80000000, size=0x00100000, remove_offset=0x80000000)
         self.bind(axi_ico, 'ddr', self, 'ddr')
@@ -284,8 +288,9 @@ class Soc(st.Component):
             self.bind(self, 'gpio%d' % i, gpio, 'gpio%d' % i)
 
         # UDMA
-        self.bind(udma, 'l2_itf', soc_ico, 'udma_tx')
-        self.bind(udma, 'event_itf', soc_eu, 'event_in')
+        if self.get_io_accuracy() != IoAccuracy.ACCURATE:
+            self.bind(udma, 'l2_itf', soc_ico, 'udma_tx')
+            self.bind(udma, 'event_itf', soc_eu, 'event_in')
 
         for itf in udma_conf['interfaces']:
             itf_conf = udma_conf.get(itf)
@@ -344,7 +349,8 @@ class Soc(st.Component):
         self.bind(self, 'dma_irq', fc_itc, 'in_event_8')
 
         # Pulp TAP
-        self.bind(pulp_tap, 'io', soc_ico, 'debug')
+        if self.get_io_accuracy() != IoAccuracy.ACCURATE:
+            self.bind(pulp_tap, 'io', soc_ico, 'debug')
 
         # Make sure the loader is notified by any executable attached to the hieararchy of this
         # component so that it is automatically loaded

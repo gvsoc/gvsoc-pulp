@@ -25,6 +25,7 @@ from pulp.timer.timer_v2 import Timer
 from pulp.cluster.cluster_control_v2 import Cluster_control
 from pulp.ne16.ne16 import Ne16
 from pulp.icache_ctrl.icache_ctrl_v2 import Icache_ctrl
+from gvsoc.systree import IoAccuracy
 
 from pulp.redmule.redmule import RedMule
 
@@ -152,8 +153,9 @@ class Cluster(st.Component):
 
         # L1 subsystem
         for i in range(0, nb_pe):
-            self.bind(l1, 'dma_%d' % i, mchan, 'in_%d' % i)
-            self.bind(l1, 'dma_alias_%d' % i, mchan, 'in_%d' % i)
+            if self.get_io_accuracy() != IoAccuracy.ACCURATE:
+                self.bind(l1, 'dma_%d' % i, mchan, 'in_%d' % i)
+                self.bind(l1, 'dma_alias_%d' % i, mchan, 'in_%d' % i)
             self.bind(l1, 'event_unit_%d' % i, event_unit, 'demux_in_%d' % i)
             self.bind(l1, 'event_unit_alias_%d' % i, event_unit, 'demux_in_%d' % i)
 
@@ -189,47 +191,49 @@ class Cluster(st.Component):
         cluster_ico.add_mapping('l1', **self._reloc_mapping(cluster_conf.get_property('l1/mapping')))
         self.bind(cluster_ico, 'l1', l1, 'ext2loc')
 
-        cluster_ico.add_mapping('l1_ts', **self._reloc_mapping(cluster_conf.get_property('l1/ts_mapping')))
-        self.bind(cluster_ico, 'l1_ts', l1, 'ext2loc_ts')
+        if self.get_io_accuracy() != IoAccuracy.ACCURATE:
+            cluster_ico.add_mapping('l1_ts', **self._reloc_mapping(cluster_conf.get_property('l1/ts_mapping')))
+            self.bind(cluster_ico, 'l1_ts', l1, 'ext2loc_ts')
 
-        cluster_ico.add_mapping('periph_ico', **cluster_conf.get_property('peripherals/mapping'))
-        self.bind(cluster_ico, 'periph_ico', periph_ico, 'input')
+            cluster_ico.add_mapping('periph_ico', **cluster_conf.get_property('peripherals/mapping'))
+            self.bind(cluster_ico, 'periph_ico', periph_ico, 'input')
 
-        cluster_ico.add_mapping('periph_ico_alias', **cluster_conf.get_property('peripherals/alias'), add_offset=int(cluster_conf.get_property('peripherals/mapping/base'), 0) - int(cluster_conf.get_property('peripherals/alias/base'), 0))
-        self.bind(cluster_ico, 'periph_ico_alias', periph_ico, 'input')
+            cluster_ico.add_mapping('periph_ico_alias', **cluster_conf.get_property('peripherals/alias'), add_offset=int(cluster_conf.get_property('peripherals/mapping/base'), 0) - int(cluster_conf.get_property('peripherals/alias/base'), 0))
+            self.bind(cluster_ico, 'periph_ico_alias', periph_ico, 'input')
 
-        # Periph interconnect
-        periph_ico.add_mapping('error', **self._reloc_mapping(cluster_conf.get_property('mapping')))
+            # Periph interconnect
+            periph_ico.add_mapping('error', **self._reloc_mapping(cluster_conf.get_property('mapping')))
 
-        periph_ico.add_mapping('cluster_ico')
-        self.bind(periph_ico, 'cluster_ico', cluster_ico, 'input')
+            periph_ico.add_mapping('cluster_ico')
+            self.bind(periph_ico, 'cluster_ico', cluster_ico, 'input')
 
-        periph_ico.add_mapping('event_unit', **self._reloc_mapping(cluster_conf.get_property('peripherals/event_unit/mapping')))
-        self.bind(periph_ico, 'event_unit', event_unit, 'input')
+            periph_ico.add_mapping('event_unit', **self._reloc_mapping(cluster_conf.get_property('peripherals/event_unit/mapping')))
+            self.bind(periph_ico, 'event_unit', event_unit, 'input')
 
-        periph_ico.add_mapping('cluster_ctrl', **self._reloc_mapping(cluster_conf.get_property('peripherals/cluster_ctrl/mapping')))
-        self.bind(periph_ico, 'cluster_ctrl', cluster_control, 'input')
+            periph_ico.add_mapping('cluster_ctrl', **self._reloc_mapping(cluster_conf.get_property('peripherals/cluster_ctrl/mapping')))
+            self.bind(periph_ico, 'cluster_ctrl', cluster_control, 'input')
 
-        periph_ico.add_mapping('icache_ctrl', **self._reloc_mapping(cluster_conf.get_property('peripherals/icache_ctrl/mapping')))
-        self.bind(periph_ico, 'icache_ctrl', icache_ctrl, 'input')
+            periph_ico.add_mapping('icache_ctrl', **self._reloc_mapping(cluster_conf.get_property('peripherals/icache_ctrl/mapping')))
+            self.bind(periph_ico, 'icache_ctrl', icache_ctrl, 'input')
 
-        periph_ico.add_mapping('timer', **self._reloc_mapping(cluster_conf.get_property('peripherals/timer/mapping')))
-        self.bind(periph_ico, 'timer', timer, 'input')
+            periph_ico.add_mapping('timer', **self._reloc_mapping(cluster_conf.get_property('peripherals/timer/mapping')))
+            self.bind(periph_ico, 'timer', timer, 'input')
 
-        periph_ico.add_mapping('dma', **self._reloc_mapping(cluster_conf.get_property('peripherals/dma/mapping')))
-        self.bind(periph_ico, 'dma', mchan, 'in_%d' % nb_pe)
+            periph_ico.add_mapping('dma', **self._reloc_mapping(cluster_conf.get_property('peripherals/dma/mapping')))
+            self.bind(periph_ico, 'dma', mchan, 'in_%d' % nb_pe)
 
-        if has_ne16:
-            periph_ico.add_mapping('ne16', **self._reloc_mapping(cluster_conf.get_property('peripherals/ne16/mapping')))
-            self.bind(periph_ico, 'ne16', ne16, 'input')
+            if has_ne16:
+                periph_ico.add_mapping('ne16', **self._reloc_mapping(cluster_conf.get_property('peripherals/ne16/mapping')))
+                self.bind(periph_ico, 'ne16', ne16, 'input')
 
-        if has_redmule:
-            periph_ico.add_mapping('redmule', **self._reloc_mapping(cluster_conf.get_property('peripherals/redmule/mapping')))
-            self.bind(periph_ico, 'redmule', redmule, 'input')
+            if has_redmule:
+                periph_ico.add_mapping('redmule', **self._reloc_mapping(cluster_conf.get_property('peripherals/redmule/mapping')))
+                self.bind(periph_ico, 'redmule', redmule, 'input')
 
         # MCHAN
-        self.bind(mchan, 'ext_irq_itf', self, 'dma_irq')
-        self.bind(mchan, 'ext_itf', cluster_ico, 'input')
+        if self.get_io_accuracy() != IoAccuracy.ACCURATE:
+            self.bind(mchan, 'ext_irq_itf', self, 'dma_irq')
+            self.bind(mchan, 'ext_itf', cluster_ico, 'input')
 
         for i in range(0, 4):
             self.bind(mchan, 'loc_itf_%d' % i, l1, 'dma_in_%d' % i)

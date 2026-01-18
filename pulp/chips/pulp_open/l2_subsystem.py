@@ -19,6 +19,7 @@ import memory.memory as memory
 import interco.interleaver as interleaver
 import interco.testandset
 from gvrun.attribute import Tree, Area, Value
+from gvsoc.systree import IoAccuracy
 
 
 class L2SharedAttr(Tree):
@@ -52,18 +53,19 @@ class L2Subsystem(st.Component):
         l2_shared_nb_regions = attr.shared.nb_regions
         cut_size = int(l2_shared_size / l2_shared_nb_regions / l2_shared_nb_banks)
 
-        for i in range(0, l2_shared_nb_regions):
+        if self.get_io_accuracy() != IoAccuracy.ACCURATE:
+            for i in range(0, l2_shared_nb_regions):
 
-            l2_shared_interleaver = interleaver.Interleaver(self, 'l2_shared_%d' % i, nb_slaves=l2_shared_nb_banks,
-                interleaving_bits=2)
+                l2_shared_interleaver = interleaver.Interleaver(self, 'l2_shared_%d' % i, nb_slaves=l2_shared_nb_banks,
+                    interleaving_bits=2)
 
-            self.bind(self, 'shared_%d' % i, l2_shared_interleaver, 'input')
+                self.bind(self, 'shared_%d' % i, l2_shared_interleaver, 'input')
 
-            for j in range(0, l2_shared_nb_banks):
+                for j in range(0, l2_shared_nb_banks):
 
-                cut = memory.Memory(self, 'shared_%d_cut_%d' % (i, j), size=cut_size)
+                    cut = memory.Memory(self, 'shared_%d_cut_%d' % (i, j), size=cut_size)
 
-                self.bind(l2_shared_interleaver, 'out_%d' % j, cut, 'input')
+                    self.bind(l2_shared_interleaver, 'out_%d' % j, cut, 'input')
 
         self.bind(self, 'priv0', l2_priv0, 'input')
         self.bind(self, 'priv1', l2_priv1, 'input')

@@ -20,7 +20,6 @@
 
 
 #include <vp/vp.hpp>
-#include <vp/itf/io.hpp>
 #include "pulp_iss_wrapper.hpp"
 #include <cpu/iss/include/iss_core.hpp>
 

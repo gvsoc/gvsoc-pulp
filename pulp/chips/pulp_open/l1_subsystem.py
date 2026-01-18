@@ -19,6 +19,7 @@ from memory.memory import Memory
 from interco.router import Router
 from interco.converter import Converter
 from pulp.cluster.l1_interleaver import L1_interleaver
+from gvsoc.systree import IoAccuracy
 import math
 
 
@@ -82,32 +83,33 @@ class L1_subsystem(st.Component):
         for i in range(0, nb_pe):
             self.bind(self, 'data_pe_%d' % i, pe_icos[i], 'input')
 
-            pe_icos[i].add_mapping('l1', **cluster._reloc_mapping(cluster_conf.get_property('l1/mapping')))
-            self.bind(pe_icos[i], 'l1', interleaver, 'in_%d' % i)
+            if self.get_io_accuracy() != IoAccuracy.ACCURATE:
+                pe_icos[i].add_mapping('l1', **cluster._reloc_mapping(cluster_conf.get_property('l1/mapping')))
+                self.bind(pe_icos[i], 'l1', interleaver, 'in_%d' % i)
 
-            pe_icos[i].add_mapping('l1_alias', **cluster._reloc_mapping_alias(cluster_conf.get_property('l1/mapping')))
-            self.bind(pe_icos[i], 'l1_alias', interleaver, 'in_%d' % i)
+                pe_icos[i].add_mapping('l1_alias', **cluster._reloc_mapping_alias(cluster_conf.get_property('l1/mapping')))
+                self.bind(pe_icos[i], 'l1_alias', interleaver, 'in_%d' % i)
 
-            pe_icos[i].add_mapping('l1_ts', **cluster._reloc_mapping(cluster_conf.get_property('l1/ts_mapping')))
-            self.bind(pe_icos[i], 'l1_ts', interleaver, 'ts_in_%d' % i)
+                pe_icos[i].add_mapping('l1_ts', **cluster._reloc_mapping(cluster_conf.get_property('l1/ts_mapping')))
+                self.bind(pe_icos[i], 'l1_ts', interleaver, 'ts_in_%d' % i)
 
-            pe_icos[i].add_mapping('l1_ts_alias', **cluster._reloc_mapping_alias(cluster_conf.get_property('l1/ts_mapping')))
-            self.bind(pe_icos[i], 'l1_ts_alias', interleaver, 'ts_in_%d' % i)
+                pe_icos[i].add_mapping('l1_ts_alias', **cluster._reloc_mapping_alias(cluster_conf.get_property('l1/ts_mapping')))
+                self.bind(pe_icos[i], 'l1_ts_alias', interleaver, 'ts_in_%d' % i)
 
-            pe_icos[i].add_mapping('dma', **cluster._reloc_mapping(cluster_conf.get_property('demux_peripherals/dma/mapping')))
-            self.bind(pe_icos[i], 'dma', self, 'dma_%d' % i)
+                pe_icos[i].add_mapping('dma', **cluster._reloc_mapping(cluster_conf.get_property('demux_peripherals/dma/mapping')))
+                self.bind(pe_icos[i], 'dma', self, 'dma_%d' % i)
 
-            pe_icos[i].add_mapping('dma_alias', **cluster._reloc_mapping_alias(cluster_conf.get_property('demux_peripherals/dma/mapping')))
-            self.bind(pe_icos[i], 'dma_alias', self, 'dma_%d' % i)
+                pe_icos[i].add_mapping('dma_alias', **cluster._reloc_mapping_alias(cluster_conf.get_property('demux_peripherals/dma/mapping')))
+                self.bind(pe_icos[i], 'dma_alias', self, 'dma_%d' % i)
 
-            pe_icos[i].add_mapping('event_unit', **cluster._reloc_mapping(cluster_conf.get_property('demux_peripherals/event_unit/mapping')))
-            self.bind(pe_icos[i], 'event_unit', self, 'event_unit_%d' % i)
+                pe_icos[i].add_mapping('event_unit', **cluster._reloc_mapping(cluster_conf.get_property('demux_peripherals/event_unit/mapping')))
+                self.bind(pe_icos[i], 'event_unit', self, 'event_unit_%d' % i)
 
-            pe_icos[i].add_mapping('event_unit_alias', **cluster._reloc_mapping_alias(cluster_conf.get_property('demux_peripherals/event_unit/mapping')))
-            self.bind(pe_icos[i], 'event_unit_alias', self, 'event_unit_%d' % i)
+                pe_icos[i].add_mapping('event_unit_alias', **cluster._reloc_mapping_alias(cluster_conf.get_property('demux_peripherals/event_unit/mapping')))
+                self.bind(pe_icos[i], 'event_unit_alias', self, 'event_unit_%d' % i)
 
-            pe_icos[i].add_mapping('event_unit_alias', **cluster._reloc_mapping_alias(cluster_conf.get_property('demux_peripherals/event_unit/mapping')))
-            self.bind(pe_icos[i], 'event_unit_alias', self, 'event_unit_%d' % i)
+                pe_icos[i].add_mapping('event_unit_alias', **cluster._reloc_mapping_alias(cluster_conf.get_property('demux_peripherals/event_unit/mapping')))
+                self.bind(pe_icos[i], 'event_unit_alias', self, 'event_unit_%d' % i)
 
             pe_icos[i].add_mapping('cluster_ico')
             self.bind(pe_icos[i], 'cluster_ico', self, 'cluster_ico')
@@ -118,20 +120,21 @@ class L1_subsystem(st.Component):
             # self.bind(self, 'ext_counter_%d[%d]' % (i, first_external_pcer + 3), pe_icos[i], 'write_stalls[1]')
             # self.bind(self, 'ext_counter_%d[%d]' % (i, first_external_pcer + 4), pe_icos[i], 'stalls[0]')
 
-        # L1 interleaver
-        for i in range(0, nb_l1_banks):
-            self.bind(interleaver, 'out_%d' % i, l1_banks[i], 'input')
+        if self.get_io_accuracy() != IoAccuracy.ACCURATE:
+            # L1 interleaver
+            for i in range(0, nb_l1_banks):
+                self.bind(interleaver, 'out_%d' % i, l1_banks[i], 'input')
 
-        self.bind(self, 'ne16_in', interleaver, 'in_%d' % (nb_pe + 4))
-        self.bind(self, 'redmule_in', interleaver, 'in_%d' % (nb_pe + 4)) # TODO: check why it is "nb_pe + 4" and not "nb_pe + 8" -> alternative to NE16!!
+            self.bind(self, 'ne16_in', interleaver, 'in_%d' % (nb_pe + 4))
+            self.bind(self, 'redmule_in', interleaver, 'in_%d' % (nb_pe + 4)) # TODO: check why it is "nb_pe + 4" and not "nb_pe + 8" -> alternative to NE16!!
 
-        for i in range(0, 4):
-            self.bind(self, 'dma_in_%d' % i, interleaver, 'in_%d' % (nb_pe + i))
+            for i in range(0, 4):
+                self.bind(self, 'dma_in_%d' % i, interleaver, 'in_%d' % (nb_pe + i))
 
-        # EXT2LOC
-        self.bind(self, 'ext2loc', ext2loc, 'input')
-        self.bind(ext2loc, 'out', interleaver, 'in_%d' % nb_pe)
+            # EXT2LOC
+            self.bind(self, 'ext2loc', ext2loc, 'input')
+            self.bind(ext2loc, 'out', interleaver, 'in_%d' % nb_pe)
 
-        # EXT2LOC test-and-set
-        self.bind(self, 'ext2loc_ts', ext2loc_ts, 'input')
-        self.bind(ext2loc_ts, 'out', interleaver, 'ts_in_%d' % nb_pe)
+            # EXT2LOC test-and-set
+            self.bind(self, 'ext2loc_ts', ext2loc_ts, 'input')
+            self.bind(ext2loc_ts, 'out', interleaver, 'ts_in_%d' % nb_pe)

@@ -23,6 +23,7 @@ from pulp.padframe.padframe_v1 import Padframe
 import interco.router_proxy as router_proxy
 import memory.dramsys
 from gvrun.attribute import Tree, Area, Value
+from gvsoc.systree import IoAccuracy
 
 class PulpOpenAttr(Tree):
     def __init__(self, parent):
@@ -165,8 +166,9 @@ class Pulp_open(st.Component):
         # SOC
         self.bind(self, 'bootsel', soc, 'bootsel')
         self.bind(fast_clock, 'out', soc, 'fast_clock_out')
-        self.bind(axi_proxy, 'out', soc, 'soc_input')
-        self.bind(soc, 'axi_proxy', axi_proxy, 'input')
+        if self.get_io_accuracy() != IoAccuracy.ACCURATE:
+            self.bind(axi_proxy, 'out', soc, 'soc_input')
+            self.bind(soc, 'axi_proxy', axi_proxy, 'input')
         if use_ddr:
             self.bind(soc, 'ddr', ddr, 'input')
 
