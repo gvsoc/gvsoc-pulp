@@ -408,13 +408,13 @@ void Router::collective_analyze(vp::IoReq * req, std::queue<int> * queue, int ro
 {
     int src_x = req->get_int(FlooNoc::REQ_SRC_X) - 1;
     int src_y = req->get_int(FlooNoc::REQ_SRC_Y) - 1;
-    int src_z = req->get_int(FlooNoc::REQ_SRC_Z) - 1;
+    int src_z = req->get_int(FlooNoc::REQ_SRC_Z);
     int cur_x = router_x - 1;
     int cur_y = router_y - 1;
-    int cur_z = router_z - 1;
+    int cur_z = router_z ;
     int dim_x = this->noc->dim_x - 2;
     int dim_y = this->noc->dim_y - 2;
-    int dim_z = this->noc->dim_z - 2;
+    int dim_z = this->noc->dim_z ;
     int row_m = req->get_int(FlooNoc::REQ_ROW_MASK);
     int col_m = req->get_int(FlooNoc::REQ_COL_MASK);
     int lay_m = req->get_int(FlooNoc::REQ_LAY_MASK);
@@ -443,7 +443,7 @@ void Router::collective_analyze(vp::IoReq * req, std::queue<int> * queue, int ro
     if (req->get_int(FlooNoc::REQ_MOMENTUM) == FlooNoc::MOMENTUM_ZMINUS)
     {
         if (check_target(cur_x,cur_y,src_x,src_y,row_m,col_m,cur_z,src_z,lay_m)) queue->push(FlooNoc::MOMENTUM_ZERO);
-        if (check_momentum(FlooNoc::MOMENTUM_ZPLUS,  cur_x,cur_y,src_x,src_y,dim_x,dim_y,row_m,col_m,cur_z,src_z,dim_z,lay_m)) queue->push(FlooNoc::MOMENTUM_ZMINUS);
+        if (check_momentum(FlooNoc::MOMENTUM_ZMINUS,  cur_x,cur_y,src_x,src_y,dim_x,dim_y,row_m,col_m,cur_z,src_z,dim_z,lay_m)) queue->push(FlooNoc::MOMENTUM_ZMINUS);
         if (check_momentum(FlooNoc::MOMENTUM_RIGHT,cur_x,cur_y,src_x,src_y,dim_x,dim_y,row_m,col_m,cur_z,src_z,dim_z,lay_m)) queue->push(FlooNoc::MOMENTUM_RIGHT);
         if (check_momentum(FlooNoc::MOMENTUM_LEFT, cur_x,cur_y,src_x,src_y,dim_x,dim_y,row_m,col_m,cur_z,src_z,dim_z,lay_m)) queue->push(FlooNoc::MOMENTUM_LEFT);
         if (check_momentum(FlooNoc::MOMENTUM_UP,   cur_x,cur_y,src_x,src_y,dim_x,dim_y,row_m,col_m,cur_z,src_z,dim_z,lay_m)) queue->push(FlooNoc::MOMENTUM_UP);
