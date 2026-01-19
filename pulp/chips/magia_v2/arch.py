@@ -51,6 +51,10 @@ class MagiaArch:
     STDOUT_ADDR_START       = 0xFFFF_0004
     STDOUT_SIZE             = 0x100
 
+    # Snitch_Spatz
+    #SPATZ_BOOT_ADDR         = 0x10000000
+    #SPATZ_BOOT_SIZE         = 0x100
+
     # From magia_pkg.sv
     N_MEM_BANKS         = 32        # Number of TCDM banks
     N_WORDS_BANK        = 8192      # Number of words per TCDM bank
@@ -62,7 +66,7 @@ class MagiaArch:
     N_TILES_X           = 4
     N_TILES_Y           = 4
 
-    USE_NARROW_WIDE     = False
+    USE_NARROW_WIDE     = True
 
 class MagiaTree(Tree):
     def __init__(self, parent, name):

@@ -23,6 +23,7 @@ import interco.router as router
 import gdbserver.gdbserver
 from pulp.stdout.stdout_v3 import Stdout
 
+from pulp.snitch.snitch_core import *
 from pulp.cluster.l1_interleaver import L1_interleaver
 from pulp.light_redmule.hwpe_interleaver import HWPEInterleaver
 from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
@@ -125,8 +126,17 @@ class MagiaV2Tile(gvsoc.systree.Component):
         # Core model from pulp cores
         core_cv32 = CV32CoreTest(self, f'tile-{tid}-cv32-core',core_id=tid)
 
+        # if MagiaArch.USE_NARROW_WIDE:
+        #     romfile = 'pulp/snitch/bootrom_spatz.bin'
+        #     rom = memory.memory.Memory(self, 'rom', size=MagiaArch.SPATZ_BOOT_SIZE,stim_file=self.get_file_path(romfile))
+        #     # Snitch Spatz cores
+        #     snitch_spatz=SnitchFast(self, f'tile-{tid}-snitch-spatz', isa="rv32imfdcav",
+        #                             fetch_enable=False, boot_addr=MagiaArch.SPATZ_BOOT_ADDR,
+        #                             core_id=tid + tree.NB_CLUSTERS, htif=False,
+        #                             inc_spatz=True, vlen=128, spatz_nb_lanes=4, pulp_v2=True)
+
         # Instruction cache (from snitch cluster model)
-        i_cache = Hierarchical_cache(self, f'tile-{tid}-icache', nb_cores=1, has_cc=0, l1_line_size_bits=4)
+        cv32_i_cache = Hierarchical_cache(self, f'tile-{tid}-icache', nb_cores=1, has_cc=0, l1_line_size_bits=4)
 
         # Data scratchpad
         l1_tcdm = MagiaTileTcdm(self, f'tile-{tid}-tcdm', parser)
@@ -185,12 +195,12 @@ class MagiaV2Tile(gvsoc.systree.Component):
         self.__o_LOADER(obi_xbar.i_INPUT())
 
         # Bind: cv32 core -> i cache
-        core_cv32.o_FETCH(i_cache.i_INPUT(0))
-        core_cv32.o_FLUSH_CACHE(i_cache.i_FLUSH())
-        i_cache.o_FLUSH_ACK(core_cv32.i_FLUSH_CACHE_ACK())
+        core_cv32.o_FETCH(cv32_i_cache.i_INPUT(0))
+        core_cv32.o_FLUSH_CACHE(cv32_i_cache.i_FLUSH())
+        cv32_i_cache.o_FLUSH_ACK(core_cv32.i_FLUSH_CACHE_ACK())
 
         # Bind: icache -> tile interconnect
-        i_cache.o_REFILL(tile_xbar.i_INPUT())
+        cv32_i_cache.o_REFILL(tile_xbar.i_INPUT())
 
         # Bind obi xbar so that it can communicate with RedMule
         obi_xbar.o_MAP(redmule.i_INPUT(), name=f'redmule-mm-{tid}-mem',
