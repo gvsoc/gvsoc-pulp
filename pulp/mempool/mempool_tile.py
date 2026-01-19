@@ -23,7 +23,7 @@ import pulp.mempool.l1_subsystem as l1_subsystem
 import interco.router as router
 import gvsoc.systree as st
 from pulp.snitch.sequencer import Sequencer
-from pulp.mempool.address_scrambler import AddressScrambler
+from pulp.mempool.l1_interconnect.l1_address_scrambler import L1_AddressScrambler
 
 class Tile(st.Component):
 
@@ -69,11 +69,11 @@ class Tile(st.Component):
         icache = Hierarchical_cache(self, 'shared_icache', nb_cores=nb_cores_per_tile)
 
         # Address Scrambler
-        addr_scrambler_list = []
+        l1_addr_scrambler_list = []
         for i in range(0, nb_cores_per_tile):
-            addr_scrambler_list.append(AddressScrambler(self, f'addr_scrambler{i}', \
+            l1_addr_scrambler_list.append(L1_AddressScrambler(self, f'addr_scrambler{i}', \
                                                        bypass=False, num_tiles=int(total_cores/nb_cores_per_tile), \
-                                                       seq_mem_size_per_tile=512, byte_offset=2, \
+                                                       seq_mem_size_per_tile=512*nb_cores_per_tile, byte_offset=2, \
                                                        num_banks_per_tile=nb_cores_per_tile*bank_factor))
 
         # Route
@@ -159,7 +159,7 @@ class Tile(st.Component):
             self.bind(icache, 'flush_ack', self.int_cores[core_id], 'flush_cache_ack')
 
             # Snitch integer cores
-            self.bind(self.int_cores[core_id], 'data', addr_scrambler_list[core_id], 'input')
+            self.bind(self.int_cores[core_id], 'data', l1_addr_scrambler_list[core_id], 'input')
             self.bind(self.int_cores[core_id], 'fetch', icache, 'input_%d' % core_id)
             self.bind(self, 'loader_start', self.int_cores[core_id], 'fetchen')
             self.bind(self, 'loader_entry', self.int_cores[core_id], 'bootaddr')
@@ -167,13 +167,13 @@ class Tile(st.Component):
             if not fast_model:
                 # Snitch fp subsystems
                 # Pay attention to interactions and bandwidth between subsystem and tohost.
-                self.bind(self.fp_cores[core_id], 'data', addr_scrambler_list[core_id], 'input')
+                self.bind(self.fp_cores[core_id], 'data', l1_addr_scrambler_list[core_id], 'input')
                 # FP subsystem doesn't fetch instructions from core->ico->memory, but from integer cores acc_req.
                 self.bind(self, 'loader_start', self.fp_cores[core_id], 'fetchen')
                 self.bind(self, 'loader_entry', self.fp_cores[core_id], 'bootaddr')
 
             # Scrambler
-            self.bind(addr_scrambler_list[core_id], 'output', ico_list[core_id], 'input')
+            self.bind(l1_addr_scrambler_list[core_id], 'output', ico_list[core_id], 'input')
 
             # Use WireMaster & WireSlave
             # Add fpu sequence buffer in between int core and fp core to issue instructions

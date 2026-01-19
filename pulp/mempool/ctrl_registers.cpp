@@ -42,6 +42,7 @@ private:
     vp::WireMaster<IssOffloadInsn<uint32_t>*> rocache_cfg_itf;
     vp::ClockEvent * wakeup_event;
     int wakeup_latency;
+    bool eoc_reached;
 };
 
 
@@ -57,6 +58,7 @@ CtrlRegisters::CtrlRegisters(vp::ComponentConf &config)
     this->new_master_port("rocache_cfg", &this->rocache_cfg_itf);
     this->wakeup_event = this->event_new(&CtrlRegisters::wakeup_event_handler);
     wakeup_latency = get_js_config()->get_child_int("wakeup_latency");
+    eoc_reached = false;
 }
 
 void CtrlRegisters::wakeup_event_handler(vp::Block *__this, vp::ClockEvent *event) {
@@ -81,8 +83,9 @@ vp::IoReqStatus CtrlRegisters::req(vp::Block *__this, vp::IoReq *req)
     if (is_write && size == 4)
     {
         uint32_t value = *(uint32_t *)data;
-        if (offset == 0 && (value & 1))
+        if (offset == 0 && (value & 1) && !_this->eoc_reached)
         {
+            _this->eoc_reached = true;
             std::cout << "EOC register return value: 0x" << std::hex << ((value - 1) >> 1) << std::endl;
             _this->time.get_engine()->quit(value >> 1);
         }
@@ -90,18 +93,18 @@ vp::IoReqStatus CtrlRegisters::req(vp::Block *__this, vp::IoReq *req)
         {
             _this->event_enqueue(_this->wakeup_event, _this->wakeup_latency);
         }
-        if (offset == 0x40 || offset == 0x44 || offset == 0x48 || offset == 0x4C)
+        if (offset == 0x48 || offset == 0x4C || offset == 0x50 || offset == 0x54)
         {
             IssOffloadInsn<uint32_t> insn;
-            insn.arg_a = (offset - 0x40) >> 2;
+            insn.arg_a = (offset - 0x48) >> 2;
             insn.arg_b = 0;
             insn.arg_c = value;
             _this->rocache_cfg_itf.sync(&insn);
         }
-        if (offset == 0x50 || offset == 0x54 || offset == 0x58 || offset == 0x5C)
+        if (offset == 0x58 || offset == 0x5C || offset == 0x60 || offset == 0x64)
         {
             IssOffloadInsn<uint32_t> insn;
-            insn.arg_a = (offset - 0x50) >> 2;
+            insn.arg_a = (offset - 0x58) >> 2;
             insn.arg_b = 1;
             insn.arg_c = value;
             _this->rocache_cfg_itf.sync(&insn);

@@ -23,7 +23,7 @@ import interco.router as router
 import devices.uart.ns16550 as ns16550
 import utils.loader.loader
 import gvsoc.systree as st
-from pulp.mempool.mempool_dma import MemPoolDma
+from pulp.mempool.dma.mempool_dma import MemPoolDma
 from elftools.elf.elffile import *
 from pulp.mempool.mempool_cluster import Cluster
 from pulp.mempool.ctrl_registers import CtrlRegisters
@@ -171,7 +171,7 @@ class MempoolSystem(st.Component):
 
         clock = Clock_domain(self, 'clock', frequency=500000000)
 
-        soc = System(self, 'mempool_soc', parser)
+        soc = System(self, 'mempool_soc', parser, terapool=False, nb_cores_per_tile=4, nb_sub_groups_per_group=1, nb_groups=4, total_cores=256, bank_factor=4, axi_data_width=64, nb_axi_masters_per_group=1, l2_size=0x400000, nb_l2_banks=4)
 
         self.bind(clock, 'out', soc, 'clock')
 
@@ -183,7 +183,7 @@ class MinpoolSystem(st.Component):
 
         clock = Clock_domain(self, 'clock', frequency=500000000)
 
-        soc = System(self, 'mempool_soc', parser, total_cores=16, axi_data_width=32)
+        soc = System(self, 'mempool_soc', parser, terapool=False, nb_cores_per_tile=4, nb_sub_groups_per_group=1, nb_groups=4, total_cores=16, bank_factor=4, axi_data_width=32, nb_axi_masters_per_group=1, l2_size=0x400000, nb_l2_banks=4)
 
         self.bind(clock, 'out', soc, 'clock')
 
@@ -195,6 +195,6 @@ class TerapoolSystem(st.Component):
 
         clock = Clock_domain(self, 'clock', frequency=500000000)
 
-        soc = System(self, 'mempool_soc', parser, terapool=True, nb_cores_per_tile=8, nb_sub_groups_per_group=4, total_cores=1024, nb_axi_masters_per_group=4, nb_l2_banks=16)
+        soc = System(self, 'mempool_soc', parser, terapool=True, nb_cores_per_tile=8, nb_sub_groups_per_group=4, nb_groups=4, total_cores=1024, bank_factor=4, axi_data_width=64, nb_axi_masters_per_group=4, l2_size=0x1000000, nb_l2_banks=16)
 
         self.bind(clock, 'out', soc, 'clock')

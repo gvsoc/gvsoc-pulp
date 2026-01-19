@@ -31,7 +31,7 @@ if os.environ.get('USE_GVRUN') is None:
 
 class Pulp_open_board(st.Component):
 
-    def __init__(self, parent, name, parser, options, use_ddr=False):
+    def __init__(self, parent, name, parser, options, use_ddr=False, pulpnn=False):
 
         super(Pulp_open_board, self).__init__(parent, name, options=options)
 
@@ -40,7 +40,7 @@ class Pulp_open_board(st.Component):
         attr = self.set_attributes(PulpOpenAttr(self))
 
         # Pulp
-        pulp = Pulp_open(self, 'chip', attr, parser, use_ddr=use_ddr)
+        pulp = Pulp_open(self, 'chip', attr, parser, use_ddr=use_ddr, pulpnn=pulpnn)
 
         # Flash
         hyperflash = Hyperflash(self, 'hyperflash')
@@ -61,6 +61,12 @@ class Pulp_open_board(st.Component):
 
         uart_checker = Uart_checker(self, 'uart_checker')
         self.bind(pulp, 'uart0', uart_checker, 'input')
+
+
+class Pulp_open_nn_board(Pulp_open_board):
+    def __init__(self, parent, name, parser, options, use_ddr=False):
+
+        super().__init__(parent, name, parser, options, use_ddr, pulpnn=True)
 
 
 

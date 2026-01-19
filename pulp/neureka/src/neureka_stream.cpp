@@ -30,7 +30,7 @@
 #include "xtensor/xpad.hpp"
 #include <neureka.hpp>
 
-// the NE16 can only access L1 memory in the range 0xY000_0000 -- 0xY001_FFFC, where Y=1 or 0
+// the NEUREKA can only access L1 memory in the range 0xY000_0000 -- 0xY003_FFFC, where Y=1 or 0
 // in the model, Y is ignored
 #define NE16_STREAM_L1_MASK 0x0003FFFF
 
@@ -44,16 +44,16 @@ NeurekaStreamAccess::NeurekaStreamAccess(
   int d2_length,
   int d2_stride,
   bool debug
-) : neureka ( neureka ),
-    base_addr     ( base_addr    ),
-    d0_length   ( d0_length  ),
-    d0_stride   ( d0_stride  ),
-    d1_length   ( d1_length  ),
-    d1_stride   ( d1_stride  ),
-    d2_length  ( d2_length ),
-    d2_stride  ( d2_stride ),
-    debug         ( debug        ),
-    current_addr  ( 0            )
+) : neureka     ( neureka   ),
+    base_addr   ( base_addr ),
+    d0_length   ( d0_length ),
+    d0_stride   ( d0_stride ),
+    d1_length   ( d1_length ),
+    d1_stride   ( d1_stride ),
+    d2_length   ( d2_length ),
+    d2_stride   ( d2_stride ),
+    debug       ( debug     ),
+    current_addr( 0         )
 {
   this->reset_iteration();
   if(this->debug) {
@@ -208,9 +208,7 @@ xt::xarray<T> NeurekaVectorLoad<T>::ex(int width, bool w_demux, int64_t& cycles)
   }
   std::ostringstream stringStream;
 
-  // if (this->neureka->trace_level == L3_ALL) {
-    this->neureka->trace.msg(vp::Trace::LEVEL_DEBUG, "Issuing read request (addr=0x%08x, size=%dB, latency=%d)\n", addr & NE16_STREAM_L1_MASK, width*sizeof(T), cycles+1);
-  // }
+  this->neureka->trace.msg(vp::Trace::LEVEL_DEBUG, "Issuing read request (addr=0x%08x, size=%dB, latency=%d)\n", addr & NE16_STREAM_L1_MASK, width*sizeof(T), cycles+1);
   xt::xarray<T> x = xt::zeros<T>({width});
   for(auto i=0; i<width; i++) {
     xt::view(x, i) = *(T *)(load_data + (addr & 0x3) + i*sizeof(T));
@@ -267,34 +265,25 @@ xt::xarray<T> NeurekaVectorStore<T>::ex(xt::xarray<T> data, int width, int64_t& 
 
   auto width_words = (addr_end_aligned> addr_start_aligned) ? (addr_end_aligned - addr_start_aligned)/4 : 0;
 
-  // std::cout<<std::hex<<"addr_start_aligned="<<addr_start_aligned<<", addr_end_aligned="<<addr_end_aligned<<std::endl;
-  // std::cout<<std::hex<<"addr_start="<<addr_start<<", addr_end="<<addr_end<<std::endl;
-
-  // std::cout<<std::hex<<"misaligned_start_byte="<<misaligned_start_byte<<", misaligned_end_byte="<<misaligned_end_byte<<std::endl;
 
   int64_t max_latency = 0;
   if(enable) {
-    // std::cout<<std::dec<<"Width="<<width<<", width_bytes="<<width_bytes<<", width_words="<<width_words<<", addr="<<addr<<", sizeof(T)="<<sizeof(T)<<std::endl;
     for(auto i=0; i<width_words+misaligned_start_byte+misaligned_end_byte; i++) {
       this->neureka->io_req.init();
 
-      // if((i<misaligned_start_byte) ||((i>=width_words+misaligned_start_byte)))
       if((i<misaligned_start_byte))
       {
-        // std::cout<<i<<" Head of misaligned "<<((addr_start+i) & NE16_STREAM_L1_MASK)<<std::endl;
         this->neureka->io_req.set_addr((addr_start+i) & NE16_STREAM_L1_MASK);
         this->neureka->io_req.set_size(1);
         this->neureka->io_req.set_data(store_data+i);
       }
       else if(i>=misaligned_start_byte+width_words){
-        // std::cout<<i<<" Tail of misaligned "<<((addr_start+misaligned_start_byte + 4*width_words+(i- misaligned_start_byte - width_words)) & NE16_STREAM_L1_MASK)<<std::endl;
         this->neureka->io_req.set_addr((addr_start+misaligned_start_byte + 4*width_words+(i- misaligned_start_byte - width_words)) & NE16_STREAM_L1_MASK);
         this->neureka->io_req.set_size(1);
         this->neureka->io_req.set_data(store_data+misaligned_start_byte + 4*width_words+(i- misaligned_start_byte - width_words));
       }
       else
       {
-        // std::cout<<i<<" Aligned "<<((addr_start_aligned+4*(i - misaligned_start_byte)) & NE16_STREAM_L1_MASK)<<std::endl;
         this->neureka->io_req.set_addr((addr_start_aligned+4*( i- misaligned_start_byte)) & NE16_STREAM_L1_MASK);
         this->neureka->io_req.set_size(4);
         this->neureka->io_req.set_data(store_data+misaligned_start_byte+4*(i-misaligned_start_byte));

@@ -39,8 +39,15 @@ class Wmem_subsystem(st.Component):
         # Components
         #
 
+        interleaver = Interleaver(self, 'interleaver',  interleaving_bits=2, nb_masters=2, nb_slaves=nb_wmem_banks, stage_bits=0)
         ico = Router(self, 'ico', latency=2)
-        interleaver = Interleaver(self, 'interleaver',  interleaving_bits=2, nb_masters=1, nb_slaves=nb_wmem_banks, stage_bits=0)
+        ico.add_mapping('wmem_cluster', **cluster._reloc_mapping(cluster.get_property('wmem')))
+        self.bind(ico, 'wmem_cluster', interleaver, 'in_0')
+        neureka_mapping = cluster._reloc_mapping(cluster.get_property('wmem'))
+        neureka_mapping['base'] = 0x0
+        neureka_mapping['remove_offset'] = 0x0
+        ico.add_mapping('wmem_neureka', **neureka_mapping)
+        self.bind(ico, 'wmem_neureka', interleaver, 'in_1')
 
         wmem_banks = []
         for i in range(0, nb_wmem_banks):
@@ -50,8 +57,8 @@ class Wmem_subsystem(st.Component):
         # Bindings
         #
 
-        ico.add_mapping('wmem_translated_address', **cluster._reloc_mapping(cluster.get_property('wmem')))
-        self.bind(ico, 'wmem_translated_address', interleaver, 'in_0')
+        # ico.add_mapping('wmem_translated_address', **cluster._reloc_mapping(cluster.get_property('wmem')))
+        # self.bind(ico, 'wmem_translated_address', interleaver, 'in_0')
 
         for i in range(0, nb_wmem_banks):
             self.bind(interleaver, f'out_{i}', wmem_banks[i], 'input')
