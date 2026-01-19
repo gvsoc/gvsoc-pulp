@@ -120,7 +120,7 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
 
             this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding router (x: %d, y: %d, z: %d)\n", x, y, z);
 
-            this->routers[z*this->dim_y*this->dim_x + y*this->dim_x + x] = new Router(this, x, y, this->router_input_queue_size);
+            this->routers[z*this->dim_y*this->dim_x + y*this->dim_x + x] = new Router(this, x, y, this->router_input_queue_size, z);
         }
     }
 }
