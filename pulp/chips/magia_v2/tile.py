@@ -35,6 +35,7 @@ from pulp.light_redmule.light_redmule import LightRedmule
 from pulp.idma.snitch_dma import SnitchDma
 from pulp.chips.magia_v2.fractal_sync_mm_ctrl.fractal_sync_mm_ctrl import FSync_mm_ctrl
 from pulp.chips.magia_v2.idma_mm_ctrl.idma_mm_ctrl import iDMA_mm_ctrl
+from pulp.chips.magia_v2.spatz.snitch_spatz_regs import SnitchSpatzRegs
 from pulp.event_unit.event_unit_v3 import Event_unit
 
 
@@ -47,9 +48,14 @@ class MagiaTileTcdm(gvsoc.systree.Component):
         nb_banks = MagiaArch.N_MEM_BANKS
         bank_size = MagiaArch.N_WORDS_BANK * MagiaArch.BYTES_PER_WORD
 
-        # 1 master: OBI
-        L1_masters = 1
-        interleaver = L1_interleaver(self, 'interleaver', nb_slaves=nb_banks, nb_masters=L1_masters, interleaving_bits=2)
+        if MagiaArch.ENABLE_SPATZ:
+            # 5 master: OBI, VLSU0, VLSU1, VLSU2, VLSU03
+            L1_masters = 5
+            interleaver = L1_interleaver(self, 'interleaver', nb_slaves=nb_banks, nb_masters=L1_masters, interleaving_bits=2)
+        else:
+            # 1 master: OBI
+            L1_masters = 1
+            interleaver = L1_interleaver(self, 'interleaver', nb_slaves=nb_banks, nb_masters=L1_masters, interleaving_bits=2)
 
         # 3 masters: OBI/WIDE-NOC, iDMA0, iDMA1
         dma_masters = 3
@@ -126,17 +132,25 @@ class MagiaV2Tile(gvsoc.systree.Component):
         # Core model from pulp cores
         core_cv32 = CV32CoreTest(self, f'tile-{tid}-cv32-core',core_id=tid)
 
-        # if MagiaArch.USE_NARROW_WIDE:
-        #     romfile = 'pulp/snitch/bootrom_spatz.bin'
-        #     rom = memory.memory.Memory(self, 'rom', size=MagiaArch.SPATZ_BOOT_SIZE,stim_file=self.get_file_path(romfile))
-        #     # Snitch Spatz cores
-        #     snitch_spatz=SnitchFast(self, f'tile-{tid}-snitch-spatz', isa="rv32imfdcav",
-        #                             fetch_enable=False, boot_addr=MagiaArch.SPATZ_BOOT_ADDR,
-        #                             core_id=tid + tree.NB_CLUSTERS, htif=False,
-        #                             inc_spatz=True, vlen=128, spatz_nb_lanes=4, pulp_v2=True)
+        if MagiaArch.ENABLE_SPATZ:
+
+            # Snitch Spatz boot rom file
+            snitch_spatz_rom = memory.Memory(self, 'snitch-spatz-rom', size=MagiaArch.SPATZ_BOOTROM_SIZE,stim_file=self.get_file_path(tree.romfile))
+
+            # Snitch Spatz cores (fetch_enable is set to false as we control the boot sequence. The core automatically starts from the rom and the corresponding boot address as soon as we issue the fetch enable)
+            snitch_spatz = SnitchFast(self, f'tile-{tid}-snitch-spatz', isa="rv32imfdcav",
+                                    fetch_enable=False, boot_addr=MagiaArch.SPATZ_BOOTROM_ADDR,
+                                    core_id=tid + tree.NB_CLUSTERS, htif=False,
+                                    inc_spatz=True, vlen=128, spatz_nb_lanes=4, pulp_v2=False)
+            
+            # Instruction cache (from snitch cluster model). PLEASE DOUBLE CHECK THAT THE INTERNAL PARAMETERS OF THIS MODEL ARE THE SAME OF THE CV32 I_CACHE.
+            snitch_spatz_i_cache = Hierarchical_cache(self, f'tile-{tid}-snitch-spatz-icache', nb_cores=1, has_cc=0, l1_line_size_bits=4)
+
+            # Snitch Spatz CC control registers
+            snitch_spatz_regs = SnitchSpatzRegs(self, f'tile-{tid}-snitch-spatz-regs')
 
         # Instruction cache (from snitch cluster model)
-        cv32_i_cache = Hierarchical_cache(self, f'tile-{tid}-icache', nb_cores=1, has_cc=0, l1_line_size_bits=4)
+        cv32_i_cache = Hierarchical_cache(self, f'tile-{tid}-cv32-icache', nb_cores=1, has_cc=0, l1_line_size_bits=4)
 
         # Data scratchpad
         l1_tcdm = MagiaTileTcdm(self, f'tile-{tid}-tcdm', parser)
@@ -187,14 +201,37 @@ class MagiaV2Tile(gvsoc.systree.Component):
         # UART
         stdout = Stdout(self, f'tile-{tid}-stdout',max_cluster=tree.NB_CLUSTERS,max_core_per_cluster=1,user_set_core_id=0,user_set_cluster_id=tid)
 
+        # Bind: loader -> obi interconnect
+        self.__o_LOADER(obi_xbar.i_INPUT())
+
+        if MagiaArch.ENABLE_SPATZ:
+            # Bind: snitch spatz core data -> obi interconnect
+            snitch_spatz.o_DATA(obi_xbar.i_INPUT())
+            snitch_spatz.o_DATA_DEBUG(obi_xbar.i_INPUT())
+
+            # Bind: snitch spatz core -> snitch spatz icache
+            snitch_spatz.o_FETCH(snitch_spatz_i_cache.i_INPUT(0))
+            snitch_spatz.o_FLUSH_CACHE(snitch_spatz_i_cache.i_FLUSH())
+            snitch_spatz_i_cache.o_FLUSH_ACK(snitch_spatz.i_FLUSH_CACHE_ACK())
+
+            # Bind: snitch spatz icache -> tile interconnect
+            snitch_spatz_i_cache.o_REFILL(obi_xbar.i_INPUT())
+
+            # Bind: snitch spatz TCDM
+            snitch_spatz.o_VLSU(0,l1_tcdm.i_INPUT(1))
+            snitch_spatz.o_VLSU(1,l1_tcdm.i_INPUT(2))
+            snitch_spatz.o_VLSU(2,l1_tcdm.i_INPUT(3))
+            snitch_spatz.o_VLSU(3,l1_tcdm.i_INPUT(4))
+
+            # Bind: snitch spatz core complex registers
+            snitch_spatz_regs.o_CLK_EN(snitch_spatz.i_FETCHEN())
+            snitch_spatz_regs.o_START(snitch_spatz.i_IRQ(11))
+
         # Bind: cv32 core data -> obi interconnect
         core_cv32.o_DATA(obi_xbar.i_INPUT())
         core_cv32.o_DATA_DEBUG(obi_xbar.i_INPUT())
 
-        # Bind: loader -> obi interconnect
-        self.__o_LOADER(obi_xbar.i_INPUT())
-
-        # Bind: cv32 core -> i cache
+        # Bind: cv32 core -> icache
         core_cv32.o_FETCH(cv32_i_cache.i_INPUT(0))
         core_cv32.o_FLUSH_CACHE(cv32_i_cache.i_FLUSH())
         cv32_i_cache.o_FLUSH_ACK(core_cv32.i_FLUSH_CACHE_ACK())
@@ -226,6 +263,16 @@ class MagiaV2Tile(gvsoc.systree.Component):
                        base=MagiaArch.STACK_ADDR_START,
                        size=MagiaArch.STACK_SIZE, rm_base=False)
         
+        if MagiaArch.ENABLE_SPATZ:
+            # Bind obi xbar so that it can communicate with snitch spatz bootrom
+            obi_xbar.o_MAP(snitch_spatz_rom.i_INPUT(), name="snitch-spatz-bootrom",
+                        base=MagiaArch.SPATZ_BOOTROM_ADDR,
+                        size=MagiaArch.SPATZ_BOOTROM_SIZE, rm_base=True)
+            
+            obi_xbar.o_MAP(snitch_spatz_regs.i_INPUT(), name="snitch-spatz-regs",
+                        base=MagiaArch.SPATZ_CTRL_START,
+                        size=MagiaArch.SPATZ_CTRL_SIZE, rm_base=True)
+            
         if not MagiaArch.USE_NARROW_WIDE:
             # Bind obi xbar so that it can communicate with local L1
             obi_xbar.o_MAP(l1_tcdm.i_DMA_INPUT(), name="local-l1-mem", #here we use the iDMA interleaver because an iDMA axi request routed to obi (e.g. local L1 to off-tile L1 data movement) does not handle the right bank interleaving

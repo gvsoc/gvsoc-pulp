@@ -32,8 +32,11 @@ class MagiaArch:
     EVENT_UNIT_ADDR_START   = FSYNC_CTRL_ADDR_END + 1
     EVENT_UNIT_SIZE         = 0x0000_0FFF
     EVENT_UNIT_ADDR_END     = EVENT_UNIT_ADDR_START + EVENT_UNIT_SIZE
-    RESERVED_ADDR_START     = EVENT_UNIT_ADDR_END + 1
-    RESERVED_SIZE           = 0x0000_E8FF
+    SPATZ_CTRL_START        = EVENT_UNIT_ADDR_END + 1
+    SPATZ_CTRL_SIZE         = 0x0000_000F
+    SPATZ_CTRL_END          = SPATZ_CTRL_START + SPATZ_CTRL_SIZE
+    RESERVED_ADDR_START     = SPATZ_CTRL_END + 1
+    RESERVED_SIZE           = 0x0000_E8EF
     RESERVED_ADDR_END       = RESERVED_ADDR_START + RESERVED_SIZE
     STACK_ADDR_START        = RESERVED_ADDR_END + 1
     STACK_SIZE              = 0x0000_FFFF
@@ -51,8 +54,9 @@ class MagiaArch:
     STDOUT_SIZE             = 0x100
 
     # Snitch_Spatz
-    #SPATZ_BOOT_ADDR         = 0x10000000
-    #SPATZ_BOOT_SIZE         = 0x100
+    SPATZ_BOOTROM_ADDR         = 0x1000_0000
+    SPATZ_BOOTROM_SIZE         = 0x100
+    SPATZ_ROMFILE              = 'pulp/snitch/bootrom_spatz.bin'
 
     # From magia_pkg.sv
     N_MEM_BANKS         = 32        # Number of TCDM banks
@@ -65,17 +69,21 @@ class MagiaArch:
     N_TILES_X           = 4
     N_TILES_Y           = 4
 
-    USE_NARROW_WIDE     = True
+    USE_NARROW_WIDE     = False
+    ENABLE_SPATZ        = False
 
 class MagiaTree(Tree):
     def __init__(self, parent, name):
         super().__init__(parent, name)
-        self.n_tiles_x = Value(self, 'n_tiles_x', MagiaArch.N_TILES_X, cast=int,
+        self.N_TILES_X = Value(self, 'n_tiles_x', MagiaArch.N_TILES_X, cast=int,
             description='Number of tiles on X dimension')
-        self.n_tiles_y = Value(self, 'n_tiles_y', MagiaArch.N_TILES_Y, cast=int,
+        self.N_TILES_Y = Value(self, 'n_tiles_y', MagiaArch.N_TILES_Y, cast=int,
             description='Number of tiles on Y dimension')
 
-        self.NB_CLUSTERS = self.n_tiles_x*self.n_tiles_y
+        self.NB_CLUSTERS = self.N_TILES_X*self.N_TILES_Y
+
+        self.romfile = Value(self, 'spatz_romfile', MagiaArch.SPATZ_ROMFILE, cast=str,
+            description='Snitch_Spatz rom file')
 
 class MagiaDSE:
     SOC_L2_LATENCY              = 2
