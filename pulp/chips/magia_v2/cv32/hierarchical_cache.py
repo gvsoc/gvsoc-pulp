@@ -23,11 +23,11 @@ from utils.common_cells import And
 from pulp.chips.magia.arch import *
 import math
 
-class Hierarchical_cache(gvsoc.systree.Component):
+class CV32_Hierarchical_cache(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, nb_cores: int=0, has_cc: int=0, l1_line_size_bits: int=0):
 
-        super(Hierarchical_cache, self).__init__(parent, name)
+        super(CV32_Hierarchical_cache, self).__init__(parent, name)
 
         #
         # Properties

@@ -33,10 +33,10 @@ class MagiaArch:
     EVENT_UNIT_SIZE         = 0x0000_0FFF
     EVENT_UNIT_ADDR_END     = EVENT_UNIT_ADDR_START + EVENT_UNIT_SIZE
     SPATZ_CTRL_START        = EVENT_UNIT_ADDR_END + 1
-    SPATZ_CTRL_SIZE         = 0x0000_000F
+    SPATZ_CTRL_SIZE         = 0x0000_00FF
     SPATZ_CTRL_END          = SPATZ_CTRL_START + SPATZ_CTRL_SIZE
     RESERVED_ADDR_START     = SPATZ_CTRL_END + 1
-    RESERVED_SIZE           = 0x0000_E8EF
+    RESERVED_SIZE           = 0x0000_E7FF
     RESERVED_ADDR_END       = RESERVED_ADDR_START + RESERVED_SIZE
     STACK_ADDR_START        = RESERVED_ADDR_END + 1
     STACK_SIZE              = 0x0000_FFFF
@@ -46,7 +46,8 @@ class MagiaArch:
     L1_ADDR_END             = L1_ADDR_START + L1_SIZE
     L1_TILE_OFFSET          = 0x0010_0000
     L2_ADDR_START           = 0xC000_0000
-    L2_SIZE                 = 0x0CFE_FFFF # here in RTL we have 0x4000_0000 but the end address (TEST_END_ADDR_START) then will fall in L2... no sense to me
+    #L2_SIZE                 = 0x0CFE_FFFF # here in RTL we have 0x4000_0000 but the end address (TEST_END_ADDR_START) then will fall in L2... no sense to me
+    L2_SIZE                 = 0x0C02_FFFF # temp L2 size to match Luca Balboni bare-metal MMAP
     L2_ADDR_END             = L2_ADDR_START + L2_SIZE
     TEST_END_ADDR_START     = L2_ADDR_END + 1
     TEST_END_SIZE           = 0x400
@@ -70,7 +71,7 @@ class MagiaArch:
     N_TILES_Y           = 4
 
     USE_NARROW_WIDE     = False
-    ENABLE_SPATZ        = False
+    ENABLE_SPATZ        = True
 
 class MagiaTree(Tree):
     def __init__(self, parent, name):

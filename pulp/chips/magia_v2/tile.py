@@ -27,7 +27,8 @@ from pulp.snitch.snitch_core import *
 from pulp.cluster.l1_interleaver import L1_interleaver
 from pulp.light_redmule.hwpe_interleaver import HWPEInterleaver
 from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
-from pulp.chips.magia_v2.cv32.hierarchical_cache import Hierarchical_cache
+from pulp.snitch.hierarchical_cache import Hierarchical_cache
+from pulp.chips.magia_v2.cv32.hierarchical_cache import CV32_Hierarchical_cache
 
 from pulp.chips.magia_v2.arch import *
 from pulp.chips.magia_v2.cv32.core import CV32CoreTest
@@ -138,19 +139,19 @@ class MagiaV2Tile(gvsoc.systree.Component):
             snitch_spatz_rom = memory.Memory(self, 'snitch-spatz-rom', size=MagiaArch.SPATZ_BOOTROM_SIZE,stim_file=self.get_file_path(tree.romfile))
 
             # Snitch Spatz cores (fetch_enable is set to false as we control the boot sequence. The core automatically starts from the rom and the corresponding boot address as soon as we issue the fetch enable)
-            snitch_spatz = SnitchFast(self, f'tile-{tid}-snitch-spatz', isa="rv32imfdcav",
+            snitch_spatz = SnitchFast(self, f'tile-{tid}-snitch-spatz', isa="rv32imfdav", #rv32imfdcav
                                     fetch_enable=False, boot_addr=MagiaArch.SPATZ_BOOTROM_ADDR,
                                     core_id=tid + tree.NB_CLUSTERS, htif=False,
                                     inc_spatz=True, vlen=128, spatz_nb_lanes=4, pulp_v2=False)
             
             # Instruction cache (from snitch cluster model). PLEASE DOUBLE CHECK THAT THE INTERNAL PARAMETERS OF THIS MODEL ARE THE SAME OF THE CV32 I_CACHE.
-            snitch_spatz_i_cache = Hierarchical_cache(self, f'tile-{tid}-snitch-spatz-icache', nb_cores=1, has_cc=0, l1_line_size_bits=4)
+            snitch_spatz_i_cache = Hierarchical_cache(self, f'tile-{tid}-snitch-spatz-icache', nb_cores=1, has_cc=0, l1_line_size_bits=7)
 
             # Snitch Spatz CC control registers
             snitch_spatz_regs = SnitchSpatzRegs(self, f'tile-{tid}-snitch-spatz-regs')
 
         # Instruction cache (from snitch cluster model)
-        cv32_i_cache = Hierarchical_cache(self, f'tile-{tid}-cv32-icache', nb_cores=1, has_cc=0, l1_line_size_bits=4)
+        cv32_i_cache = CV32_Hierarchical_cache(self, f'tile-{tid}-cv32-icache', nb_cores=1, has_cc=0, l1_line_size_bits=4)
 
         # Data scratchpad
         l1_tcdm = MagiaTileTcdm(self, f'tile-{tid}-tcdm', parser)
@@ -351,6 +352,8 @@ class MagiaV2Tile(gvsoc.systree.Component):
         self.bind(event_unit, 'irq_req_0', core_cv32, 'irq_req')
         self.bind(idma_mm_ctrl, 'idma0_done_irq', event_unit, 'in_event_2_pe_0')
         self.bind(idma_mm_ctrl, 'idma1_done_irq', event_unit, 'in_event_3_pe_0')
+        if MagiaArch.ENABLE_SPATZ:
+            self.bind(snitch_spatz_regs, 'spatz_done_irq', event_unit, 'in_event_8_pe_0')
         self.bind(redmule, 'done_irq', event_unit, 'in_event_10_pe_0')
         self.bind(fsync_mm_ctrl, 'fsync_done_irq', event_unit, 'in_event_24_pe_0')
 

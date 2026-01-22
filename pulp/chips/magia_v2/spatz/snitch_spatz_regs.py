@@ -35,4 +35,7 @@ class SnitchSpatzRegs(gvsoc.systree.Component):
         self.itf_bind('clock_en', itf, signature='wire<bool>')
 
     def o_START(self, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind('start_irq', itf, signature='wire<bool>')
+        self.itf_bind('spatz_start_irq', itf, signature='wire<bool>')
+
+    def o_DONE(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('spatz_done_irq', itf, signature='wire<bool>')
