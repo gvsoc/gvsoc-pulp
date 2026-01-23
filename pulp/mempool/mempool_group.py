@@ -27,7 +27,7 @@ from pulp.mempool.l2_interconnect.hierarchical_interco import Hierarchical_Inter
 
 class Group(st.Component):
 
-    def __init__(self, parent, name, parser, terapool: bool=False, async_l1_interco: bool=False, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_dmas_per_group: int=1):
+    def __init__(self, parent, name, parser, terapool: bool=False, async_l1_interco: bool=False, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_dmas_per_group: int=1, terapool_group_latency: int=7):
         super().__init__(parent, name)
 
         ################################################################
@@ -54,7 +54,7 @@ class Group(st.Component):
             self.sub_group_list = []
             for i in range(0, nb_sub_groups_per_group):
                 self.sub_group_list.append(Sub_group(self, f'sub_group_{i}', parser=parser, terapool=terapool, async_l1_interco=async_l1_interco, sub_group_id=i, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
-                    nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width))
+                    nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width, terapool_group_latency=terapool_group_latency))
         else:
             # TIles
             self.tile_list = []
@@ -81,6 +81,20 @@ class Group(st.Component):
                         tile_itf_list.append(itf)
                     sub_group_itf_list.append(tile_itf_list)
                 group_remote_out_interfaces.append(sub_group_itf_list)
+
+            if terapool_group_latency == 9:
+                group_remote_slave_regs = []
+                for port in range(0, nb_remote_group_ports):
+                    sub_group_reg_list = []
+                    for i in range(0, nb_sub_groups_per_group):
+                        tile_reg_list = []
+                        for j in range(0, nb_tiles_per_sub_group):
+                            reg = router.Router(self, f'group_remote_slave_reg{port}_sg{i}_tile{j}', latency=1, bandwidth=4, shared_rw_bandwidth=True, synchronous=not async_l1_interco, max_input_pending_size=4)
+                            reg.add_mapping('output')
+                            tile_reg_list.append(reg)
+                        sub_group_reg_list.append(tile_reg_list)
+                    group_remote_slave_regs.append(sub_group_reg_list)
+
         else:
             #Group local interconnect
             group_local_interleaver = Interleaver(self, 'group_local_interleaver', nb_slaves=nb_tiles_per_group, nb_masters=nb_tiles_per_group,
@@ -221,7 +235,11 @@ class Group(st.Component):
             for port in range(0, nb_remote_group_ports):
                 for i in range(0, nb_sub_groups_per_group):
                     for j in range(0, nb_tiles_per_sub_group):
-                        self.bind(self, f'grp_remt{port+1}_sg{i}_tile{j}_slave_in', self.sub_group_list[i], f'grp_remt{port}_tile{j}_slave_in')
+                        if terapool_group_latency == 9:
+                            self.bind(self, f'grp_remt{port+1}_sg{i}_tile{j}_slave_in', group_remote_slave_regs[port][i][j], f'input')
+                            self.bind(group_remote_slave_regs[port][i][j], 'output', self.sub_group_list[i], f'grp_remt{port}_tile{j}_slave_in')
+                        else:
+                            self.bind(self, f'grp_remt{port+1}_sg{i}_tile{j}_slave_in', self.sub_group_list[i], f'grp_remt{port}_tile{j}_slave_in')
                         self.bind(group_remote_out_interfaces[port][i][j], 'output', self, f'grp_remt{port+1}_sg{i}_tile{j}_master_out')
 
         else:
