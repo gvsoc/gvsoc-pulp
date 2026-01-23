@@ -162,7 +162,9 @@ vp::IoReqStatus SnitchSpatzRegs::req(vp::Block *__this, vp::IoReq *req)
             }
         }
         else {
-            _this->trace.fatal("[Magia Snitch Spatz Registers] Snitch Spatz start unsupported read to register\n");
+            uint32_t cnf_r =  _this->start_irq_reg.get();
+            memcpy((void *)data, (void *)&cnf_r, size);
+            _this->trace.msg("[Magia Snitch Spatz Registers] Snitch Spatz read start register (0x%08x)\n",cnf_r);
         }
     }
     else if (offset == 0x0C) { //SPATZ_DONE
