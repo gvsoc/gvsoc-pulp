@@ -27,7 +27,7 @@ from pulp.mempool.l1_interconnect.l1_address_scrambler import L1_AddressScramble
 
 class Tile(st.Component):
 
-    def __init__(self, parent, name, parser, terapool: bool=False, async_l1_interco: bool=False, tile_id: int=0, sub_group_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64):
+    def __init__(self, parent, name, parser, terapool: bool=False, async_l1_interco: bool=False, tile_id: int=0, sub_group_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, terapool_group_latency: int=7):
         super().__init__(parent, name)
 
         [args, __] = parser.parse_known_args()
@@ -63,8 +63,9 @@ class Tile(st.Component):
                                         async_l1_interco=async_l1_interco, tile_id=tile_id, sub_group_id=sub_group_id, group_id=group_id, \
                                         nb_tiles_per_sub_group=nb_tiles_per_sub_group, nb_sub_groups_per_group=nb_sub_groups_per_group, \
                                         nb_groups=nb_groups, nb_remote_local_masters=1, nb_remote_group_masters=nb_remote_group_ports, \
-                                        nb_remote_sub_group_masters=nb_remote_sub_group_ports, nb_pe=nb_cores_per_tile, \
-                                        size=mem_size, bandwidth=4, nb_banks_per_tile=nb_cores_per_tile*bank_factor, axi_data_width=axi_data_width)
+                                        nb_remote_sub_group_masters=nb_remote_sub_group_ports, nb_pe=nb_cores_per_tile, size=mem_size, \
+                                        bandwidth=4, nb_banks_per_tile=nb_cores_per_tile*bank_factor, axi_data_width=axi_data_width, \
+                                        terapool_group_latency=terapool_group_latency)
         # Shared icache
         icache = Hierarchical_cache(self, 'shared_icache', nb_cores=nb_cores_per_tile)
 

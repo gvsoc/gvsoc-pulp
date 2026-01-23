@@ -26,7 +26,7 @@ from pulp.mempool.l2_interconnect.hierarchical_interco import Hierarchical_Inter
 
 class Sub_group(st.Component):
 
-    def __init__(self, parent, name, parser, terapool: bool=False, async_l1_interco: bool=False, sub_group_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=4, nb_groups: int=4, total_cores: int=1024, bank_factor: int=4, axi_data_width: int=64):
+    def __init__(self, parent, name, parser, terapool: bool=False, async_l1_interco: bool=False, sub_group_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=4, nb_groups: int=4, total_cores: int=1024, bank_factor: int=4, axi_data_width: int=64, terapool_group_latency: int=7):
         super().__init__(parent, name)
 
         ################################################################
@@ -45,7 +45,7 @@ class Sub_group(st.Component):
         self.tile_list = []
         for i in range(0, nb_tiles_per_sub_group):
             self.tile_list.append(Tile(self, f'tile_{i}',parser=parser, terapool=terapool, async_l1_interco=async_l1_interco, tile_id=i, sub_group_id=sub_group_id, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
-                nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor))
+                nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, terapool_group_latency=terapool_group_latency))
 
         #Sub Group local interconnect
         sub_group_local_interleaver = Interleaver(self, 'sub_group_local_interleaver', nb_slaves=nb_tiles_per_sub_group, nb_masters=nb_tiles_per_sub_group,
