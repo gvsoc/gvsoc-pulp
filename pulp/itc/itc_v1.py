@@ -15,11 +15,11 @@
 #
 
 import gvsoc.gui
-import gvsoc.systree as st
+import gvsoc.systree
 
-class Itc_v1(st.Component):
+class Itc_v1(gvsoc.systree.Component):
 
-    def __init__(self, parent, name):
+    def __init__(self, parent: gvsoc.systree.Component, name: str):
 
         super(Itc_v1, self).__init__(parent, name)
 
