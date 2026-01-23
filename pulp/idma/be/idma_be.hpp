@@ -191,8 +191,9 @@ public:
      * @brief Get collective operation of current transfer
      */
     virtual uint64_t get_collective_type() = 0;
-    virtual uint16_t get_collective_row_mask() = 0;
-    virtual uint16_t get_collective_col_mask() = 0;
+    virtual uint8_t get_collective_row_mask() = 0;
+    virtual uint8_t get_collective_col_mask() = 0;
+    virtual uint8_t get_collective_lay_mask() = 0;
 #endif //ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
 };
 
@@ -232,8 +233,9 @@ public:
     void ack_data(uint8_t *data, int size) override;
 #ifdef ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
     uint64_t get_collective_type() override;
-    uint16_t get_collective_row_mask() override;
-    uint16_t get_collective_col_mask() override;
+    uint8_t get_collective_row_mask() override;
+    uint8_t get_collective_col_mask() override;
+    uint8_t get_collective_lay_mask() override;
 #endif //ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
 
 private:

@@ -124,15 +124,21 @@ uint64_t IDmaBe::get_collective_type()
     return this->current_transfer->parent->collective_type;
 }
 
-uint16_t IDmaBe::get_collective_row_mask()
+uint8_t IDmaBe::get_collective_row_mask()
 {
     return this->current_transfer->parent->collective_row_mask;
 }
 
-uint16_t IDmaBe::get_collective_col_mask()
+uint8_t IDmaBe::get_collective_col_mask()
 {
     return this->current_transfer->parent->collective_col_mask;
 }
+
+uint8_t IDmaBe::get_collective_lay_mask()
+{
+    return this->current_transfer->parent->collective_lay_mask;
+}
+
 #endif //ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
 
 

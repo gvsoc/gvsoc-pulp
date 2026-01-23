@@ -98,9 +98,10 @@ void IDmaFeXdma::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *insn)
             insn->result = _this->enqueue_copy(0b00000, insn->arg_a, insn->granted, ((insn->opcode >> 20) & 0b11111));
             break;
         case 0b0000101:
-            _this->collective_row_mask = (insn->arg_b) >> 0;
-            _this->collective_col_mask = (insn->arg_b) >> 16;
-            _this->trace.msg(vp::Trace::LEVEL_TRACE, "Received dmmask operation (row mask: 0x%lx, col mask: 0x%lx)\n", _this->collective_row_mask, _this->collective_col_mask);
+            _this->collective_row_mask = ((insn->arg_b) >> 0)  & 0xFF;
+            _this->collective_col_mask = ((insn->arg_b) >> 8)  & 0xFF;
+            _this->collective_lay_mask = ((insn->arg_b) >> 16) & 0xFF;
+            _this->trace.msg(vp::Trace::LEVEL_TRACE, "Received dmmask operation (row mask: 0x%lx, col mask: 0x%lx, lay mask: 0x%l)\n", _this->collective_row_mask, _this->collective_col_mask, _this->collective_lay_mask);
             insn->result = insn->arg_b;
             break;
         case 0b0000010:
@@ -171,6 +172,7 @@ uint32_t IDmaFeXdma::enqueue_copy(uint32_t config, uint32_t size, bool &granted,
     transfer->collective_type = collective_type;
     transfer->collective_row_mask = this->collective_row_mask;
     transfer->collective_col_mask = this->collective_col_mask;
+    transfer->collective_lay_mask = this->collective_lay_mask;
 #endif //ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
 
     // Check if middle end can accept a new transfer

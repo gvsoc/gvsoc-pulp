@@ -196,6 +196,7 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         *req->arg_get(FlooNoc::REQ_COLL_TYPE) = (void *)0;
         *req->arg_get(FlooNoc::REQ_ROW_MASK) = (void *)0;
         *req->arg_get(FlooNoc::REQ_COL_MASK) = (void *)0;
+        *req->arg_get(FlooNoc::REQ_LAY_MASK) = (void *)0;
         *req->arg_get(FlooNoc::REQ_PEND_KIDS) = (void *)0;
         *req->arg_get(FlooNoc::REQ_MOMENTUM) = (void *)FlooNoc::MOMENTUM_ZERO;
         if (_this->noc->collective)
@@ -206,9 +207,11 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             {
                 uint8_t row_mask = burst->get_payload()[1];
                 uint8_t col_mask = burst->get_payload()[2];
+                uint8_t lay_mask = burst->get_payload()[3];
                 req->set_int(FlooNoc::REQ_COLL_TYPE, collective_type);
                 req->set_int(FlooNoc::REQ_ROW_MASK, row_mask);
                 req->set_int(FlooNoc::REQ_COL_MASK, col_mask);
+                req->set_int(FlooNoc::REQ_LAY_MASK, lay_mask);
             }
         }
 
