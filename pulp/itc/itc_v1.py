@@ -50,7 +50,8 @@ class Itc_v1(gvsoc.systree.Component):
             tree.add_trace(self, 'mask', 'mask', '[31:0]', tag='irq')
 
     def gen_gui(self, parent_signal):
-        active = gvsoc.gui.Signal(self, parent_signal, name=self.name)
+        active = gvsoc.gui.Signal(self, parent_signal, name=self.name, path='irq',
+            display=gvsoc.gui.DisplayPulse())
 
         gvsoc.gui.Signal(self, active, name='status', path='status', groups='regmap')
         gvsoc.gui.Signal(self, active, name='input_status', path='input_status', groups='regmap')

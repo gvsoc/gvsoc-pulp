@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-/* 
+/*
  * Authors: Germain Haugou, GreenWaves Technologies (germain.haugou@greenwaves-technologies.com)
  */
 
 #include <vp/vp.hpp>
+#include <vp/signal.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
 #include <stdio.h>
@@ -85,10 +86,13 @@ private:
 
   vp::WireSlave<bool> in_event_itf[32];
 
+  vp::Signal<bool> trace_irq;
+
 };
 
 itc::itc(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config),
+trace_irq(*this, "irq", 1)
 {
 
   traces.new_trace("trace", &trace, vp::DEBUG);
@@ -135,6 +139,8 @@ void itc::check_state()
   uint32_t status_masked = status.get() & mask.get();
   int irq = status_masked ? 31 - __builtin_clz(status_masked) : -1;
 
+  this->trace_irq = status_masked != 0;
+
   if (irq != sync_irq) {
     trace.msg("Updating irq req (irq: %d)\n", irq);
     sync_irq = irq;
@@ -164,7 +170,7 @@ vp::IoReqStatus itc::itc_mask_set_ioReq(uint32_t offset, uint32_t *data, uint32_
   trace.msg("Updated irq mask (value: 0x%x)\n", mask.get());
 
   check_state();
-  
+
   return vp::IO_REQ_OK;
 }
 
@@ -176,7 +182,7 @@ vp::IoReqStatus itc::itc_mask_clr_ioReq(uint32_t offset, uint32_t *data, uint32_
   trace.msg("Updated irq mask (value: 0x%x)\n", mask.get());
 
   check_state();
-  
+
   return vp::IO_REQ_OK;
 }
 
@@ -319,6 +325,8 @@ void itc::irq_ack_sync(vp::Block *__this, int irq)
   _this->itc_status_setValue(_this->status.get() & ~(1<<irq));
   _this->ack |= 1<<irq;
   _this->sync_irq = -1;
+
+  _this->check_state();
 
   _this->trace.msg("Updated irq ack (value: 0x%x)\n", _this->ack);
 }
