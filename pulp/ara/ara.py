@@ -52,6 +52,10 @@ def extend_isa(isa_instance):
         else:
             insn.add_tag('vothers')
 
+        # Vector instructions can be given latencies like that
+        # if insn.label.find('vfmac') == 0:
+        #     insn.set_latency(1)
+
 def attach(component, vlen, nb_lanes, use_spatz=False, spatz_nb_ports=None):
     component.add_sources([
         "cpu/iss/src/ara/ara.cpp",
