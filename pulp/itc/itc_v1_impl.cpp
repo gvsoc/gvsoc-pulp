@@ -15,16 +15,18 @@
  * limitations under the License.
  */
 
-/* 
+/*
  * Authors: Germain Haugou, GreenWaves Technologies (germain.haugou@greenwaves-technologies.com)
  */
 
 #include <vp/vp.hpp>
+#include <vp/signal.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
 #include <stdio.h>
 #include <string.h>
 #include "archi/itc_v1.h"
+
 
 class itc : public vp::Component
 {
@@ -63,8 +65,9 @@ private:
   vp::IoSlave in;
 
   uint32_t ack;
-  uint32_t status;
-  uint32_t mask;
+  vp::reg_32 status;
+  vp::reg_32 input_status;
+  vp::reg_32 mask;
 
   int nb_free_events;
   int fifo_event_head;
@@ -83,12 +86,20 @@ private:
 
   vp::WireSlave<bool> in_event_itf[32];
 
+  vp::Signal<bool> trace_irq;
+
 };
 
 itc::itc(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config),
+trace_irq(*this, "irq", 1)
 {
+
   traces.new_trace("trace", &trace, vp::DEBUG);
+
+  this->new_reg("status", &this->status, 0);
+  this->new_reg("input_status", &this->input_status, 0, false);
+  this->new_reg("mask", &this->mask, 0);
 
   in.set_req_meth(&itc::req);
   new_slave_port("input", &in);
@@ -118,15 +129,17 @@ itc::itc(vp::ComponentConf &config)
 void itc::itc_status_setValue(uint32_t value)
 {
   trace.msg("Updated irq status (value: 0x%x)\n", value);
-  status = value;
+  status.set(value);
 
   check_state();
 }
 
 void itc::check_state()
 {
-  uint32_t status_masked = status & mask;
+  uint32_t status_masked = status.get() & mask.get();
   int irq = status_masked ? 31 - __builtin_clz(status_masked) : -1;
+
+  this->trace_irq = status_masked != 0;
 
   if (irq != sync_irq) {
     trace.msg("Updating irq req (irq: %d)\n", irq);
@@ -138,10 +151,10 @@ void itc::check_state()
 
 vp::IoReqStatus itc::itc_mask_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
 {
-  if (!is_write) *data = mask;
+  if (!is_write) *data = mask.get();
   else {
-    mask = *data;
-    trace.msg("Updated irq mask (value: 0x%x)\n", mask);
+    mask.set(*data);
+    trace.msg("Updated irq mask (value: 0x%x)\n", mask.get());
   }
 
   check_state();
@@ -153,11 +166,11 @@ vp::IoReqStatus itc::itc_mask_set_ioReq(uint32_t offset, uint32_t *data, uint32_
 {
   if (!is_write) return vp::IO_REQ_INVALID;
 
-  mask |= *data;
-  trace.msg("Updated irq mask (value: 0x%x)\n", mask);
+  mask.set(mask.get() | *data);
+  trace.msg("Updated irq mask (value: 0x%x)\n", mask.get());
 
   check_state();
-  
+
   return vp::IO_REQ_OK;
 }
 
@@ -165,17 +178,17 @@ vp::IoReqStatus itc::itc_mask_clr_ioReq(uint32_t offset, uint32_t *data, uint32_
 {
   if (!is_write) return vp::IO_REQ_INVALID;
 
-  mask &= ~(*data);
-  trace.msg("Updated irq mask (value: 0x%x)\n", mask);
+  mask.set(mask.get() & ~(*data));
+  trace.msg("Updated irq mask (value: 0x%x)\n", mask.get());
 
   check_state();
-  
+
   return vp::IO_REQ_OK;
 }
 
 vp::IoReqStatus itc::itc_status_ioReq(uint32_t offset, uint32_t *data, uint32_t size, bool is_write)
 {
-  if (!is_write) *data = status;
+  if (!is_write) *data = status.get();
   else {
     itc_status_setValue(*data);
   }
@@ -187,7 +200,7 @@ vp::IoReqStatus itc::itc_status_set_ioReq(uint32_t offset, uint32_t *data, uint3
 {
   if (!is_write) return vp::IO_REQ_INVALID;
 
-  itc_status_setValue(status | *data);
+  itc_status_setValue(status.get() | *data);
 
   return vp::IO_REQ_OK;
 }
@@ -196,7 +209,7 @@ vp::IoReqStatus itc::itc_status_clr_ioReq(uint32_t offset, uint32_t *data, uint3
 {
   if (!is_write) return vp::IO_REQ_INVALID;
 
-  itc_status_setValue(status & ~(*data));
+  itc_status_setValue(status.get() & ~(*data));
 
   return vp::IO_REQ_OK;
 }
@@ -246,7 +259,7 @@ vp::IoReqStatus itc::itc_fifo_ioReq(uint32_t offset, uint32_t *data, uint32_t si
     if (fifo_event_tail == nb_fifo_events) fifo_event_tail = 0;
     nb_free_events++;
     if (nb_free_events != nb_fifo_events) {
-      itc_status_setValue(status | (1<<fifo_irq));
+      itc_status_setValue(status.get() | (1<<fifo_irq));
     }
   }
 
@@ -299,7 +312,7 @@ void itc::soc_event_sync(vp::Block *__this, int event)
 
   if (_this->fifo_irq != -1 && _this->nb_free_events == _this->nb_fifo_events - 1) {
     _this->trace.msg("Generating FIFO irq (id: %d)\n", _this->fifo_irq);
-    _this->itc_status_setValue(_this->status | (1<<_this->fifo_irq));
+    _this->itc_status_setValue(_this->status.get() | (1<<_this->fifo_irq));
   }
 }
 
@@ -309,9 +322,11 @@ void itc::irq_ack_sync(vp::Block *__this, int irq)
 
   _this->trace.msg("Received IRQ acknowledgement (irq: %d)\n", irq);
 
-  _this->itc_status_setValue(_this->status & ~(1<<irq));
+  _this->itc_status_setValue(_this->status.get() & ~(1<<irq));
   _this->ack |= 1<<irq;
   _this->sync_irq = -1;
+
+  _this->check_state();
 
   _this->trace.msg("Updated irq ack (value: 0x%x)\n", _this->ack);
 }
@@ -320,8 +335,12 @@ void itc::in_event_sync(vp::Block *__this, bool active, int id)
 {
   itc *_this = (itc *)__this;
   _this->trace.msg("Received input event (event: %d, active: %d)\n", id, active);
-  _this->itc_status_setValue(_this->status | (1<<id));
-  _this->check_state();
+  if (active)
+  {
+    _this->itc_status_setValue(_this->status.get() | (1<<id));
+    _this->input_status.set(_this->input_status.get() | (1<<id));
+    _this->check_state();
+  }
 }
 
 
@@ -329,8 +348,6 @@ void itc::reset(bool active)
 {
   if (active)
   {
-    status = 0;
-    mask   = 0;
     ack    = 0;
 
     sync_irq = -1;
@@ -338,6 +355,7 @@ void itc::reset(bool active)
     nb_free_events = nb_fifo_events;
     fifo_event_head = 0;
     fifo_event_tail = 0;
+    this->status.set(this->input_status.get());
   }
 }
 

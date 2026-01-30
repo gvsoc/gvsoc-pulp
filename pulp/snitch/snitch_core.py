@@ -228,7 +228,7 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
 
         modules = []
 
-        if not sequencer:
+        if not sequencer or inc_spatz:
             modules.append(cpu.iss.riscv.ExecInOrder(scoreboard=True))
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
