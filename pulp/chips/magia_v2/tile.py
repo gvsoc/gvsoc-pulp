@@ -142,7 +142,7 @@ class MagiaV2Tile(gvsoc.systree.Component):
             snitch_spatz = SnitchFast(self, f'tile-{tid}-snitch-spatz', isa="rv32imfdav", #rv32imfdcav
                                     fetch_enable=False, boot_addr=MagiaArch.SPATZ_BOOTROM_ADDR,
                                     core_id=tid + tree.NB_CLUSTERS, htif=False,
-                                    inc_spatz=True, vlen=128, spatz_nb_lanes=4, pulp_v2=False)
+                                    inc_spatz=True, vlen=256, spatz_nb_lanes=4, pulp_v2=False)
             
             # Instruction cache (from snitch cluster model). PLEASE DOUBLE CHECK THAT THE INTERNAL PARAMETERS OF THIS MODEL ARE THE SAME OF THE CV32 I_CACHE.
             snitch_spatz_i_cache = Hierarchical_cache(self, f'tile-{tid}-snitch-spatz-icache', nb_cores=1, has_cc=0, l1_line_size_bits=7)

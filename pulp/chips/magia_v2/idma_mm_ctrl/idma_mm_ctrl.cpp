@@ -340,7 +340,7 @@ vp::IoReqStatus iDMA_mm_ctrl::req(vp::Block *__this, vp::IoReq *req)
                 dmstati_dma1.opcode=R_TYPE_ENCODE(DMSTATI_FUNCT7, 0b01, 0, XDMA_FUNCT3, 5, OP_CUSTOM1);
                 dmstati_dma1.arg_b=0b01; //type of status register we are getting form iDMA. 0b01 means next transfer id
                 _this->offload_itf_idma1.sync(&dmstati_dma1); //send dmstati
-                _this->next_id_reg_dma1.set(dmstati_dma1.result);
+                _this->next_id_reg_dma1.set(dmstati_dma1.result - 1); //fixed next id to be coherent with RTL value
                 uint32_t next_id_r =  _this->next_id_reg_dma1.get();
                 memcpy((void *)data, (void *)&next_id_r, size);
                 if (_this->fsm_state_dma1.get()!=IDLE) {
@@ -553,7 +553,7 @@ vp::IoReqStatus iDMA_mm_ctrl::req(vp::Block *__this, vp::IoReq *req)
                 dmstati_dma0.opcode=R_TYPE_ENCODE(DMSTATI_FUNCT7, 0b01, 0, XDMA_FUNCT3, 5, OP_CUSTOM1);
                 dmstati_dma0.arg_b=0b01; //type of status register we are getting form iDMA. 0b01 means next transfer id
                 _this->offload_itf_idma0.sync(&dmstati_dma0); //send dmstati
-                _this->next_id_reg_dma0.set(dmstati_dma0.result);
+                _this->next_id_reg_dma0.set(dmstati_dma0.result - 1); //fixed next id to be coherent with RTL value
                 uint32_t next_id_r =  _this->next_id_reg_dma0.get();
                 memcpy((void *)data, (void *)&next_id_r, size);
                 if (_this->fsm_state_dma0.get()!=IDLE) {
