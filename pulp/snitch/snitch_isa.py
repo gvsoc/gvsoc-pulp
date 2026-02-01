@@ -31,6 +31,8 @@ class Xdma(IsaSubset):
             Instr('dmstat',    Format_R  ,   '0000101 ----- ----- 000 ----- 0101011'),
             Instr('dmcpyi',    Format_I1U,   '0000010 ----- ----- 000 ----- 0101011'),
             Instr('dmstati',   Format_I1U,   '0000100 ----- ----- 000 ----- 0101011'),
+        ], includes=[
+            '<cpu/iss_v2/include/isa/xdma.hpp>',
         ])
 
 # Encodings for extended Snitch instruction set
@@ -39,7 +41,7 @@ class Xdma(IsaSubset):
       #   X X X X X X X   |   X X X X X   |   X X X X X   |   X X X   |   X X X X X   |   X X X X X X X
 # FREP#              ui2[11:0]            |      rs1      |  ui1[2:0] |   ui0[3:0]  |        opcode
 
-Format_FREP = [   
+Format_FREP = [
     UnsignedImm(0, Range(8, 4)),
     UnsignedImm(1, Range(12, 3)),
     InReg(0, Range(15, 5)),
@@ -55,25 +57,25 @@ Format_FREP = [
 # SCFGR #    0000000      |      rs1      |     00001     |    001    |      rd       |      opcode
 # SCFGW #    0000000      |      rs2      |      rs1      |    010    |     00001     |      opcode
 
-Format_SCFGRI = [   
+Format_SCFGRI = [
     OutReg(0, Range(7, 5)),
     UnsignedImm(0, Range(20, 5)),
     UnsignedImm(1, Range(25, 7))
 ]
 
-Format_SCFGWI = [   
+Format_SCFGWI = [
     InReg(0, Range(15, 5)),
     UnsignedImm(0, Range(20, 5)),
     UnsignedImm(1, Range(25, 7))
 ]
 
-Format_SCFGR = [   
+Format_SCFGR = [
     OutReg(0, Range(7, 5)),
     InReg(0, Range(20, 5))
 ]
 
-Format_SCFGW = [ 
-    InReg(0, Range(15, 5)), 
+Format_SCFGW = [
+    InReg(0, Range(15, 5)),
     InReg(1, Range(20, 5))
 ]
 
@@ -81,7 +83,7 @@ Format_SCFGW = [
 
 # RV32 Extension FREP
 class Rv32frep(IsaSubset):
-    
+
     def __init__(self):
         super().__init__(name='Xfrep', instrs=[
             Instr('frep.o', Format_FREP, '------------ ----- --- ---- 10001011', tags=["frep"]),
@@ -92,7 +94,7 @@ class Rv32frep(IsaSubset):
 
 # RV32 Extension SSR
 class Rv32ssr(IsaSubset):
-    
+
     def __init__(self):
         super().__init__(name='Xssr', instrs=[
             Instr('scfgri', Format_SCFGRI, '------------ 00000 001 ---- -0101011', tags=["ssr", 'nseq', 'fp_op']),
