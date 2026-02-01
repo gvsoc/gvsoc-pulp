@@ -32,7 +32,7 @@ class Xdma(IsaSubset):
             Instr('dmcpyi',    Format_I1U,   '0000010 ----- ----- 000 ----- 0101011'),
             Instr('dmstati',   Format_I1U,   '0000100 ----- ----- 000 ----- 0101011'),
         ], includes=[
-            '<cpu/iss_v2/include/isa/xdma.hpp>',
+            '<cpu/iss/include/isa/xdma.hpp>',
         ])
 
 # Encodings for extended Snitch instruction set
