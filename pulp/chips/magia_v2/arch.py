@@ -76,12 +76,12 @@ class MagiaArch:
 class MagiaTree(Tree):
     def __init__(self, parent, name):
         super().__init__(parent, name)
-        self.N_TILES_X = Value(self, 'n_tiles_x', MagiaArch.N_TILES_X, cast=int,
+        self.n_tiles_x = Value(self, 'n_tiles_x', MagiaArch.N_TILES_X, cast=int,
             description='Number of tiles on X dimension')
-        self.N_TILES_Y = Value(self, 'n_tiles_y', MagiaArch.N_TILES_Y, cast=int,
+        self.n_tiles_y = Value(self, 'n_tiles_y', MagiaArch.N_TILES_Y, cast=int,
             description='Number of tiles on Y dimension')
 
-        self.NB_CLUSTERS = self.N_TILES_X*self.N_TILES_Y
+        self.NB_CLUSTERS = self.n_tiles_x*self.n_tiles_y
 
         self.romfile = Value(self, 'spatz_romfile', MagiaArch.SPATZ_ROMFILE, cast=str,
             description='Snitch_Spatz rom file')

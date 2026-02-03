@@ -49,14 +49,9 @@ class MagiaTileTcdm(gvsoc.systree.Component):
         nb_banks = MagiaArch.N_MEM_BANKS
         bank_size = MagiaArch.N_WORDS_BANK * MagiaArch.BYTES_PER_WORD
 
-        if MagiaArch.ENABLE_SPATZ:
-            # 5 master: OBI, VLSU0, VLSU1, VLSU2, VLSU03
-            L1_masters = 5
-            interleaver = L1_interleaver(self, 'interleaver', nb_slaves=nb_banks, nb_masters=L1_masters, interleaving_bits=2)
-        else:
-            # 1 master: OBI
-            L1_masters = 1
-            interleaver = L1_interleaver(self, 'interleaver', nb_slaves=nb_banks, nb_masters=L1_masters, interleaving_bits=2)
+        # 1 master: OBI
+        L1_masters = 1
+        interleaver = L1_interleaver(self, 'interleaver', nb_slaves=nb_banks, nb_masters=L1_masters, interleaving_bits=2)
 
         # 3 masters: OBI/WIDE-NOC, iDMA0, iDMA1
         dma_masters = 3
@@ -65,6 +60,10 @@ class MagiaTileTcdm(gvsoc.systree.Component):
         # 1 master: redmule
         redmule_masters = 1
         redmule_interleaver = HWPEInterleaver(self, 'redmule_interleaver', nb_master_ports=redmule_masters, nb_banks=nb_banks, bank_width=MagiaArch.BYTES_PER_WORD)
+
+        # 4 master: VLSU0, VLSU1, VLSU2, VLSU03
+        snitch_spatz_vlsu = 4
+        snitch_spatz_interleaver = L1_interleaver(self, 'snitch_spatz_interleaver', nb_slaves=nb_banks, nb_masters=snitch_spatz_vlsu, interleaving_bits=2, offset_mask=MagiaArch.L1_TILE_OFFSET-1)
 
         banks = []
         for i in range(nb_banks):
@@ -76,6 +75,7 @@ class MagiaTileTcdm(gvsoc.systree.Component):
             self.bind(interleaver, f'out_{i}', bank, 'input')
             self.bind(dma_interleaver, f'out_{i}', bank, 'input')
             self.bind(redmule_interleaver, f'out_{i}', bank, 'input')
+            self.bind(snitch_spatz_interleaver, f'out_{i}', bank, 'input')
 
         # Bind external ports (input->[internal]output->interleaver)
         for i in range(L1_masters):
@@ -87,6 +87,9 @@ class MagiaTileTcdm(gvsoc.systree.Component):
         for i in range(redmule_masters):
             self.bind(self, f'RedMulE_input', redmule_interleaver, f'input')
 
+        for i in range(snitch_spatz_vlsu):
+            self.bind(self, f'SnitchSpatz_input_{i}', snitch_spatz_interleaver, f'in_{i}')
+
     # Input ports (port number as arguments)
     def i_INPUT(self, id: int) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'L1_input_{id}', signature='io')
@@ -96,6 +99,9 @@ class MagiaTileTcdm(gvsoc.systree.Component):
     
     def i_REDMULE_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'RedMulE_input', signature='io')
+    
+    def i_SNITCH_SPATZ(self, id: int)  -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'SnitchSpatz_input_{id}', signature='io')
 
 
 class MagiaV2Tile(gvsoc.systree.Component):
@@ -139,10 +145,17 @@ class MagiaV2Tile(gvsoc.systree.Component):
             snitch_spatz_rom = memory.Memory(self, 'snitch-spatz-rom', size=MagiaArch.SPATZ_BOOTROM_SIZE,stim_file=self.get_file_path(tree.romfile))
 
             # Snitch Spatz cores (fetch_enable is set to false as we control the boot sequence. The core automatically starts from the rom and the corresponding boot address as soon as we issue the fetch enable)
-            snitch_spatz = SnitchFast(self, f'tile-{tid}-snitch-spatz', isa="rv32imfdav", #rv32imfdcav
-                                    fetch_enable=False, boot_addr=MagiaArch.SPATZ_BOOTROM_ADDR,
-                                    core_id=tid + tree.NB_CLUSTERS, htif=False,
-                                    inc_spatz=True, vlen=256, spatz_nb_lanes=4, pulp_v2=False)
+            snitch_spatz = SnitchFast(self, f'tile-{tid}-snitch-spatz',
+                                        isa             = "rv32imfdav", #rv32imfdcav
+                                        fetch_enable    = False,
+                                        boot_addr       = MagiaArch.SPATZ_BOOTROM_ADDR,
+                                        core_id         = tid + tree.NB_CLUSTERS,
+                                        htif            = False,
+                                        inc_spatz       = True,
+                                        vlen            = 256,
+                                        spatz_nb_lanes  = 4,
+                                        pulp_v2         = False,
+                                        ssr             = False)
             
             # Instruction cache (from snitch cluster model). PLEASE DOUBLE CHECK THAT THE INTERNAL PARAMETERS OF THIS MODEL ARE THE SAME OF THE CV32 I_CACHE.
             snitch_spatz_i_cache = Hierarchical_cache(self, f'tile-{tid}-snitch-spatz-icache', nb_cores=1, has_cc=0, l1_line_size_bits=7)
@@ -219,10 +232,10 @@ class MagiaV2Tile(gvsoc.systree.Component):
             snitch_spatz_i_cache.o_REFILL(obi_xbar.i_INPUT())
 
             # Bind: snitch spatz TCDM
-            snitch_spatz.o_VLSU(0,l1_tcdm.i_INPUT(1))
-            snitch_spatz.o_VLSU(1,l1_tcdm.i_INPUT(2))
-            snitch_spatz.o_VLSU(2,l1_tcdm.i_INPUT(3))
-            snitch_spatz.o_VLSU(3,l1_tcdm.i_INPUT(4))
+            snitch_spatz.o_VLSU(0,l1_tcdm.i_SNITCH_SPATZ(0))
+            snitch_spatz.o_VLSU(1,l1_tcdm.i_SNITCH_SPATZ(1))
+            snitch_spatz.o_VLSU(2,l1_tcdm.i_SNITCH_SPATZ(2))
+            snitch_spatz.o_VLSU(3,l1_tcdm.i_SNITCH_SPATZ(3))
 
             # Bind: snitch spatz core complex registers
             snitch_spatz_regs.o_CLK_EN(snitch_spatz.i_FETCHEN())
