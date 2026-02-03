@@ -214,7 +214,8 @@ class SnitchCluster(gvsoc.systree.Component):
             self.__o_FETCHEN( cores[core_id].i_FETCHEN() )
 
         for core_id in range(0, arch.nb_core):
-            cores[core_id].o_BARRIER_REQ(cluster_registers.i_BARRIER_ACK(core_id))
+            if not arch.use_spatz:
+                cores[core_id].o_BARRIER_REQ(cluster_registers.i_BARRIER_ACK(core_id))
 
         tcdm_port = 0
         for core_id in range(0, arch.nb_core):
@@ -225,7 +226,7 @@ class SnitchCluster(gvsoc.systree.Component):
 
             if arch.use_spatz:
                 for port in range(0, arch.spatz_nb_lanes):
-                    # cores[core_id].o_VLSU(port, tcdm.i_INPUT(tcdm_port))
+                    cores[core_id].o_VLSU(port, tcdm.i_INPUT(tcdm_port))
                     tcdm_port += 1
 
             cores_ico[core_id].o_MAP(narrow_axi.i_INPUT())
@@ -269,7 +270,8 @@ class SnitchCluster(gvsoc.systree.Component):
         narrow_axi.o_MAP(cluster_registers.i_INPUT(), base=arch.peripheral.base,
             size=arch.peripheral.size, rm_base=True)
         for core_id in range(0, arch.nb_core):
-            self.bind(cluster_registers, f'barrier_ack', cores[core_id], 'barrier_ack')
+            if not arch.use_spatz:
+                self.bind(cluster_registers, f'barrier_ack', cores[core_id], 'barrier_ack')
         # for core_id in range(0, arch.nb_core):
             # cluster_registers.o_EXTERNAL_IRQ(core_id, cores[core_id].i_IRQ(arch.barrier_irq))
             # self.__o_MSIP(core_id, cores[core_id].i_IRQ(3))
