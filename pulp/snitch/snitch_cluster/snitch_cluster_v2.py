@@ -272,11 +272,11 @@ class SnitchCluster(gvsoc.systree.Component):
         for core_id in range(0, arch.nb_core):
             if not arch.use_spatz:
                 self.bind(cluster_registers, f'barrier_ack', cores[core_id], 'barrier_ack')
-        # for core_id in range(0, arch.nb_core):
-            # cluster_registers.o_EXTERNAL_IRQ(core_id, cores[core_id].i_IRQ(arch.barrier_irq))
-            # self.__o_MSIP(core_id, cores[core_id].i_IRQ(3))
-            # self.__o_MTIP(core_id, cores[core_id].i_IRQ(7))
-            # self.__o_MEIP(core_id, cores[core_id].i_IRQ(11))
+        for core_id in range(0, arch.nb_core):
+            cluster_registers.o_EXTERNAL_IRQ(core_id, cores[core_id].i_IRQ(arch.barrier_irq))
+            self.__o_MSIP(core_id, cores[core_id].i_IRQ(3))
+            self.__o_MTIP(core_id, cores[core_id].i_IRQ(7))
+            self.__o_MEIP(core_id, cores[core_id].i_IRQ(11))
 
         if arch.use_spatz:
             for core_id in range(0, arch.nb_core):
