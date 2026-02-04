@@ -45,8 +45,10 @@ protected:
     vp::IoSlave         input_itf;
 
     vp::reg_32 clock_en_reg;
-    vp::reg_32 exchange_reg;
     vp::reg_32 start_irq_reg;
+    vp::reg_32 taskbin_reg;
+    vp::reg_32 data_reg;
+    vp::reg_32 return_reg;
     vp::reg_32 done_reg;
 
     vp::WireMaster<bool> clock_en;
@@ -73,8 +75,10 @@ SnitchSpatzRegs::SnitchSpatzRegs(vp::ComponentConf &config)
     this->new_slave_port("input", &this->input_itf);
 
     this->clock_en_reg.set(0x00000000);
-    this->exchange_reg.set(0x00000000);
     this->start_irq_reg.set(0x00000000);
+    this->taskbin_reg.set(0x00000000);
+    this->data_reg.set(0x00000000);
+    this->return_reg.set(0x00000000);
     this->done_reg.set(0x00000000);
     
     this->new_master_port("clock_en", &this->clock_en, this);
@@ -131,20 +135,7 @@ vp::IoReqStatus SnitchSpatzRegs::req(vp::Block *__this, vp::IoReq *req)
             _this->trace.msg("[Magia Snitch Spatz Registers] Snitch Spatz read clock enable register (0x%08x)\n",cnf_r);
         }
     }
-    else if (offset == 0x04) { //SPATZ_EXCHANGE_REG
-        if (is_write == 1) {
-            uint32_t cnf_w;
-            memcpy((uint8_t*)&cnf_w,data,size);
-            _this->exchange_reg.set(cnf_w);
-            _this->trace.msg("[Magia Snitch Spatz Registers] Snitch Spatz written exchange register (0x%08x)\n",cnf_w);
-        }
-        else {
-            uint32_t cnf_r =  _this->exchange_reg.get();
-            memcpy((void *)data, (void *)&cnf_r, size);
-            _this->trace.msg("[Magia Snitch Spatz Registers] Snitch Spatz read exchange register (0x%08x)\n",cnf_r);
-        }
-    }
-    else if (offset == 0x08) { //SPATZ_START
+    else if (offset == 0x04) { //SPATZ_START
         if (is_write == 1) {
             uint32_t cnf_w;
             memcpy((uint8_t*)&cnf_w,data,size);
@@ -167,7 +158,46 @@ vp::IoReqStatus SnitchSpatzRegs::req(vp::Block *__this, vp::IoReq *req)
             _this->trace.msg("[Magia Snitch Spatz Registers] Snitch Spatz read start register (0x%08x)\n",cnf_r);
         }
     }
-    else if (offset == 0x0C) { //SPATZ_DONE
+    else if (offset == 0x08) { //SPATZ_TASKBIN_REG
+        if (is_write == 1) {
+            uint32_t cnf_w;
+            memcpy((uint8_t*)&cnf_w,data,size);
+            _this->taskbin_reg.set(cnf_w);
+            _this->trace.msg("[Magia Snitch Spatz Registers] Snitch Spatz written taskbin register (0x%08x)\n",cnf_w);
+        }
+        else {
+            uint32_t cnf_r =  _this->taskbin_reg.get();
+            memcpy((void *)data, (void *)&cnf_r, size);
+            _this->trace.msg("[Magia Snitch Spatz Registers] Snitch Spatz read task register (0x%08x)\n",cnf_r);
+        }
+    }
+    else if (offset == 0x0C) { //SPATZ_DATA_REG
+        if (is_write == 1) {
+            uint32_t cnf_w;
+            memcpy((uint8_t*)&cnf_w,data,size);
+            _this->data_reg.set(cnf_w);
+            _this->trace.msg("[Magia Snitch Spatz Registers] Snitch Spatz written data register (0x%08x)\n",cnf_w);
+        }
+        else {
+            uint32_t cnf_r =  _this->data_reg.get();
+            memcpy((void *)data, (void *)&cnf_r, size);
+            _this->trace.msg("[Magia Snitch Spatz Registers] Snitch Spatz read data register (0x%08x)\n",cnf_r);
+        }
+    }
+    else if (offset == 0x10) { //SPATZ_RETURN_REG
+        if (is_write == 1) {
+            uint32_t cnf_w;
+            memcpy((uint8_t*)&cnf_w,data,size);
+            _this->return_reg.set(cnf_w);
+            _this->trace.msg("[Magia Snitch Spatz Registers] Snitch Spatz written return register (0x%08x)\n",cnf_w);
+        }
+        else {
+            uint32_t cnf_r =  _this->return_reg.get();
+            memcpy((void *)data, (void *)&cnf_r, size);
+            _this->trace.msg("[Magia Snitch Spatz Registers] Snitch Spatz read return register (0x%08x)\n",cnf_r);
+        }
+    }
+    else if (offset == 0x14) { //SPATZ_DONE
         if (is_write == 1) {
             uint32_t cnf_w;
             memcpy((uint8_t*)&cnf_w,data,size);

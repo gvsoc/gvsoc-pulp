@@ -47,7 +47,6 @@ class MagiaArch:
     L1_TILE_OFFSET          = 0x0010_0000
     L2_ADDR_START           = 0xC000_0000
     L2_SIZE                 = 0x0CFE_FFFF # here in RTL we have 0x4000_0000 but the end address (TEST_END_ADDR_START) then will fall in L2... no sense to me
-    #L2_SIZE                 = 0x0C02_FFFF # temp L2 size to match Luca Balboni bare-metal MMAP
     L2_ADDR_END             = L2_ADDR_START + L2_SIZE
     TEST_END_ADDR_START     = L2_ADDR_END + 1
     TEST_END_SIZE           = 0x400
