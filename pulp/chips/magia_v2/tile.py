@@ -157,7 +157,7 @@ class MagiaV2Tile(gvsoc.systree.Component):
                                         pulp_v2         = False,
                                         ssr             = False)
             
-            # Instruction cache (from snitch cluster model). PLEASE DOUBLE CHECK THAT THE INTERNAL PARAMETERS OF THIS MODEL ARE THE SAME OF THE CV32 I_CACHE.
+            # Instruction cache (from snitch cluster model)
             snitch_spatz_i_cache = Hierarchical_cache(self, f'tile-{tid}-snitch-spatz-icache', nb_cores=1, has_cc=0, l1_line_size_bits=7)
 
             # Snitch Spatz CC control registers
