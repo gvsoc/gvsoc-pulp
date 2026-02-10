@@ -196,32 +196,31 @@ class Spatz(cpu.iss_v2.riscv.RiscvCommon):
     def gen_gui(self, parent_signal):
         active = super().gen_gui(parent_signal)
 
-        if self.inc_spatz:
-            ara = gvsoc.gui.Signal(self, active, name='ara', path='ara/label', groups=['regmap'], display=gvsoc.gui.DisplayStringBox())
+        ara = gvsoc.gui.Signal(self, active, name='ara', path='ara/label', groups=['regmap'], display=gvsoc.gui.DisplayStringBox())
 
-            gvsoc.gui.Signal(self, ara, name="queue", path="ara/queue", groups=['regmap'])
-            gvsoc.gui.Signal(self, ara, name="pc", path="ara/pc", groups=['regmap'])
-            gvsoc.gui.Signal(self, ara, name="active", path="ara/active",
-                display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
-            gvsoc.gui.Signal(self, ara, name="queue_full", path="ara/queue_full",
-                display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
-            gvsoc.gui.Signal(self, ara, name="pending_insn", path="ara/nb_pending_insn", groups=['regmap'])
-            gvsoc.gui.Signal(self, ara, name="waiting_insn", path="ara/nb_waiting_insn", groups=['regmap'])
+        gvsoc.gui.Signal(self, ara, name="queue", path="ara/queue", groups=['regmap'])
+        gvsoc.gui.Signal(self, ara, name="pc", path="ara/pc", groups=['regmap'])
+        gvsoc.gui.Signal(self, ara, name="active", path="ara/active",
+            display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+        gvsoc.gui.Signal(self, ara, name="queue_full", path="ara/queue_full",
+            display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+        gvsoc.gui.Signal(self, ara, name="pending_insn", path="ara/nb_pending_insn", groups=['regmap'])
+        gvsoc.gui.Signal(self, ara, name="waiting_insn", path="ara/nb_waiting_insn", groups=['regmap'])
 
-            vlsu = gvsoc.gui.Signal(self, ara, name='vlsu', path='ara/vlsu/label', groups=['regmap'], display=gvsoc.gui.DisplayStringBox())
-            gvsoc.gui.Signal(self, vlsu, name="active", path="ara/vlsu/active", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
-            gvsoc.gui.Signal(self, vlsu, name="queue", path="ara/vlsu/queue", groups=['regmap'])
-            gvsoc.gui.Signal(self, vlsu, name="pc", path="ara/vlsu/pc", groups=['regmap'])
-            gvsoc.gui.Signal(self, vlsu, name="pending_insn", path="ara/vlsu/nb_pending_insn", groups=['regmap'])
-            for i in range(0, self.get_property('ara/nb_ports', int)):
-                port = gvsoc.gui.Signal(self, vlsu, name=f"port_{i}", path=f"ara/vlsu/port_{i}/addr", groups=['regmap'])
-                gvsoc.gui.Signal(self, port, name="size", path=f"ara/vlsu/port_{i}/size", groups=['regmap'])
-                gvsoc.gui.Signal(self, port, name="is_write", path=f"ara/vlsu/port_{i}/is_write", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+        vlsu = gvsoc.gui.Signal(self, ara, name='vlsu', path='ara/vlsu/label', groups=['regmap'], display=gvsoc.gui.DisplayStringBox())
+        gvsoc.gui.Signal(self, vlsu, name="active", path="ara/vlsu/active", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+        gvsoc.gui.Signal(self, vlsu, name="queue", path="ara/vlsu/queue", groups=['regmap'])
+        gvsoc.gui.Signal(self, vlsu, name="pc", path="ara/vlsu/pc", groups=['regmap'])
+        gvsoc.gui.Signal(self, vlsu, name="pending_insn", path="ara/vlsu/nb_pending_insn", groups=['regmap'])
+        for i in range(0, self.get_property('ara/nb_ports', int)):
+            port = gvsoc.gui.Signal(self, vlsu, name=f"port_{i}", path=f"ara/vlsu/port_{i}/addr", groups=['regmap'])
+            gvsoc.gui.Signal(self, port, name="size", path=f"ara/vlsu/port_{i}/size", groups=['regmap'])
+            gvsoc.gui.Signal(self, port, name="is_write", path=f"ara/vlsu/port_{i}/is_write", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
 
-            vfpu = gvsoc.gui.Signal(self, ara, name='vfpu', path='ara/vfpu/label', groups=['regmap'], display=gvsoc.gui.DisplayStringBox())
-            gvsoc.gui.Signal(self, vfpu, name="active", path="ara/vfpu/active", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
-            gvsoc.gui.Signal(self, vfpu, name="pc", path="ara/vfpu/pc", groups=['regmap'])
+        vfpu = gvsoc.gui.Signal(self, ara, name='vfpu', path='ara/vfpu/label', groups=['regmap'], display=gvsoc.gui.DisplayStringBox())
+        gvsoc.gui.Signal(self, vfpu, name="active", path="ara/vfpu/active", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+        gvsoc.gui.Signal(self, vfpu, name="pc", path="ara/vfpu/pc", groups=['regmap'])
 
-            vslide = gvsoc.gui.Signal(self, ara, name='vslide', path='ara/vslide/label', groups=['regmap'], display=gvsoc.gui.DisplayStringBox())
-            gvsoc.gui.Signal(self, vslide, name="active", path="ara/vslide/active", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
-            gvsoc.gui.Signal(self, vslide, name="pc", path="ara/vslide/pc", groups=['regmap'])
+        vslide = gvsoc.gui.Signal(self, ara, name='vslide', path='ara/vslide/label', groups=['regmap'], display=gvsoc.gui.DisplayStringBox())
+        gvsoc.gui.Signal(self, vslide, name="active", path="ara/vslide/active", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
+        gvsoc.gui.Signal(self, vslide, name="pc", path="ara/vslide/pc", groups=['regmap'])
