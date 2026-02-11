@@ -148,5 +148,3 @@ extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
     return new Cluster_registers(config);
 }
-
-
