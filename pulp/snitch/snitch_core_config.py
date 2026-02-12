@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2025 ETH Zurich, University of Bologna and Fondazione ChipsIT
+# Copyright (C) 2020 ETH Zurich and University of Bologna
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,15 +14,17 @@
 # limitations under the License.
 #
 
-import gvsoc.runner
-from pulp.chips.magia.board import MagiaBoard
 
-class Target(gvsoc.runner.Target):
+from dataclasses import dataclass
+from gvrun.config import Config, cfg_field
 
-    gapy_description="Magia board"
-    model = MagiaBoard
 
-    def __init__(self, parser, options=None, name=None):
+@dataclass(repr=False)
+class SnitchCoreConfig(Config):
+    nb_outstanding: int = cfg_field(default=1, dump=True, desc=(
+        "Maximum number of oustanding requests"
+    ))
 
-        super(Target, self).__init__(parser, options,
-              model=MagiaBoard)
+    isa: str = cfg_field(default='rv32imafdc', dump=True, desc=(
+        "ISA string of the core"
+    ))

@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2025 ETH Zurich, University of Bologna and Fondazione ChipsIT
+# Copyright (C) 2020 ETH Zurich and University of Bologna
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,15 +14,20 @@
 # limitations under the License.
 #
 
+#
+# Authors: Germain Haugou (germain.haugou@gmail.com)
+#
+
+from gvsoc.systree import Component
 import gvsoc.runner
-from pulp.chips.magia.board import MagiaBoard
+
+from pulp.snitch.snitch_testbench_config import SnitchTestbenchMultiBoardConfig
+from pulp.snitch.snitch_testbench import SnitchTestbenchMultiBoard
+
 
 class Target(gvsoc.runner.Target):
 
-    gapy_description="Magia board"
-    model = MagiaBoard
-
-    def __init__(self, parser, options=None, name=None):
-
-        super(Target, self).__init__(parser, options,
-              model=MagiaBoard)
+    gapy_description: str = "Snitch testbench"
+    model: type[Component] = SnitchTestbenchMultiBoard
+    name: str = ""
+    config: SnitchTestbenchMultiBoardConfig = SnitchTestbenchMultiBoardConfig()
