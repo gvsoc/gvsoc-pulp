@@ -23,7 +23,7 @@ from cpu.iss.isa_gen.isa_pulpv2 import *
 import gvsoc.systree
 import os
 import pulp.ara.ara
-
+from pulp.snitch.snitch_core_config import SnitchCoreConfig
 
 def add_latencies(isa, is_fast=False, use_spatz=False):
 
@@ -197,8 +197,13 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             wakeup_counter: bool=False,
             single_regfile: bool=False,
             ssr: bool=True,
-            sequencer: bool=True
+            sequencer: bool=True,
+            config: SnitchCoreConfig | None=None
         ):
+
+        if config is not None:
+            nb_outstanding = config.nb_outstanding
+            isa = config.isa
 
         isa_instance = isa_instances.get(isa)
 
@@ -235,7 +240,7 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True,
             prefetcher_size=32, htif=htif, binaries=binaries, handle_misaligned=True, custom_sources=True,
             nb_outstanding=nb_outstanding, single_regfile=single_regfile,
-            modules=modules)
+            modules=modules, config=config)
 
         self.inc_spatz = inc_spatz
 
