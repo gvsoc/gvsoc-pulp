@@ -50,7 +50,7 @@ class SocAttr(Tree):
 
 class SocConf(st.Component):
     def __init__(self, property_file):
-        super(SocConf, self).__init__(parent=None, name=None)
+        super(SocConf, self).__init__(parent=None, name='')
 
         self.add_properties(self.load_property_file(property_file))
 

@@ -37,7 +37,8 @@ class Pulp_open_board(st.Component):
 
         self.set_target_name('pulp-open')
 
-        attr = self.set_attributes(PulpOpenAttr(self))
+        attr = PulpOpenAttr(self)
+        self.set_attributes(attr)
 
         # Pulp
         pulp = Pulp_open(self, 'chip', attr, parser, use_ddr=use_ddr, pulpnn=pulpnn)

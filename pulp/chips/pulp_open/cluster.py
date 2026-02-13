@@ -52,7 +52,7 @@ def get_cluster_name(cid: int):
 
 class ClusterConf(st.Component):
     def __init__(self, property_file):
-        super(ClusterConf, self).__init__(parent=None, name=None)
+        super(ClusterConf, self).__init__(parent=None, name='')
 
         self.add_properties(self.load_property_file(property_file))
 
