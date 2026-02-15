@@ -135,8 +135,7 @@ class Spatz(cpu.iss_v2.riscv.RiscvCommon):
             if pulp_v2:
                 extensions = [ PulpV2(hwloop=False, elw=False), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ]
             else:
-                extensions = [ Xdma() ]
-                # extensions = [ Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ]
+                extensions = [ Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ]
 
                 if not inc_spatz:
                     extensions += [Rv32frep()]
