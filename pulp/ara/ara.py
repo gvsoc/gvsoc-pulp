@@ -56,7 +56,7 @@ def extend_isa(isa_instance):
         # if insn.label.find('vfmac') == 0:
         #     insn.set_latency(1)
 
-def attach(component, vlen, nb_lanes, use_spatz=False, spatz_nb_ports=None):
+def attach(component, vlen, nb_lanes, use_spatz=False, spatz_nb_ports=None, lane_width=8):
     component.add_sources([
         "cpu/iss/src/ara/ara.cpp",
         "cpu/iss/src/ara/ara_vcompute.cpp",
@@ -80,6 +80,8 @@ def attach(component, vlen, nb_lanes, use_spatz=False, spatz_nb_ports=None):
     ])
 
     component.add_property('ara/nb_lanes', nb_lanes)
+    component.add_property('ara/lsu_width', lane_width)
+    component.add_property('ara/compute_width', lane_width)
     if use_spatz:
         component.add_property('ara/nb_ports', nb_lanes if spatz_nb_ports is None else spatz_nb_ports)
         component.add_property('ara/nb_outstanding_reqs', 8)

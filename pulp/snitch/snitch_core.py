@@ -192,6 +192,7 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             inc_spatz: bool=False,
             core_id: int=0,
             htif: bool=False, vlen: int=512, spatz_nb_lanes=4,
+            spatz_lane_width=8,
             pulp_v2: bool=False,
             nb_outstanding: int=1,
             wakeup_counter: bool=False,
@@ -260,7 +261,7 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
         ])
 
         if inc_spatz:
-            pulp.ara.ara.attach(self, vlen, nb_lanes=spatz_nb_lanes, use_spatz=True)
+            pulp.ara.ara.attach(self, vlen, nb_lanes=spatz_nb_lanes, use_spatz=True, lane_width=spatz_lane_width)
 
             self.add_c_flags([
                 "-DCONFIG_GVSOC_ISS_USE_SPATZ",
