@@ -154,6 +154,7 @@ class MagiaV2Tile(gvsoc.systree.Component):
                                         inc_spatz       = True,
                                         vlen            = 256,
                                         spatz_nb_lanes  = 4,
+                                        spatz_lane_width= 4,
                                         pulp_v2         = False,
                                         ssr             = False)
             
