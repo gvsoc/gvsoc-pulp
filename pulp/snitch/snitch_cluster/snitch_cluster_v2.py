@@ -20,6 +20,7 @@
 
 import gvsoc.runner
 from pulp.cpu.iss.spatz import Spatz
+from pulp.cpu.iss.spatz_config import SpatzConfig
 import memory.memory as memory
 import interco.router as router
 import gvsoc.systree
@@ -165,11 +166,10 @@ class SnitchCluster(gvsoc.systree.Component):
 
         for core_id in range(0, arch.nb_core):
 
-            cores.append(Spatz(self, f'pe{core_id}', isa=arch.isa,
-                fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
-                core_id=arch.first_hartid + core_id, htif=True, binaries=binaries,
-                inc_spatz=arch.use_spatz, spatz_nb_lanes=arch.spatz_nb_lanes
-            ))
+            config = SpatzConfig(isa=arch.isa, fetch_enable=arch.auto_fetch,
+                boot_addr=arch.boot_addr, hart_id=arch.first_hartid + core_id,
+                htif=True, nb_lanes=arch.spatz_nb_lanes)
+            cores.append(Spatz(self, f'pe{core_id}', config=config))
             cores_ico.append(router.Router(self, f'pe{core_id}_ico', bandwidth=arch.tcdm.bank_width))
 
         # Cluster peripherals
