@@ -15,8 +15,10 @@
 #
 
 import re
+from gvsoc.systree import Component
+from cpu.iss.isa_gen.isa_gen import Isa
 
-def extend_isa(isa_instance):
+def extend_isa(isa_instance: Isa):
     # Assign tags to instructions so that we can handle them with different blocks
 
     # For now only load/stores are assigned to vlsu
@@ -56,7 +58,8 @@ def extend_isa(isa_instance):
         # if insn.label.find('vfmac') == 0:
         #     insn.set_latency(1)
 
-def attach(component, vlen, nb_lanes, use_spatz=False, spatz_nb_ports=None):
+def attach(component: Component, vlen: int, nb_lanes: int, use_spatz: bool=False,
+        spatz_nb_ports: int|None=None):
     component.add_sources([
         "cpu/iss_v2/src/ara/ara.cpp",
         "cpu/iss_v2/src/ara/ara_vcompute.cpp",
