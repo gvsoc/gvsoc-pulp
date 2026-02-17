@@ -208,7 +208,8 @@ class SnitchCluster(gvsoc.systree.Component):
                 cores.append(iss.SnitchFast(self, f'pe{core_id}', isa=arch.isa,
                     fetch_enable=arch.auto_fetch, boot_addr=arch.boot_addr,
                     core_id=arch.first_hartid + core_id, htif=True, binaries=binaries,
-                    inc_spatz=arch.use_spatz, spatz_nb_lanes=arch.spatz_nb_lanes
+                    inc_spatz=arch.use_spatz, spatz_nb_lanes=arch.spatz_nb_lanes,
+                    spatz_lane_width=8
                 ))
 
             else:
