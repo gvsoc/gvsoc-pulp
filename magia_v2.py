@@ -23,7 +23,6 @@ class Target(gvsoc.runner.Target):
 
     gapy_description="Magia v2 (memory mapped) board"
     model = MagiaV2Board
-    name = "magia_v2"
 
     def __init__(self, parser, options=None, name=None):
 
