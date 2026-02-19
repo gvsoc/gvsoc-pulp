@@ -43,7 +43,7 @@ from pulp.event_unit.event_unit_v3 import Event_unit
 # adapted from snitch cluster model
 # interface i_INPUT -> interleaver -> banks
 class MagiaTileTcdm(gvsoc.systree.Component):
-    def __init__(self, parent, name, parser):
+    def __init__(self, parent, name, tree, parser):
         super().__init__(parent, name)
 
         nb_banks = MagiaArch.N_MEM_BANKS
@@ -61,9 +61,10 @@ class MagiaTileTcdm(gvsoc.systree.Component):
         redmule_masters = 1
         redmule_interleaver = HWPEInterleaver(self, 'redmule_interleaver', nb_master_ports=redmule_masters, nb_banks=nb_banks, bank_width=MagiaArch.BYTES_PER_WORD)
 
-        # 4 master: VLSU0, VLSU1, VLSU2, VLSU03
-        snitch_spatz_vlsu = 4
-        snitch_spatz_interleaver = L1_interleaver(self, 'snitch_spatz_interleaver', nb_slaves=nb_banks, nb_masters=snitch_spatz_vlsu, interleaving_bits=2, offset_mask=MagiaArch.L1_TILE_OFFSET-1)
+        if tree.enable_spatz:
+            # 4 master: VLSU0, VLSU1, VLSU2, VLSU03
+            snitch_spatz_vlsu = 4
+            snitch_spatz_interleaver = L1_interleaver(self, 'snitch_spatz_interleaver', nb_slaves=nb_banks, nb_masters=snitch_spatz_vlsu, interleaving_bits=2, offset_mask=MagiaArch.L1_TILE_OFFSET-1)
 
         banks = []
         for i in range(nb_banks):
@@ -75,7 +76,8 @@ class MagiaTileTcdm(gvsoc.systree.Component):
             self.bind(interleaver, f'out_{i}', bank, 'input')
             self.bind(dma_interleaver, f'out_{i}', bank, 'input')
             self.bind(redmule_interleaver, f'out_{i}', bank, 'input')
-            self.bind(snitch_spatz_interleaver, f'out_{i}', bank, 'input')
+            if tree.enable_spatz:
+                self.bind(snitch_spatz_interleaver, f'out_{i}', bank, 'input')
 
         # Bind external ports (input->[internal]output->interleaver)
         for i in range(L1_masters):
@@ -87,8 +89,9 @@ class MagiaTileTcdm(gvsoc.systree.Component):
         for i in range(redmule_masters):
             self.bind(self, f'RedMulE_input', redmule_interleaver, f'input')
 
-        for i in range(snitch_spatz_vlsu):
-            self.bind(self, f'SnitchSpatz_input_{i}', snitch_spatz_interleaver, f'in_{i}')
+        if tree.enable_spatz:
+            for i in range(snitch_spatz_vlsu):
+                self.bind(self, f'SnitchSpatz_input_{i}', snitch_spatz_interleaver, f'in_{i}')
 
     # Input ports (port number as arguments)
     def i_INPUT(self, id: int) -> gvsoc.systree.SlaveItf:
@@ -100,7 +103,7 @@ class MagiaTileTcdm(gvsoc.systree.Component):
     def i_REDMULE_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'RedMulE_input', signature='io')
     
-    def i_SNITCH_SPATZ(self, id: int)  -> gvsoc.systree.SlaveItf:
+    def i_SNITCH_SPATZ(self, id: int) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'SnitchSpatz_input_{id}', signature='io')
 
 
@@ -139,7 +142,7 @@ class MagiaV2Tile(gvsoc.systree.Component):
         # Core model from pulp cores
         core_cv32 = CV32CoreTest(self, f'tile-{tid}-cv32-core',core_id=tid)
 
-        if MagiaArch.ENABLE_SPATZ:
+        if tree.enable_spatz:
 
             # Snitch Spatz boot rom file
             snitch_spatz_rom = memory.Memory(self, 'snitch-spatz-rom', size=MagiaArch.SPATZ_BOOTROM_SIZE,stim_file=self.get_file_path(tree.romfile))
@@ -149,7 +152,7 @@ class MagiaV2Tile(gvsoc.systree.Component):
                                         isa             = "rv32imfdav", #rv32imfdcav
                                         fetch_enable    = False,
                                         boot_addr       = MagiaArch.SPATZ_BOOTROM_ADDR,
-                                        core_id         = tid + tree.NB_CLUSTERS,
+                                        core_id         = tid + tree.nb_clusters,
                                         htif            = False,
                                         inc_spatz       = True,
                                         vlen            = 256,
@@ -168,7 +171,7 @@ class MagiaV2Tile(gvsoc.systree.Component):
         cv32_i_cache = CV32_Hierarchical_cache(self, f'tile-{tid}-cv32-icache', nb_cores=1, has_cc=0, l1_line_size_bits=4)
 
         # Data scratchpad
-        l1_tcdm = MagiaTileTcdm(self, f'tile-{tid}-tcdm', parser)
+        l1_tcdm = MagiaTileTcdm(self, f'tile-{tid}-tcdm', tree, parser)
 
         # AXI and OBI x-bars
         tile_xbar = router.Router(self, f'tile-{tid}-axi-xbar',bandwidth=4,latency=MagiaDSE.TILE_AXI_XBAR_LATENCY,synchronous=MagiaDSE.TILE_AXI_XBAR_SYNC)
@@ -214,12 +217,12 @@ class MagiaV2Tile(gvsoc.systree.Component):
         event_unit = Event_unit(self, f'tile-{tid}-event-unit', self.get_property('event_unit/config'))
 
         # UART
-        stdout = Stdout(self, f'tile-{tid}-stdout',max_cluster=tree.NB_CLUSTERS,max_core_per_cluster=1,user_set_core_id=0,user_set_cluster_id=tid)
+        stdout = Stdout(self, f'tile-{tid}-stdout',max_cluster=tree.nb_clusters,max_core_per_cluster=1,user_set_core_id=0,user_set_cluster_id=tid)
 
         # Bind: loader -> obi interconnect
         self.__o_LOADER(obi_xbar.i_INPUT())
 
-        if MagiaArch.ENABLE_SPATZ:
+        if tree.enable_spatz:
             # Bind: snitch spatz core data -> obi interconnect
             snitch_spatz.o_DATA(obi_xbar.i_INPUT())
             snitch_spatz.o_DATA_DEBUG(obi_xbar.i_INPUT())
@@ -278,7 +281,7 @@ class MagiaV2Tile(gvsoc.systree.Component):
                        base=MagiaArch.STACK_ADDR_START,
                        size=MagiaArch.STACK_SIZE, rm_base=False)
         
-        if MagiaArch.ENABLE_SPATZ:
+        if tree.enable_spatz:
             # Bind obi xbar so that it can communicate with snitch spatz bootrom
             obi_xbar.o_MAP(snitch_spatz_rom.i_INPUT(), name="snitch-spatz-bootrom",
                         base=MagiaArch.SPATZ_BOOTROM_ADDR,
@@ -294,7 +297,7 @@ class MagiaV2Tile(gvsoc.systree.Component):
                         base=MagiaArch.L1_ADDR_START+(tid*MagiaArch.L1_TILE_OFFSET),
                         size=MagiaArch.L1_SIZE, rm_base=False, remove_offset=(tid*MagiaArch.L1_TILE_OFFSET))
             # Bind obi xbar so that it can communicate with tile xbar to get access to remote tiles l1 and reserved mem
-            for tile_id in range(0,tree.NB_CLUSTERS):
+            for tile_id in range(0,tree.nb_clusters):
                 if (tile_id!=tid): #skip yourself
                     obi_xbar.o_MAP(tile_xbar.i_INPUT(), name=f'obi2axi-off-tile-{tile_id}-l1-mem',
                             base=MagiaArch.L1_ADDR_START+(tile_id*MagiaArch.L1_TILE_OFFSET),
@@ -304,7 +307,7 @@ class MagiaV2Tile(gvsoc.systree.Component):
                             base=MagiaArch.L1_ADDR_START+(tid*MagiaArch.L1_TILE_OFFSET),
                             size=MagiaArch.L1_SIZE, rm_base=False)
             # Bind tile xbar so that it can communicate with remote tiles l1 and reserved mem
-            for tile_id in range(0,tree.NB_CLUSTERS):
+            for tile_id in range(0,tree.nb_clusters):
                 if (tile_id!=tid): #skip yourself
                     tile_xbar.o_MAP(self.__i_NARROW_OUTPUT(), name=f'axi-to-off-tile-{tile_id}-l1-mem',
                             base=MagiaArch.L1_ADDR_START+(tile_id*MagiaArch.L1_TILE_OFFSET),
@@ -366,7 +369,7 @@ class MagiaV2Tile(gvsoc.systree.Component):
         self.bind(event_unit, 'irq_req_0', core_cv32, 'irq_req')
         self.bind(idma_mm_ctrl, 'idma0_done_irq', event_unit, 'in_event_2_pe_0')
         self.bind(idma_mm_ctrl, 'idma1_done_irq', event_unit, 'in_event_3_pe_0')
-        if MagiaArch.ENABLE_SPATZ:
+        if tree.enable_spatz:
             self.bind(snitch_spatz_regs, 'spatz_done_irq', event_unit, 'in_event_8_pe_0')
         self.bind(redmule, 'done_irq', event_unit, 'in_event_10_pe_0')
         self.bind(fsync_mm_ctrl, 'fsync_done_irq', event_unit, 'in_event_24_pe_0')

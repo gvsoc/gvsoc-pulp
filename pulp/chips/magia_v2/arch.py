@@ -70,7 +70,6 @@ class MagiaArch:
     N_TILES_Y           = 4
 
     USE_NARROW_WIDE     = False
-    ENABLE_SPATZ        = True
 
 class MagiaTree(Tree):
     def __init__(self, parent, name):
@@ -80,10 +79,15 @@ class MagiaTree(Tree):
         self.n_tiles_y = Value(self, 'n_tiles_y', MagiaArch.N_TILES_Y, cast=int,
             description='Number of tiles on Y dimension')
 
-        self.NB_CLUSTERS = self.n_tiles_x*self.n_tiles_y
+        self.nb_clusters = self.n_tiles_x*self.n_tiles_y
 
         self.romfile = Value(self, 'spatz_romfile', MagiaArch.SPATZ_ROMFILE, cast=str,
             description='Snitch_Spatz rom file')
+        
+        if len(self.romfile) == 0:
+            self.enable_spatz = False
+        else: 
+            self.enable_spatz = True
 
 class MagiaDSE:
     SOC_L2_LATENCY              = 2
