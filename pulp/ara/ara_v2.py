@@ -58,6 +58,10 @@ def extend_isa(isa_instance: Isa):
         # if insn.label.find('vfmac') == 0:
         #     insn.set_latency(1)
 
+    for insn in isa_instance.get_isa('v').get_insns():
+        if insn.label.startswith('vfncvt'):
+            insn.add_field('chaining_factor', '2.0f')
+
 def attach(component: Component, vlen: int, nb_lanes: int, use_spatz: bool=False,
         spatz_nb_ports: int|None=None):
     component.add_sources([
