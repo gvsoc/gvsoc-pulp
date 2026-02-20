@@ -168,7 +168,7 @@ class SnitchCluster(gvsoc.systree.Component):
 
             config = SpatzConfig(isa=arch.isa, fetch_enable=arch.auto_fetch,
                 boot_addr=arch.boot_addr, hart_id=arch.first_hartid + core_id,
-                htif=True, nb_lanes=arch.spatz_nb_lanes)
+                htif=True, nb_lanes=arch.spatz_nb_lanes, lane_width=8)
             cores.append(Spatz(self, f'pe{core_id}', config=config))
             cores_ico.append(router.Router(self, f'pe{core_id}_ico', bandwidth=arch.tcdm.bank_width))
 

@@ -63,7 +63,7 @@ def extend_isa(isa_instance: Isa):
             insn.add_field('chaining_factor', '2.0f')
 
 def attach(component: Component, vlen: int, nb_lanes: int, use_spatz: bool=False,
-        spatz_nb_ports: int|None=None):
+        spatz_nb_ports: int|None=None, lane_width=8):
     component.add_sources([
         "cpu/iss_v2/src/ara/ara.cpp",
         "cpu/iss_v2/src/ara/ara_vcompute.cpp",
@@ -91,6 +91,7 @@ def attach(component: Component, vlen: int, nb_lanes: int, use_spatz: bool=False
     ])
 
     component.add_property('ara/nb_lanes', nb_lanes)
+    component.add_property('ara/lane_width', lane_width)
     if use_spatz:
         component.add_property('ara/nb_ports', nb_lanes if spatz_nb_ports is None else spatz_nb_ports)
         component.add_property('ara/nb_outstanding_reqs', 8)

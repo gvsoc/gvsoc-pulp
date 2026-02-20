@@ -70,7 +70,8 @@ class Spatz(RiscvCommon):
             'cpu/iss_v2/src/cores/spatz/spatz.cpp',
         ])
 
-        pulp.ara.ara_v2.attach(self, config.vlen, nb_lanes=config.nb_lanes, use_spatz=True)
+        pulp.ara.ara_v2.attach(self, config.vlen, nb_lanes=config.nb_lanes, use_spatz=True,
+            lane_width=config.lane_width)
 
 
     def o_BARRIER_REQ(self, itf: gvsoc.systree.SlaveItf):
