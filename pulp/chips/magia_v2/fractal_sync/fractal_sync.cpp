@@ -225,11 +225,11 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
                 _this->syncro_val_nord_sud[_this->nord_current_id_req]++; //vertical i.e., nord-sud
                 if (_this->syncro_val_nord_sud[_this->nord_current_id_req]==2) { //if both the ports have been syncronized
                     _this->state.set(NORD_SUD_END_SYNCRO);
-                    _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+                    _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
                 else {
                     _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
-                    _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+                    _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
             }
             else if ((_this->nord_current_aggr[_this->nord_current_id_req]&_this->level)!=0) {
@@ -238,11 +238,11 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
                     _this->nord_sud_current_aggr=_this->nord_current_aggr[_this->nord_current_id_req];
                     _this->nord_sud_current_id_req=_this->nord_current_id_req;
                     _this->state.set(NORD_SUD_UP_SYNCRO);
-                    _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+                    _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
                 else {
                     _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
-                    _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+                    _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
 
             }
@@ -250,7 +250,7 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
                 _this->nord_sud_current_aggr=_this->nord_current_aggr[_this->nord_current_id_req];
                 _this->nord_sud_current_id_req=_this->nord_current_id_req;
                 _this->state.set(NORD_SUD_UP_SYNCRO);
-                _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+                _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
             }
             break;
         }
@@ -262,11 +262,11 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
                 _this->syncro_val_nord_sud[_this->sud_current_id_req]++; //vertical i.e., nord-sud
                 if (_this->syncro_val_nord_sud[_this->sud_current_id_req]==2) { //if both the ports have been syncronized
                     _this->state.set(NORD_SUD_END_SYNCRO);
-                    _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+                    _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
                 else {
                     _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
-                    _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+                    _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }   
             }
             else if ((_this->sud_current_aggr[_this->sud_current_id_req]&_this->level)!=0) {
@@ -275,18 +275,18 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
                     _this->nord_sud_current_aggr=_this->sud_current_aggr[_this->sud_current_id_req];
                     _this->nord_sud_current_id_req=_this->sud_current_id_req;
                     _this->state.set(NORD_SUD_UP_SYNCRO);
-                    _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+                    _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
                 else {
                     _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
-                    _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+                    _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
             }
             else { //not for this fractal so propagate to the next
                 _this->nord_sud_current_aggr=_this->sud_current_aggr[_this->sud_current_id_req];
                 _this->nord_sud_current_id_req=_this->sud_current_id_req;
                 _this->state.set(NORD_SUD_UP_SYNCRO);
-                _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+                _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
             }
             break;
         }
@@ -298,11 +298,11 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
                 _this->syncro_val_east_west[_this->east_current_id_req]++; //horizontal i.e., east-west
                 if (_this->syncro_val_east_west[_this->east_current_id_req]==2) { //if both the ports have been syncronized
                     _this->state.set(EAST_WEST_END_SYNCRO);
-                    _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+                    _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
                 else {
                     _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
-                    _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+                    _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
             }
             else if ((_this->east_current_aggr[_this->east_current_id_req]&_this->level)!=0) {
@@ -311,18 +311,18 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
                     _this->east_west_current_aggr=_this->east_current_aggr[_this->east_current_id_req];
                     _this->east_west_current_id_req=_this->east_current_id_req;
                     _this->state.set(EAST_WEST_UP_SYNCRO);
-                    _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+                    _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
                 else {
                     _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
-                    _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+                    _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
             }
             else { //not for this fractal so propagate to the next
                 _this->east_west_current_aggr=_this->east_current_aggr[_this->east_current_id_req];
                 _this->east_west_current_id_req=_this->east_current_id_req;
                 _this->state.set(EAST_WEST_UP_SYNCRO);
-                _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+                _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
             }
             break;
         }
@@ -334,11 +334,11 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
                 _this->syncro_val_east_west[_this->west_current_id_req]++; //horizontal i.e., east-west
                 if (_this->syncro_val_east_west[_this->west_current_id_req]==2) { //if both the ports have been syncronized
                     _this->state.set(EAST_WEST_END_SYNCRO);
-                    _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+                    _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
                 else {
                     _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
-                    _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+                    _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
             }
             else if ((_this->east_current_aggr[_this->west_current_id_req]&_this->level)!=0) {
@@ -347,18 +347,18 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
                      _this->east_west_current_aggr=_this->west_current_aggr[_this->west_current_id_req];
                     _this->east_west_current_id_req=_this->west_current_id_req;
                     _this->state.set(EAST_WEST_UP_SYNCRO);
-                    _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+                    _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
                 else {
                     _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
-                    _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+                    _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
                 }
             }
             else { //not for this fractal so propagate to the next
                 _this->east_west_current_aggr=_this->west_current_aggr[_this->west_current_id_req];
                 _this->east_west_current_id_req=_this->west_current_id_req;
                 _this->state.set(EAST_WEST_UP_SYNCRO);
-                _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+                _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
             }
             break;
         }
@@ -373,7 +373,7 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
             _this->master_ew_output_port.sync(&OutReq); 
             _this->syncro_val_nord_sud[_this->nord_sud_current_id_req]=0;
             _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
-            _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+            _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
             break;
         }
         case NORD_SUD_END_SYNCRO:
@@ -406,7 +406,7 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
             _this->nord_current_aggr[id_rsp_to_propagate]=0xFFFFFFFF;
             _this->sud_current_aggr[id_rsp_to_propagate]=0xFFFFFFFF;
             _this->state.set(IDLE);
-            _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+            _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
             break;
         }
         case EAST_WEST_UP_SYNCRO:
@@ -421,7 +421,7 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
             _this->master_ns_output_port.sync(&OutReq);
             _this->syncro_val_east_west[_this->east_west_current_id_req]=0;
             _this->state.set(IDLE); //syncro is not completed, so wait for request from next port
-            _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+            _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
             break;
         }
         case EAST_WEST_END_SYNCRO:
@@ -454,7 +454,7 @@ void FractalSync::fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
             _this->west_current_aggr[id_rsp_to_propagate]=0xFFFFFFFF;
             _this->east_current_aggr[id_rsp_to_propagate]=0xFFFFFFFF;
             _this->state.set(IDLE);
-            _this->event_enqueue(_this->fsm_event, 0); //trigger fsm
+            _this->event_enqueue(_this->fsm_event, 1); //trigger fsm
             break;
         }
         default:
