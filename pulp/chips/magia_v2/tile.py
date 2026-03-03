@@ -24,6 +24,8 @@ import gdbserver.gdbserver
 from pulp.stdout.stdout_v3 import Stdout
 
 from pulp.snitch.snitch_core import *
+from pulp.cpu.iss.spatz import Spatz
+from pulp.cpu.iss.spatz_config import SpatzConfig
 from pulp.cluster.l1_interleaver import L1_interleaver
 from pulp.light_redmule.hwpe_interleaver import HWPEInterleaver
 from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
@@ -147,19 +149,29 @@ class MagiaV2Tile(gvsoc.systree.Component):
             # Snitch Spatz boot rom file
             snitch_spatz_rom = memory.Memory(self, 'snitch-spatz-rom', size=MagiaArch.SPATZ_BOOTROM_SIZE,stim_file=self.get_file_path(tree.romfile))
 
-            # Snitch Spatz cores (fetch_enable is set to false as we control the boot sequence. The core automatically starts from the rom and the corresponding boot address as soon as we issue the fetch enable)
-            snitch_spatz = SnitchFast(self, f'tile-{tid}-snitch-spatz',
-                                        isa             = "rv32imfdav", #rv32imfdcav
-                                        fetch_enable    = False,
-                                        boot_addr       = MagiaArch.SPATZ_BOOTROM_ADDR,
-                                        core_id         = tid + tree.nb_clusters,
-                                        htif            = False,
-                                        inc_spatz       = True,
-                                        vlen            = 256,
-                                        spatz_nb_lanes  = 4,
-                                        spatz_lane_width= 4,
-                                        pulp_v2         = False,
-                                        ssr             = False)
+            if MagiaArch.USE_NEW_SPATZ:
+                # Snitch Spatz cores (fetch_enable is set to false as we control the boot sequence. The core automatically starts from the rom and the corresponding boot address as soon as we issue the fetch enable)
+                config = SpatzConfig(isa="rv32imfdcav", fetch_enable=False,
+                    boot_addr=MagiaArch.SPATZ_BOOTROM_ADDR, hart_id=tid + tree.nb_clusters,
+                    htif=False, nb_lanes=4, lane_width=4)
+                
+                snitch_spatz = Spatz(self, f'tile-{tid}-snitch-spatz', config=config)
+
+            else:
+
+                # Snitch Spatz cores (fetch_enable is set to false as we control the boot sequence. The core automatically starts from the rom and the corresponding boot address as soon as we issue the fetch enable)
+                snitch_spatz = SnitchFast(self, f'tile-{tid}-snitch-spatz',
+                                            isa             = "rv32imfdcav", #rv32imfdcav
+                                            fetch_enable    = False,
+                                            boot_addr       = MagiaArch.SPATZ_BOOTROM_ADDR,
+                                            core_id         = tid + tree.nb_clusters,
+                                            htif            = False,
+                                            inc_spatz       = True,
+                                            vlen            = 256,
+                                            spatz_nb_lanes  = 4,
+                                            spatz_lane_width= 4,
+                                            pulp_v2         = False,
+                                            ssr             = False)
             
             # Instruction cache (from snitch cluster model)
             snitch_spatz_i_cache = Hierarchical_cache(self, f'tile-{tid}-snitch-spatz-icache', nb_cores=1, has_cc=0, l1_line_size_bits=7)

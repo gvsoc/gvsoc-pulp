@@ -70,6 +70,7 @@ class MagiaArch:
     N_TILES_Y           = 4
 
     USE_NARROW_WIDE     = False
+    USE_NEW_SPATZ       = False
 
 class MagiaTree(Tree):
     def __init__(self, parent, name):
