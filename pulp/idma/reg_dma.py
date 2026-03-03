@@ -14,8 +14,10 @@
 # limitations under the License.
 #
 
+from typing_extensions import override
 import gvsoc.systree
-import gvsoc.gui
+from gvsoc.gui import Signal, DisplayPulse, DisplayLogicBox
+from pulp.idma.reg_dma_config import RegDmaConfig
 
 class RegDma(gvsoc.systree.Component):
     """
@@ -29,25 +31,12 @@ class RegDma(gvsoc.systree.Component):
         The parent component where this one should be instantiated.
     name: str
         The name of the component within the parent space.
-    transfer_queue_size: int
-        Number of transfer requests which can be queued to the DMA.
-    burst_queue_size: int
-        Maximum number of outstanding burst requests.
-    loc_base: int
-        Base address of the local area.
-    loc_size: int
-        Size of the local area.
-    tcdm_width: int
-        Width of the local interconnect, in bytes.
+    config: RegDmaConfig
+        iDMA configuration.
     """
 
-    def __init__(self, parent: gvsoc.systree.Component, name: str,
-            transfer_queue_size: int=8,
-            burst_queue_size: int=8,
-            burst_size: int=0,
-            loc_base: int=0,
-            loc_size: int=0,
-            tcdm_width: int=0):
+    def __init__(self, parent: gvsoc.systree.Component, name: str, config: RegDmaConfig,
+    ):
 
         super().__init__(parent, name)
 
@@ -61,12 +50,12 @@ class RegDma(gvsoc.systree.Component):
         ])
 
         self.add_properties({
-            "transfer_queue_size": transfer_queue_size,
-            "burst_queue_size": burst_queue_size,
-            "burst_size" : burst_size,
-            "loc_base": loc_base,
-            "loc_size": loc_size,
-            "tcdm_width": tcdm_width,
+            "transfer_queue_size": config.transfer_queue_size,
+            "burst_queue_size": config.burst_queue_size,
+            "burst_size" : config.burst_size,
+            "loc_base": config.loc_base,
+            "loc_size": config.loc_size,
+            "tcdm_width": config.tcdm_width,
         })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
@@ -125,16 +114,18 @@ class RegDma(gvsoc.systree.Component):
         """
         self.itf_bind('irq', itf, signature='wire<bool>')
 
-    def gen_gui(self, parent_signal):
-        active = gvsoc.gui.Signal(self, parent_signal, name=self.name, path='fe/busy', groups='regmap', display=gvsoc.gui.DisplayLogicBox('ACTIVE'))
+    @override
+    def gen_gui(self, parent_signal: Signal):
+        active = Signal(self, parent_signal, name=self.name, path='fe/busy', groups='regmap',
+            display=DisplayLogicBox('ACTIVE'))
 
         # This shows details about all the transfers which are queued to the DMA
-        queue = gvsoc.gui.Signal(self, active, name='queue')
-        gvsoc.gui.Signal(self, queue, name='source', path='fe/src', groups='regmap')
-        gvsoc.gui.Signal(self, queue, name='dest', path='fe/dst', groups='regmap')
-        gvsoc.gui.Signal(self, queue, name='length', path='fe/length', groups='regmap')
-        gvsoc.gui.Signal(self, queue, name='src_stride', path='fe/src_stride', groups='regmap')
-        gvsoc.gui.Signal(self, queue, name='dst_stride', path='fe/dst_stride', groups='regmap')
-        gvsoc.gui.Signal(self, queue, name='reps', path='fe/reps', groups='regmap')
-        gvsoc.gui.Signal(self, queue, name='id', path='fe/id', groups='regmap',
-            display=gvsoc.gui.DisplayPulse())
+        queue = Signal(self, active, name='queue')
+        _ = Signal(self, queue, name='source', path='fe/src', groups='regmap')
+        _ = Signal(self, queue, name='dest', path='fe/dst', groups='regmap')
+        _ = Signal(self, queue, name='length', path='fe/length', groups='regmap')
+        _ = Signal(self, queue, name='src_stride', path='fe/src_stride', groups='regmap')
+        _ = Signal(self, queue, name='dst_stride', path='fe/dst_stride', groups='regmap')
+        _ = Signal(self, queue, name='reps', path='fe/reps', groups='regmap')
+        _ = Signal(self, queue, name='id', path='fe/id', groups='regmap',
+            display=DisplayPulse())
