@@ -35,12 +35,12 @@
 // General hwpe register offsets
 #define HWPE_REGISTER_OFFS              0x00    // Standard HWPE register offset
 
-#define DATAMOVER_COMMIT_AND_TRIGGER    0    // Trigger commit
-#define DATAMOVER_ACQUIRE               1    // Acquire command
-#define DATAMOVER_FINISHED              2    // Finished signal
-#define DATAMOVER_STATUS                3    // Status register
-#define DATAMOVER_RUNNING_JOB           4    // Running job ID
-#define DATAMOVER_SOFT_CLEAR            5    // Soft clear
+#define DATAMOVER_COMMIT_AND_TRIGGER    0x00    // Trigger commit
+#define DATAMOVER_ACQUIRE               0x04    // Acquire command
+#define DATAMOVER_FINISHED              0x08    // Finished signal
+#define DATAMOVER_STATUS                0x0C    // Status register
+#define DATAMOVER_RUNNING_JOB           0x10    // Running job ID
+#define DATAMOVER_SOFT_CLEAR            0x14    // Soft clear
 
 // Job-specific registers
 #define DATAMOVER_REGISTER_OFFS        0x40 // Register base offset

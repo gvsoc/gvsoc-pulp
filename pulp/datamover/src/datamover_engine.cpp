@@ -134,6 +134,7 @@ void Datamover::copy() {
   // }
 
   // Write to HWPE register to indicate completion
+  printf("copy(): Data copy completed, writing to finished register\n");
   this->datamover_finished = 1;
 }
 
@@ -184,5 +185,6 @@ void Datamover::transpose(uint8_t transpose_mode) {
   // }
 
   // Write to HWPE register to indicate completion
+  printf("transpose(): Data transpose completed, writing to finished register\n");
   this->datamover_finished = 1;
 }

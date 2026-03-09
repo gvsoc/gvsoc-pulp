@@ -23,7 +23,7 @@
 int Datamover::hwpe_regfile_rd(int addr)
 {
   int value = 0;
-  switch (addr)
+  switch (addr<<2)
   {
   case DATAMOVER_ACQUIRE:
     value = this->datamover_acquire;

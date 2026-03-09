@@ -96,7 +96,7 @@ vp::IoReqStatus Datamover::handle_req(vp::Block *__this, vp::IoReq *req)
             _this->clear();
             _this->trace.msg(vp::Trace::LEVEL_INFO, "Datamover::handle_req(): Received soft clear command, clearing state\n");
         }
-        else if((req->get_addr() & 0xfff) >= DATAMOVER_REGISTER_OFFS && (req->get_addr() & 0xfff) < DATAMOVER_REGISTER_OFFS + DATAMOVER_NB_REG * 4) {
+        else if(((req->get_addr() & 0xfff) >= DATAMOVER_REGISTER_OFFS) && ((req->get_addr() & 0xfff) < DATAMOVER_REGISTER_OFFS + DATAMOVER_NB_REG*4)) {
             // printf("Datamover::handle_req(): Write to register address 0x%x, value 0x%08x\n", req->get_addr(), *(uint32_t *) req->get_data());
             _this->regfile_wr((req->get_addr() & 0xfff - DATAMOVER_REGISTER_OFFS) >> 2, *(uint32_t *) req->get_data());
         }
