@@ -61,18 +61,24 @@ def extend_isa(isa_instance: Isa):
     for insn in isa_instance.get_isa('v').get_insns():
         if insn.label.startswith('vfncvt'):
             insn.add_field('chaining_factor', '2.0f')
+        elif insn.label.startswith('vw'):
+            insn.add_field('out_chaining_factor', '2.0f')
+        elif insn.label.startswith('vfred'):
+            insn.add_field('out_chaining_factor', '0.0f')
+        elif insn.label.startswith('vred'):
+            insn.add_field('out_chaining_factor', '0.0f')
 
 def attach(component: Component, vlen: int, nb_lanes: int, use_spatz: bool=False,
         spatz_nb_ports: int|None=None, lane_width=8):
     component.add_sources([
-        "cpu/iss_v2/src/ara/ara.cpp",
-        "cpu/iss_v2/src/ara/ara_vcompute.cpp",
+        "cpu/iss_v2/src/vector_unit/vector_unit.cpp",
+        "cpu/iss_v2/src/vector_unit/vector_unit_compute.cpp",
         "cpu/iss_v2/src/vector.cpp",
     ])
 
     if use_spatz:
         component.add_sources([
-            "cpu/iss_v2/src/ara/spatz_vlsu.cpp",
+            "cpu/iss_v2/src/cores/spatz/spatz_vlsu.cpp",
         ])
         component.add_c_flags([
             "-DCONFIG_GVSOC_ISS_USE_SPATZ",
@@ -80,7 +86,7 @@ def attach(component: Component, vlen: int, nb_lanes: int, use_spatz: bool=False
 
     else:
         component.add_sources([
-            "cpu/iss_v2/src/ara/ara_vlsu.cpp",
+            "cpu/iss_v2/src/cores/ara/ara_vlsu.cpp",
         ])
 
     component.add_c_flags([
@@ -90,8 +96,8 @@ def attach(component: Component, vlen: int, nb_lanes: int, use_spatz: bool=False
         "cpu/iss_v2/src/vector.cpp",
     ])
 
-    component.add_property('ara/nb_lanes', nb_lanes)
-    component.add_property('ara/lane_width', lane_width)
+    component.add_property('vu/nb_lanes', nb_lanes)
+    component.add_property('vu/lane_width', lane_width)
     if use_spatz:
-        component.add_property('ara/nb_ports', nb_lanes if spatz_nb_ports is None else spatz_nb_ports)
-        component.add_property('ara/nb_outstanding_reqs', 8)
+        component.add_property('vu/nb_ports', nb_lanes if spatz_nb_ports is None else spatz_nb_ports)
+        component.add_property('vu/nb_outstanding_reqs', 8)

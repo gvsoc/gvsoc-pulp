@@ -37,7 +37,7 @@ from interco.router import Router
 class SnitchTestbench(Component):
 
     def __init__(self, parent: Component, name: str, config: SnitchTestbenchConfig):
-        super().__init__(parent, name, config)
+        super().__init__(parent, name, config=config)
 
         _ = TargetParameter(
             self, name='binary', value=None, description='Binary to be loaded and started',
@@ -107,7 +107,7 @@ class SnitchTestbenchBoard(Component):
 
     def __init__(self, parent: Component, name: str, config: SnitchTestbenchBoardConfig):
 
-        super().__init__(parent, name, config)
+        super().__init__(parent, name, config=config)
 
         self.set_target_name('snitch.testbench')
 

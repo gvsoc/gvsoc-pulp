@@ -27,57 +27,54 @@ import gvsoc.systree
 from gvsoc.systree import Component
 import pulp.ara.ara_v2
 import cpu.iss.isa_gen.isa_riscv_gen
-from cpu.iss_v2.riscv import (Arch, ExecInOrder, Regfile, PrefetchSingleLine, Offload, Irq,
-                              IrqExternal)
-from pulp.cpu.iss.spatz_config import SpatzConfig
+from cpu.iss_v2.riscv import (Arch, ExecInOrder, Regfile, PrefetchSingleLine, Offload, Irq)
+from pulp.cpu.iss.cva6_config import Cva6Config
 from cpu.iss_v2.riscv import RiscvCommon, IssModule
 
 
 isa_instances: dict[str,Isa] = {}
 
-class Spatz(RiscvCommon):
+class Cva6(RiscvCommon):
 
     def __init__(self,
             parent: Component,
             name: str,
-            config: SpatzConfig
+            config: Cva6Config
         ):
 
         isa_instance: Isa | None = isa_instances.get(config.isa)
 
         if isa_instances.get(config.isa) is None:
 
-            extensions = [ Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ]
-
-            isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("spatz_" + config.isa,
-                config.isa, extensions=extensions)
+            isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("cva6_" + config.isa,
+                config.isa)
             isa_instances[config.isa] = isa_instance
 
             pulp.ara.ara_v2.extend_isa(isa_instance)
 
         modules: dict[str, IssModule] = {
-            'arch': Arch('Spatz'),
+            'arch': Arch('Ara'),
             'exec': ExecInOrder(scoreboard=True),
             'regfile': Regfile(scoreboard=True),
             'prefetch': PrefetchSingleLine(),
             'offload': Offload(),
-            'irq': IrqExternal() if config.irq == 'external' else Irq()
+            'irq': Irq()
         }
 
         super().__init__(parent, name, config=config, isa=isa_instance, modules=modules)
 
         self.add_sources([
-            'cpu/iss_v2/src/cores/spatz/spatz.cpp',
+            'cpu/iss_v2/src/cores/ara/ara.cpp',
         ])
 
-        pulp.ara.ara_v2.attach(self, config.vlen, nb_lanes=config.nb_lanes, use_spatz=True,
+        pulp.ara.ara_v2.attach(self, config.vlen, nb_lanes=config.nb_lanes,
             lane_width=config.lane_width)
 
 
     def o_BARRIER_REQ(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('barrier_req', itf, signature='wire<bool>')
 
-    def o_VLSU(self, port: int, itf: gvsoc.systree.SlaveItf):
+    def o_VLSU(self, itf: gvsoc.systree.SlaveItf):
         """Binds the vector data port.
 
         This port is used for issuing data accesses to the memory for vector loads and stores.\n
@@ -89,7 +86,7 @@ class Spatz(RiscvCommon):
         slave: gvsoc.systree.SlaveItf
             Slave interface
         """
-        self.itf_bind(f'vlsu_{port}', itf, signature='io')
+        self.itf_bind(f'vlsu', itf, signature='io')
 
     @override
     def gen_gui(self, parent_signal: Signal) -> Signal:
@@ -107,21 +104,14 @@ class Spatz(RiscvCommon):
         _ = Signal(self, ara, name="pending_insn", path="ara/nb_pending_insn", groups=['regmap'])
         _ = Signal(self, ara, name="waiting_insn", path="ara/nb_waiting_insn", groups=['regmap'])
 
-        vlsu = Signal(self, ara, name='vlsu', path='ara/vlsu/label', groups=['regmap'],
-                      display=DisplayStringBox())
-        _ = Signal(self, vlsu, name="active", path="ara/vlsu/active", display=DisplayPulse(),
-                   groups=['regmap'])
+        vlsu = Signal(self, ara, name='vlsu', path='ara/vlsu/label', groups=['regmap'], display=DisplayStringBox())
+        _ = Signal(self, vlsu, name="active", path="ara/vlsu/active", display=DisplayPulse(), groups=['regmap'])
         _ = Signal(self, vlsu, name="queue", path="ara/vlsu/queue", groups=['regmap'])
         _ = Signal(self, vlsu, name="pc", path="ara/vlsu/pc", groups=['regmap'])
-        _ = Signal(self, vlsu, name="pending_insn", path="ara/vlsu/nb_pending_insn",
-                   groups=['regmap'])
-        for i in range(0, self.get_property('vu/nb_ports', int)):
-            port = Signal(self, vlsu, name=f"port_{i}", path=f"ara/vlsu/port_{i}/addr",
-                          groups=['regmap'])
-            _ = Signal(self, port, name="size", path=f"ara/vlsu/port_{i}/size",
-                       groups=['regmap'])
-            _ = Signal(self, port, name="is_write", path=f"ara/vlsu/port_{i}/is_write",
-                       display=DisplayPulse(), groups=['regmap'])
+        _ = Signal(self, vlsu, name="pending_insn", path="ara/vlsu/nb_pending_insn", groups=['regmap'])
+        _ = Signal(self, vlsu, name="addr", path="ara/vlsu/addr", groups=['regmap'])
+        _ = Signal(self, vlsu, name="size", path="ara/vlsu/size", groups=['regmap'])
+        _ = Signal(self, vlsu, name="is_write", path="ara/vlsu/is_write", display=DisplayPulse(), groups=['regmap'])
 
         vfpu = Signal(self, ara, name='vfpu', path='ara/vfpu/label', groups=['regmap'],
                       display=DisplayStringBox())
