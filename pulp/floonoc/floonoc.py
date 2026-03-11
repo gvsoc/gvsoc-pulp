@@ -55,7 +55,8 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         before the source output queue is stalled.
     """
     def __init__(self, parent: gvsoc.systree.Component, name, narrow_width: int, wide_width:int,
-            dim_x: int, dim_y:int, ni_outstanding_reqs: int=8, router_input_queue_size: int=2):
+            dim_x: int, dim_y:int, ni_outstanding_reqs: int=8, router_input_queue_size: int=2,
+            is_2d_mesh: bool=True, nb_nodes: int=0, router_degrees: int=5):
         super().__init__(parent, name)
 
         self.add_sources([
@@ -73,6 +74,12 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         self.add_property('dim_x', dim_x)
         self.add_property('dim_y', dim_y)
         self.add_property('router_input_queue_size', router_input_queue_size)
+        
+        # Support for flexible topologies
+        self.add_property('is_2d_mesh', is_2d_mesh)
+        self.add_property('nb_nodes', nb_nodes)
+        self.add_property('router_degrees', router_degrees)
+        #How exactly are we going to be defining the connections
 
     def __add_mapping(self, name: str, base: int, size: int, x: int, y: int, remove_offset:int =0):
         self.get_property('mappings')[name] =  {'base': base, 'size': size, 'x': x, 'y': y, 'remove_offset':remove_offset}
@@ -103,6 +110,43 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
             Y position of the network interface in the grid
         """
         self.get_property('network_interfaces').append([x, y])
+
+    # Support for flexible topologies, boilerplate for now
+    def add_router_node(self, node_id: int):
+        """Instantiate a router for flexible topology.
+
+        Parameters
+        ----------
+        node_id: int
+            ID of the router node
+        """
+        if self.get_property('is_2d_mesh'):
+            raise RuntimeError("Cannot add router node in 2D mesh mode")
+        pass
+
+        self.get_property('routers').append([node_id]) #Would be the idea
+
+    def add_network_interface_node(self, node_id: int):
+        """Instantiate a network interface for flexible topology.
+
+        Parameters
+        ----------
+        node_id: int
+            ID of the network interface node
+        """
+        if self.get_property('is_2d_mesh'):
+            raise RuntimeError("Cannot add NI node in 2D mesh mode")
+        pass
+
+        self.get_property('network_interfaces').append([node_id]) #Would be the idea
+        
+
+
+    def add_route(self, src_node_id: int, dest_node_id: int, next_node_id: int): ##
+        """Add a route for flexible topology."""
+        if self.get_property('is_2d_mesh'):
+            raise RuntimeError("Cannot add route in 2D mesh mode")
+        pass
 
     def o_NARROW_MAP(self, itf: gvsoc.systree.SlaveItf, base: int, size: int,
             x: int, y: int, name: str=None, rm_base: bool=False, remove_offset:int =0):
@@ -231,7 +275,7 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
 
 
 
-class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
+class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide): #Not going to be touching this for now
     """FlooNoc instance for a grid of clusters
 
     This instantiates a FlooNoc 2D mesh for a grid of clusters.
