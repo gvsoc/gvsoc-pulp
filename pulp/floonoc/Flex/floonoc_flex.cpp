@@ -20,9 +20,9 @@
  * Jonas Martin, ETH (martinjo@student.ethz.ch)
  */
 
-#include "floonoc.hpp"
-#include "floonoc_network_interface.hpp"
-#include "floonoc_router.hpp"
+#include "floonoc_flex.hpp"
+#include "floonoc_network_interface_flex.hpp"
+#include "floonoc_router_flex.hpp"
 #include <vp/itf/io.hpp>
 #include <vp/vp.hpp>
 
@@ -32,24 +32,12 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
     // Get properties from generator
     this->wide_width = get_js_config()->get("wide_width")->get_int();
     this->narrow_width = get_js_config()->get("narrow_width")->get_int();
-    this->dim_x = get_js_config()->get_int("dim_x");
-    this->dim_y = get_js_config()->get_int("dim_y");
+    this->node_id = get_js_config()->get_int("node_id");
     this->router_input_queue_size =
         get_js_config()->get_int("router_input_queue_size");
 
-    js::Config *is_2d_mesh_conf = get_js_config()->get("is_2d_mesh");
-    this->is_2d_mesh = is_2d_mesh_conf ? is_2d_mesh_conf->get_bool() : true;
-
-    if (!this->is_2d_mesh)
-    {
-        js::Config *nb_nodes_conf = get_js_config()->get("nb_nodes");
-        this->nb_nodes = nb_nodes_conf ? nb_nodes_conf->get_int() : 0;
-
-        // Flex topology implemented from here
-        return;
-    }
-
     // Reserve the array for the target. We may have one target at each node.
+    //
     this->itf_names.resize(this->dim_x * this->dim_y);
 
     // Go through the mappings to create one master IO interface for each target
@@ -70,7 +58,7 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
             uint64_t base = config->get_uint("base");
             uint64_t size = config->get_uint("size");
             uint64_t remove_offset = config->get_uint("remove_offset");
-            int x = config->get_int("x");
+            int x = config->get_int("x"); //
             int y = config->get_int("y");
 
             if (size > 0)
@@ -79,7 +67,7 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
                 // target position
                 this->entries[id].base = base;
                 this->entries[id].size = size;
-                this->entries[id].x = x;
+                this->entries[id].x = x; //
                 this->entries[id].y = y;
                 this->entries[id].remove_offset = remove_offset;
             }
@@ -88,7 +76,7 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
             {
                 // Once a request reaches the right position, the target will be
                 // retrieved through this array indexed by the position
-                this->itf_names[y * this->dim_x + x] = mapping.first;
+                this->itf_names[y * this->dim_x + x] = mapping.first; //
 
                 this->trace.msg(
                     vp::Trace::LEVEL_DEBUG,
@@ -101,7 +89,7 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
         }
     }
 
-    // Create the array of networks interfaces
+    // Create the array of networks interfaces //TODO
     this->network_interfaces.resize(this->dim_x * this->dim_y);
     js::Config *network_interfaces = get_js_config()->get("network_interfaces");
     if (network_interfaces != NULL)
@@ -120,7 +108,7 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
         }
     }
 
-    // Create the array of routers
+    // Create the array of routers //TODO
     this->req_routers.resize(this->dim_x * this->dim_y);
     this->rsp_routers.resize(this->dim_x * this->dim_y);
     this->wide_routers.resize(this->dim_x * this->dim_y);
@@ -137,7 +125,7 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
                 vp::Trace::LEVEL_DEBUG,
                 "Adding routers (req, rsp and wide) (x: %d, y: %d)\n", x, y);
 
-            this->req_routers[y * this->dim_x + x] = new Router(
+            this->req_routers[y * this->dim_x + x] = new Router( // TODOs
                 this, "req_router_", x, y, this->router_input_queue_size);
             this->rsp_routers[y * this->dim_x + x] = new Router(
                 this, "rsp_router_", x, y, this->router_input_queue_size);
@@ -168,7 +156,7 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
         }
     }
 
-    for (int x = 0; x < this->dim_x; x++)
+    for (int x = 0; x < this->dim_x; x++) // Aaaand all of this
     {
         for (int y = 0; y < this->dim_y; y++)
         {
@@ -239,6 +227,7 @@ FlooNoc::~FlooNoc()
     }
 }
 
+// TODOS: below here
 FloonocNode *FlooNoc::get_router_neighbour(std::vector<Router *> &routers,
                                            int x, int y)
 {
