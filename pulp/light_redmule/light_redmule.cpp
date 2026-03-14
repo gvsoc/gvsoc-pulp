@@ -97,6 +97,7 @@ public:
 
 // private: ? why not private?????
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
+    static vp::IoReqStatus req_v2(vp::Block *__this, vp::IoReq *req);
     // Method for offload interface, called when the core is offloading an instruction
     static void offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *insn);
     //static void offload_grant(vp::Block *__this, IssOffloadInsnGrant<iss_reg_t> *result);
@@ -122,6 +123,7 @@ public:
 
     vp::Trace           trace;
     vp::IoSlave         input_itf;
+    vp::IoSlave         input_itf_v2;
     // Interface from which the instructions are received from the core
     vp::WireSlave<IssOffloadInsn<uint32_t> *> offload_itf;
     // Interface for granting previously stalled redmule offload
@@ -224,6 +226,8 @@ LightRedmule::LightRedmule(vp::ComponentConf &config)
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
     this->input_itf.set_req_meth(&LightRedmule::req);
     this->new_slave_port("input", &this->input_itf);
+    this->input_itf_v2.set_req_meth(&LightRedmule::req_v2);
+    this->new_slave_port("input_v2", &this->input_itf_v2);
     this->new_master_port("tcdm", &this->tcdm_itf);
 
     // Declare offload slave interface where instructions will be offloaded
@@ -946,6 +950,118 @@ vp::IoReqStatus LightRedmule::req(vp::Block *__this, vp::IoReq *req)
             case 0x50: { //REDMULE_MCFG1_PTR
                 _this->n_size=value & 0xFFFF;
                 _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set N size %d)\n", _this->n_size);
+                break;
+            }
+            case 0x54: {
+                _this->compute_able = _this->op_foramt_parser((value == 0x480)? 9:0); //the marith mapping between reg-if and offload-if is different... WHY?
+                _this->elem_size = (_this->compute_able < 4)? 2:1;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] marith 0x%x, compute_able 0x%x, elem_size %d)\n", value,_this->compute_able,_this->elem_size);
+                break;
+            }
+            default:
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] write to INVALID address\n");
+        }
+    }
+    else {
+        switch (offset) {
+            case 0x00:
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] read to INVALID address\n");
+                break;
+            case 0x0C: {
+                int32_t done_id_r;
+                if ((_this->redmule_query == NULL) && (_this->state.get() == IDLE)) {
+                    done_id_r =  0x00;
+                    memcpy((void *)data, (void *)&done_id_r, size);
+                }
+                else {
+                    done_id_r =  0x01;
+                    memcpy((void *)data, (void *)&done_id_r, size);
+                }
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] read status reg 0x%x\n",done_id_r);
+                break;
+            }
+            default:
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] read to INVALID address\n");
+        }
+    }
+    return vp::IO_REQ_OK;
+}
+
+vp::IoReqStatus LightRedmule::req_v2(vp::Block *__this, vp::IoReq *req)
+{
+    LightRedmule *_this = (LightRedmule *)__this;
+
+    uint64_t offset = req->get_addr();
+    uint8_t *data = req->get_data();
+    uint64_t size = req->get_size();
+    bool is_write = req->get_is_write();
+
+    //_this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] access (offset: 0x%x, size: 0x%x, is_write: %d, data:%x)\n", offset, size, is_write, *(uint32_t *)data);
+
+    if (is_write == 1) {
+        uint32_t value = *(uint32_t *)data;
+        switch (offset) {
+            case 0x00: {
+                if ((_this->redmule_query == NULL) && (_this->state.get() == IDLE)) {
+                    /************************
+                    *  Synchronize Trigger  *
+                    ************************/
+                    //Sanity Check
+                    _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] redmule configuration (M-N-K): %d, %d, %d. Compute able is %d\n", _this->m_size, _this->n_size, _this->k_size,_this->compute_able);
+                    if ((_this->m_size == 0)||(_this->n_size == 0)||(_this->k_size == 0))
+                    {
+                        _this->trace.fatal("[LightRedmule] INVALID redmule configuration (M-N-K): %d, %d, %d\n", _this->m_size, _this->n_size, _this->k_size);
+                        return vp::IO_REQ_OK;
+                    }
+
+                    //Initilaize redmule meta data
+                    _this->init_redmule_meta_data();
+
+                    
+
+                    //Trigger FSM
+                    _this->state.set(PRELOAD);
+                    _this->tcdm_block_total = _this->get_preload_access_block_number();
+                    _this->fsm_counter      = 0;
+                    _this->fsm_timestamp    = 0;
+                    _this->timer_start      = _this->time.get_time();
+                    _this->cycle_start      = _this->clock.get_cycles();
+                    _this->event_enqueue(_this->fsm_event, 1);
+
+                    //Save Query
+                    //_this->redmule_query = req;
+                }
+                break;
+            }
+            case 0x20: { //REDMULE_MCFG0_PTR
+                _this->m_size=value & 0xFFFF;
+                _this->k_size=value >> 16;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set mcfg_reg0 -- M size %d, Set K size %d)\n", _this->m_size,_this->k_size);
+                break;
+            }
+            case 0x24: { //REDMULE_MCFG1_PTR
+                _this->n_size=value & 0xFFFF;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set mcfg_reg1 -- N size %d)\n", _this->n_size);
+                break;
+            }
+            case 0x28: { //REDMULE_MCFG2_PTR
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set mcfg_reg2 -- currently not used\n");
+                break;
+            }
+            case 0x2C: {
+                _this->x_addr = value;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set X addr 0x%x)\n", _this->x_addr);
+                break;
+            }
+            case 0x30: {
+                _this->w_addr = value;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set W addr 0x%x)\n", _this->w_addr);
+                break;
+            }
+            case 0x34: {
+                _this->y_addr = value;
+                _this->z_addr = _this->y_addr;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set Y addr 0x%x, Set Z addr 0x%x)\n", _this->y_addr,_this->z_addr);
                 break;
             }
             case 0x54: {

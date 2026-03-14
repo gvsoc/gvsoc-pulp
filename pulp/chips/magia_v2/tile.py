@@ -270,7 +270,7 @@ class MagiaV2Tile(gvsoc.systree.Component):
         cv32_i_cache.o_REFILL(tile_xbar.i_INPUT())
 
         # Bind obi xbar so that it can communicate with RedMule
-        obi_xbar.o_MAP(redmule.i_INPUT(), name=f'redmule-mm-{tid}-mem',
+        obi_xbar.o_MAP(redmule.i_INPUT_V2(), name=f'redmule-mm-{tid}-mem',
                        base=MagiaArch.REDMULE_CTRL_ADDR_START,
                        size=MagiaArch.REDMULE_CTRL_SIZE, rm_base=True)
         
