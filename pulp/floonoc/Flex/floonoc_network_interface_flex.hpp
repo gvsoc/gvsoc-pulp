@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include "floonoc.hpp"
+#include "floonoc_flex.hpp"
 #include <list>
 #include <vp/vp.hpp>
 
@@ -51,6 +51,11 @@ class NetworkQueue : public FloonocNode
     void unstall_queue(int from_x, int from_y) override;
     bool handle_request(FloonocNode *node, vp::IoReq *req, int from_x,
                         int from_y) override;
+
+    // Support for flexible topologies
+    void unstall_queue_node(int from_id) override;
+    bool handle_request_node(FloonocNode *node, vp::IoReq *req,
+                             int from_id) override;
 
     NetworkInterface &ni;
     Router *router;
@@ -86,6 +91,9 @@ class NetworkInterface : public FloonocNode
     static constexpr int REQ_WIDE = 1;
 
     NetworkInterface(FlooNoc *noc, int x, int y, std::string itf_name);
+
+    // Support for flexible topologies
+    NetworkInterface(FlooNoc *noc, int node_id, std::string itf_name);
 
     void reset(bool active);
 
