@@ -17,6 +17,7 @@
 from enum import IntEnum
 import gvsoc.systree
 
+"""
 class FlooNocDirection(IntEnum):
     RIGHT = -4
     LEFT = -3
@@ -25,16 +26,20 @@ class FlooNocDirection(IntEnum):
     SELF = 1
     DIR_1 = 2
     DIR_2 = 3
+""" 
+class FlooNocDirection(IntEnum):
+    DIR_LOCAL = 1
+    DIR_1 = 2
+    DIR_2 = 3
+    DIR_3 = 4
+    DIR_4 = 5
+    DIR_5 = 6
+    DIR_6 = 7
 
-class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component): #Rename this and rewrite description to something generic
-    """FlooNoc instance for a 2D mesh
+class FlooNocFlex(gvsoc.systree.Component):
+    """FlooNoc instance for a flexible topology
 
-    This instantiates a FlooNoc 2D mesh for a grid of clusters.
-    It contains:
-     - a central part made of one cluster, one router and one network interface at each node
-     - a border of targets
-    If the grid contains X by Y clusters, the whole grid is X+2 by Y+2 as there are borders in each
-    direction for the targets.
+    This instantiates a Flexible Floonoc Topology
 
     Attributes
     ----------
@@ -44,11 +49,11 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component): #Rename this and rewrite
         The name of the component within the parent space.
     width: int
         The width in bytes of the interconnect. This gives the number of bytes/cycles each node can
-        route.
-    dim_x: int
-        The X dimension of the grid. This should also include targets on the borders.
-    dim_y: int
-        The Y dimension of the grid. This should also include targets on the borders.
+        route. 
+    nb_nodes: int
+        Number of nodes in the network.
+    router_degrees: int
+        Degree of ALL routers in the network. For different degrees, leave empty.
     ni_outstanding_reqs: int
         Number of outstanding requests each network interface can inject to the routers. This should
         be increased when the size of the noc increases.
@@ -57,8 +62,7 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component): #Rename this and rewrite
         before the source output queue is stalled.
     """
     def __init__(self, parent: gvsoc.systree.Component, name, narrow_width: int, wide_width:int,
-            ni_outstanding_reqs: int=8, router_input_queue_size: int=2, nb_nodes: int=0, 
-            router_degrees: int=5):
+            router_degrees: int=0, nb_nodes: int=0, ni_outstanding_reqs: int=8, router_input_queue_size: int=2):
         super().__init__(parent, name)
 
         self.add_sources([
@@ -77,7 +81,8 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component): #Rename this and rewrite
         
         # Support for flexible topologies
         self.add_property('nb_nodes', nb_nodes)
-        self.add_property('router_degrees', router_degrees)
+        self.add_property('links', [])
+        self.add_property('router_degrees', router_degrees)        
 
     def __add_mapping(self, name: str, base: int, size: int, node_id: int, remove_offset:int =0):
         self.get_property('mappings')[name] =  {'base': base, 'size': size, 'node_id': node_id, 'remove_offset':remove_offset}
@@ -105,29 +110,17 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component): #Rename this and rewrite
         """
         self.get_property('network_interfaces').append([node_id])
 
-    def add_router_node(self, node_id: int):
-        """Instantiate a router for flexible topology.
+    def add_link(self, src_node_id: int, dest_node_id: int):
+        """Add a link between two nodes
 
         Parameters
         ----------
-        node_id: int
-            ID of the router node
+        src_node_id: int
+            ID of the source node
+        dest_node_id: int
+            ID of the destination node
         """
-        self.get_property('routers').append([node_id])
-
-    def add_network_interface_node(self, node_id: int):
-        """Instantiate a network interface for flexible topology.
-
-        Parameters
-        ----------
-        node_id: int
-            ID of the network interface node
-        """
-        self.get_property('network_interfaces').append([node_id])
-
-    def add_route(self, src_node_id: int, dest_node_id: int, next_node_id: int):
-        """Add a route for flexible topology."""
-        pass
+        self.get_property('links').append([src_node_id, dest_node_id])
 
     def o_NARROW_MAP(self, itf: gvsoc.systree.SlaveItf, base: int, size: int,
         node_id: int, name: str=None, rm_base: bool=False, remove_offset:int =0):

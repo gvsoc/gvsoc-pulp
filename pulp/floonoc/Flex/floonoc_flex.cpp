@@ -40,6 +40,10 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
     //
     this->itf_names.resize(this->dim_x * this->dim_y);
 
+    this->nb_nodes = get_js_config()->get_int("nb_nodes");
+    this->links = get_js_config()->get_list("links");
+    this->router_degrees = get_js_config()->get_int("router_degrees");
+
     // Go through the mappings to create one master IO interface for each target
     js::Config *mappings = get_js_config()->get("mappings");
     if (mappings != NULL)
@@ -58,8 +62,7 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
             uint64_t base = config->get_uint("base");
             uint64_t size = config->get_uint("size");
             uint64_t remove_offset = config->get_uint("remove_offset");
-            int x = config->get_int("x"); //
-            int y = config->get_int("y");
+            int node_id = config->get_int("node_id");
 
             if (size > 0)
             {
@@ -67,12 +70,11 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
                 // target position
                 this->entries[id].base = base;
                 this->entries[id].size = size;
-                this->entries[id].x = x; //
-                this->entries[id].y = y;
+                this->entries[id].node_id = node_id;
                 this->entries[id].remove_offset = remove_offset;
             }
 
-            if (x >= 0 && y >= 0)
+            if (node_id >= 0)
             {
                 // Once a request reaches the right position, the target will be
                 // retrieved through this array indexed by the position
@@ -90,47 +92,51 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
     }
 
     // Create the array of networks interfaces //TODO
-    this->network_interfaces.resize(this->dim_x * this->dim_y);
+    this->network_interfaces.resize(this->nb_nodes);
     js::Config *network_interfaces = get_js_config()->get("network_interfaces");
     if (network_interfaces != NULL)
     {
         for (js::Config *network_interface : network_interfaces->get_elems())
         {
-            int x = network_interface->get_elem(0)->get_int();
-            int y = network_interface->get_elem(1)->get_int();
+            int node_id = network_interface->get_elem(0)->get_int();
+            // int ... for other variables
 
             this->trace.msg(vp::Trace::LEVEL_DEBUG,
-                            "Adding network interface (x: %d, y: %d)\n", x, y);
+                            "Adding network interface (node_id: %d)\n",
+                            node_id);
 
-            this->network_interfaces[y * this->dim_x + x] =
-                new NetworkInterface(this, x, y,
-                                     this->itf_names[y * this->dim_x + x]);
+            this->network_interfaces[node_id] =
+                new NetworkInterface(this, node_id, this->itf_names[node_id]);
         }
     }
 
     // Create the array of routers //TODO
-    this->req_routers.resize(this->dim_x * this->dim_y);
-    this->rsp_routers.resize(this->dim_x * this->dim_y);
-    this->wide_routers.resize(this->dim_x * this->dim_y);
+    this->req_routers.resize(this->nb_nodes);
+    this->rsp_routers.resize(this->nb_nodes);
+    this->wide_routers.resize(this->nb_nodes);
 
     js::Config *routers = get_js_config()->get("routers");
     if (routers != NULL)
     {
         for (js::Config *router : routers->get_elems())
         {
-            int x = router->get_elem(0)->get_int();
-            int y = router->get_elem(1)->get_int();
+            int node_id = router->get_elem(0)->get_int();
+            int degree = router->get_elem(1)->get_int();
+            // int ... for other variables
 
             this->trace.msg(
                 vp::Trace::LEVEL_DEBUG,
-                "Adding routers (req, rsp and wide) (x: %d, y: %d)\n", x, y);
+                "Adding routers (req, rsp and wide) (node_id: %d)\n", node_id);
 
-            this->req_routers[y * this->dim_x + x] = new Router( // TODOs
-                this, "req_router_", x, y, this->router_input_queue_size);
-            this->rsp_routers[y * this->dim_x + x] = new Router(
-                this, "rsp_router_", x, y, this->router_input_queue_size);
-            this->wide_routers[y * this->dim_x + x] = new Router(
-                this, "wide_router_", x, y, this->router_input_queue_size);
+            this->req_routers[node_id] = new Router( // TODOs
+                this, "req_router_", node_id, degree,
+                this->router_input_queue_size);
+            this->rsp_routers[node_id] =
+                new Router(this, "rsp_router_", node_id, degree,
+                           this->router_input_queue_size);
+            this->wide_routers[node_id] =
+                new Router(this, "wide_router_", node_id, degree,
+                           this->router_input_queue_size);
         }
 
         for (Router *router : this->req_routers)
@@ -229,41 +235,35 @@ FlooNoc::~FlooNoc()
 
 // TODOS: below here
 FloonocNode *FlooNoc::get_router_neighbour(std::vector<Router *> &routers,
-                                           int x, int y)
+                                           int node_id)
 {
-    int index = y * this->dim_x + x;
-    Router *router = routers[index];
+    Router *router = routers[node_id]; // Change this to look for router with
+                                       // specific node_id instead of index
     if (router)
     {
         return router;
     }
-    return this->network_interfaces[index];
+    return this->network_interfaces[node_id];
 }
 
 void FlooNoc::router_init_neighbours(Router *router,
                                      std::vector<Router *> &routers)
 {
-    router->set_neighbour(
-        FlooNoc::DIR_RIGHT,
-        this->get_router_neighbour(routers, router->x + 1, router->y));
-    router->set_neighbour(
-        FlooNoc::DIR_LEFT,
-        this->get_router_neighbour(routers, router->x - 1, router->y));
-    router->set_neighbour(
-        FlooNoc::DIR_UP,
-        this->get_router_neighbour(routers, router->x, router->y + 1));
-    router->set_neighbour(
-        FlooNoc::DIR_DOWN,
-        this->get_router_neighbour(routers, router->x, router->y - 1));
-    router->set_neighbour(
-        FlooNoc::DIR_LOCAL,
-        this->network_interfaces[router->y * this->dim_x + router->x]);
-}
-
-void FlooNoc::router_init_neighbours_flex(Router *router,
-                                          std::vector<Router *> &routers)
-{
-    // Have to find a way to make an abstraction of the floonoc directionbs
+    router->set_neighbour(FlooNoc::DIR_LOCAL,
+                          this->network_interfaces[node_id]);
+    for (int i = 0; i < links.size(); i++)
+    {
+        if (links[i][0] == node_id)
+        {
+            router->set_neighbour(FlooNoc::DIR_1, this->get_router_neighbour(
+                                                      routers, links[i][1]));
+        }
+        else if (links[i][1] == node_id)
+        {
+            router->set_neighbour(FlooNoc::DIR_2, this->get_router_neighbour(
+                                                      routers, links[i][0]));
+        }
+    }
 }
 
 void FlooNoc::reset(bool active) {}

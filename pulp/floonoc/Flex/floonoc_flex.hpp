@@ -147,17 +147,12 @@ class FlooNoc : public vp::Component
     // on the edges
     int dim_y;
 
-    int node_id;
+    int nb_nodes;
 
   private:
-    FloonocNode *get_router_neighbour(std::vector<Router *> &routers, int x,
-                                      int y);
-    FloonocNode *get_router_neighbour_flex(std::vector<Router *> &routers,
-                                           int node_id);
+    FloonocNode *get_router_neighbour(std::vector<Router *> &routers,
+                                      int node_id);
     void router_init_neighbours(Router *router, std::vector<Router *> &routers);
-    void router_init_neighbours_flex(Router *router,
-                                     std::vector<Router *> &routers);
-    FloonocNode *get_node(std::vector<Router *> &routers, int x, int y);
 
     // This block trace
     vp::Trace trace;
