@@ -26,7 +26,8 @@
 #include <vp/itf/io.hpp>
 #include <vp/vp.hpp>
 
-Router::Router(FlooNoc *noc, std::string name, int node_id, int queue_size)
+Router::Router(FlooNoc *noc, std::string name, int node_id, int num_queues,
+               int queue_size)
     : FloonocNode(noc, name + std::to_string(x) + "_" + std::to_string(y)),
       fsm_event(this, &Router::fsm_handler),
       signal_req(*this, "req", 64, vp::SignalCommon::ResetKind::HighZ),
@@ -43,13 +44,12 @@ Router::Router(FlooNoc *noc, std::string name, int node_id, int queue_size)
     this->traces.new_trace("trace", &trace, vp::DEBUG);
 
     this->noc = noc;
-    this->x = x;
-    this->y = y;
     this->node_id = node_id;
+    this->num_queues = num_queues;
     this->queue_size = queue_size;
 
     // Create a queue for each direction (N, E, S, W, local)
-    for (int i = 0; i < 5; i++)
+    for (int i = 0; i < this->num_queues; i++)
     {
         this->input_queues[i] = new RouterQueue(
             this, "input_queue_" + std::to_string(i), &this->fsm_event);
