@@ -105,11 +105,6 @@ class NetworkInterface : public FloonocNode
     int get_x();
     // Can be used to retrieve the y coordinate of the network interface
     int get_y();
-    // Support for flexible topologies
-    int get_id();
-    void unstall_queue_node(int from_id) override;
-    bool handle_request_node(FloonocNode *node, vp::IoReq *req,
-                             int from_id) override;
     // This gets called by the top noc to grant a a request denied by a target
     void grant(vp::IoReq *req);
     void set_router(int nw, Router *router);
@@ -143,8 +138,6 @@ class NetworkInterface : public FloonocNode
     // Y position of this network interface in the grid
     int y;
 
-    // Support for flexible topologies
-    int node_id;
     vp::IoMaster wide_output_itf;
     vp::IoMaster narrow_output_itf;
     // Input IO interface where wide incoming bursts are injected into the

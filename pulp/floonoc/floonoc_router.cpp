@@ -57,8 +57,6 @@ Router::Router(FlooNoc *noc, std::string name, int x, int y, int queue_size)
     }
 }
 
-// Going to need a new router here
-
 Router::~Router()
 {
     for (int i = 0; i < 5; i++)
@@ -402,48 +400,4 @@ RouterQueue::RouterQueue(vp::Block *parent, std::string name,
                          vp::ClockEvent *ready_event)
     : queue(parent, name, ready_event)
 {
-}
-
-// Support for flexible topologies
-Router::Router(FlooNoc *noc, std::string name, int node_id, int queue_size,
-               int nb_ports)
-    : FloonocNode(noc, name + std::to_string(node_id)),
-      fsm_event(this, &Router::fsm_handler),
-      signal_req(*this, "req", 64, vp::SignalCommon::ResetKind::HighZ),
-      signal_req_size(*this, "req_size", 64,
-                      vp::SignalCommon::ResetKind::HighZ),
-      signal_req_is_write(*this, "req_is_write", 1,
-                          vp::SignalCommon::ResetKind::HighZ)
-{
-    this->traces.new_trace("trace", &trace, vp::DEBUG);
-
-    this->noc = noc;
-    this->node_id = node_id;
-    this->queue_size = queue_size;
-    this->nb_ports = nb_ports;
-
-    for (int i = 0; i < nb_ports; i++)
-    {
-        this->input_queues_node.push_back(new RouterQueue(
-            this, "input_queue_" + std::to_string(i), &this->fsm_event));
-        this->output_nodes_node.push_back(NULL);
-        vp::Signal<bool> *stall_sig = new vp::Signal<bool>(
-            *this, "stalled_queue_" + std::to_string(i), 1);
-        *stall_sig = false;
-        this->stalled_queues_node.push_back(stall_sig);
-    }
-}
-
-bool Router::handle_request_node(FloonocNode *node, vp::IoReq *req, int from_id)
-{
-    return false;
-}
-
-void Router::unstall_queue_node(int from_id) {}
-
-void Router::stall_queue_node(int from_id) {}
-
-void Router::set_neighbour_node(int out_port, FloonocNode *node)
-{
-    this->output_nodes_node[out_port] = node;
 }
