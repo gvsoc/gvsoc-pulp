@@ -37,18 +37,6 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
     this->router_input_queue_size =
         get_js_config()->get_int("router_input_queue_size");
 
-    js::Config *is_2d_mesh_conf = get_js_config()->get("is_2d_mesh");
-    this->is_2d_mesh = is_2d_mesh_conf ? is_2d_mesh_conf->get_bool() : true;
-
-    if (!this->is_2d_mesh)
-    {
-        js::Config *nb_nodes_conf = get_js_config()->get("nb_nodes");
-        this->nb_nodes = nb_nodes_conf ? nb_nodes_conf->get_int() : 0;
-
-        // Flex topology implemented from here
-        return;
-    }
-
     // Reserve the array for the target. We may have one target at each node.
     this->itf_names.resize(this->dim_x * this->dim_y);
 
@@ -269,12 +257,6 @@ void FlooNoc::router_init_neighbours(Router *router,
     router->set_neighbour(
         FlooNoc::DIR_LOCAL,
         this->network_interfaces[router->y * this->dim_x + router->x]);
-}
-
-void FlooNoc::router_init_neighbours_flex(Router *router,
-                                          std::vector<Router *> &routers)
-{
-    // Have to find a way to make an abstraction of the floonoc directionbs
 }
 
 void FlooNoc::reset(bool active) {}
