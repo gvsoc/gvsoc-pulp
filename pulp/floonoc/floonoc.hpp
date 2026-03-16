@@ -35,14 +35,6 @@ class FloonocNode : public vp::Block
     virtual void unstall_queue(int from_x, int from_y) = 0;
     virtual bool handle_request(FloonocNode *node, vp::IoReq *req, int from_x,
                                 int from_y) = 0;
-
-    // Support for flexible topologies
-    virtual void unstall_queue_node(int from_id) {}
-    virtual bool handle_request_node(FloonocNode *node, vp::IoReq *req,
-                                     int from_id)
-    {
-        return false;
-    }
 };
 
 /**
@@ -136,10 +128,6 @@ class FlooNoc : public vp::Component
     uint64_t wide_width;
     uint64_t narrow_width;
 
-    // Properties for generic topology support
-    bool is_2d_mesh;
-    int nb_nodes;
-
     // X dimension of the network. This includes both routers but also targets
     // on the edges
     int dim_x;
@@ -150,11 +138,7 @@ class FlooNoc : public vp::Component
   private:
     FloonocNode *get_router_neighbour(std::vector<Router *> &routers, int x,
                                       int y);
-    FloonocNode *get_router_neighbour_flex(std::vector<Router *> &routers,
-                                           int node_id);
     void router_init_neighbours(Router *router, std::vector<Router *> &routers);
-    void router_init_neighbours_flex(Router *router,
-                                     std::vector<Router *> &routers);
     FloonocNode *get_node(std::vector<Router *> &routers, int x, int y);
 
     // This block trace
