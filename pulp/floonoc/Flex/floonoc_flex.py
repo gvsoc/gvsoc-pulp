@@ -110,7 +110,7 @@ class FlooNocFlex(gvsoc.systree.Component):
         """
         self.get_property('network_interfaces').append([node_id])
 
-    def add_link(self, src_node_id: int, dest_node_id: int):
+    def add_link(self, src_node_id: int, dest_node_id: int, latency: int = 1):
         """Add a link between two nodes
 
         Parameters
@@ -119,8 +119,10 @@ class FlooNocFlex(gvsoc.systree.Component):
             ID of the source node
         dest_node_id: int
             ID of the destination node
+        latency: int
+            Latency of the link in cycles
         """
-        self.get_property('links').append([src_node_id, dest_node_id])
+        self.get_property('links').append([src_node_id, dest_node_id, latency])
 
     def o_NARROW_MAP(self, itf: gvsoc.systree.SlaveItf, base: int, size: int,
         node_id: int, name: str=None, rm_base: bool=False, remove_offset:int =0):
