@@ -124,11 +124,13 @@ class FlooNoc : public vp::Component
 
     // The following constants gives the index in the queue array of the queue
     // associated to each direction
-    static constexpr int DIR_RIGHT = 0;
-    static constexpr int DIR_LEFT = 1;
-    static constexpr int DIR_UP = 2;
-    static constexpr int DIR_DOWN = 3;
-    static constexpr int DIR_LOCAL = 4;
+    static constexpr int DIR_LOCAL = 1;
+    static constexpr int DIR_1 = 2;
+    static constexpr int DIR_2 = 3;
+    static constexpr int DIR_3 = 4;
+    static constexpr int DIR_4 = 5;
+    static constexpr int DIR_5 = 6;
+    static constexpr int DIR_6 = 7;
 
     // Width in bytes of the noc. This is used to split incoming bursts into
     // internal requests of this width so that the bandwidth corresponds to the
@@ -137,17 +139,9 @@ class FlooNoc : public vp::Component
     uint64_t narrow_width;
 
     // Properties for generic topology support
-    bool is_2d_mesh;
     int nb_nodes;
-
-    // X dimension of the network. This includes both routers but also targets
-    // on the edges
-    int dim_x;
-    // Y dimension of the network. This includes both routers but also targets
-    // on the edges
-    int dim_y;
-
-    int nb_nodes;
+    int router_degrees;
+    std::vector<std::vector<int>> links;
 
   private:
     FloonocNode *get_router_neighbour(std::vector<Router *> &routers,
