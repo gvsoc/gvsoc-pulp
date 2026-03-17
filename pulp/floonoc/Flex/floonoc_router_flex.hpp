@@ -58,25 +58,10 @@ class Router : public FloonocNode
                         int from_y) override;
     // Called by other routers or NI to unstall an output queue after an input
     // queue became available
-    void unstall_queue(int from_x, int from_y) override;
+    void unstall_queue(int from_node) override;
     // Called by NI to stall the queues in case no more request should be sent
     // to NI
-    void stall_queue(int from_x, int from_y);
-    void set_neighbour(int dir, FloonocNode *node);
-
-    // Support for flexible topologies
-    Router(FlooNoc *noc, std::string name, int node_id, int queue_size,
-           int nb_ports);
-    bool handle_request_node(FloonocNode *node, vp::IoReq *req,
-                             int from_id) override;
-    void unstall_queue_node(int from_id) override;
-    void stall_queue_node(int from_id);
-    void set_neighbour_node(int out_port, FloonocNode *node);
-
-    // X position of this router in the grid
-    int x;
-    // Y position of this router in the grid
-    int y;
+    void stall_queue(int from_node);
 
     // Node ID for flexible topologies
     int node_id;
@@ -87,13 +72,13 @@ class Router : public FloonocNode
     // checked to see if a request should be handled.
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
     // Get the position of the next router which should handle a request.
-    void get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_y);
+    void get_next_router_pos(int dest_node, int &next_node);
     // Get the index of the queue corresponding to a source or destination
     // position
-    int get_req_queue(int from_x, int from_y);
+    int get_req_queue(int from_node);
     // Return the source or destination position which corresponds to a source
     // or destination queue index
-    void get_pos_from_queue(int queue, int &pos_x, int &pos_y);
+    void get_node_from_queue(int queue, int &node_id);
 
     // Pointer to top
     FlooNoc *noc;
@@ -113,11 +98,6 @@ class Router : public FloonocNode
     // State of the output queues, true if it is stalled and nothing can be sent
     // to it anymore until it is unstalled.
     std::array<vp::Signal<bool>, 5> stalled_queues;
-
-    // Support for flexible topologies
-    std::vector<RouterQueue *> input_queues_node;
-    std::vector<FloonocNode *> output_nodes_node;
-    std::vector<vp::Signal<bool> *> stalled_queues_node;
 
     // Signal used for tracing router request address
     vp::Signal<uint64_t> signal_req;
