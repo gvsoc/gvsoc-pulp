@@ -56,15 +56,13 @@ void NetworkQueue::check()
     }
 }
 
-// Should be really easy to make flexible
-void NetworkQueue::unstall_queue(int from_x, int from_y)
+void NetworkQueue::unstall_queue(int from_node)
 {
     // The request which was previously denied has been granted. Unstall the
     // output queue and schedule the FSM handler to check if something has to be
     // done
     this->trace.msg(vp::Trace::LEVEL_TRACE,
-                    "Unstalling queue (position: (%d, %d), queue: %d)\n",
-                    from_x, from_y);
+                    "Unstalling queue (from node: %d)\n", from_node);
     this->stalled = false;
     this->ni.fsm_event.enqueue();
 }
@@ -99,8 +97,8 @@ void NetworkQueue::handle_rsp(vp::IoReq *req, bool is_address)
                              *(bool *)req->arg_get(FlooNoc::REQ_WIDE), false);
 }
 
-bool NetworkQueue::handle_request(FloonocNode *node, vp::IoReq *req, int from_x,
-                                  int from_y)
+bool NetworkQueue::handle_request(FloonocNode *node, vp::IoReq *req,
+                                  int from_node)
 {
     return true;
 }
@@ -166,32 +164,29 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address,
             {
                 // Be careful to not have any request which is crossing 2
                 // entries
+
+                // TODO: handle entries business
                 uint64_t max_size = entry->base + entry->size - burst_base;
                 size = std::min(max_size, size);
 
                 this->trace.msg(vp::Trace::LEVEL_TRACE,
                                 "Enqueue request to router (req: %p, base: "
                                 "0x%x, size: 0x%x, "
-                                "destination: (%d, %d))\n",
-                                router_req, burst_base, size, entry->x,
-                                entry->y);
+                                "destination: node %d)\n",
+                                router_req, burst_base, size, entry->node_id);
 
                 router_req->set_size(size);
                 router_req->set_addr(burst_base - entry->remove_offset);
                 router_req->initiator_addr = burst_base;
-                *router_req->arg_get(FlooNoc::REQ_DEST_X) =
-                    (void *)(long)entry->x;
-                *router_req->arg_get(FlooNoc::REQ_DEST_Y) =
-                    (void *)(long)entry->y;
+                *router_req->arg_get(FlooNoc::REQ_DEST_ID) =
+                    (void *)(long)entry->node_id;
             }
         }
         else
         {
             *router_req->arg_get(FlooNoc::REQ_SRC_NI) = NULL;
-            *router_req->arg_get(FlooNoc::REQ_DEST_X) =
-                *req->arg_get(FlooNoc::REQ_DEST_X);
-            *router_req->arg_get(FlooNoc::REQ_DEST_Y) =
-                *req->arg_get(FlooNoc::REQ_DEST_Y);
+            *router_req->arg_get(FlooNoc::REQ_DEST_ID) =
+                *req->arg_get(FlooNoc::REQ_DEST_ID);
             *router_req->arg_get(FlooNoc::REQ_BURST) =
                 *req->arg_get(FlooNoc::REQ_BURST);
         }
@@ -242,13 +237,12 @@ void NetworkQueue::send_router_req()
 
     // Note that the router may not grant the request if its input queue is
     // full. In this case we must stall the network interface
-    this->stalled =
-        this->router->handle_request(this, req, this->ni.x, this->ni.y);
+    this->stalled = this->router->handle_request(this, req, this->ni.node_id);
     if (this->stalled)
     {
         this->trace.msg(vp::Trace::LEVEL_TRACE,
-                        "Stalling network interface (position: (%d, %d))\n",
-                        this->ni.x, this->ni.y);
+                        "Stalling network interface (node: %d)\n",
+                        this->ni.node_id);
     }
 
     // Since we processed a burst, we need to check again in the next cycle if
@@ -259,9 +253,9 @@ void NetworkQueue::send_router_req()
     }
 }
 
-NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y,
+NetworkInterface::NetworkInterface(FlooNoc *noc, int node_id,
                                    std::string itf_name)
-    : FloonocNode(noc, "ni_" + std::to_string(x) + "_" + std::to_string(y)),
+    : FloonocNode(noc, "ni_" + std::to_string(node_id)),
       fsm_event(this, &NetworkInterface::fsm_handler),
       signal_narrow_req(*this, "narrow_req", 64),
       signal_wide_req(*this, "wide_req", 64),
@@ -271,31 +265,26 @@ NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y,
       response_queue(this, "response_queue", &this->fsm_event)
 {
     this->noc = noc;
-    this->x = x;
-    this->y = y;
+    this->node_id = node_id;
 
     this->wide_output_itf.set_resp_meth(&NetworkInterface::wide_response);
     this->wide_output_itf.set_grant_meth(&NetworkInterface::wide_grant);
-    noc->new_master_port("ni_wide_" + std::to_string(x) + "_" +
-                             std::to_string(y),
+    noc->new_master_port("ni_wide_" + std::to_string(node_id),
                          &this->wide_output_itf, this);
 
     this->narrow_output_itf.set_resp_meth(&NetworkInterface::narrow_response);
     this->narrow_output_itf.set_grant_meth(&NetworkInterface::narrow_grant);
-    noc->new_master_port("ni_narrow_" + std::to_string(x) + "_" +
-                             std::to_string(y),
+    noc->new_master_port("ni_narrow_" + std::to_string(node_id),
                          &this->narrow_output_itf, this);
 
     traces.new_trace("trace", &trace, vp::DEBUG);
 
     // Network interface input port
     this->narrow_input_itf.set_req_meth(&NetworkInterface::narrow_req);
-    noc->new_slave_port("narrow_input_" + std::to_string(x) + "_" +
-                            std::to_string(y),
+    noc->new_slave_port("narrow_input_" + std::to_string(node_id),
                         &this->narrow_input_itf, this);
     this->wide_input_itf.set_req_meth(&NetworkInterface::wide_req);
-    noc->new_slave_port("wide_input_" + std::to_string(x) + "_" +
-                            std::to_string(y),
+    noc->new_slave_port("wide_input_" + std::to_string(node_id),
                         &this->wide_input_itf, this);
 
     this->ni_outstanding_reqs =
@@ -391,11 +380,7 @@ int NetworkInterface::get_rsp_nw(bool is_wide, bool is_write)
     return is_wide ? NetworkInterface::NW_WIDE : NetworkInterface::NW_RSP;
 }
 
-int NetworkInterface::get_x() { return this->x; }
-
-int NetworkInterface::get_y() { return this->y; }
-
-void NetworkInterface::unstall_queue(int from_x, int from_y) {}
+void NetworkInterface::unstall_queue(int node_id) {}
 
 vp::IoReqStatus NetworkInterface::narrow_req(vp::Block *__this, vp::IoReq *req)
 {
@@ -468,7 +453,7 @@ vp::IoReqStatus NetworkInterface::handle_req(vp::IoReq *req)
 }
 
 bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req,
-                                      int from_x, int from_y)
+                                      int from_node)
 {
     NetworkInterface *origin_ni =
         *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);
@@ -523,10 +508,10 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req,
             vp::Trace::LEVEL_DEBUG,
             "Received request from router (req: %p, base: 0x%x, size: "
             "0x%x, isaddr: (%d), "
-            "position: (%d, %d)) origin Ni: (%d, %d)\n",
+            "position: %d origin Ni: %d)\n",
             req, req->get_addr(), req->get_size(),
-            req->get_int(FlooNoc::REQ_IS_ADDRESS), this->x, this->y,
-            origin_ni->get_x(), origin_ni->get_y());
+            req->get_int(FlooNoc::REQ_IS_ADDRESS), this->node_id,
+            origin_ni->get_id());
 
         if ((req->get_is_write() && !req->get_int(FlooNoc::REQ_IS_ADDRESS)) ||
             !req->get_is_write())
@@ -554,6 +539,7 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req,
                 if (req->get_latency() > 0)
                 {
                     this->response_queue.push_delayed(req, req->get_latency());
+                    // Can we add link delay here?
                 }
                 else
                 {
@@ -601,7 +587,7 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     {
         // If we removed a pending burst and the number of pending bursts was
         // the maximum, notify the local router that it can send another request
-        _this->routers_stalled->unstall_queue(_this->x, _this->y);
+        _this->routers_stalled->unstall_queue(_this->node_id);
         _this->routers_stalled = NULL;
     }
 
@@ -726,8 +712,7 @@ void NetworkInterface::handle_response(vp::IoReq *req)
             *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);
 
         *req->arg_get(FlooNoc::REQ_SRC_NI) = NULL;
-        *req->arg_get(FlooNoc::REQ_DEST_X) = (void *)(long)origin_ni->x;
-        *req->arg_get(FlooNoc::REQ_DEST_Y) = (void *)(long)origin_ni->y;
+        *req->arg_get(FlooNoc::REQ_DEST_ID) = (void *)(long)origin_ni->node_id;
         if (*(bool *)req->arg_get(FlooNoc::REQ_WIDE))
         {
             this->wide_queue.handle_rsp(req, false);
@@ -758,8 +743,8 @@ void NetworkInterface::handle_response(vp::IoReq *req)
                 *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);
 
             *req->arg_get(FlooNoc::REQ_SRC_NI) = NULL;
-            *req->arg_get(FlooNoc::REQ_DEST_X) = (void *)(long)origin_ni->x;
-            *req->arg_get(FlooNoc::REQ_DEST_Y) = (void *)(long)origin_ni->y;
+            *req->arg_get(FlooNoc::REQ_DEST_ID) =
+                (void *)(long)origin_ni->node_id;
             this->rsp_queue.handle_rsp(req, true);
         }
     }
@@ -770,16 +755,6 @@ void NetworkInterface::grant(vp::IoReq *req)
 {
     this->target_stalled = false;
     this->fsm_event.enqueue();
-}
-
-// Support for flexible topologies
-
-void NetworkQueue::unstall_queue_node(int from_id) {}
-
-bool NetworkQueue::handle_request_node(FloonocNode *node, vp::IoReq *req,
-                                       int from_id)
-{
-    return true;
 }
 
 NetworkInterface::NetworkInterface(FlooNoc *noc, int node_id,
@@ -821,11 +796,3 @@ NetworkInterface::NetworkInterface(FlooNoc *noc, int node_id,
 }
 
 int NetworkInterface::get_id() { return this->node_id; }
-
-void NetworkInterface::unstall_queue_node(int from_id) {}
-
-bool NetworkInterface::handle_request_node(FloonocNode *node, vp::IoReq *req,
-                                           int from_id)
-{
-    return false;
-}
