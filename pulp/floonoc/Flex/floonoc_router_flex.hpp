@@ -47,15 +47,16 @@ class RouterQueue
 class Router : public FloonocNode
 {
   public:
-    Router(FlooNoc *noc, std::string name, int node_id, int queue_size);
+    Router(FlooNoc *noc, std::string name, int node_id, int num_queues,
+           int queue_size);
     ~Router();
 
     void reset(bool active);
 
     // This gets called by other routers or a network interface to move a
     // request to this router
-    bool handle_request(FloonocNode *node, vp::IoReq *req, int from_x,
-                        int from_y) override;
+    bool handle_request(FloonocNode *node, vp::IoReq *req,
+                        int from_node) override;
     // Called by other routers or NI to unstall an output queue after an input
     // queue became available
     void unstall_queue(int from_node) override;
@@ -63,9 +64,11 @@ class Router : public FloonocNode
     // to NI
     void stall_queue(int from_node);
 
+    void set_neighbour(int dir, FloonocNode *node);
+
     // Node ID for flexible topologies
     int node_id;
-    int nb_ports;
+    int num_queues;
 
   private:
     // FSM event handler called when something happened and queues need to be
@@ -88,8 +91,8 @@ class Router : public FloonocNode
     // same source which can be pending
     int queue_size;
     // The input queues for each direction and the local one
-    RouterQueue *input_queues[5];
-    FloonocNode *output_nodes[5];
+    std::vector<RouterQueue *> input_queues;
+    std::vector<FloonocNode *> output_nodes;
     // Clock event used to schedule FSM handler. This is scheduled eveytime
     // something may need to be done
     vp::ClockEvent fsm_event;
@@ -97,8 +100,7 @@ class Router : public FloonocNode
     int current_queue;
     // State of the output queues, true if it is stalled and nothing can be sent
     // to it anymore until it is unstalled.
-    std::array<vp::Signal<bool>, 5> stalled_queues;
-
+    std::vector<vp::Signal<bool> *> stalled_queues;
     // Signal used for tracing router request address
     vp::Signal<uint64_t> signal_req;
     vp::Signal<uint64_t> signal_req_size;
