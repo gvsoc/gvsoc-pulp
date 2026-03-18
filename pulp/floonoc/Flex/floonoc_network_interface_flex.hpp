@@ -48,9 +48,9 @@ class NetworkQueue : public FloonocNode
     void enqueue_router_req(vp::IoReq *req, bool is_address, bool wide,
                             bool is_req);
     void send_router_req();
-    void unstall_queue(int from_x, int from_y) override;
-    bool handle_request(FloonocNode *node, vp::IoReq *req, int from_x,
-                        int from_y) override;
+    void unstall_queue(int from_id) override;
+    bool handle_request(FloonocNode *node, vp::IoReq *req,
+                        int from_id) override;
 
     // Support for flexible topologies
     void unstall_queue_node(int from_id) override;
@@ -90,9 +90,6 @@ class NetworkInterface : public FloonocNode
     static constexpr int REQ_REM_SIZE = 0;
     static constexpr int REQ_WIDE = 1;
 
-    NetworkInterface(FlooNoc *noc, int x, int y, std::string itf_name);
-
-    // Support for flexible topologies
     NetworkInterface(FlooNoc *noc, int node_id, std::string itf_name);
 
     void reset(bool active);
@@ -103,21 +100,14 @@ class NetworkInterface : public FloonocNode
     // This gets called by a router to unstall the output queue of the network
     // interface after a request was denied because the input queue of the
     // router was full
-    void unstall_queue(int from_x, int from_y) override;
+    void unstall_queue(int from_id) override;
 
     // This gets called by a router when the destination is reached and the
     // request is sent from the router to the network interface
-    bool handle_request(FloonocNode *node, vp::IoReq *req, int from_x,
-                        int from_y) override;
-    // Can be used to retrieve the x coordinate of the network interface
-    int get_x();
-    // Can be used to retrieve the y coordinate of the network interface
-    int get_y();
-    // Support for flexible topologies
+    bool handle_request(FloonocNode *node, vp::IoReq *req,
+                        int from_id) override;
+    // Returns the id of the network interface
     int get_id();
-    void unstall_queue_node(int from_id) override;
-    bool handle_request_node(FloonocNode *node, vp::IoReq *req,
-                             int from_id) override;
     // This gets called by the top noc to grant a a request denied by a target
     void grant(vp::IoReq *req);
     void set_router(int nw, Router *router);
@@ -146,10 +136,6 @@ class NetworkInterface : public FloonocNode
     // Pointer to top
     FlooNoc *noc;
     int ni_outstanding_reqs;
-    // X position of this network interface in the grid
-    int x;
-    // Y position of this network interface in the grid
-    int y;
 
     // Support for flexible topologies
     int node_id;

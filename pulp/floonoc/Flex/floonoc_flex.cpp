@@ -32,13 +32,13 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
     // Get properties from generator
     this->wide_width = get_js_config()->get("wide_width")->get_int();
     this->narrow_width = get_js_config()->get("narrow_width")->get_int();
-    this->node_id = get_js_config()->get_int("node_id");
+    this->nb_nodes = get_js_config()->get_int("nb_nodes");
     this->router_input_queue_size =
         get_js_config()->get_int("router_input_queue_size");
 
     // Reserve the array for the target. We may have one target at each node.
     //
-    this->itf_names.resize(this->dim_x * this->dim_y);
+    this->itf_names.resize(this->nb_nodes);
 
     this->nb_nodes = get_js_config()->get_int("nb_nodes");
     this->links = get_js_config()->get_list("links");
@@ -74,24 +74,27 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
                 this->entries[id].remove_offset = remove_offset;
             }
 
-            if (node_id >= 0)
+            if (node_id >= 0 && node_id < this->nb_nodes)
             {
                 // Once a request reaches the right position, the target will be
                 // retrieved through this array indexed by the position
-                this->itf_names[y * this->dim_x + x] = mapping.first; //
+                this->itf_names[node_id] = mapping.first;
 
                 this->trace.msg(
                     vp::Trace::LEVEL_DEBUG,
                     "Adding target (name: %s, base: 0x%x, "
-                    "size: 0x%x, x: %d, y: %d, remove_offset: 0x%x)\n",
-                    mapping.first.c_str(), base, size, x, y, remove_offset);
+                    "size: 0x%x, node_id: %d, remove_offset: 0x%x)\n",
+                    mapping.first.c_str(), base, size, node_id, remove_offset);
             }
 
             id++;
         }
     }
 
-    // Create the array of networks interfaces //TODO
+    // Track which NIs map to which router
+    std::vector<int> ni_to_router_map(this->nb_nodes, -1);
+
+    // Create the array of networks interfaces
     this->network_interfaces.resize(this->nb_nodes);
     js::Config *network_interfaces = get_js_config()->get("network_interfaces");
     if (network_interfaces != NULL)
@@ -107,10 +110,12 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
 
             this->network_interfaces[node_id] =
                 new NetworkInterface(this, node_id, this->itf_names[node_id]);
+
+            ni_to_router_map[node_id] = connected_router_id;
         }
     }
 
-    // Create the array of routers //TODO
+    // Create vectors of routers
     this->req_routers.resize(this->nb_nodes);
     this->rsp_routers.resize(this->nb_nodes);
     this->wide_routers.resize(this->nb_nodes);
@@ -121,21 +126,21 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
         for (js::Config *router : routers->get_elems())
         {
             int node_id = router->get_elem(0)->get_int();
-            int degree = router->get_elem(1)->get_int();
+            int num_queues = router->get_elem(1)->get_int();
             // int ... for other variables
 
             this->trace.msg(
                 vp::Trace::LEVEL_DEBUG,
                 "Adding routers (req, rsp and wide) (node_id: %d)\n", node_id);
 
-            this->req_routers[node_id] = new Router( // TODOs
-                this, "req_router_", node_id, degree,
-                this->router_input_queue_size);
+            this->req_routers[node_id] =
+                new Router(this, "req_router_", node_id, num_queues,
+                           this->router_input_queue_size);
             this->rsp_routers[node_id] =
-                new Router(this, "rsp_router_", node_id, degree,
+                new Router(this, "rsp_router_", node_id, num_queues,
                            this->router_input_queue_size);
             this->wide_routers[node_id] =
-                new Router(this, "wide_router_", node_id, degree,
+                new Router(this, "wide_router_", node_id, num_queues,
                            this->router_input_queue_size);
         }
 
@@ -162,52 +167,28 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
         }
     }
 
-    for (int x = 0; x < this->dim_x; x++) // Aaaand all of this
+    for (int i = 0; i < this->nb_nodes; i++)
     {
-        for (int y = 0; y < this->dim_y; y++)
+        NetworkInterface *ni = this->network_interfaces[i];
+
+        if (ni)
         {
-            NetworkInterface *ni =
-                this->network_interfaces[y * this->dim_x + x];
-            if (ni)
+            int target_router_id = ni_to_router_map[i];
+
+            if (target_router_id != -1 &&
+                this->req_routers[target_router_id] != NULL)
             {
-                // Find the closest router starting locally
-                int r_x = x, r_y = y;
-                if (this->req_routers[r_y * this->dim_x + r_x] == NULL)
-                {
-                    r_x = x + 1;
-
-                    if (x == this->dim_x - 1 ||
-                        this->req_routers[r_y * this->dim_x + r_x] == NULL)
-                    {
-                        r_x = x - 1;
-
-                        if (x == 0 ||
-                            this->req_routers[r_y * this->dim_x + r_x] == NULL)
-                        {
-                            r_x = x;
-                            r_y = y + 1;
-
-                            if (y >= this->dim_y - 1 ||
-                                this->req_routers[r_y * this->dim_x + r_x] ==
-                                    NULL)
-                            {
-                                r_y = y - 1;
-                                if (y == 0)
-                                {
-                                    r_x = x;
-                                    r_y = y;
-                                }
-                            }
-                        }
-                    }
-                }
-
                 ni->set_router(NetworkInterface::NW_REQ,
-                               this->req_routers[r_y * this->dim_x + r_x]);
+                               this->req_routers[target_router_id]);
                 ni->set_router(NetworkInterface::NW_RSP,
-                               this->rsp_routers[r_y * this->dim_x + r_x]);
+                               this->rsp_routers[target_router_id]);
                 ni->set_router(NetworkInterface::NW_WIDE,
-                               this->wide_routers[r_y * this->dim_x + r_x]);
+                               this->wide_routers[target_router_id]);
+            }
+            else
+            {
+                this->trace.msg(vp::Trace::LEVEL_ERROR,
+                                "NI %d has no valid router assigned!\n", i);
             }
         }
     }
@@ -249,20 +230,32 @@ FloonocNode *FlooNoc::get_router_neighbour(std::vector<Router *> &routers,
 void FlooNoc::router_init_neighbours(Router *router,
                                      std::vector<Router *> &routers)
 {
+    int node_id = router->node_id;
     router->set_neighbour(FlooNoc::DIR_LOCAL,
                           this->network_interfaces[node_id]);
+    int current_port = 1;
+
     for (int i = 0; i < links.size(); i++)
     {
         if (links[i][0] == node_id)
         {
-            router->set_neighbour(FlooNoc::DIR_1, this->get_router_neighbour(
-                                                      routers, links[i][1]));
+            router->set_neighbour(
+                current_port, this->get_router_neighbour(routers, links[i][1]));
+            current_port++;
         }
         else if (links[i][1] == node_id)
         {
-            router->set_neighbour(FlooNoc::DIR_2, this->get_router_neighbour(
-                                                      routers, links[i][0]));
+            router->set_neighbour(
+                current_port, this->get_router_neighbour(routers, links[i][0]));
+            current_port++;
         }
+    }
+    if (current_port > router->num_queues)
+    {
+        this->trace.msg(
+            vp::Trace::LEVEL_ERROR,
+            "Router %d has %d queues, %d connected (including local)\n",
+            node_id, router->num_queues, current_port);
     }
 }
 

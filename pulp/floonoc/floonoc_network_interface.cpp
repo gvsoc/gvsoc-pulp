@@ -56,7 +56,6 @@ void NetworkQueue::check()
     }
 }
 
-// Should be really easy to make flexible
 void NetworkQueue::unstall_queue(int from_x, int from_y)
 {
     // The request which was previously denied has been granted. Unstall the

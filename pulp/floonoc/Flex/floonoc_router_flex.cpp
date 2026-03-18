@@ -138,9 +138,10 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     // {
     //     _this->current_queue = 0;
     // }
-    bool output_full[num_queues] = {false}; // Used to make sure we only send a
-                                            // single request per cycle to each
-                                            // direction
+    std::vector<bool> output_full(this->num_queues,
+                                  false); // Used to make sure we only send a
+                                          // single request per cycle to each
+                                          // direction
     // Then go through the num_queues input queues until we find a request which
     // can be propagated
     for (int i = 0; i < num_queues; i++)
@@ -184,7 +185,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 {
                     in_queue_index = 0;
                 }
-                continue; // Skip this request and isntead check another input
+                continue; // Skip this request and instead check another input
                           // queue
             }
             output_full[out_queue_id] = true;
@@ -262,7 +263,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
         // Go to next input queue
         in_queue_index += 1;
-        if (in_queue_index == 5)
+        if (in_queue_index == this->num_queues)
         {
             in_queue_index = 0;
         }
