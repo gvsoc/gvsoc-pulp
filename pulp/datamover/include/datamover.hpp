@@ -90,6 +90,7 @@ class Datamover : public vp::Component
         void fill_elem_matrix(int num_rows);
         void copy();
         void transpose(uint8_t transpose_mode);
+        void cim_layout_conversion();
         void printout();
 
         // HWPE REGISTER FILE
@@ -135,6 +136,8 @@ class Datamover : public vp::Component
         uint32_t out_d3_len;
         uint32_t out_d4_stride;
         uint32_t out_dim_enable;
+        uint32_t matrix_dim_m;
+        uint32_t matrix_dim_n;
 
         //=========================================================
         // MEMORY TRANSACTION HELPERS
