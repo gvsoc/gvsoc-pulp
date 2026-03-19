@@ -69,6 +69,7 @@ vp::IoReqStatus Datamover::handle_req(vp::Block *__this, vp::IoReq *req)
     // printf("Datamover::handle_req(): Received request (addr: 0x%lx, size: 0x%lx, is_write: %d, data: 0x%lx)\n", req->get_addr(), req->get_size(), req->get_is_write(), *(uint64_t *)(req->get_data()));
     // _this->trace.msg("Datamover::handle_req(): Received request (addr: 0x%x, size: 0x%x, is_write: %d, data: 0x%x)\n", req->get_addr(), req->get_size(), req->get_is_write(), *(uint32_t *)(req->get_data()));
 
+    uint8_t datamover_mode = (_this->ctrl_engine >> 27) & 0x1F;
     uint8_t transpose_mode = _this->ctrl_engine & 0x7;
 
     if (req->get_size() != 4) return vp::IO_REQ_INVALID;
@@ -76,20 +77,33 @@ vp::IoReqStatus Datamover::handle_req(vp::Block *__this, vp::IoReq *req)
     if (req->get_is_write())
     {
         if((req->get_addr() & 0xfff) == DATAMOVER_COMMIT_AND_TRIGGER) {      // trigger operation when writing to the control register at offset 0  ToDo(cdurrer): mask necessary?
-            if(transpose_mode == 0) {
-                printf("Datamover::handle_req(): Triggering copy operation\n");
-                _this->trace.msg(vp::Trace::LEVEL_INFO, "Datamover::handle_req(): Triggering copy operation\n");
-                _this->copy();
-            }
-            else if (transpose_mode == 1 || transpose_mode == 2 || transpose_mode == 4) {
-                printf("Datamover::handle_req(): Triggering transpose operation (mode=%d)\n", transpose_mode);
-                _this->trace.msg(vp::Trace::LEVEL_INFO, "Datamover::handle_req(): Triggering transpose operation (mode=%d)\n", transpose_mode);
-                _this->transpose(transpose_mode);
-            }
-            else {
-                printf("Datamover::handle_req(): Unsupported operation triggered (ctrl_engine=0x%08x)\n", _this->ctrl_engine);
-                _this->trace.msg(vp::Trace::LEVEL_WARNING, "Datamover::handle_req(): Unsupported operation triggered (ctrl_engine=0x%08x)\n", _this->ctrl_engine);
-                return vp::IO_REQ_INVALID;
+            switch(datamover_mode) {
+                case 0:     // copy
+                    printf("Datamover::handle_req(): Triggering copy operation\n");
+                    _this->trace.msg(vp::Trace::LEVEL_INFO, "Datamover::handle_req(): Triggering copy operation\n");
+                    _this->copy();
+                    break;
+                case 1:     // transpose
+                    if (transpose_mode == 1 || transpose_mode == 2 || transpose_mode == 4) {
+                        printf("Datamover::handle_req(): Triggering transpose operation (mode=%d)\n", transpose_mode);
+                        _this->trace.msg(vp::Trace::LEVEL_INFO, "Datamover::handle_req(): Triggering transpose operation (mode=%d)\n", transpose_mode);
+                        _this->transpose(transpose_mode);
+                    }
+                    else {
+                        printf("Datamover::handle_req(): Unsupported operation triggered (ctrl_engine=0x%08x)\n", _this->ctrl_engine);
+                        _this->trace.msg(vp::Trace::LEVEL_WARNING, "Datamover::handle_req(): Unsupported operation triggered (ctrl_engine=0x%08x)\n", _this->ctrl_engine);
+                        return vp::IO_REQ_INVALID;
+                    }
+                    break;
+                case 2:     // CIM layout conversion (row tile: 64 elements) (ToDo)
+                    printf("Datamover::handle_req(): Triggering CIM layout conversion operation\n");
+                    _this->trace.msg(vp::Trace::LEVEL_INFO, "Datamover::handle_req(): Triggering CIM layout conversion operation\n");
+                    _this->cim_layout_conversion();
+                    break;
+                default:
+                    printf("Datamover::handle_req(): Unsupported operation triggered (ctrl_engine=0x%08x)\n", _this->ctrl_engine);
+                    _this->trace.msg(vp::Trace::LEVEL_WARNING, "Datamover::handle_req(): Unsupported operation triggered (ctrl_engine=0x%08x)\n", _this->ctrl_engine);
+                    return vp::IO_REQ_INVALID;
             }
         }
         else if((req->get_addr() & 0xfff) == DATAMOVER_SOFT_CLEAR) {
