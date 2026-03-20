@@ -120,7 +120,7 @@ class SnitchTestbenchMultiBoard(Component):
 
     def __init__(self, parent: Component, name: str, config: SnitchTestbenchMultiBoardConfig):
 
-        super().__init__(parent, name, config)
+        super().__init__(parent, name, config=config)
 
         boards: list[SnitchTestbenchBoard] = []
         for i in range(0, config.nb_boards):
