@@ -14,10 +14,8 @@
 # limitations under the License.
 #
 
-from dataclasses import dataclass
-from gvrun.config import Config, cfg_field
+from config_tree import Config, cfg_field
 
-@dataclass(repr=False)
 class RegDmaConfig(Config):
 
     transfer_queue_size: int = cfg_field(default=8, desc=(
