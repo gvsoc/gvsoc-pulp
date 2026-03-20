@@ -18,13 +18,9 @@
 # Authors: Germain Haugou (germain.haugou@gmail.com)
 #
 
-
-from dataclasses import dataclass
-from gvrun.config import cfg_field
+from config_tree import cfg_field
 from cpu.iss_v2.riscv_config import RiscvConfig
 
-
-@dataclass(repr=False)
 class SpatzConfig(RiscvConfig):
     isa: str = cfg_field(default='rv32imafdcv', dump=True, desc=(
         "ISA string of the core"
