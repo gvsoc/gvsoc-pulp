@@ -94,15 +94,14 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
     // Track which NIs map to which router
     std::vector<int> ni_to_router_map(this->nb_nodes, -1);
 
-    // Create the array of networks interfaces
-    this->network_interfaces.resize(this->nb_nodes);
+    // Create the array of networks interfaces (initialize empty slots to NULL)
+    this->network_interfaces.resize(this->nb_nodes, NULL);
     js::Config *network_interfaces = get_js_config()->get("network_interfaces");
     if (network_interfaces != NULL)
     {
         for (js::Config *network_interface : network_interfaces->get_elems())
         {
             int node_id = network_interface->get_elem(0)->get_int();
-            // int ... for other variables
 
             this->trace.msg(vp::Trace::LEVEL_DEBUG,
                             "Adding network interface (node_id: %d)\n",
@@ -110,15 +109,13 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
 
             this->network_interfaces[node_id] =
                 new NetworkInterface(this, node_id, this->itf_names[node_id]);
-
-            ni_to_router_map[node_id] = connected_router_id;
         }
     }
 
-    // Create vectors of routers
-    this->req_routers.resize(this->nb_nodes);
-    this->rsp_routers.resize(this->nb_nodes);
-    this->wide_routers.resize(this->nb_nodes);
+    // Create sparse vectors of routers
+    this->req_routers.resize(this->nb_nodes, NULL);
+    this->rsp_routers.resize(this->nb_nodes, NULL);
+    this->wide_routers.resize(this->nb_nodes, NULL);
 
     js::Config *routers = get_js_config()->get("routers");
     if (routers != NULL)
@@ -167,6 +164,59 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
         }
     }
 
+    // Parse routing tables
+    js::Config *routing_tables_cfg = get_js_config()->get("routing_tables");
+    if (routing_tables_cfg != NULL)
+    {
+        for (int i = 0; i < this->nb_nodes; i++)
+        {
+            js::Config *router_table_cfg =
+                routing_tables_cfg->get(std::to_string(i));
+            std::vector<int> r_table(this->nb_nodes, -1);
+
+            if (router_table_cfg != NULL)
+            {
+                for (int dest = 0; dest < this->nb_nodes; dest++)
+                {
+                    js::Config *hop =
+                        router_table_cfg->get(std::to_string(dest));
+                    if (hop)
+                        r_table[dest] = hop->get_int();
+                }
+            }
+
+            if (this->req_routers[i])
+                this->req_routers[i]->set_routing_table(r_table);
+            if (this->rsp_routers[i])
+                this->rsp_routers[i]->set_routing_table(r_table);
+            if (this->wide_routers[i])
+                this->wide_routers[i]->set_routing_table(r_table);
+        }
+    }
+
+    // Build the NI-to-Router map from the links array
+    std::vector<int> ni_to_router_map(this->nb_nodes, -1);
+
+    for (int i = 0; i < this->links.size(); i++)
+    {
+        int node_a = this->links[i][0];
+        int node_b = this->links[i][1];
+
+        // If Node A is an NI and Node B is a Router
+        if (this->network_interfaces[node_a] != NULL &&
+            this->req_routers[node_b] != NULL)
+        {
+            ni_to_router_map[node_a] = node_b;
+        }
+        // If Node B is an NI and Node A is a Router
+        else if (this->network_interfaces[node_b] != NULL &&
+                 this->req_routers[node_a] != NULL)
+        {
+            ni_to_router_map[node_b] = node_a;
+        }
+    }
+
+    // Assign the discovered upstream routers to the NIs
     for (int i = 0; i < this->nb_nodes; i++)
     {
         NetworkInterface *ni = this->network_interfaces[i];
@@ -187,8 +237,10 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
             }
             else
             {
-                this->trace.msg(vp::Trace::LEVEL_ERROR,
-                                "NI %d has no valid router assigned!\n", i);
+                this->trace.msg(
+                    vp::Trace::LEVEL_ERROR,
+                    "NI %d has no valid router assigned in the links array!\n",
+                    i);
             }
         }
     }
@@ -214,43 +266,49 @@ FlooNoc::~FlooNoc()
     }
 }
 
-// TODOS: below here
-FloonocNode *FlooNoc::get_router_neighbour(std::vector<Router *> &routers,
-                                           int node_id)
-{
-    Router *router = routers[node_id]; // Change this to look for router with
-                                       // specific node_id instead of index
-    if (router)
-    {
-        return router;
-    }
-    return this->network_interfaces[node_id];
-}
-
 void FlooNoc::router_init_neighbours(Router *router,
                                      std::vector<Router *> &routers)
 {
     int node_id = router->node_id;
-    router->set_neighbour(FlooNoc::DIR_LOCAL,
-                          this->network_interfaces[node_id]);
-    int current_port = 1;
+    int current_port = 2; // To bypass local
 
-    for (int i = 0; i < links.size(); i++)
+    for (int i = 0; i < this->links.size(); i++)
     {
-        if (links[i][0] == node_id)
+        int neighbor_id = -1;
+
+        // Check if this link involves our router
+        if (this->links[i][0] == node_id)
         {
-            router->set_neighbour(
-                current_port, this->get_router_neighbour(routers, links[i][1]));
-            current_port++;
+            neighbor_id = this->links[i][1];
         }
-        else if (links[i][1] == node_id)
+        else if (this->links[i][1] == node_id)
         {
-            router->set_neighbour(
-                current_port, this->get_router_neighbour(routers, links[i][0]));
-            current_port++;
+            neighbor_id = this->links[i][0];
+        }
+
+        if (neighbor_id != -1)
+        {
+            // The neighbor is a Network Interface
+            if (this->network_interfaces[neighbor_id] != NULL)
+            {
+                // Plug the NI into DIR_LOCAL (Port 1) and register its ID
+                router->set_neighbour(FlooNoc::DIR_LOCAL,
+                                      this->network_interfaces[neighbor_id],
+                                      neighbor_id);
+            }
+            // The neighbor is another Router
+            else if (routers[neighbor_id] != NULL)
+            {
+                // Plug the Router into the next available routing port and
+                // register its ID
+                router->set_neighbour(current_port, routers[neighbor_id],
+                                      neighbor_id);
+                current_port++;
+            }
         }
     }
-    if (current_port > router->num_queues)
+
+    if (current_port > router->num_queues + 1)
     {
         this->trace.msg(
             vp::Trace::LEVEL_ERROR,

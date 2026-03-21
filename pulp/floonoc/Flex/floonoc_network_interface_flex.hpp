@@ -52,11 +52,6 @@ class NetworkQueue : public FloonocNode
     bool handle_request(FloonocNode *node, vp::IoReq *req,
                         int from_id) override;
 
-    // Support for flexible topologies
-    void unstall_queue_node(int from_id) override;
-    bool handle_request_node(FloonocNode *node, vp::IoReq *req,
-                             int from_id) override;
-
     NetworkInterface &ni;
     Router *router;
     uint64_t width;

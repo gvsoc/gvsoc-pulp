@@ -244,3 +244,89 @@ class FlooNocFlex(gvsoc.systree.Component):
             The slave interface
         """
         return gvsoc.systree.SlaveItf(self, f'wide_input_{x}_{y}', signature='io')
+
+def __generate_routing_tables(self, dim_x=1, dim_y=1, dim_z=1):
+        """
+        Generates routing tables for the routers based on grid dimensions.
+        Safely handles sparse Network Interface (NI) IDs.
+        """
+        # 1 = 2D_MESH (XY Routing)
+        # 2 = 3D_MESH (Z-XY Routing)
+        # 3 = CUSTOM
+        routing_mode = 1 
+
+        nb_nodes = self.get_property('nb_nodes')
+        links = self.get_property('links')
+        
+        # Extract the IDs of our components
+        routers = [r[0] for r in self.get_property('routers')]
+        nis = [n[0] for n in self.get_property('network_interfaces')]
+
+        # Build the NI-to-Router physical mapping from the links array
+        ni_to_router = {}
+        for link in links:
+            node_a, node_b = link[0], link[1]
+            if node_a in nis and node_b in routers:
+                ni_to_router[node_a] = node_b
+            elif node_b in nis and node_a in routers:
+                ni_to_router[node_b] = node_a
+
+        # Initialize routing tables
+        routing_tables = {r: {} for r in routers}
+
+        for src in routers:
+            for dst in range(nb_nodes):
+                
+                # Resolve the target router for this destination
+                if dst in routers:
+                    target_router = dst
+                elif dst in nis:
+                    target_router = ni_to_router.get(dst, -1)
+                else:
+                    target_router = -1 # Unmapped or empty node ID
+
+                # Base Cases
+                if target_router == -1:
+                    routing_tables[src][dst] = -1
+                    continue
+                if src == target_router:
+                    # We are at the router physically attached to the destination
+                    # The next hop is the destination itself!
+                    routing_tables[src][dst] = dst
+                    continue
+
+                # Apply Routing Math (from src router to target_router)
+                # Note: We assume Router IDs are sequentially numbered 0 to (W*H - 1)
+                if routing_mode == 1: # 2D_MESH
+                    src_x, src_y = src % dim_x, src // dim_x
+                    dst_x, dst_y = target_router % dim_x, target_router // dim_x
+
+                    if src_x != dst_x:
+                        next_hop = src + 1 if dst_x > src_x else src - 1
+                    else:
+                        next_hop = src + dim_x if dst_y > src_y else src - dim_x
+                        
+                    routing_tables[src][dst] = next_hop
+
+                elif routing_mode == 2: # 3D_MESH
+                    layer_size = dim_x * dim_y
+                    src_z, rem_src = src // layer_size, src % layer_size
+                    src_y, src_x = rem_src // dim_x, rem_src % dim_x
+                    
+                    dst_z, rem_dst = target_router // layer_size, target_router % layer_size
+                    dst_y, dst_x = rem_dst // dim_x, rem_dst % dim_x
+
+                    if src_z != dst_z:
+                        next_hop = src + layer_size if dst_z > src_z else src - layer_size
+                    elif src_x != dst_x:
+                        next_hop = src + 1 if dst_x > src_x else src - 1
+                    else:
+                        next_hop = src + dim_x if dst_y > src_y else src - dim_x
+                        
+                    routing_tables[src][dst] = next_hop
+
+                elif routing_mode == 3: # CUSTOM
+                    # Custom routing logic
+                    routing_tables[src][dst] = -1
+        
+        self.add_property('routing_tables', routing_tables)

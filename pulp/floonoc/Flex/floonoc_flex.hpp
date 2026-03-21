@@ -132,8 +132,6 @@ class FlooNoc : public vp::Component
     std::vector<std::vector<int>> links; // source node, dest node, latency
 
   private:
-    FloonocNode *get_router_neighbour(std::vector<Router *> &routers,
-                                      int node_id);
     void router_init_neighbours(Router *router, std::vector<Router *> &routers);
 
     // This block trace

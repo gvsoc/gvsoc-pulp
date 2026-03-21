@@ -757,42 +757,4 @@ void NetworkInterface::grant(vp::IoReq *req)
     this->fsm_event.enqueue();
 }
 
-NetworkInterface::NetworkInterface(FlooNoc *noc, int node_id,
-                                   std::string itf_name)
-    : FloonocNode(noc, "ni_node_" + std::to_string(node_id)),
-      fsm_event(this, &NetworkInterface::fsm_handler),
-      signal_narrow_req(*this, "narrow_req", 64),
-      signal_wide_req(*this, "wide_req", 64),
-      req_queue(*this, "narrow", noc->narrow_width, false),
-      rsp_queue(*this, "rsp", noc->narrow_width, false),
-      wide_queue(*this, "wide", noc->wide_width, true),
-      response_queue(this, "response_queue", &this->fsm_event)
-{
-    this->noc = noc;
-    this->node_id = node_id;
-
-    this->wide_output_itf.set_resp_meth(&NetworkInterface::wide_response);
-    this->wide_output_itf.set_grant_meth(&NetworkInterface::wide_grant);
-    noc->new_master_port("ni_wide_node_" + std::to_string(node_id),
-                         &this->wide_output_itf, this);
-
-    this->narrow_output_itf.set_resp_meth(&NetworkInterface::narrow_response);
-    this->narrow_output_itf.set_grant_meth(&NetworkInterface::narrow_grant);
-    noc->new_master_port("ni_narrow_node_" + std::to_string(node_id),
-                         &this->narrow_output_itf, this);
-
-    traces.new_trace("trace", &trace, vp::DEBUG);
-
-    // Network interface input port
-    this->narrow_input_itf.set_req_meth(&NetworkInterface::narrow_req);
-    noc->new_slave_port("narrow_input_node_" + std::to_string(node_id),
-                        &this->narrow_input_itf, this);
-    this->wide_input_itf.set_req_meth(&NetworkInterface::wide_req);
-    noc->new_slave_port("wide_input_node_" + std::to_string(node_id),
-                        &this->wide_input_itf, this);
-
-    this->ni_outstanding_reqs =
-        this->noc->get_js_config()->get("ni_outstanding_reqs")->get_int();
-}
-
 int NetworkInterface::get_id() { return this->node_id; }
