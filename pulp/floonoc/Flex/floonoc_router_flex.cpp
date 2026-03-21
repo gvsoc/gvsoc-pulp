@@ -77,9 +77,16 @@ Router::~Router()
     }
 }
 
-void Router::set_neighbour(int dir, FloonocNode *node)
+void Router::set_neighbour(int dir, FloonocNode *node, int neighbor_id)
 {
     this->output_nodes[dir] = node;
+    this->neighbor_to_queue[neighbor_id] = dir;
+    this->queue_to_neighbor[dir] = neighbor_id;
+}
+
+void Router::set_routing_table(std::vector<int> table)
+{
+    this->routing_table = table;
 }
 
 bool Router::handle_request(FloonocNode *node, vp::IoReq *req, int from_node)
@@ -275,8 +282,7 @@ void Router::get_next_router_pos(int to_node, int &next_node)
 {
     if (to_node != this->node_id)
     {
-        // TODO: Implement table based routing
-        // Look at Floogen
+        next_node = this->routing_table[to_node];
     }
     else
     {
@@ -309,18 +315,19 @@ void Router::stall_queue(int from_node)
 
 void Router::get_node_from_queue(int queue, int &node_id)
 {
-    // TODO: look at the routing table to find the node id based on outgoing
-    // queue
-    node_id = this->node_id + 1;
+    node_id = this->queue_to_neighbor[queue];
 }
 
 int Router::get_req_queue(int from_node)
 {
-    int queue_index = 0;
-    // TODO: look at the routing table to find the queue index based on incoming
-    // node
-
-    return queue_index;
+    // Local NI and neighbor routers will be mapped here
+    if (this->neighbor_to_queue.count(from_node))
+    {
+        return this->neighbor_to_queue[from_node];
+    }
+    this->trace.msg(vp::Trace::LEVEL_ERROR, "Unknown from_node %d\n",
+                    from_node);
+    return 0;
 }
 
 void Router::reset(bool active)
