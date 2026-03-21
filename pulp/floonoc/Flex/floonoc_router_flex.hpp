@@ -64,11 +64,21 @@ class Router : public FloonocNode
     // to NI
     void stall_queue(int from_node);
 
-    void set_neighbour(int dir, FloonocNode *node);
-
     // Node ID for flexible topologies
     int node_id;
     int num_queues;
+
+    void set_neighbour(int dir, FloonocNode *node, int neighbor_id);
+
+    // Pass the routing table during initialization
+    void set_routing_table(std::vector<int> table);
+
+  private:
+    std::vector<int> routing_table; // Index: dest_node -> Value: next_hop_node
+    std::unordered_map<int, int>
+        neighbor_to_queue; // Key: neighbor_id -> Value: queue_index
+    std::unordered_map<int, int>
+        queue_to_neighbor; // Key: queue_index -> Value: neighbor_id
 
   private:
     // FSM event handler called when something happened and queues need to be
