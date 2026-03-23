@@ -1,0 +1,12 @@
+# routing.yaml
+# Source Router
+router_0:
+  # Destination : Next Hop
+  ep_0_ni: router_0   # If going to ep_0, hand it to local NI (which is on router_0)
+  ep_1_ni: router_1   # If going to ep_1, send it to router_1
+  router_1: router_1  # If going to router_1, send it to router_1
+
+router_1:
+  ep_0_ni: router_0
+  ep_1_ni: router_1
+  router_0: router_0

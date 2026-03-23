@@ -16,17 +16,11 @@
 
 from enum import IntEnum
 import gvsoc.systree
+import yaml
 
-"""
-class FlooNocDirection(IntEnum):
-    RIGHT = -4
-    LEFT = -3
-    UP = -2
-    DOWN = -1
-    SELF = 1
-    DIR_1 = 2
-    DIR_2 = 3
-""" 
+from floogen.config_parser import parse_config
+from floogen.model.network import Network
+
 class FlooNocDirection(IntEnum):
     DIR_LOCAL = 1
     DIR_1 = 2
@@ -62,7 +56,8 @@ class FlooNocFlex(gvsoc.systree.Component):
         before the source output queue is stalled.
     """
     def __init__(self, parent: gvsoc.systree.Component, name, narrow_width: int, wide_width:int,
-            router_degrees: int=0, nb_nodes: int=0, ni_outstanding_reqs: int=8, router_input_queue_size: int=2):
+            router_degrees: int=0, nb_nodes: int=0, ni_outstanding_reqs: int=8, router_input_queue_size: int=2,
+            network_path: str | None = None, routing_path: str | None = None, routing_mode: int = 3, dim_x: int = 1, dim_y: int = 1):
         super().__init__(parent, name)
 
         self.add_sources([
@@ -82,7 +77,11 @@ class FlooNocFlex(gvsoc.systree.Component):
         # Support for flexible topologies
         self.add_property('nb_nodes', nb_nodes)
         self.add_property('links', [])
-        self.add_property('router_degrees', router_degrees)        
+        self.add_property('router_degrees', router_degrees)       
+
+        self.id_map = {}
+        if network_path is not None:
+            self.id_map = self.load_from_floogen(network_path, routing_path, routing_mode, dim_x, dim_y) 
 
     def __add_mapping(self, name: str, base: int, size: int, node_id: int, remove_offset:int =0):
         self.get_property('mappings')[name] =  {'base': base, 'size': size, 'node_id': node_id, 'remove_offset':remove_offset}
@@ -245,7 +244,7 @@ class FlooNocFlex(gvsoc.systree.Component):
         """
         return gvsoc.systree.SlaveItf(self, f'wide_input_{x}_{y}', signature='io')
 
-def __generate_routing_tables(self, dim_x=1, dim_y=1, dim_z=1):
+def generate_routing_tables(self, routing_mode: int, dim_x: int, dim_y: int, routing_path: str):
         """
         Generates routing tables for the routers based on grid dimensions.
         Safely handles sparse Network Interface (NI) IDs.
@@ -253,10 +252,12 @@ def __generate_routing_tables(self, dim_x=1, dim_y=1, dim_z=1):
         # 1 = 2D_MESH (XY Routing)
         # 2 = 3D_MESH (Z-XY Routing)
         # 3 = CUSTOM
-        routing_mode = 1 
+        routing_mode = 1 #Hardcoded here for now
 
         nb_nodes = self.get_property('nb_nodes')
         links = self.get_property('links')
+
+        routing_tables = {i: {j: -1 for j in range(nb_nodes)} for i in range(nb_nodes)}
         
         # Extract the IDs of our components
         routers = [r[0] for r in self.get_property('routers')]
@@ -326,7 +327,81 @@ def __generate_routing_tables(self, dim_x=1, dim_y=1, dim_z=1):
                     routing_tables[src][dst] = next_hop
 
                 elif routing_mode == 3: # CUSTOM
-                    # Custom routing logic
-                    routing_tables[src][dst] = -1
+                    if not routing_path:
+                        raise ValueError("CUSTOM routing mode selected but no custom_routing_path provided!")
+                        
+                    # Parse the routing YAML
+                    with open(routing_path, 'r') as f:
+                        custom_routes = yaml.safe_load(f)
+                        
+                    # Translate names to internal IDs
+                    for src_name, routes in custom_routes.items():
+                        if src_name not in self.id_map:
+                            raise ValueError(f"Unknown source router '{src_name}' in custom routing file.")
+                        
+                        src_id = self.id_map[src_name]
+                        
+                        for dst_name, next_hop_name in routes.items():
+                            if dst_name not in self.id_map or next_hop_name not in self.id_map:
+                                raise ValueError(f"Unknown destination or next hop in custom routing file for {src_name}.")
+                            if next_hop_name not in self.id_map:
+                                raise ValueError(f"Unknown next hop '{next_hop_name}' in custom routing file.")
+                            
+                            dst_id = self.id_map[dst_name]
+                            next_hop_id = self.id_map[next_hop_name]
+                            
+                            # Populate the final integer table for C++
+                            routing_tables[src_id][dst_id] = next_hop_id
         
         self.add_property('routing_tables', routing_tables)
+
+
+def load_from_floogen(self, network_path: str, routing_path: str, routing_mode: int, dim_x: int, dim_y: int):
+        """
+        Parses a FlooGen YAML file and populates the GVSoC NoC topology.
+        """
+
+        # Parse the YAML into FlooGen's Network object
+        floo_net = parse_config(Network, network_path)
+        floo_net.create_network()
+        floo_net.compile_network()
+
+        # Compatibility layer: Maps FlooGen string names to our FloonocFlex IDs
+        node_to_id = {}
+        current_id = 0
+
+        # Extract Routers
+        for rt_name, _ in floo_net.graph.get_rt_nodes(with_name=True):
+            node_to_id[rt_name] = current_id
+            self.add_router(current_id)
+            current_id += 1
+
+        # Extract Network Interfaces (NIs)
+        for ni_name, _ in floo_net.graph.get_ni_nodes(with_name=True):
+            node_to_id[ni_name] = current_id
+            self.add_network_interface(current_id)
+            current_id += 1
+
+        self.add_property('nb_nodes', current_id)
+        self.id_map = node_to_id
+
+        # Extract Links
+        for src_name, dst_name in floo_net.graph.get_link_edges(with_obj=False, with_name=True):
+            # Ensure both sides of the link exist in our ID map
+            if src_name in node_to_id and dst_name in node_to_id:
+                src_id = node_to_id[src_name]
+                dst_id = node_to_id[dst_name]
+                
+                # Add links , latency defaults to 1 rn, TODO: add latency support
+                self.add_link(src_id, dst_id, 1)
+
+        # Generate Routing Tables
+        self.generate_routing_tables(
+            routing_mode=routing_mode, 
+            dim_x=dim_x, 
+            dim_y=dim_y, 
+            routing_path=routing_path
+        )
+        
+        # Return the dictionary, just in case
+        return node_to_id

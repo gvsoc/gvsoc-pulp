@@ -228,7 +228,7 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         """
         return gvsoc.systree.SlaveItf(self, f'wide_input_{x}_{y}', signature='io')
 
-class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide): #Not going to be touching this for now
+class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
     """FlooNoc instance for a grid of clusters
 
     This instantiates a FlooNoc 2D mesh for a grid of clusters.
