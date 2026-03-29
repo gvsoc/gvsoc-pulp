@@ -22,11 +22,11 @@ import vp.clock_domain
 import utils.loader.loader
 import interco.router as router
 
-from pulp.chips.magia.tile import MagiaTile
-from pulp.chips.magia.arch import MagiaArch
+from pulp.chips.magia_flex.tile import MagiaTile
+from pulp.chips.magia_flex.arch import MagiaArch
 from pulp.floonoc_flex.floonoc_flex import *
-from pulp.chips.magia.fractal_sync.fractal_sync import *
-from pulp.chips.magia.kill_module.kill_module import *
+from pulp.chips.magia_flex.fractal_sync.fractal_sync import *
+from pulp.chips.magia_flex.kill_module.kill_module import *
 from typing import List, Dict
 import math
 
@@ -142,69 +142,115 @@ class MagiaSoc(gvsoc.systree.Component):
                 fsync_neighbour_nord_sud.append(FractalSync(self,f'fsync_nord_sud_nb_id_{n_fractal}',level=0))
 
 
-        #Connect NoC to tiles and L2    
+        # ---------------------------------------------------------------------
+        # Start FlooNoc Flex Changes
+        # ---------------------------------------------------------------------
         noc = FlooNocFlex(self,
-                                    name='magia-noc',
-                                    narrow_width=4,
-                                    wide_width=4,
-                                    ni_outstanding_reqs=8, #need to double check this with RTL
-                                    router_input_queue_size=4, #need to double check this with RTL
-                                    dim_x=tree.n_tiles_x+1, dim_y=tree.n_tiles_y)
+                          name='magia_flex-noc',
+                          narrow_width=4,
+                          wide_width=4,
+                          router_degrees=5, 
+                          ni_outstanding_reqs=8, 
+                          router_input_queue_size=4, 
+                          routing_mode=1,             # 1 = XY Routing
+                          dim_x=tree.n_tiles_x,       # Router grid is exactly n_tiles_x wide
+                          dim_y=tree.n_tiles_y)
         
+        self.node_ids = {} # Dictionary to store our assigned integer IDs
+        num_queues = 7 #HARDCODED HERE FOR NOW
 
-        # Create noc routers
-        for y in range(0,tree.n_tiles_y):
-            for x in range(1,tree.n_tiles_x+1):
-                print(f"[NoC] Adding router and NI at position x={x} y={y}")
-                noc.add_router(x, y)
-                noc.add_network_interface(x, y)
+        # Generate Routers (IDs MUST form a perfect grid for XY math)
+        for y in range(0, tree.n_tiles_y):
+            for x in range(1, tree.n_tiles_x + 1):
+                # Calculate flat ID: e.g. for 4x4, row 0 gets 0, 1, 2, 3
+                r_id = y * tree.n_tiles_x + (x - 1)
+                self.node_ids[('router', x, y)] = r_id
+                noc.add_router(r_id, num_queues)
 
-        for y in range(0,tree.n_tiles_y):
-            print(f"[NoC] L2-NI at position x={0} y={y}")
-            noc.add_network_interface(0, y)
+        # Generate Network Interfaces (NIs)
+        current_ni_id = tree.n_tiles_x * tree.n_tiles_y
+        
+        # Tile NIs (x=1 to n_tiles_x)
+        for y in range(0, tree.n_tiles_y):
+            for x in range(1, tree.n_tiles_x + 1):
+                self.node_ids[('ni', x, y)] = current_ni_id
+                noc.add_network_interface(current_ni_id)
+                
+                # Connect Bidirectionally to local router
+                r_id = self.node_ids[('router', x, y)]
+                noc.add_link(current_ni_id, r_id)
+                noc.add_link(r_id, current_ni_id)
+                current_ni_id += 1
 
-        # Bind clusters to noc. E.g. for 4x4
-        # {1.0}----{2.0}----{3.0}----{4.0}
-        #   | 0      |  1     |  2     |  3
-        #   |        |        |        |
-        # {1.1}----{2.1}----{3.1}----{4.1}
-        #   | 4      |  5     |  6     |  7
-        #   |        |        |        |
-        # {1.2}----{2.2}----{3.2}----{4.2}
-        #   | 8      |  9     |  10    |  11
-        #   |        |        |        |
-        # {1.3}----{2.3}----{3.3}----{4.3}
-        #     12        13       14       15                        
+        # L2 NIs (x=0)
+        for y in range(0, tree.n_tiles_y):
+            self.node_ids[('ni', 0, y)] = current_ni_id
+            noc.add_network_interface(current_ni_id)
+            
+            # Connect to the closest router in the grid (x=1)
+            r_id = self.node_ids[('router', 1, y)]
+            noc.add_link(current_ni_id, r_id)
+            noc.add_link(r_id, current_ni_id)
+            current_ni_id += 1
+
+        # Generate Router-to-Router Links
+        for y in range(0, tree.n_tiles_y):
+            for x in range(1, tree.n_tiles_x + 1):
+                r_id = self.node_ids[('router', x, y)]
+                # Connect East
+                if x < tree.n_tiles_x:
+                    noc.add_link(r_id, self.node_ids[('router', x + 1, y)])
+                # Connect West
+                if x > 1:
+                    noc.add_link(r_id, self.node_ids[('router', x - 1, y)])
+                # Connect South
+                if y < tree.n_tiles_y - 1:
+                    noc.add_link(r_id, self.node_ids[('router', x, y + 1)])
+                # Connect North
+                if y > 0:
+                    noc.add_link(r_id, self.node_ids[('router', x, y - 1)])
+
+        # Finalize NoC size
+        noc.add_property('nb_nodes', current_ni_id)
 
         id = 0
-        for y in range(0,tree.n_tiles_y):
-            for x in range(1,tree.n_tiles_x+1):
-                print(f"[NoC] Adding cluster {id} at position x={x} y={y}")
+        for y in range(0, tree.n_tiles_y):
+            for x in range(1, tree.n_tiles_x + 1):
+                print(f"[NoC] Binding cluster {id} at position x={x} y={y}")
+                target_ni_id = self.node_ids[('ni', x, y)]
+
                 cluster[id].o_KILLER_OUTPUT(killer.i_INPUT())
-                cluster[id].o_NARROW_OUTPUT(noc.i_NARROW_INPUT(x,y))
-                noc.o_NARROW_MAP(cluster[id].i_NARROW_INPUT(),name=f'tile-{id}-l1-mem',base=MagiaArch.L1_ADDR_START+(id*MagiaArch.L1_TILE_OFFSET),size=MagiaArch.L1_SIZE,x=x,y=y,rm_base=False)
+                
+                # Bind output using the exact integer ID
+                cluster[id].o_NARROW_OUTPUT(noc.i_NARROW_INPUT(target_ni_id))
+                
+                # Map incoming memory requests to this cluster's exact NI ID
+                noc.o_NARROW_MAP(cluster[id].i_NARROW_INPUT(),
+                                 name=f'tile-{id}-l1-mem',
+                                 base=MagiaArch.L1_ADDR_START + (id * MagiaArch.L1_TILE_OFFSET),
+                                 size=MagiaArch.L1_SIZE,
+                                 node_id=target_ni_id,
+                                 rm_base=False)
                 id += 1
 
-        # Bind memory to noc
-        # {0.0}----{1.0}----{2.0}----{3.0}----{4.0}
-        #   | L2     | 0      |  1     |  2     |  3
-        #   |        |        |        |        |
-        # {0.1}----{1.1}----{2.1}----{3.1}----{4.1}
-        #   | L2     | 4      |  5     |  6     |  7
-        #   |        |        |        |        |
-        # {0.2}----{1.2}----{2.2}----{3.2}----{4.2}
-        #   | L2     | 8      |  9     |  10    |  11
-        #   |        |        |        |        |
-        # {0.3}----{1.3}----{2.3}----{3.3}----{4.3}
-        #     L2       12        13       14       15
-
-        for y in range(0,tree.n_tiles_y):
-            print(f"[NoC] Adding L2 at position x={0} y={y}")
-            #noc.o_NARROW_MAP(l2_mem.i_INPUT(),name=f'l2-map-{y}',base=MagiaArch.L2_ADDR_START,size=MagiaArch.L2_SIZE,x=0,y=y,rm_base=True)
-            noc.o_NARROW_BIND(l2_mem.i_INPUT(), x=0, y=y)
+        # Bind L2 memory to noc at x=0
+        for y in range(0, tree.n_tiles_y):
+            print(f"[NoC] Binding L2 at position x=0 y={y}")
+            l2_ni_id = self.node_ids[('ni', 0, y)]
+            noc.o_NARROW_BIND(l2_mem.i_INPUT(), node_id=l2_ni_id)
         
-        noc.o_MAP_DIR(base=MagiaArch.L2_ADDR_START,size=MagiaArch.L2_SIZE, dir=FlooNocDirection.LEFT,name=f'mem_left', rm_base=True)
+        # Route all L2 memory requests to the first L2 NI at (0,0)
+        noc.o_NARROW_MAP(l2_mem.i_INPUT(),
+                         name='mem_left',
+                         base=MagiaArch.L2_ADDR_START,
+                         size=MagiaArch.L2_SIZE,
+                         node_id=self.node_ids[('ni', 0, 0)], 
+                         rm_base=True)
 
+        # ---------------------------------------------------------------------
+        # End Floonoc Flex Changes
+        # ---------------------------------------------------------------------
+        
         # Fractal tree routing
         for lvl in range(0,int(math.log2(tree.NB_CLUSTERS))):
             # level 0 is a special level connecting the tiles

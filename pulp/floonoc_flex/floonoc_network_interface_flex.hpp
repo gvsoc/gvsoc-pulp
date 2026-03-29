@@ -24,6 +24,7 @@
 
 #include "floonoc_flex.hpp"
 #include <list>
+#include <vp/signal.hpp>
 #include <vp/vp.hpp>
 
 class FlooNoc;
