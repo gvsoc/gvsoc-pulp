@@ -23,7 +23,7 @@
 #pragma once
 
 #include <vp/itf/io.hpp>
-#include <vp/vp.hpp>
+#include <vp/signal.hpp>
 
 class Router;
 class NetworkInterface;

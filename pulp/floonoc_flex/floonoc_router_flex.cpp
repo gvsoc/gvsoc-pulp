@@ -34,14 +34,7 @@ Router::Router(FlooNoc *noc, std::string name, int node_id, int num_queues,
       signal_req_size(*this, "req_size", 64,
                       vp::SignalCommon::ResetKind::HighZ),
       signal_req_is_write(*this, "req_is_write", 1,
-                          vp::SignalCommon::ResetKind::HighZ),
-      stalled_queues{{vp::Signal<bool>(*this, "stalled_queue_1", 1),
-                      vp::Signal<bool>(*this, "stalled_queue_2", 1),
-                      vp::Signal<bool>(*this, "stalled_queue_3", 1),
-                      vp::Signal<bool>(*this, "stalled_queue_4", 1),
-                      vp::Signal<bool>(*this, "stalled_queue_5", 1),
-                      vp::Signal<bool>(*this, "stalled_queue_6", 1),
-                      vp::Signal<bool>(*this, "stalled_queue_local", 1)}}
+                          vp::SignalCommon::ResetKind::HighZ)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
 
@@ -50,14 +43,11 @@ Router::Router(FlooNoc *noc, std::string name, int node_id, int num_queues,
     this->num_queues = num_queues;
     this->queue_size = queue_size;
 
-    if (this->num_queues != 7) // Disallow other number of queues for now
-    {
-        this->trace.msg(vp::Trace::LEVEL_ERROR,
-                        "Router must have 7 queues, but %d queues "
-                        "requested\n",
-                        this->num_queues);
-        this->num_queues = 7;
-    }
+    this->num_queues = 7; // Disallow other number of queues for now
+
+    this->input_queues.resize(this->num_queues, nullptr);
+    this->output_nodes.resize(this->num_queues, nullptr);
+    this->stalled_queues.resize(this->num_queues, nullptr);
 
     // Create a queue for each direction
     for (int i = 0; i < this->num_queues; i++)
@@ -65,7 +55,10 @@ Router::Router(FlooNoc *noc, std::string name, int node_id, int num_queues,
         this->input_queues[i] = new RouterQueue(
             this, "input_queue_" + std::to_string(i), &this->fsm_event);
 
-        this->stalled_queues[i] = false;
+        this->stalled_queues[i] = new vp::Signal<bool>(
+            *this, "stalled_queue_" + std::to_string(i), 1);
+
+        *(this->stalled_queues[i]) = false;
     }
 }
 
@@ -74,6 +67,7 @@ Router::~Router()
     for (int i = 0; i < this->num_queues; i++)
     {
         delete this->input_queues[i];
+        delete this->stalled_queues[i];
     }
 }
 
@@ -145,13 +139,13 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     // {
     //     _this->current_queue = 0;
     // }
-    std::vector<bool> output_full(this->num_queues,
+    std::vector<bool> output_full(_this->num_queues,
                                   false); // Used to make sure we only send a
                                           // single request per cycle to each
                                           // direction
     // Then go through the num_queues input queues until we find a request which
     // can be propagated
-    for (int i = 0; i < num_queues; i++)
+    for (int i = 0; i < _this->num_queues; i++)
     {
         RouterQueue *queue = _this->input_queues[in_queue_index];
         _this->trace.msg(
@@ -246,7 +240,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 _this->trace.msg(vp::Trace::LEVEL_DEBUG,
                                  "Stalling queue (node: %d, queue: %d)\n",
                                  _this->node_id, out_queue_id);
-                _this->stalled_queues[out_queue_id] = true;
+                *(_this->stalled_queues[out_queue_id]) = true;
             }
             _this->current_queue =
                 in_queue_index + 1; // Always start looking from the queue after
@@ -270,7 +264,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
         // Go to next input queue
         in_queue_index += 1;
-        if (in_queue_index == this->num_queues)
+        if (in_queue_index == _this->num_queues)
         {
             in_queue_index = 0;
         }
@@ -300,7 +294,7 @@ void Router::unstall_queue(int from_node)
     this->trace.msg(vp::Trace::LEVEL_TRACE,
                     "Unstalling queue (node: %d, queue: %d)\n", from_node,
                     queue);
-    this->stalled_queues[queue] = false;
+    *(this->stalled_queues[queue]) = false;
     // And check in next cycle if another request can be sent
     this->fsm_event.enqueue();
 }
@@ -310,7 +304,7 @@ void Router::stall_queue(int from_node)
     int queue = this->get_req_queue(from_node);
     this->trace.msg(vp::Trace::LEVEL_TRACE,
                     "Stalling queue (node: %d, queue: %d)\n", from_node, queue);
-    this->stalled_queues[queue] = true;
+    *(this->stalled_queues[queue]) = true;
 }
 
 void Router::get_node_from_queue(int queue, int &node_id)
@@ -337,7 +331,7 @@ void Router::reset(bool active)
         this->current_queue = 0;
         for (int i = 0; i < this->num_queues; i++)
         {
-            this->stalled_queues[i] = false;
+            *(this->stalled_queues[i]) = false;
         }
     }
 }

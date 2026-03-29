@@ -19,9 +19,9 @@
 import gvsoc.systree
 import gvsoc.runner
 import os
-from pulp.chips.magia.arch import MagiaTree
+from pulp.chips.magia_flex.arch import MagiaTree
 
-from pulp.chips.magia.soc import MagiaSoc
+from pulp.chips.magia_flex.soc import MagiaSoc
 from gvrun.parameter import TargetParameter
 
 class MagiaBoard(gvsoc.systree.Component):
