@@ -41,8 +41,21 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
     this->itf_names.resize(this->nb_nodes);
 
     this->nb_nodes = get_js_config()->get_int("nb_nodes");
-    this->links = get_js_config()->get_list("links");
     this->router_degrees = get_js_config()->get_int("router_degrees");
+
+    js::Config *links_cfg = get_js_config()->get("links");
+    if (links_cfg != NULL)
+    {
+        for (js::Config *link_cfg : links_cfg->get_elems())
+        {
+            std::vector<int> link;
+            for (js::Config *elem : link_cfg->get_elems())
+            {
+                link.push_back(elem->get_int());
+            }
+            this->links.push_back(link);
+        }
+    }
 
     // Go through the mappings to create one master IO interface for each target
     js::Config *mappings = get_js_config()->get("mappings");
@@ -90,9 +103,6 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
             id++;
         }
     }
-
-    // Track which NIs map to which router
-    std::vector<int> ni_to_router_map(this->nb_nodes, -1);
 
     // Create the array of networks interfaces (initialize empty slots to NULL)
     this->network_interfaces.resize(this->nb_nodes, NULL);

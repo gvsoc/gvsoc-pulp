@@ -28,13 +28,13 @@ from pulp.light_redmule.hwpe_interleaver import HWPEInterleaver
 from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 from pulp.chips.magia.cv32.hierarchical_cache import Hierarchical_cache
 
-from pulp.chips.magia.arch import MagiaArch
-from pulp.chips.magia.cv32.core import CV32CoreTest
+from pulp.chips.magia_flex.arch import MagiaArch
+from pulp.chips.magia_flex.cv32.core import CV32CoreTest
 #from pulp.redmule.redmule import RedMule
 from pulp.light_redmule.light_redmule import LightRedmule
 from pulp.idma.snitch_dma import SnitchDma
-from pulp.chips.magia.xif_decoder.xif_decoder import XifDecoder
-from pulp.chips.magia.idma_ctrl.idma_ctrl import Magia_iDMA_Ctrl
+from pulp.chips.magia_flex.xif_decoder.xif_decoder import XifDecoder
+from pulp.chips.magia_flex.idma_ctrl.idma_ctrl import Magia_iDMA_Ctrl
 
 
 

@@ -61,9 +61,9 @@ class FlooNocFlex(gvsoc.systree.Component):
         super().__init__(parent, name)
 
         self.add_sources([
-            'pulp/floonoc/floonoc_flex.cpp',
-            'pulp/floonoc/floonoc_router_flex.cpp',
-            'pulp/floonoc/floonoc_network_interface_flex.cpp',
+            'pulp/floonoc_flex/floonoc_flex.cpp',
+            'pulp/floonoc_flex/floonoc_router_flex.cpp',
+            'pulp/floonoc_flex/floonoc_network_interface_flex.cpp',
         ])
 
         self.add_property('mappings', {})
@@ -86,7 +86,7 @@ class FlooNocFlex(gvsoc.systree.Component):
     def __add_mapping(self, name: str, base: int, size: int, node_id: int, remove_offset:int =0):
         self.get_property('mappings')[name] =  {'base': base, 'size': size, 'node_id': node_id, 'remove_offset':remove_offset}
 
-    def add_router(self, node_id: int):
+    def add_router(self, node_id: int, num_queues: int):
         """Instantiate a router in the grid.
 
         Parameters
@@ -204,7 +204,7 @@ class FlooNocFlex(gvsoc.systree.Component):
         self.__add_mapping(f"wide_{name}", base=base, size=size, node_id=0, remove_offset=remove_offset) #Placeholder node id rn
         self.itf_bind(f"ni_wide_{x}_{y}", itf, signature='io')
 
-    def i_NARROW_INPUT(self, x: int, y: int) -> gvsoc.systree.SlaveItf:
+    def i_NARROW_INPUT(self, node_id: int) -> gvsoc.systree.SlaveItf:
         """Returns the input port of a node.
 
         Requests can be injected to the noc using this interface. The noc will then
@@ -222,9 +222,9 @@ class FlooNocFlex(gvsoc.systree.Component):
         gvsoc.systree.SlaveItf
             The slave interface
         """
-        return gvsoc.systree.SlaveItf(self, f'narrow_input_{x}_{y}', signature='io')
+        return gvsoc.systree.SlaveItf(self, f'narrow_input_node_{node_id}', signature='io')
 
-    def i_WIDE_INPUT(self, x: int, y: int) -> gvsoc.systree.SlaveItf:
+    def i_WIDE_INPUT(self, node_id: int) -> gvsoc.systree.SlaveItf:
         """Returns the input port of a node.
 
         Requests can be injected to the noc using this interface. The noc will then
@@ -242,7 +242,7 @@ class FlooNocFlex(gvsoc.systree.Component):
         gvsoc.systree.SlaveItf
             The slave interface
         """
-        return gvsoc.systree.SlaveItf(self, f'wide_input_{x}_{y}', signature='io')
+        return gvsoc.systree.SlaveItf(self, f'wide_input_node_{node_id}', signature='io')
 
 def generate_routing_tables(self, routing_mode: int, dim_x: int, dim_y: int, routing_path: str):
         """
