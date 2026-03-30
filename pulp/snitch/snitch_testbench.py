@@ -30,7 +30,7 @@ from gvrun.parameter import TargetParameter
 from pulp.snitch.snitch_testbench_config import SnitchTestbenchConfig, SnitchTestbenchBoardConfig, SnitchTestbenchMultiBoardConfig
 from utils.loader.loader import ElfLoader
 from pulp.snitch.snitch_core import SnitchFast
-from memory.memory import Memory
+from memory.memory_v2 import Memory
 from interco.router import Router
 
 
@@ -120,7 +120,7 @@ class SnitchTestbenchMultiBoard(Component):
 
     def __init__(self, parent: Component, name: str, config: SnitchTestbenchMultiBoardConfig):
 
-        super().__init__(parent, name, config)
+        super().__init__(parent, name, config=config)
 
         boards: list[SnitchTestbenchBoard] = []
         for i in range(0, config.nb_boards):
