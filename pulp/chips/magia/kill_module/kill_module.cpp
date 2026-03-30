@@ -64,18 +64,21 @@ vp::IoReqStatus KillModule::req(vp::Block *__this, vp::IoReq *req)
     uint64_t offset = req->get_addr();
     uint64_t size = req->get_size();
     bool is_write = req->get_is_write();
+    uint8_t *data = req->get_data();
+    uint32_t cnf_w;
 
     if ((!is_write) || (size>4))
       return vp::IO_REQ_INVALID;
     else {
 
       if ((offset>=_this->kill_base_address) && (offset<=(_this->kill_base_address)+_this->kill_addr_size)) {
-          _this->nb_recv_kill_reqs++;
-          _this->trace.msg(vp::Trace::LEVEL_TRACE, "Received kill request at address 0x%08lx. Current kill count is %d. Number of cores to wait is %d\n",offset,_this->nb_recv_kill_reqs,_this->nb_cores_to_wait);
+        memcpy((uint8_t*)&cnf_w,data,size);
+        _this->nb_recv_kill_reqs++;
+        _this->trace.msg(vp::Trace::LEVEL_TRACE, "Received kill request at address 0x%08lx. Current kill count is %d. Number of cores to wait is %d. Received exit code is %d.\n",offset,_this->nb_recv_kill_reqs,_this->nb_cores_to_wait, cnf_w);
       }
 
       if (_this->nb_recv_kill_reqs==_this->nb_cores_to_wait) {
-        _this->time.get_engine()->quit(0);
+        _this->time.get_engine()->quit(cnf_w);
       }
       return vp::IO_REQ_OK;
     }
