@@ -23,7 +23,7 @@ try:
 except ImportError:
     from typing_extensions import override  # Python 3.10–3.11
 
-from vp.clock_domain import ClockDomain
+from vp.clock_domain import Clock_domain
 from gvsoc.systree import Component
 from gvrun.parameter import TargetParameter
 
@@ -111,7 +111,7 @@ class SnitchTestbenchBoard(Component):
 
         self.set_target_name('snitch.testbench')
 
-        clock = ClockDomain     ( self, 'clock', frequency=config.frequency )
+        clock = Clock_domain     ( self, 'clock', frequency=config.frequency )
         soc   = SnitchTestbench ( self, 'soc',   config.soc                 )
 
         clock.o_CLOCK ( soc.i_CLOCK() )
