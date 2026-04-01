@@ -49,7 +49,7 @@ void Neureka::fsm_start_handler(vp::Block *__this, vp::ClockEvent *event) {
   Neureka *_this = (Neureka *)__this;
   _this->state.set(JOB_START);
   _this->running_job_id = _this->cxt_job_id[_this->cxt_use_ptr];
-  if(trace_at_least(_this->trace_level, NEUREKA_L1_CONFIG)) {
+  if(trace_at_least(_this->trace_level, NEUREKA_L3_ALL)) {
     _this->trace.msg(vp::Trace::LEVEL_DEBUG, "FSM JOB_START EVENT\n");
   }
 
@@ -145,18 +145,24 @@ void Neureka::fsm_end_handler(vp::Block *__this, vp::ClockEvent *event) {
   if (trace_state_phase_summary_only(_this->trace_level)) {
     _this->trace.msg(vp::Trace::LEVEL_INFO, "  ----------------------  -----------  -----------  ----------  ----------------------\n");
   }
-  _this->trace.msg(
-    vp::Trace::LEVEL_INFO,
-    "Ending job (id=%d, start_cycle=%d, end_cycle=%d, total_cycles=%d).\n",
-    job_id,
-    _this->start_cycles,
-    _this->end_cycles,
-    total_cycles
-  );
+  if (trace_state_phase_summary_only(_this->trace_level)) {
+    _this->trace.msg(
+      vp::Trace::LEVEL_INFO,
+      "Ending job (id=%d, start_cycle=%d, end_cycle=%d, total_cycles=%d).\n",
+      job_id,
+      _this->start_cycles,
+      _this->end_cycles,
+      total_cycles
+    );
+  }
   if (!_this->fsm_start_event->is_enqueued() && _this->job_pending > 0) {
       _this->event_enqueue(_this->fsm_start_event, 1);
-      _this->trace.msg(vp::Trace::LEVEL_DEBUG, "FSM Start Event enqueued with cycles=%d\n", _this->fsm_start_event->get_cycle());
-      _this->trace.msg(vp::Trace::LEVEL_INFO, "Starting a new job from the queue.\n");
+      if (trace_at_least(_this->trace_level, NEUREKA_L3_ALL)) {
+        _this->trace.msg(vp::Trace::LEVEL_DEBUG, "FSM Start Event enqueued with cycles=%d\n", _this->fsm_start_event->get_cycle());
+      }
+      if (!trace_state_phase_summary_only(_this->trace_level)) {
+        _this->trace.msg(vp::Trace::LEVEL_INFO, "Starting a new job from the queue.\n");
+      }
   }
   _this->activity.set(0);
   _this->state.set(IDLE);
@@ -172,7 +178,7 @@ void Neureka::fsm_loop() {
     latency = this->fsm();
   } while(latency == 0 && state.get() != JOB_END);
 
-  if (trace_at_least(this->trace_level, NEUREKA_L1_CONFIG)) {
+  if (trace_at_least(this->trace_level, NEUREKA_L3_ALL)) {
     this->trace.msg(
       vp::Trace::LEVEL_DEBUG,
       "FSM loop settled: state=%d latency=%d\n",
@@ -187,7 +193,7 @@ void Neureka::fsm_loop() {
   }
   else if (!this->fsm_event->is_enqueued()) {
     this->event_enqueue(this->fsm_event, latency);
-    if (trace_at_least(this->trace_level, NEUREKA_L1_CONFIG)) {
+    if (trace_at_least(this->trace_level, NEUREKA_L3_ALL)) {
       this->trace.msg(vp::Trace::LEVEL_DEBUG, "FSM Event enqueued with cycles=%d (latency=%d)\n", this->fsm_event->get_cycle(), latency);
     }
   }
@@ -217,18 +223,14 @@ int Neureka::fsm() {
   this->binconv_traces = false;
   this->fsm_traces = false;
 
-  // L1: FSM/config-oriented progress traces.
-  if (trace_at_least(this->trace_level, NEUREKA_L1_CONFIG)) {
+  // L3: FSM/runtime-oriented progress traces.
+  if (trace_at_least(this->trace_level, NEUREKA_L3_ALL)) {
     this->fsm_traces = true;
   }
 
-  // L2: activation input/output visibility and key stage snapshots.
-  if (trace_at_least(this->trace_level, NEUREKA_L2_ACTIV_INOUT)) {
-    this->x_buffer_traces_postload = true;
-    this->accum_traces_streamout = true;
+  // L2: stream-in/stream-out focused visibility.
+  if (trace_at_least(this->trace_level, NEUREKA_L2_STREAM_INOUT)) {
     this->accum_traces_poststreamin = true;
-    this->accum_traces_postmatrixvec = true;
-    this->accum_traces_normquant = true;
   }
 
   // L3: full internal dumps.
@@ -243,11 +245,13 @@ int Neureka::fsm() {
     case JOB_START:
       this->activity.set(1);
     
-      if (trace_at_least(this->trace_level, NEUREKA_L1_CONFIG)) {
-        this->trace.msg(vp::Trace::LEVEL_INFO, "Starting a job (id=%d) with the following configuration:\n", this->cxt_job_id[this->cxt_use_ptr]);
-        this->printout();
-      } else {
-        this->trace.msg(vp::Trace::LEVEL_INFO, "Starting a job (id=%d).\n", this->cxt_job_id[this->cxt_use_ptr]);
+      if (!trace_state_phase_summary_only(this->trace_level)) {
+        if (trace_at_least(this->trace_level, NEUREKA_L1_CONFIG)) {
+          this->trace.msg(vp::Trace::LEVEL_INFO, "Starting a job (id=%d) with the following configuration:\n", this->cxt_job_id[this->cxt_use_ptr]);
+          this->printout();
+        } else {
+          this->trace.msg(vp::Trace::LEVEL_INFO, "Starting a job (id=%d).\n", this->cxt_job_id[this->cxt_use_ptr]);
+        }
       }
       if (trace_state_phase_summary_only(this->trace_level)) {
         this->trace.msg(vp::Trace::LEVEL_INFO, "  state                    start_cycle  end_cycle   cycle_diff  next_state\n");
@@ -403,6 +407,7 @@ int Neureka::fsm() {
       if(this->weight_demux)
         latency = 1; // assume 1 cycle latency for weight from WMEM
 
+
       if(this->activation_prefetch && !((this->j_major == this->subtile_nb_wo-1) && (this->i_major == this->subtile_nb_ho-1) && (this->k_in_major_iter == k_in_major_lim-1))){
         this->matrixvec_latency += latency;
         latency = 0;  
@@ -414,7 +419,9 @@ int Neureka::fsm() {
         this->debug_accum();
       }
       if(this->matrixvec_exit_idx()) {// true after iteration for qw is completed in depthwise mode
-
+        if(this->fsm_traces) {
+          this->trace.msg(vp::Trace::LEVEL_DEBUG, "Exiting MATRIX_VECTOR_COMPUTE (latency=%d)\n", latency);
+        }
         // emulate 6 cycles of latency due to FIFOs + ctrl
         if(!this->depthwise) {
           latency += this->fs == 3 ? 8 : 0; // MATRIXVEC_OVERHEAD and UPDATEIDX
@@ -424,9 +431,6 @@ int Neureka::fsm() {
           }  
         }
 
-        if(this->fsm_traces) {
-          this->trace.msg(vp::Trace::LEVEL_DEBUG, "Exiting MATRIX_VECTOR_COMPUTE\n");
-        }
         if(this->accum_traces_postmatrixvec) {
           this->debug_accum();
         }
@@ -517,7 +521,7 @@ int Neureka::fsm() {
 
         if(this->fs == 1) {
           latency += 3;
-          if (trace_at_least(this->trace_level, NEUREKA_L1_CONFIG)) {
+          if (trace_at_least(this->trace_level, NEUREKA_L3_ALL)) {
             this->trace.msg(vp::Trace::LEVEL_DEBUG, "  After streamout cycle adjust =%d\n", latency);
           }
         }
