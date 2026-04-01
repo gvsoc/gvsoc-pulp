@@ -37,7 +37,7 @@ void Neureka::load_setup() {
  
   auto k_in_major = this->depthwise ? this->k_out_major : this->k_in_major_iter;
 
-  if(this->trace_level == L3_ALL) {
+  if(trace_at_least(this->trace_level, NEUREKA_L3_ALL)) {
     this->trace.msg(vp::Trace::LEVEL_DEBUG, "   h_size_in=%d\n", this->h_size_in);
     this->trace.msg(vp::Trace::LEVEL_DEBUG, "   w_size_in=%d\n", this->w_size_in);
     this->trace.msg(vp::Trace::LEVEL_DEBUG, "   h_size_out=%d\n", this->h_size_out);
@@ -193,12 +193,7 @@ void Neureka::load_filter_masking() {
 }
 
 bool Neureka::load_exit_idx() {
-  if(this->load_i_fbuf == this->load_i_fbuf_lim-1 && this->load_j_fbuf == this->load_j_fbuf_lim-1) {
-    return true;
-  }
-  else {
-    return false;
-  }
+  return this->load_i_fbuf == this->load_i_fbuf_lim-1 && this->load_j_fbuf == this->load_j_fbuf_lim-1;
 }
 
 void Neureka::load_update_idx() {

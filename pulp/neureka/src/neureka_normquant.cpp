@@ -105,12 +105,7 @@ int  Neureka::normquant_mult_cycle() {
 }
 
 bool Neureka::normquant_mult_exit_idx() {
-  if(this->nq_iter == this->nq_lim-1) {
-    return true;
-  }
-  else {
-    return false;
-  }
+  return this->nq_iter == this->nq_lim-1;
 }
 
 void Neureka::normquant_mult_update_idx() {
@@ -179,12 +174,7 @@ int  Neureka::normquant_bias_cycle() {
 }
 
 bool Neureka::normquant_bias_exit_idx() {
-  if(this->nqb_iter == 3) {
-    return true;
-  }
-  else {
-    return false;
-  }
+  return this->nqb_iter == 3;
 }
 
 void Neureka::normquant_bias_update_idx() {

@@ -23,17 +23,20 @@
 
 int Neureka::regfile_rd(int addr) {
   if(addr == NEUREKA_SPECIAL_TRACE_REG) {
-    if(this->trace_level == L0_CONFIG) {
+    if(this->trace_level == NEUREKA_L0_JOB_START_END) {
       return 0;
     }
-    else if(this->trace_level == L1_ACTIV_INOUT) {
+    else if(this->trace_level == NEUREKA_L1_CONFIG) {
       return 1;
     }
-    else if(this->trace_level == L2_DEBUG) {
+    else if(this->trace_level == NEUREKA_L2_ACTIV_INOUT) {
       return 2;
     }
-    else {
+    else if(this->trace_level == NEUREKA_L3_ALL) {
       return 3;
+    }
+    else {
+      return 4;
     }
   }
   else if(addr < NEUREKA_NB_REG) {
@@ -55,16 +58,19 @@ int Neureka::regfile_rd(int addr) {
 void Neureka::regfile_wr(int addr, int value) {
   if(addr == NEUREKA_SPECIAL_TRACE_REG) {
     if(value == 0) {
-      this->trace_level = L0_CONFIG;
+      this->trace_level = NEUREKA_L0_JOB_START_END;
     }
     else if(value == 1) {
-      this->trace_level = L1_ACTIV_INOUT;
+      this->trace_level = NEUREKA_L1_CONFIG;
     }
     else if(value == 2) {
-      this->trace_level = L2_DEBUG;
+      this->trace_level = NEUREKA_L2_ACTIV_INOUT;
+    }
+    else if(value == 3) {
+      this->trace_level = NEUREKA_L3_ALL;
     }
     else {
-      this->trace_level = L3_ALL;
+      this->trace_level = NEUREKA_L4_STATE_PHASE_SUMMARY;
     }
   }
   else if (addr == NEUREKA_SPECIAL_FORMAT_TRACE_REG) {
@@ -384,8 +390,5 @@ int Neureka::acquire() {
 
 bool Neureka::status() {
   this->trace.msg(vp::Trace::LEVEL_DEBUG, "job_state=%d job_pending=%d\n", this->job_state, this->job_pending);
-  if(this->job_state == 0 & this->job_pending == 0)
-    return false;
-  else
-    return true;
+  return !(this->job_state == 0 & this->job_pending == 0);
 }
