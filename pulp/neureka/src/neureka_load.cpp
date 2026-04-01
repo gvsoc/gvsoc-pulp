@@ -107,7 +107,7 @@ void Neureka::load_do_padding() { // not linear
   // | BBL   | BB    | BBR   | BBRR  |
   // +-------+-------+-------+-------+
 
-  // FIXME: non0-padding values do not work in mode16 in the model, see similar bug in NE16 RTL
+  // FIXME: non0-padding values do not work in mode16 in the model, see similar bug in NEUREKA RTL
   
   // top-left
   if(this->padding_left  > 0 && this->j_major==0 || this->padding_top > 0 && this->i_major==0) {

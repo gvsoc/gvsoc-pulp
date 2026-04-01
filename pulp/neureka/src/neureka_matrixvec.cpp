@@ -19,7 +19,7 @@
  *          Arpan Suravi Prasad, ETH Zurich (prasadar@iis.ee.ethz.ch)
  */
 
-// as the internal max precision of NE16 is 32 bits, this is emulated by casting x to 32 bits here
+// as the internal max precision of NEUREKA is 32 bits, this is emulated by casting x to 32 bits here
 #include <neureka.hpp>
 
 xt::xarray<uint8_t> __Weight_transform_1x1(xt::xarray<uint8_t> W)

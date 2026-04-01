@@ -113,7 +113,6 @@ int Neureka::streamout_cycle() {
       this->trace.msg(vp::Trace::LEVEL_DEBUG, "  Inside the if before subtile_nb_ko=%d\n", this->subtile_nb_ko);
       this->trace.msg(vp::Trace::LEVEL_DEBUG, "  Inside the if before k_out_last=%d\n", k_out_last);
       k_out_last = (k_out_last < (this->subtile_rem_ko)) ? k_out_last : (this->subtile_rem_ko);
-      // k_out_last = this->subtile_rem_ko;
       this->trace.msg(vp::Trace::LEVEL_DEBUG, "  Inside the if after k_out_last=%d\n", k_out_last);
     }
     for (auto i=this->streamout_k_out_iter*8; i<k_out_last; i++) {
