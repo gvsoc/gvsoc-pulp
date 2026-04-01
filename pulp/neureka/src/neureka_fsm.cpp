@@ -379,8 +379,8 @@ int Neureka::fsm() {
       }
       else if(!this->depthwise) {
         if(this->activation_prefetch){
-          this->matrixvec_latency = this->fs == 1 ? 7 : 6;
-          latency += this->fs == 1 ? 7 : 6;
+          this->matrixvec_latency = this->fs == 1 ? 3 : 6;
+          latency += this->fs == 1 ? 3 : 6;
         }
         else{
           latency += this->fs == 1 ? 10 : 6;
@@ -462,6 +462,7 @@ int Neureka::fsm() {
         this->trace.msg(vp::Trace::LEVEL_DEBUG, "State NORM_SHIFT\n");
       }
       latency = this->normquant_shift_cycle();
+      latency = latency + 7;
       this->normquant_mult_setup();
       state_next = NORM_MULTIPLY;
       break;
