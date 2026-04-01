@@ -24,7 +24,6 @@
 void Neureka::debug_x_buffer() {
     std::ostringstream stringStream;
     stringStream << "x_buffer[8,8,32] = \n" << (this->trace_format?std::hex:std::dec) << std::setw(2) << xt::view(this->x_buffer,xt::range(0,2),xt::range(0,2),xt::range(0,1)) << std::dec << "\n";
-    // stringStream << "x_buffer[8,8,32] = \n" << (this->trace_format?std::hex:std::dec) << std::setw(2) << xt::view(this->x_buffer,xt::all(),xt::all(),xt::all()) << std::dec << "\n";
     std::string copyOfStr = stringStream.str();
     this->trace.msg(vp::Trace::LEVEL_DEBUG, copyOfStr.c_str());
 }
