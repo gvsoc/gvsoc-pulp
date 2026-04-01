@@ -54,9 +54,11 @@ class MagiaArch:
     STDOUT_SIZE             = 0x100
 
     # Snitch_Spatz
+    SPATZ_ENABLE               = False
     SPATZ_BOOTROM_ADDR         = 0x1000_0000
     SPATZ_BOOTROM_SIZE         = 0x100
-    SPATZ_ROMFILE              = 'pulp/snitch/bootrom_spatz.bin'
+    SPATZ_ROMFILE              = ''
+    USE_NEW_SPATZ              = True
 
     # From magia_pkg.sv
     N_MEM_BANKS         = 32        # Number of TCDM banks
@@ -70,7 +72,6 @@ class MagiaArch:
     N_TILES_Y           = 4
 
     USE_NARROW_WIDE     = False
-    USE_NEW_SPATZ       = False
 
 class MagiaTree(Tree):
     def __init__(self, parent, name):
@@ -82,13 +83,10 @@ class MagiaTree(Tree):
 
         self.nb_clusters = self.n_tiles_x*self.n_tiles_y
 
-        self.romfile = Value(self, 'spatz_romfile', MagiaArch.SPATZ_ROMFILE, cast=str,
-            description='Snitch_Spatz rom file')
-        
-        if len(self.romfile) == 0:
-            self.enable_spatz = False
-        else: 
-            self.enable_spatz = True
+        if MagiaArch.SPATZ_ENABLE:
+            self.romfile = Value(self, 'spatz_romfile', MagiaArch.SPATZ_ROMFILE, cast=str,
+                description='Snitch_Spatz rom file')
+            print("SNITCH_SPATZ complex enabled")
 
 class MagiaDSE:
     SOC_L2_LATENCY              = 2

@@ -63,7 +63,7 @@ class MagiaTileTcdm(gvsoc.systree.Component):
         redmule_masters = 1
         redmule_interleaver = HWPEInterleaver(self, 'redmule_interleaver', nb_master_ports=redmule_masters, nb_banks=nb_banks, bank_width=MagiaArch.BYTES_PER_WORD)
 
-        if tree.enable_spatz:
+        if MagiaArch.SPATZ_ENABLE:
             # 4 master: VLSU0, VLSU1, VLSU2, VLSU03
             snitch_spatz_vlsu = 4
             snitch_spatz_interleaver = L1_interleaver(self, 'snitch_spatz_interleaver', nb_slaves=nb_banks, nb_masters=snitch_spatz_vlsu, interleaving_bits=2, offset_mask=MagiaArch.L1_TILE_OFFSET-1)
@@ -78,7 +78,7 @@ class MagiaTileTcdm(gvsoc.systree.Component):
             self.bind(interleaver, f'out_{i}', bank, 'input')
             self.bind(dma_interleaver, f'out_{i}', bank, 'input')
             self.bind(redmule_interleaver, f'out_{i}', bank, 'input')
-            if tree.enable_spatz:
+            if MagiaArch.SPATZ_ENABLE:
                 self.bind(snitch_spatz_interleaver, f'out_{i}', bank, 'input')
 
         # Bind external ports (input->[internal]output->interleaver)
@@ -91,7 +91,7 @@ class MagiaTileTcdm(gvsoc.systree.Component):
         for i in range(redmule_masters):
             self.bind(self, f'RedMulE_input', redmule_interleaver, f'input')
 
-        if tree.enable_spatz:
+        if MagiaArch.SPATZ_ENABLE:
             for i in range(snitch_spatz_vlsu):
                 self.bind(self, f'SnitchSpatz_input_{i}', snitch_spatz_interleaver, f'in_{i}')
 
@@ -144,7 +144,7 @@ class MagiaV2Tile(gvsoc.systree.Component):
         # Core model from pulp cores
         core_cv32 = CV32CoreTest(self, f'tile-{tid}-cv32-core',core_id=tid)
 
-        if tree.enable_spatz:
+        if MagiaArch.SPATZ_ENABLE:
 
             # Snitch Spatz boot rom file
             snitch_spatz_rom = memory.Memory(self, 'snitch-spatz-rom', size=MagiaArch.SPATZ_BOOTROM_SIZE,stim_file=self.get_file_path(tree.romfile))
@@ -234,7 +234,7 @@ class MagiaV2Tile(gvsoc.systree.Component):
         # Bind: loader -> obi interconnect
         self.__o_LOADER(obi_xbar.i_INPUT())
 
-        if tree.enable_spatz:
+        if MagiaArch.SPATZ_ENABLE:
             # Bind: snitch spatz core data -> obi interconnect
             snitch_spatz.o_DATA(obi_xbar.i_INPUT())
             snitch_spatz.o_DATA_DEBUG(obi_xbar.i_INPUT())
@@ -293,7 +293,7 @@ class MagiaV2Tile(gvsoc.systree.Component):
                        base=MagiaArch.STACK_ADDR_START,
                        size=MagiaArch.STACK_SIZE, rm_base=False)
         
-        if tree.enable_spatz:
+        if MagiaArch.SPATZ_ENABLE:
             # Bind obi xbar so that it can communicate with snitch spatz bootrom
             obi_xbar.o_MAP(snitch_spatz_rom.i_INPUT(), name="snitch-spatz-bootrom",
                         base=MagiaArch.SPATZ_BOOTROM_ADDR,
@@ -381,7 +381,7 @@ class MagiaV2Tile(gvsoc.systree.Component):
         self.bind(event_unit, 'irq_req_0', core_cv32, 'irq_req')
         self.bind(idma_mm_ctrl, 'idma0_done_irq', event_unit, 'in_event_2_pe_0')
         self.bind(idma_mm_ctrl, 'idma1_done_irq', event_unit, 'in_event_3_pe_0')
-        if tree.enable_spatz:
+        if MagiaArch.SPATZ_ENABLE:
             self.bind(snitch_spatz_regs, 'spatz_done_irq', event_unit, 'in_event_8_pe_0')
         self.bind(redmule, 'done_irq', event_unit, 'in_event_10_pe_0')
         self.bind(fsync_mm_ctrl, 'fsync_done_irq', event_unit, 'in_event_24_pe_0')
