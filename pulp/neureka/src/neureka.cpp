@@ -92,7 +92,7 @@ vp::IoReqStatus Neureka::hwpe_slave(vp::Block *__this, vp::IoReq *req)
 {
     Neureka *_this = (Neureka *)__this;
 
-    if (trace_at_least(_this->trace_level, NEUREKA_L1_CONFIG)) {
+    if (trace_at_least(_this->trace_level, NEUREKA_L3_ALL)) {
       _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received request (addr: 0x%x, size: 0x%x, is_write: %d, data: %p\n", req->get_addr(), req->get_size(), req->get_is_write(), req->get_data());
     }
     uint8_t *data = req->get_data(); // size depends on data get_size
@@ -109,8 +109,8 @@ vp::IoReqStatus Neureka::hwpe_slave(vp::Block *__this, vp::IoReq *req)
                 _this->trace.msg("Setting tracing level to NEUREKA_L1_CONFIG\n");
             }
             else if(*data == 2) {
-                _this->trace_level = NEUREKA_L2_ACTIV_INOUT;
-                _this->trace.msg("Setting tracing level to NEUREKA_L2_ACTIV_INOUT\n");
+                _this->trace_level = NEUREKA_L2_STREAM_INOUT;
+                _this->trace.msg("Setting tracing level to NEUREKA_L2_STREAM_INOUT\n");
             }
             else if(*data == 3) {
                 _this->trace_level = NEUREKA_L3_ALL;
@@ -134,7 +134,7 @@ vp::IoReqStatus Neureka::hwpe_slave(vp::Block *__this, vp::IoReq *req)
             }
         }
         else {
-            if (trace_at_least(_this->trace_level, NEUREKA_L1_CONFIG)) {
+            if (trace_at_least(_this->trace_level, NEUREKA_L3_ALL)) {
                 _this->trace.msg(vp::Trace::LEVEL_DEBUG, "offset: %d data: %08x\n", ((req->get_addr() & 0x17f) - 0x20) >> 2, *(uint32_t *) data);
             }
             _this->regfile_wr(((req->get_addr() & 0x17f) - 0x20)>> 2, *(uint32_t *) data);
@@ -143,26 +143,26 @@ vp::IoReqStatus Neureka::hwpe_slave(vp::Block *__this, vp::IoReq *req)
     else {
         if((req->get_addr() & 0x17f) == 0x4) {
             *(uint32_t *) data = _this->acquire();
-            if (trace_at_least(_this->trace_level, NEUREKA_L1_CONFIG)) {
+            if (trace_at_least(_this->trace_level, NEUREKA_L3_ALL)) {
                 _this->trace.msg("Returning %x\n", *(uint32_t *) data);
             }
         }
         else if((req->get_addr() & 0x17f) == 0xc) {
             *(uint32_t *) data = ((_this->cxt_job_id[0]>=0?0x1:0)|(_this->cxt_job_id[1]>=0?0x100:0));
-            if (trace_at_least(_this->trace_level, NEUREKA_L1_CONFIG)) {
+            if (trace_at_least(_this->trace_level, NEUREKA_L3_ALL)) {
                 _this->trace.msg("Returning %x\n", *(uint32_t *) data);
             }
         }
         else if((req->get_addr() & 0x17f) == 0x10) {
             // Returns the active running job or the last jobid that was run
             *(uint32_t *) data = _this->running_job_id;
-            if (trace_at_least(_this->trace_level, NEUREKA_L1_CONFIG)) {
+            if (trace_at_least(_this->trace_level, NEUREKA_L3_ALL)) {
                 _this->trace.msg("Returning %x\n", *(uint32_t *) data);
             }
         }
         else {
             *(uint32_t *) data = _this->regfile_rd(((req->get_addr() & 0x17f) - 0x20) >> 2);
-            if (trace_at_least(_this->trace_level, NEUREKA_L1_CONFIG)) {
+            if (trace_at_least(_this->trace_level, NEUREKA_L3_ALL)) {
                 _this->trace.msg("Returning %x\n", *(uint32_t *) data);
             }
         }

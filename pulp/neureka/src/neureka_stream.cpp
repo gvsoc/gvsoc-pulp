@@ -200,7 +200,7 @@ xt::xarray<T> NeurekaVectorLoad<T>::ex(int width, bool w_demux, int64_t& cycles)
       this->neureka->trace.fatal("Unsupported asynchronous reply\n");
     }
   }
-  if (trace_at_least(this->neureka->trace_level, NEUREKA_L2_ACTIV_INOUT)) {
+  if (trace_at_least(this->neureka->trace_level, NEUREKA_L2_STREAM_INOUT)) {
     this->neureka->trace.msg(
       vp::Trace::LEVEL_DEBUG,
       "STREAM ACTIVATION_LOAD: addr=0x%08x size=%dB latency=%lld\n",
@@ -215,7 +215,7 @@ xt::xarray<T> NeurekaVectorLoad<T>::ex(int width, bool w_demux, int64_t& cycles)
     xt::view(x, i) = *(T *)(load_data + (addr & 0x3) + i*sizeof(T));
   }
 
-  if (trace_at_least(this->neureka->trace_level, NEUREKA_L3_ALL)) {
+  if (trace_at_least(this->neureka->trace_level, NEUREKA_L2_STREAM_INOUT)) {
     std::ostringstream stream;
     xt::print_options::set_line_width(1000);
     stream << "STREAM ACTIVATION_LOAD DATA: " << (this->neureka->trace_format ? std::hex : std::dec) << x << std::dec << "\n";
@@ -305,7 +305,7 @@ xt::xarray<T> NeurekaVectorStore<T>::ex(xt::xarray<T> data, int width, int64_t& 
       }
     }
   }
-  if (trace_at_least(this->neureka->trace_level, NEUREKA_L2_ACTIV_INOUT)) {
+  if (trace_at_least(this->neureka->trace_level, NEUREKA_L2_STREAM_INOUT)) {
     this->neureka->trace.msg(
       vp::Trace::LEVEL_DEBUG,
       "STREAM STORE: addr=0x%08x size=%dB en=%d latency=%lld\n",
@@ -316,7 +316,7 @@ xt::xarray<T> NeurekaVectorStore<T>::ex(xt::xarray<T> data, int width, int64_t& 
     );
   }
 
-  if (trace_at_least(this->neureka->trace_level, NEUREKA_L3_ALL)) {
+  if (trace_at_least(this->neureka->trace_level, NEUREKA_L2_STREAM_INOUT)) {
     std::ostringstream stream;
     xt::print_options::set_line_width(1000);
     if(enable) {

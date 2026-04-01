@@ -29,7 +29,7 @@ int Neureka::regfile_rd(int addr) {
     else if(this->trace_level == NEUREKA_L1_CONFIG) {
       return 1;
     }
-    else if(this->trace_level == NEUREKA_L2_ACTIV_INOUT) {
+    else if(this->trace_level == NEUREKA_L2_STREAM_INOUT) {
       return 2;
     }
     else if(this->trace_level == NEUREKA_L3_ALL) {
@@ -64,7 +64,7 @@ void Neureka::regfile_wr(int addr, int value) {
       this->trace_level = NEUREKA_L1_CONFIG;
     }
     else if(value == 2) {
-      this->trace_level = NEUREKA_L2_ACTIV_INOUT;
+      this->trace_level = NEUREKA_L2_STREAM_INOUT;
     }
     else if(value == 3) {
       this->trace_level = NEUREKA_L3_ALL;
