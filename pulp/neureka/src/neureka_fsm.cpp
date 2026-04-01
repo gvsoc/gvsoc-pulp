@@ -422,6 +422,10 @@ int Neureka::fsm() {
         if(this->fsm_traces) {
           this->trace.msg(vp::Trace::LEVEL_DEBUG, "Exiting MATRIX_VECTOR_COMPUTE (latency=%d)\n", latency);
         }
+        if(this->activation_prefetch && (this->fs == 1) && ((this->j_major == this->subtile_nb_wo-1) && (this->i_major == this->subtile_nb_ho-1) && (this->k_in_major_iter == k_in_major_lim-1))){
+          latency += 10;
+          this->matrixvec_latency += 10;
+        }
         // emulate 6 cycles of latency due to FIFOs + ctrl
         if(!this->depthwise) {
           latency += this->fs == 3 ? 8 : 0; // MATRIXVEC_OVERHEAD and UPDATEIDX
