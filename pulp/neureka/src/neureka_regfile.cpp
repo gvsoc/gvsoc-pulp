@@ -23,17 +23,20 @@
 
 int Neureka::regfile_rd(int addr) {
   if(addr == NEUREKA_SPECIAL_TRACE_REG) {
-    if(this->trace_level == L0_CONFIG) {
+    if(this->trace_level == NEUREKA_L0_JOB_START_END) {
       return 0;
     }
-    else if(this->trace_level == L1_ACTIV_INOUT) {
+    else if(this->trace_level == NEUREKA_L1_CONFIG) {
       return 1;
     }
-    else if(this->trace_level == L2_DEBUG) {
+    else if(this->trace_level == NEUREKA_L2_STREAM_INOUT) {
       return 2;
     }
-    else {
+    else if(this->trace_level == NEUREKA_L3_ALL) {
       return 3;
+    }
+    else {
+      return 4;
     }
   }
   else if(addr < NEUREKA_NB_REG) {
@@ -55,16 +58,19 @@ int Neureka::regfile_rd(int addr) {
 void Neureka::regfile_wr(int addr, int value) {
   if(addr == NEUREKA_SPECIAL_TRACE_REG) {
     if(value == 0) {
-      this->trace_level = L0_CONFIG;
+      this->trace_level = NEUREKA_L0_JOB_START_END;
     }
     else if(value == 1) {
-      this->trace_level = L1_ACTIV_INOUT;
+      this->trace_level = NEUREKA_L1_CONFIG;
     }
     else if(value == 2) {
-      this->trace_level = L2_DEBUG;
+      this->trace_level = NEUREKA_L2_STREAM_INOUT;
+    }
+    else if(value == 3) {
+      this->trace_level = NEUREKA_L3_ALL;
     }
     else {
-      this->trace_level = L3_ALL;
+      this->trace_level = NEUREKA_L4_STATE_PHASE_SUMMARY;
     }
   }
   else if (addr == NEUREKA_SPECIAL_FORMAT_TRACE_REG) {
@@ -192,49 +198,11 @@ void Neureka::regfile_cxt() {
         break;
 
       case NEUREKA_REG_FILTER_MASK:
-        // this->filter_mask_config = value;
         this->filter_mask_top    = ((value) & 0x1FF);//<----------FIX ME
-        // this->filter_mask_right  = (value >> 16) & 0xff;
-        // this->filter_mask_bottom = (value >> 8) & 0xff;
-        // this->filter_mask_left   = value & 0xff;
-        // this->filter_mask_top    = ((value) & 0b1) & (((value) & 0b10)>>1)  & (((value) & 0b100)>>2);
-        // this->filter_mask_bottom    = (((value) & 0b1000000) >> 6) & (((value) & 0b10000000)>>7)  & (((value) & 0b100000000)>>8);
-        // this->filter_mask_left    = ((value) & 0b1) & (((value) & 0b1000)>>3)  & (((value) & 0b1000000)>>6);
-        // this->filter_mask_right    = (((value) & 0b100) >> 2) & (((value) & 0b100000)>>5)  & (((value) & 0b100000000)>>8);
-        // std::cout<<"FILTER MASK TOP"<<this->filter_mask_top<<std::endl;
-        // std::cout<<"FILTER MASK BOTTOM"<<this->filter_mask_bottom<<std::endl;
-        // std::cout<<"FILTER MASK LEFT"<<this->filter_mask_left<<std::endl;
-        // std::cout<<"FILTER MASK RIGHT"<<this->filter_mask_right<<std::endl;
-        // std::cout<<"VALUE = "<<std::hex<<value<<std::endl;
-
         break;
-/*
- cfg[NE16_REG_CONFIG0]           = bits(0, 31, 31) |
-                                    bits(8, 27, 30) |
-                                    bits(this->signed_activation ? 1:0, 26, 26) |
-                                    bits(this->norm_option_bias ? 1 : 0, 25, 25) |
-                                    bits(this->norm_option_shift ? 1 : 0, 24, 24) |
-                                    bits(this->use_relu ? 0 : 1, 23, 23) |
-                                    bits(this->quantization_bits >> 4, 21, 22) |
-                                    bits(this->shift_reqnt(0), 16, 20) |
-                                    bits(0, 15, 15) | // FIXME UNUSED
-                                    bits(this->streamin ? 1 : 0, 14, 14) |
-                                    bits(this->normalization_bits >> 4, 12, 13) |
-                                    bits(this->use_rounding ? 0 : 1, 11, 11) |
-                                    bits(0, 8, 10)  | // FIXME reserved for padding flags --> UNUSED
-                                    bits(this->mode_linear ? 1 : 0, 7, 7) |
-                                    bits(filter_mode, 5, 6) |
-                                    bits(this->output_quant, 4, 4) |
-                                    bits(this->mode16 ? 1 : 0, 3, 3) |
-                                    bits(this->qw-1, 0, 2) |
-                                    bits(this->activation_prefetch ? 1:0,10,10)|
-                                    bits(this->weight_demux ? 1:0,9,9);// weight_demux
-
-*/
       case NEUREKA_REG_CONFIG0:
         // [26] signed_activation
         this->signed_activation = ((value >> 26) & 0x1) ? true : false;
-//         std::cout<<"SIGNED ACTIVATION="<<this->signed_activation<<"\n";
         // [25] norm option bias (0=do not load bias; 1=load bias)
         this->norm_option_bias = ((value >> 25) & 0x1) ? true : false;
         // [24] norm option shift (0=use quantization right shift; 1=load with norm)
@@ -384,8 +352,5 @@ int Neureka::acquire() {
 
 bool Neureka::status() {
   this->trace.msg(vp::Trace::LEVEL_DEBUG, "job_state=%d job_pending=%d\n", this->job_state, this->job_pending);
-  if(this->job_state == 0 & this->job_pending == 0)
-    return false;
-  else
-    return true;
+  return !(this->job_state == 0 & this->job_pending == 0);
 }

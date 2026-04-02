@@ -85,7 +85,7 @@ void Neureka::streamout_setup() {
     this->debug_accum();
   }
 
-  if(this->trace_level == L3_ALL) {
+  if(trace_at_least(this->trace_level, NEUREKA_L3_ALL)) {
     this->trace.msg(vp::Trace::LEVEL_DEBUG, "   k_out=%d\n", this->k_out);
     this->trace.msg(vp::Trace::LEVEL_DEBUG, "   w_out=%d\n", this->w_out);
     this->trace.msg(vp::Trace::LEVEL_DEBUG, "   h_size_out=%d\n", this->h_size_out);
@@ -113,7 +113,6 @@ int Neureka::streamout_cycle() {
       this->trace.msg(vp::Trace::LEVEL_DEBUG, "  Inside the if before subtile_nb_ko=%d\n", this->subtile_nb_ko);
       this->trace.msg(vp::Trace::LEVEL_DEBUG, "  Inside the if before k_out_last=%d\n", k_out_last);
       k_out_last = (k_out_last < (this->subtile_rem_ko)) ? k_out_last : (this->subtile_rem_ko);
-      // k_out_last = this->subtile_rem_ko;
       this->trace.msg(vp::Trace::LEVEL_DEBUG, "  Inside the if after k_out_last=%d\n", k_out_last);
     }
     for (auto i=this->streamout_k_out_iter*8; i<k_out_last; i++) {
@@ -143,12 +142,7 @@ int Neureka::streamout_cycle() {
 bool Neureka::streamout_exit_idx() {
   auto h_size_out = this->h_size_out;
   auto w_size_out = this->w_size_out;
-  if(this->streamout_i_out_iter == h_size_out-1 && this->streamout_j_out_iter == w_size_out-1 && this->streamout_k_out_iter == this->streamout_k_out_lim-1) {
-    return true;
-  }
-  else {
-    return false;
-  }
+  return this->streamout_i_out_iter == h_size_out-1 && this->streamout_j_out_iter == w_size_out-1 && this->streamout_k_out_iter == this->streamout_k_out_lim-1;
 }
 
 void Neureka::streamout_update_idx() {
@@ -167,10 +161,5 @@ void Neureka::streamout_update_idx() {
 }
 
 bool Neureka::streamout_to_end_idx() {
-  if((this->k_out_major == this->subtile_nb_ko-1) && (this->i_major == this->subtile_nb_ho-1) && (this->j_major == this->subtile_nb_wo-1)) {
-    return true;
-  }
-  else {
-    return false;
-  }
+  return (this->k_out_major == this->subtile_nb_ko-1) && (this->i_major == this->subtile_nb_ho-1) && (this->j_major == this->subtile_nb_wo-1);
 }

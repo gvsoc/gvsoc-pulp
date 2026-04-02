@@ -70,31 +70,46 @@
 
 #define NEUREKA_SPECIAL_TRACE_REG NEUREKA_NB_REG
 #define NEUREKA_SPECIAL_FORMAT_TRACE_REG NEUREKA_NB_REG+1
-// #define DEFAULT_TRACE_LEVEL L0_CONFIG
+// #define DEFAULT_TRACE_LEVEL NEUREKA_L0_JOB_START_END
 #define DEFAULT_TRACE_LEVEL LEVEL_DEBUG
 
 enum NeurekaState {
     IDLE,
-    START,
-    START_STREAMIN,
-    STREAMIN_LOAD,
-    LOAD_MATRIXVEC,
-    STREAMIN,
-    LOAD,
-    MATRIXVEC,
-    NORMQUANT_SHIFT,
-    NORMQUANT_MULT,
-    NORMQUANT_BIAS,
-    STREAMOUT,
-    END
+    JOB_START,
+    TILE_PREPARE,
+    LOAD_PREPARE,
+    MATRIXVEC_PREPARE,
+    ACCUM_STREAMIN,
+    ACTIVATION_LOAD,
+    MATRIX_VECTOR_COMPUTE,
+    NORM_SHIFT,
+    NORM_MULTIPLY,
+    NORM_BIAS_SHIFT,
+    OUTPUT_STREAMOUT,
+    JOB_END
 };
 
 enum NeurekaTraceLevel {
-    L0_CONFIG,
-    L1_ACTIV_INOUT,
-    L2_DEBUG,
-    L3_ALL
+    NEUREKA_L0_JOB_START_END,
+    NEUREKA_L1_CONFIG,
+    NEUREKA_L2_STREAM_INOUT,
+    NEUREKA_L3_ALL,
+    NEUREKA_L4_STATE_PHASE_SUMMARY
 };
+
+static inline bool trace_at_least(NeurekaTraceLevel level, NeurekaTraceLevel threshold)
+{
+  // NEUREKA_L4_STATE_PHASE_SUMMARY is a dedicated mode and should not imply other levels.
+  if (level == NEUREKA_L4_STATE_PHASE_SUMMARY || threshold == NEUREKA_L4_STATE_PHASE_SUMMARY) {
+    return level == threshold;
+  }
+  return static_cast<int>(level) >= static_cast<int>(threshold);
+}
+
+static inline bool trace_state_phase_summary_only(NeurekaTraceLevel level)
+{
+  return level == NEUREKA_L4_STATE_PHASE_SUMMARY;
+}
 
 // forward definitions
 class Neureka;
@@ -344,6 +359,10 @@ private:
     int w_in;
     int start_cycles;
     int end_cycles;
+    NeurekaState state_phase_track_state;
+    int state_phase_track_cycles;
+    bool state_phase_track_valid;
+    int64_t state_phase_track_start_cycle;
 
 
     // STATEFUL BUFFERS
@@ -362,14 +381,14 @@ private:
     void clear_accum();
     void clear_x_buffer();
 
-    // STREAMIN
+    // ACCUM_STREAMIN
     void constant_setup();
     void streamin_setup();
     int  streamin_cycle();
     bool streamin_exit_idx();
     void streamin_update_idx();
 
-    // LOAD
+    // ACTIVATION_LOAD
     void load_setup();
     int  load_cycle();
     int  load_cycle_linear();
@@ -379,7 +398,7 @@ private:
     bool load_exit_idx();
     void load_update_idx();
 
-    // MATRIXVEC
+    // MATRIX_VECTOR_COMPUTE
     void depthwise_setup();
     void depthwise_update_idx();
     void weightoffs();
@@ -406,7 +425,7 @@ private:
     bool normquant_bias_exit_idx();
     void normquant_bias_update_idx();
     
-    // STREAMOUT
+    // OUTPUT_STREAMOUT
     void streamout_setup();
     int  streamout_cycle();
     bool streamout_exit_idx();
@@ -444,7 +463,7 @@ private:
     int next_k_in_major_iter;
 
 
-    // STREAMIN state
+    // ACCUM_STREAMIN state
     int streamin_ij_out;
     NeurekaVectorLoad<uint8_t> vld_streamin;
     int streamin_i_out_iter;
@@ -454,7 +473,7 @@ private:
     int streamin_k_out_iter;
     int streamin_k_out_lim;
 
-    // LOAD state
+    // ACTIVATION_LOAD state
     int load_fbuf_lim;
     int load_i_fbuf_lim;
     int load_j_fbuf_lim;
@@ -465,7 +484,7 @@ private:
     NeurekaVectorLoad<uint8_t> vld_x;
     xt::xarray<int32_t> row_enable;
 
-    // MATRIXVEC state
+    // MATRIX_VECTOR_COMPUTE state
     int base_addr_W_dw;
     int base_addr_W_3x3;
     int base_addr_W_1x1;
@@ -490,7 +509,7 @@ private:
     int nqb_iter;
     int nqb_lim;
 
-    // STREAMOUT state
+    // OUTPUT_STREAMOUT state
     int streamout_i_out_iter;
     int streamout_i_out_lim;
     int streamout_j_out_iter;
@@ -509,5 +528,3 @@ private:
 };
 
 #endif /* __NEUREKA_HPP__ */
-
-
