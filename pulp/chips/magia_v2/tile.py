@@ -192,34 +192,19 @@ class MagiaV2Tile(gvsoc.systree.Component):
         # IDMA Controller
         idma_mm_ctrl= iDMA_mm_ctrl(self,f'tile-{tid}-idma-ctrl-mm')
 
-        if not MagiaArch.USE_NARROW_WIDE:
-            # IDMA  
-            idma0 = SnitchDma(self,f'tile-{tid}-idma0',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4,transfer_queue_size=1,burst_queue_size=MagiaDSE.TILE_IDMA0_BQUEUE_SIZE,burst_size=MagiaDSE.TILE_IDMA0_B_SIZE)
-            idma1 = SnitchDma(self,f'tile-{tid}-idma1',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4,transfer_queue_size=1,burst_queue_size=MagiaDSE.TILE_IDMA1_BQUEUE_SIZE,burst_size=MagiaDSE.TILE_IDMA1_B_SIZE)
-            # Redmule
-            redmule = LightRedmule(self, f'tile-{tid}-redmule',
-                                        tcdm_bank_width     = MagiaArch.BYTES_PER_WORD,
-                                        tcdm_bank_number    = 16,# here we set 16 since tcdm_bank_width x tcdm_bank_number --> 16 x 4 = 64bytes, i.e., 512 bits. Please do not consider tcdm_bank_width and tcdm_bank_number as the boundaries of the TCDM, but rather the size of the port towards it. 
-                                        elem_size           = 2, # max number of bytes per element --> if FP16 then elem_size=2. This is the max number to accomodate any supported format which for now are 8bits and 16bits data types 
-                                        ce_height           = 8,
-                                        ce_width            = 24,
-                                        ce_pipe             = 3,
-                                        queue_depth         = 1,
-                                        loc_base            = (tid*MagiaArch.L1_TILE_OFFSET))
-        else:
-            # IDMA
-            idma0 = SnitchDma(self,f'tile-{tid}-idma0',loc_base=(tid*MagiaArch.L1_TILE_OFFSET),loc_size=MagiaArch.L1_SIZE,tcdm_width=32,transfer_queue_size=1,burst_queue_size=MagiaDSE.TILE_IDMA0_BQUEUE_SIZE,burst_size=MagiaDSE.TILE_IDMA0_B_SIZE)
-            idma1 = SnitchDma(self,f'tile-{tid}-idma1',loc_base=(tid*MagiaArch.L1_TILE_OFFSET),loc_size=MagiaArch.L1_SIZE,tcdm_width=32,transfer_queue_size=1,burst_queue_size=MagiaDSE.TILE_IDMA1_BQUEUE_SIZE,burst_size=MagiaDSE.TILE_IDMA1_B_SIZE)
-            # Redmule
-            redmule = LightRedmule(self, f'tile-{tid}-redmule',
-                                        tcdm_bank_width     = MagiaArch.BYTES_PER_WORD,
-                                        tcdm_bank_number    = 8, # here we set 8 since tcdm_bank_width x tcdm_bank_number --> 8 x 4 = 32bytes, i.e., 256 bits. Please do not consider tcdm_bank_width and tcdm_bank_number as the boundaries of the TCDM, but rather the size of the port towards it. 
-                                        elem_size           = 2, # max number of bytes per element --> if FP16 then elem_size=2. This is the max number to accomodate any supported format which for now are 8bits and 16bits data types 
-                                        ce_height           = 8,
-                                        ce_width            = 8,
-                                        ce_pipe             = 1,
-                                        queue_depth         = 1,
-                                        loc_base            = (tid*MagiaArch.L1_TILE_OFFSET))
+        # IDMA
+        idma0 = SnitchDma(self,f'tile-{tid}-idma0',loc_base=(tid*MagiaArch.L1_TILE_OFFSET),loc_size=MagiaArch.L1_SIZE,tcdm_width=32,transfer_queue_size=1,burst_queue_size=MagiaDSE.TILE_IDMA0_BQUEUE_SIZE,burst_size=MagiaDSE.TILE_IDMA0_B_SIZE)
+        idma1 = SnitchDma(self,f'tile-{tid}-idma1',loc_base=(tid*MagiaArch.L1_TILE_OFFSET),loc_size=MagiaArch.L1_SIZE,tcdm_width=32,transfer_queue_size=1,burst_queue_size=MagiaDSE.TILE_IDMA1_BQUEUE_SIZE,burst_size=MagiaDSE.TILE_IDMA1_B_SIZE)
+        # Redmule
+        redmule = LightRedmule(self, f'tile-{tid}-redmule',
+                                    tcdm_bank_width     = MagiaArch.BYTES_PER_WORD,
+                                    tcdm_bank_number    = 8, # here we set 8 since tcdm_bank_width x tcdm_bank_number --> 8 x 4 = 32bytes, i.e., 256 bits. Please do not consider tcdm_bank_width and tcdm_bank_number as the boundaries of the TCDM, but rather the size of the port towards it. 
+                                    elem_size           = 2, # max number of bytes per element --> if FP16 then elem_size=2. This is the max number to accomodate any supported format which for now are 8bits and 16bits data types 
+                                    ce_height           = 8,
+                                    ce_width            = 8,
+                                    ce_pipe             = 1,
+                                    queue_depth         = 1,
+                                    loc_base            = (tid*MagiaArch.L1_TILE_OFFSET))
             
         # Fsync mm controller
         fsync_mm_ctrl = FSync_mm_ctrl(self,f'tile-{tid}-fs-ctrl-mm')
@@ -303,30 +288,8 @@ class MagiaV2Tile(gvsoc.systree.Component):
                         base=MagiaArch.SPATZ_CTRL_START,
                         size=MagiaArch.SPATZ_CTRL_SIZE, rm_base=True)
             
-        if not MagiaArch.USE_NARROW_WIDE:
-            # Bind obi xbar so that it can communicate with local L1
-            obi_xbar.o_MAP(l1_tcdm.i_DMA_INPUT(), name="local-l1-mem", #here we use the iDMA interleaver because an iDMA axi request routed to obi (e.g. local L1 to off-tile L1 data movement) does not handle the right bank interleaving
-                        base=MagiaArch.L1_ADDR_START+(tid*MagiaArch.L1_TILE_OFFSET),
-                        size=MagiaArch.L1_SIZE, rm_base=False, remove_offset=(tid*MagiaArch.L1_TILE_OFFSET))
-            # Bind obi xbar so that it can communicate with tile xbar to get access to remote tiles l1 and reserved mem
-            for tile_id in range(0,tree.nb_clusters):
-                if (tile_id!=tid): #skip yourself
-                    obi_xbar.o_MAP(tile_xbar.i_INPUT(), name=f'obi2axi-off-tile-{tile_id}-l1-mem',
-                            base=MagiaArch.L1_ADDR_START+(tile_id*MagiaArch.L1_TILE_OFFSET),
-                            size=MagiaArch.L1_SIZE, rm_base=False)
-            # Bind tile xbar so that it can coomunicate with obi xbar l1 mem
-            tile_xbar.o_MAP(obi_xbar.i_INPUT(), name="axi-to-obi-l1-mem",
-                            base=MagiaArch.L1_ADDR_START+(tid*MagiaArch.L1_TILE_OFFSET),
-                            size=MagiaArch.L1_SIZE, rm_base=False)
-            # Bind tile xbar so that it can communicate with remote tiles l1 and reserved mem
-            for tile_id in range(0,tree.nb_clusters):
-                if (tile_id!=tid): #skip yourself
-                    tile_xbar.o_MAP(self.__i_NARROW_OUTPUT(), name=f'axi-to-off-tile-{tile_id}-l1-mem',
-                            base=MagiaArch.L1_ADDR_START+(tile_id*MagiaArch.L1_TILE_OFFSET),
-                            size=MagiaArch.L1_SIZE, rm_base=False)
-        else:
-            # Bind NoC wide channel so that it can communicate with local L1
-            self.__o_WIDE_INPUT(l1_tcdm.i_DMA_INPUT())
+        # Bind NoC wide channel so that it can communicate with local L1
+        self.__o_WIDE_INPUT(l1_tcdm.i_DMA_INPUT())
         
         # Mapping used by obi xbar to communicate with tile xbar
         obi_xbar.o_MAP(tile_xbar.i_INPUT(), name="obi2axi-off-tile-l2-mem",
@@ -355,19 +318,13 @@ class MagiaV2Tile(gvsoc.systree.Component):
         self.__o_FETCHEN(core_cv32.i_FETCHEN())
 
         # Bind: idma0
-        if not MagiaArch.USE_NARROW_WIDE:
-            idma0.o_AXI(tile_xbar.i_INPUT())
-        else:
-            idma0.o_AXI(self.__i_WIDE_OUTPUT())
+        idma0.o_AXI(self.__i_WIDE_OUTPUT())
         idma0.o_TCDM(l1_tcdm.i_DMA_INPUT())
         idma_mm_ctrl.o_OFFLOAD_iDMA0_AXI2OBI(idma0.i_OFFLOAD())
         idma0.o_OFFLOAD_GRANT(idma_mm_ctrl.i_OFFLOAD_GRANT_iDMA0_AXI2OBI())
 
         # Bind: idma1
-        if not MagiaArch.USE_NARROW_WIDE:
-            idma1.o_AXI(tile_xbar.i_INPUT())
-        else:
-            idma1.o_AXI(self.__i_WIDE_OUTPUT())
+        idma1.o_AXI(self.__i_WIDE_OUTPUT())
         idma1.o_TCDM(l1_tcdm.i_DMA_INPUT())
         idma_mm_ctrl.o_OFFLOAD_iDMA1_OBI2AXI(idma1.i_OFFLOAD())
         idma1.o_OFFLOAD_GRANT(idma_mm_ctrl.i_OFFLOAD_GRANT_iDMA1_OBI2AXI())
