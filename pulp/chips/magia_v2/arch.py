@@ -71,8 +71,6 @@ class MagiaArch:
     N_TILES_X           = 4
     N_TILES_Y           = 4
 
-    USE_NARROW_WIDE     = False
-
 class MagiaTree(Tree):
     def __init__(self, parent, name):
         super().__init__(parent, name)
@@ -97,6 +95,6 @@ class MagiaDSE:
     TILE_OBI_XBAR_LATENCY       = 2
     TILE_OBI_XBAR_SYNC          = True
     TILE_IDMA0_BQUEUE_SIZE      = 2
-    TILE_IDMA0_B_SIZE           = 4
+    TILE_IDMA0_B_SIZE           = 32
     TILE_IDMA1_BQUEUE_SIZE      = 2
-    TILE_IDMA1_B_SIZE           = 8
+    TILE_IDMA1_B_SIZE           = 32

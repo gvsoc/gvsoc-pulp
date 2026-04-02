@@ -60,13 +60,14 @@ class CV32CoreTest(cpu.iss.riscv.RiscvCommon):
         debug_handler = 0x1a190800
         fetch_enable = False
         riscv_exceptions = False
+        zfinx = True
 
         # Instantiates the ISA from the string.
         isa = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa('cv32-base', isa_str, extensions=[Xf16alt(), Xf16(), PulpV2(hwloop=True,elw=True)])
 
         super().__init__(parent, name, isa=isa, misa=misa, core_id=core_id,
                          debug_handler=debug_handler, fetch_enable=fetch_enable,
-                         riscv_exceptions=riscv_exceptions)
+                         riscv_exceptions=riscv_exceptions, zfinx=zfinx)
 
         # TODO check later
         self.add_c_flags([
