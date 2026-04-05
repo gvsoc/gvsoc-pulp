@@ -2,13 +2,23 @@
 ## 				Make Targets for SoftHier Simulator 				##
 ######################################################################
 
+third_party/toolchain:
+	mkdir -p third_party/toolchain
+	cd third_party/toolchain && \
+	wget https://github.com/pulp-platform/pulp-riscv-gnu-toolchain/releases/download/v1.0.16/v1.0.16-pulp-riscv-gcc-centos-7.tar.bz2 &&\
+	tar -xvjf v1.0.16-pulp-riscv-gcc-centos-7.tar.bz2 &&\
+	wget https://github.com/husterZC/gun_toolchain/releases/download/v2.0.0/toolchain.tar.xz &&\
+	tar -xvf toolchain.tar.xz
+
 config_file ?= "pulp/pulp/chips/softhier/softhier_arch.py"
 ifdef cfg
 	config_file = "$(cfg)"
 endif
 
 sh-config:
-	cp $(config_file) pulp/pulp/chips/softhier/softhier_arch.py
+	@if [ "$(config_file)" != "pulp/pulp/chips/softhier/softhier_arch.py" ]; then \
+		cp -f $(config_file) pulp/pulp/chips/softhier/softhier_arch.py; \
+	fi
 	python3 pulp/pulp/chips/softhier/utils/config.py $(config_file)
 
 sh-hw:
