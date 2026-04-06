@@ -280,7 +280,7 @@ void FlooNoc::router_init_neighbours(Router *router,
                                      std::vector<Router *> &routers)
 {
     int node_id = router->node_id;
-    int current_port = 2; // To bypass local
+    int current_port = 1; // To bypass local
 
     for (int i = 0; i < this->links.size(); i++)
     {
@@ -301,10 +301,11 @@ void FlooNoc::router_init_neighbours(Router *router,
             // The neighbor is a Network Interface
             if (this->network_interfaces[neighbor_id] != NULL)
             {
-                // Plug the NI into DIR_LOCAL (Port 1) and register its ID
-                router->set_neighbour(FlooNoc::DIR_LOCAL,
+                // RIGHT NOW THIS CONDITION IS SAME AS OTHER ONE
+                router->set_neighbour(current_port,
                                       this->network_interfaces[neighbor_id],
                                       neighbor_id);
+                current_port++;
             }
             // The neighbor is another Router
             else if (routers[neighbor_id] != NULL)

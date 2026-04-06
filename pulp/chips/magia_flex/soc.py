@@ -145,6 +145,8 @@ class MagiaSoc(gvsoc.systree.Component):
         # ---------------------------------------------------------------------
         # Start FlooNoc Flex Changes
         # ---------------------------------------------------------------------
+
+        total_nodes = (tree.n_tiles_x * tree.n_tiles_y) * 2 + tree.n_tiles_y
         noc = FlooNocFlex(self,
                           name='magia_flex-noc',
                           narrow_width=4,
@@ -154,7 +156,8 @@ class MagiaSoc(gvsoc.systree.Component):
                           router_input_queue_size=4, 
                           routing_mode=1,             # 1 = XY Routing
                           dim_x=tree.n_tiles_x,       # Router grid is exactly n_tiles_x wide
-                          dim_y=tree.n_tiles_y)
+                          dim_y=tree.n_tiles_y,
+                          nb_nodes=total_nodes)
         
         self.node_ids = {} # Dictionary to store our assigned integer IDs
         num_queues = 7 #HARDCODED HERE FOR NOW
@@ -179,7 +182,6 @@ class MagiaSoc(gvsoc.systree.Component):
                 # Connect Bidirectionally to local router
                 r_id = self.node_ids[('router', x, y)]
                 noc.add_link(current_ni_id, r_id)
-                noc.add_link(r_id, current_ni_id)
                 current_ni_id += 1
 
         # L2 NIs (x=0)
@@ -190,7 +192,6 @@ class MagiaSoc(gvsoc.systree.Component):
             # Connect to the closest router in the grid (x=1)
             r_id = self.node_ids[('router', 1, y)]
             noc.add_link(current_ni_id, r_id)
-            noc.add_link(r_id, current_ni_id)
             current_ni_id += 1
 
         # Generate Router-to-Router Links
@@ -200,18 +201,11 @@ class MagiaSoc(gvsoc.systree.Component):
                 # Connect East
                 if x < tree.n_tiles_x:
                     noc.add_link(r_id, self.node_ids[('router', x + 1, y)])
-                # Connect West
-                if x > 1:
-                    noc.add_link(r_id, self.node_ids[('router', x - 1, y)])
                 # Connect South
                 if y < tree.n_tiles_y - 1:
                     noc.add_link(r_id, self.node_ids[('router', x, y + 1)])
-                # Connect North
-                if y > 0:
-                    noc.add_link(r_id, self.node_ids[('router', x, y - 1)])
 
-        # Finalize NoC size
-        noc.add_property('nb_nodes', current_ni_id)
+        noc.generate_routing_tables_magia(routing_mode=1, dim_x=tree.n_tiles_x, dim_y=tree.n_tiles_y, routing_path=None)
 
         id = 0
         for y in range(0, tree.n_tiles_y):
