@@ -61,4 +61,4 @@ class MagiaBoard(gvsoc.systree.Component):
 class Target(gvsoc.runner.Target):
     def __init__(self, parser, options):
         super(Target, self).__init__(parser, options,
-              model=MagiaBoard, description="Magia board")
+              model=MagiaBoard, description="Magia_flex board")

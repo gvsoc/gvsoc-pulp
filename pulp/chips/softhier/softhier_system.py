@@ -28,7 +28,8 @@ from pulp.chips.softhier.cluster_unit import ClusterUnit, ClusterArch
 from pulp.chips.softhier.softhier_ctrl import SoftHierCtrl
 from pulp.chips.softhier.softhier_arch import SoftHierArch
 from pulp.chips.softhier.error_detector import ErrorDetector
-from pulp.floonoc.floonoc import FlooNocClusterGridNarrowWide
+# from pulp.floonoc.floonoc import FlooNocClusterGridNarrowWide
+from pulp.floonoc_flex.floonoc_flex import FlooNocFlex
 from gvrun.parameter import TargetParameter
 import os
 import math
@@ -107,8 +108,142 @@ class SoftHierSystem(gvsoc.systree.Component):
         #Control register
         softhier_ctrl = SoftHierCtrl(self, 'softhier_ctrl', num_cluster=arch.num_cluster, num_core_per_cluster=arch.num_core_per_cluster)
 
+        # --- FlooNoC Flex Initialization & Topology Building ---
+        
+        # Calculate Dimensions
+        dim_x = arch.num_cluster_x + 2
+        dim_y = arch.num_cluster_y + 2
+        
+        # Allocate a block of IDs specifically for the Mesh Coordinates
+        MESH_SIZE = dim_x * dim_y
+        
+        # Double the node count to leave a safe, unique namespace for the NIs
+        nb_nodes = MESH_SIZE * 2
+
+        noc = FlooNocFlex(self, 'noc',      
+                wide_width=arch.noc_link_width,
+                narrow_width=8,
+                nb_nodes=nb_nodes,
+                router_input_queue_size=16,
+                ni_outstanding_reqs=arch.noc_outstanding)
+
+        def get_router_id(x, y):
+            # MUST equal this exact formula for the routing_mode=1 math to work
+            return y * dim_x + x
+            
+        def get_ni_id(x, y):
+            # Offset by MESH_SIZE to guarantee it never overlaps with a router
+            return MESH_SIZE + (y * dim_x + x)
+
+        routers_map = {} 
+        nis_map = {}     
+
+        # 1. Add routers at cluster centers
+        for y in range(1, arch.num_cluster_y + 1):
+            for x in range(1, arch.num_cluster_x + 1):
+                r_id = get_router_id(x, y)
+                routers_map[(x, y)] = r_id
+                noc.add_router(r_id, num_queues=5) 
+
+        # 2. Add network interfaces everywhere except the 4 corners
+        for y in range(dim_y):
+            for x in range(dim_x):
+                if (x == 0 and y == 0) or (x == 0 and y == dim_y - 1) or \
+                   (x == dim_x - 1 and y == 0) or (x == dim_x - 1 and y == dim_y - 1):
+                    continue
+                ni_id = get_ni_id(x, y)
+                nis_map[(x, y)] = ni_id
+                noc.add_network_interface(ni_id)
+
+        # 3. Add links (NI <-> Nearest Router)
+        for (nx, ny), ni_id in nis_map.items():
+            rx = max(1, min(nx, arch.num_cluster_x))
+            ry = max(1, min(ny, arch.num_cluster_y))
+            r_id = routers_map[(rx, ry)]
+            # Only add the link once; C++ treats it as bidirectional
+            noc.add_link(ni_id, r_id, latency=1)
+
+        # 4. Add links (Router <-> Router Mesh Network)
+        for y in range(1, arch.num_cluster_y + 1):
+            for x in range(1, arch.num_cluster_x + 1):
+                r_id = routers_map[(x, y)]
+                # Link East
+                if x < arch.num_cluster_x:
+                    east_id = routers_map[(x + 1, y)]
+                    noc.add_link(r_id, east_id, latency=1)
+                # Link South
+                if y < arch.num_cluster_y:
+                    south_id = routers_map[(x, y + 1)]
+                    noc.add_link(r_id, south_id, latency=1)
+
+        # 5. Generate routing tables
+        # MUST use _magia to generate JSON Dictionaries instead of Arrays for C++
+        noc.generate_routing_tables_magia(routing_mode=1, dim_x=dim_x, dim_y=dim_y, routing_path="")
+
+        ############
+        # Bindings #
+        ############
+
+        # Debug memory
+        virtual_interco.o_MAP(error_detector.i_INPUT())
+
+        # Control register
+        virtual_interco.o_MAP(softhier_ctrl.i_INPUT(), base=arch.soc_register_base, size=arch.soc_register_size, rm_base=True)
+
+        # Clusters
+        for cluster_id in range(arch.num_cluster):
+            x_id = int(cluster_id % arch.num_cluster_x)
+            y_id = int(cluster_id / arch.num_cluster_x)
+            
+            # Retrieve the UNIQUE Network Interface ID for this cluster
+            ni_node_id = nis_map[(x_id + 1, y_id + 1)]
+            
+            narrow_arbiter = router.Router(self, f'narrow_arbiter_{cluster_id}', bandwidth=8)
+            narrow_arbiter.o_MAP(virtual_interco.i_INPUT())
+            narrow_arbiter.o_MAP(noc.i_NARROW_INPUT(ni_node_id),
+                                 base=arch.cluster_tcdm_remote,
+                                 size=arch.num_cluster * arch.cluster_tcdm_size,
+                                 rm_base=False)
+            
+            wide_arbiter = router.Router(self, f'wide_arbiter_{cluster_id}', bandwidth=arch.noc_link_width)
+            wide_arbiter.o_MAP(virtual_interco.i_INPUT())
+            wide_arbiter.o_MAP(noc.i_WIDE_INPUT(ni_node_id),
+                                 base=arch.cluster_tcdm_remote,
+                                 size=arch.num_cluster * arch.cluster_tcdm_size,
+                                 rm_base=False)
+                                 
+            cluster_list[cluster_id].o_NARROW_SOC(narrow_arbiter.i_INPUT())
+            cluster_list[cluster_id].o_WIDE_SOC(wide_arbiter.i_INPUT())
+            
+            noc.o_NARROW_MAP(cluster_list[cluster_id].i_NARROW_INPUT(),
+                           base=arch.cluster_tcdm_remote  + cluster_id * arch.cluster_tcdm_size,
+                           size=arch.cluster_tcdm_size,
+                           node_id=ni_node_id,
+                           rm_base=True)
+                           
+            wide_base = arch.cluster_tcdm_remote + cluster_id * arch.cluster_tcdm_size
+            wide_name = cluster_list[cluster_id].i_WIDE_INPUT().component.name
+            
+            noc.get_property('mappings')[f"wide_{wide_name}"] = {
+                'base': wide_base, 'size': arch.cluster_tcdm_size, 'node_id': ni_node_id, 'remove_offset': wide_base
+            }
+            noc.o_WIDE_BIND(cluster_list[cluster_id].i_WIDE_INPUT(), ni_node_id)
+
+    def configure(self):
+        # With gvrun the binary is provided through a parameter (set either from the
+        # command line or from the build process), so push it to the cluster loaders here.
+        binary = self.get_parameter('binary')
+        if binary is not None:
+            for cluster in self.clusters:
+                cluster.set_binary(binary)
+
+    def handle_binary(self, binary):
+        # Called when an executable is attached to a hierarchy containing this component.
+        self.set_parameter('binary', binary)
+
+'''
         #FlooNoC
-        noc = FlooNocClusterGridNarrowWide(self, 'noc', 
+        noc = FlooNocClusterGridNarrowWide(self, 'noc',      
                 wide_width=arch.noc_link_width,
                 narrow_width=8,
                 nb_x_clusters=arch.num_cluster_x,
@@ -157,18 +292,7 @@ class SoftHierSystem(gvsoc.systree.Component):
                            y=y_id+1,
                            rm_base=True)
             pass
-
-    def configure(self):
-        # With gvrun the binary is provided through a parameter (set either from the
-        # command line or from the build process), so push it to the cluster loaders here.
-        binary = self.get_parameter('binary')
-        if binary is not None:
-            for cluster in self.clusters:
-                cluster.set_binary(binary)
-
-    def handle_binary(self, binary):
-        # Called when an executable is attached to a hierarchy containing this component.
-        self.set_parameter('binary', binary)
+'''
 
 
 class SoftHierPlatform(gvsoc.systree.Component):

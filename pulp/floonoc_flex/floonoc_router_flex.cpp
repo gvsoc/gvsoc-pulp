@@ -193,7 +193,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
             // In case the request goes to a queue which is stalled, skip it
             // we'll retry later
-            if (_this->stalled_queues[out_queue_id])
+            if (*(_this->stalled_queues[out_queue_id]))
             {
                 _this->trace.msg(
                     vp::Trace::LEVEL_TRACE,
