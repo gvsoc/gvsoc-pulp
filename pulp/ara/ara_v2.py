@@ -57,6 +57,12 @@ def extend_isa(isa_instance: Isa):
         # Vector instructions can be given latencies like that
         # if insn.label.find('vfmac') == 0:
         #     insn.set_latency(1)
+        if insn.label.startswith('vle64'):
+            insn.set_latency(4)
+        elif insn.label.startswith('vse64'):
+            insn.set_latency(5)
+
+
 
     for insn in isa_instance.get_isa('v').get_insns():
         if insn.label.startswith('vfncvt'):
