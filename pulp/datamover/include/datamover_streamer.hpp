@@ -1,7 +1,22 @@
 /*
+ * Copyright (C) 2026 ETH Zurich
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/*
  * Authors: Soumyo Bhattacharjee (sbhattacharj@student.ethz.ch)
  *          Cyrill Durrer, ETH Zurich (cdurrer@iis.ee.ethz.ch)
- *
  */
 
 #ifndef __DATAMOVER_STREAMER_HPP__
@@ -9,8 +24,6 @@
 
 #include <cstdint>
 #include <stdexcept>
-
-#include <datamover.hpp>
 
 // Address generation configuration
 struct AddressGenConfig {
@@ -29,12 +42,6 @@ struct AddressGenConfig {
 //========================================
 // RTL-accurate HWPE Address Generator
 // Closely matches hwpe_stream_addressgen_v4
-//
-// Misaligned Accesses :    // ToDo(cdurrer)
-// - This streamer only generates byte addresses.
-// - It does not align addresses or fix unaligned accesses.
-// - Unaligned read handling is performed by Datamover::load_from_memory_functional()
-//   in datamover_memory.cpp via aligned base address + skip_prefix_bytes.
 //========================================
 
 template<typename HwpeType, typename DataType>
@@ -74,7 +81,7 @@ class HWPEStreamer {
             d2_addr_q_ = 0;
             d3_addr_q_ = 0;
             d4_addr_q_ = 0;
-            d0_counter_q_ = 1;      // ToDo: different to RTL where counters start at 0
+            d0_counter_q_ = 1;      // Note: different to RTL where counters start at 0 -> align
             d1_counter_q_ = 1;
             d2_counter_q_ = 1;
             d3_counter_q_ = 1;

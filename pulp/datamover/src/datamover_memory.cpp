@@ -1,4 +1,6 @@
 /*
+ * Copyright (C) 2026 ETH Zurich
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -21,13 +23,6 @@
 #include <cstring>
 #include <vector>
 #include <datamover.hpp>
-
-// =========================================================
-// Functional TCDM helpers used by GEMM/depthwise load/store paths.
-// Address generation stays in streamer/ops code.
-// Misalignment handling is done here via `skip_prefix_bytes`:
-// callers pass an aligned base address plus prefix bytes to discard.
-// =========================================================
 
 // Functional read helper for activation/weight paths.
 // If skip_prefix_bytes==0: direct read into destination.
