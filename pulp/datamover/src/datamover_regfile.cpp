@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020-2022  GreenWaves Technologies, ETH Zurich, University of Bologna
+ * Copyright (C) 2026 ETH Zurich, University of Bologna
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -85,8 +85,11 @@ int Datamover::regfile_rd(int addr)
   case DATAMOVER_REG_IN_OUT_D4_STRIDE:
     value = this->in_out_d4_stride;
     break;
-  case DATAMOVER_REG_DIM_ENABLE:
-    value = this->dim_enable;
+  case DATAMOVER_REG_MATRIX_DIM:
+    value = this->matrix_dim;
+    break;
+  case DATAMOVER_REG_CHANNELS:
+    value = this->channels;
     break;
   case DATAMOVER_REG_CTRL_ENGINE:
     value = this->ctrl_engine;
@@ -100,7 +103,6 @@ int Datamover::regfile_rd(int addr)
 
 void Datamover::regfile_wr(int addr, int value)
 {
-  // printf("Datamover::regfile_wr(): Register write (addr: 0x%x, value: 0x%x)\n", addr, value);
   this->trace.msg(vp::Trace::LEVEL_TRACE, "Register write (addr: 0x%x, value: 0x%x)\n", addr, value);
 
   switch (addr)
@@ -141,8 +143,11 @@ void Datamover::regfile_wr(int addr, int value)
   case DATAMOVER_REG_IN_OUT_D4_STRIDE:
     this->in_out_d4_stride = value;
     break;
-  case DATAMOVER_REG_DIM_ENABLE:
-    this->dim_enable = value;
+  case DATAMOVER_REG_MATRIX_DIM:
+    this->matrix_dim = value;
+    break;
+  case DATAMOVER_REG_CHANNELS:
+    this->channels = value;
     break;
   case DATAMOVER_REG_CTRL_ENGINE:
     this->ctrl_engine = value;
@@ -166,6 +171,7 @@ void Datamover::printout() {
   this->trace.msg(vp::Trace::LEVEL_DEBUG, "(cfg) out_d2=%x\n", this->out_d2);
   this->trace.msg(vp::Trace::LEVEL_DEBUG, "(cfg) out_d3=%x\n", this->out_d3);
   this->trace.msg(vp::Trace::LEVEL_DEBUG, "(cfg) in_out_d4_stride=%x\n", this->in_out_d4_stride);
-  this->trace.msg(vp::Trace::LEVEL_DEBUG, "(cfg) dim_enable=0x%x\n", this->dim_enable);
+  this->trace.msg(vp::Trace::LEVEL_DEBUG, "(cfg) matrix_dim=0x%x\n", this->matrix_dim);
+  this->trace.msg(vp::Trace::LEVEL_DEBUG, "(cfg) channels=0x%x\n", this->channels);
   this->trace.msg(vp::Trace::LEVEL_DEBUG, "(cfg) ctrl_engine=0x%x\n", this->ctrl_engine);
 }
