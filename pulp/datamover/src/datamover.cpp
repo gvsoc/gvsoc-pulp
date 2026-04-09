@@ -54,7 +54,8 @@ void Datamover::clear()
     this->out_d2 = 0;
     this->out_d3 = 0;
     this->in_out_d4_stride = 0;
-    this->dim_enable = 0;
+    this->matrix_dim = 0;
+    this->channels = 0;
     this->ctrl_engine = 0;
 
     this->streamer_in.reset();
@@ -69,8 +70,10 @@ vp::IoReqStatus Datamover::handle_req(vp::Block *__this, vp::IoReq *req)
     // printf("Datamover::handle_req(): Received request (addr: 0x%lx, size: 0x%lx, is_write: %d, data: 0x%lx)\n", req->get_addr(), req->get_size(), req->get_is_write(), *(uint64_t *)(req->get_data()));
     // _this->trace.msg("Datamover::handle_req(): Received request (addr: 0x%x, size: 0x%x, is_write: %d, data: 0x%x)\n", req->get_addr(), req->get_size(), req->get_is_write(), *(uint32_t *)(req->get_data()));
 
-    uint8_t datamover_mode = (_this->ctrl_engine >> 27) & 0x1F;
+    uint8_t datamover_mode = (_this->ctrl_engine >> 3) & 0x1F;
     uint8_t transpose_mode = _this->ctrl_engine & 0x7;
+
+    printf("Datamover::handle_req(): datamover_mode=%d, transpose_mode=%d\n", datamover_mode, transpose_mode);
 
     if (req->get_size() != 4) return vp::IO_REQ_INVALID;
 
@@ -100,6 +103,15 @@ vp::IoReqStatus Datamover::handle_req(vp::Block *__this, vp::IoReq *req)
                     _this->trace.msg(vp::Trace::LEVEL_INFO, "Datamover::handle_req(): Triggering CIM layout conversion operation\n");
                     _this->cim_layout_conversion();
                     break;
+                case 3:
+                    printf("Datamover::handle_req(): CIM layout conversion NOT IMPLEMENTED!\n");
+                    _this->trace.msg(vp::Trace::LEVEL_WARNING, "Datamover::handle_req(): CIM layout conversion NOT IMPLEMENTED!\n");
+                    break;
+                case 4:
+                    printf("Datamover::handle_req(): Triggering unfold operation\n");
+                    _this->trace.msg(vp::Trace::LEVEL_INFO, "Datamover::handle_req(): Triggering unfold operation\n");
+                    _this->unfold();
+                    break;
                 default:
                     printf("Datamover::handle_req(): Unsupported operation triggered (ctrl_engine=0x%08x)\n", _this->ctrl_engine);
                     _this->trace.msg(vp::Trace::LEVEL_WARNING, "Datamover::handle_req(): Unsupported operation triggered (ctrl_engine=0x%08x)\n", _this->ctrl_engine);
@@ -112,7 +124,7 @@ vp::IoReqStatus Datamover::handle_req(vp::Block *__this, vp::IoReq *req)
         }
         else if(((req->get_addr() & 0xfff) >= DATAMOVER_REGISTER_OFFS) && ((req->get_addr() & 0xfff) < DATAMOVER_REGISTER_OFFS + DATAMOVER_NB_REG*4)) {
             // printf("Datamover::handle_req(): Write to register address 0x%x, value 0x%08x\n", req->get_addr(), *(uint32_t *) req->get_data());
-            _this->regfile_wr((req->get_addr() & 0xfff - DATAMOVER_REGISTER_OFFS) >> 2, *(uint32_t *) req->get_data());
+            _this->regfile_wr(((req->get_addr() & 0xfff) - DATAMOVER_REGISTER_OFFS) >> 2, *(uint32_t *) req->get_data());
         }
         else {
             printf("Datamover::handle_req(): Write to invalid register address 0x%x\n", req->get_addr());
@@ -127,7 +139,7 @@ vp::IoReqStatus Datamover::handle_req(vp::Block *__this, vp::IoReq *req)
         }
         else if((req->get_addr() & 0xfff) >= DATAMOVER_REGISTER_OFFS && ((req->get_addr() & 0xfff) < DATAMOVER_REGISTER_OFFS + DATAMOVER_NB_REG * 4)) {
             // printf("Datamover::handle_req(): Read from Datamover register address 0x%x\n", req->get_addr());
-            *(uint32_t *)req->get_data() = _this->regfile_rd((req->get_addr() & 0xfff - DATAMOVER_REGISTER_OFFS) >> 2);
+            *(uint32_t *)req->get_data() = _this->regfile_rd(((req->get_addr() & 0xfff) - DATAMOVER_REGISTER_OFFS) >> 2);
         }
         else {
             printf("Datamover::handle_req(): Read from invalid register address 0x%x\n", req->get_addr());

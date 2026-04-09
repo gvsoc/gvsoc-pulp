@@ -30,7 +30,7 @@ void Datamover::unpack_config_from_reg() {
   this->in_d3_len = this->in_d3 & 0xFFFF;
   this->in_d3_stride = (this->in_d3 >> 16) & 0xFFFF;
   this->in_d4_stride = this->in_out_d4_stride & 0xFFFF;
-  this->in_dim_enable = this->dim_enable & 0xF;
+  this->in_dim_enable = (this->ctrl_engine >> 8) & 0xF;
 
   this->out_d0_len = this->out_d0 & 0xFFFF;
   this->out_d0_stride = (this->out_d0 >> 16) & 0xFFFF;
@@ -41,10 +41,12 @@ void Datamover::unpack_config_from_reg() {
   this->out_d3_len = this->out_d3 & 0xFFFF;
   this->out_d3_stride = (this->out_d3 >> 16) & 0xFFFF;
   this->out_d4_stride = (this->in_out_d4_stride >> 16) & 0xFFFF;
-  this->out_dim_enable = (this->dim_enable >> 4) & 0xF;
+  this->out_dim_enable = (this->ctrl_engine >> 12) & 0xF;
 
-  this->matrix_dim_m = (this->ctrl_engine >> 3) & 0xFFF;
-  this->matrix_dim_n = (this->ctrl_engine >> 15) & 0xFFF;
+  this->matrix_dim_m = this->matrix_dim & 0xFFFF;
+  this->matrix_dim_n = (this->matrix_dim >> 16) & 0xFFFF;
+  this->num_channels = this->channels & 0x7FF;
+  this->total_elements = (this->channels >> 11) & 0x1FFFFF;
 }
 
 void Datamover::update_streamer_config() {
@@ -100,8 +102,7 @@ void Datamover::copy() {
 
   int num_tiles = this->tot_len / DATAMOVER_BANDWIDTH_ELEMS;
   int leftover_rows = this->tot_len % DATAMOVER_BANDWIDTH_ELEMS;
-  int total_elems = this->matrix_dim_m * this->matrix_dim_n;
-  int leftover_elems = total_elems % DATAMOVER_BANDWIDTH_ELEMS;
+  int leftover_elems = this->total_elements % DATAMOVER_BANDWIDTH_ELEMS;
 
   for(int tile_counter = 0; tile_counter < num_tiles; tile_counter++) {
     printf("copy(): Processing tile %d\n", tile_counter);
@@ -128,8 +129,6 @@ void Datamover::copy() {
         this->store_to_memory_functional(out_addr, elem_matrix[i], DATAMOVER_BANDWIDTH_ELEMS, nullptr);
         printf("copy(): wrote leftover row %d: 0x...%08x to out_addr(%p)\n", i+1, *(uint64_t*)elem_matrix[i], out_addr);
       }
-      // this->store_to_memory_functional(out_addr, elem_matrix[i], DATAMOVER_BANDWIDTH_ELEMS, nullptr);
-      // printf("copy(): wrote leftover row %d: 0x%08x to out_addr(0x%08x)\n", i, *(uint64_t*)elem_matrix[i], out_addr);
     }
   }
 
@@ -150,16 +149,10 @@ void Datamover::transpose(uint8_t transpose_mode) {
   printf("transpose(): Starting matrix (dim_m=%d, dim_n=%d) transpose with mode %d\n", this->matrix_dim_m, this->matrix_dim_n, transpose_mode);
   this->trace.msg(vp::Trace::LEVEL_INFO, "transpose(): Starting matrix (dim_m=%d, dim_n=%d) transpose with mode %d\n", this->matrix_dim_m, this->matrix_dim_n, transpose_mode);
 
-  // int total_elems = this->matrix_dim_m * this->matrix_dim_n;
-  // int num_tiles = this->tot_len / DATAMOVER_BANDWIDTH_ELEMS;
   int m_tiles = (this->matrix_dim_m + DATAMOVER_BANDWIDTH_ELEMS - 1) / DATAMOVER_BANDWIDTH_ELEMS;   // including partial tiles
   int n_tiles = (this->matrix_dim_n + DATAMOVER_BANDWIDTH_ELEMS - 1) / DATAMOVER_BANDWIDTH_ELEMS;   // including partial tiles
-  // int complete_m_tiles = this->matrix_dim_m / DATAMOVER_BANDWIDTH_ELEMS;
-  // int complete_n_tiles = this->matrix_dim_n / DATAMOVER_BANDWIDTH_ELEMS;
-  // int num_complete_tiles = complete_m_tiles * complete_n_tiles;
   int leftover_rows = this->matrix_dim_m % DATAMOVER_BANDWIDTH_ELEMS;
   int leftover_cols = this->matrix_dim_n % DATAMOVER_BANDWIDTH_ELEMS;
-  // int leftover_elems = total_elems % DATAMOVER_BANDWIDTH_ELEMS;
   uint8_t out_row[DATAMOVER_BANDWIDTH_ELEMS];
 
   printf("transpose(): matrix_dim_m=%d, matrix_dim_n=%d, leftover_rows=%d, leftover_cols=%d\n",
@@ -186,7 +179,6 @@ void Datamover::transpose(uint8_t transpose_mode) {
             for(int j = 0; j < j_max; j++) {
               for(int elem_cnt = 0; elem_cnt < transpose_mode; elem_cnt++) {
                 out_row[transpose_mode*j + elem_cnt] = elem_matrix[c*(DATAMOVER_BANDWIDTH_ELEMS / transpose_mode) + j][i + elem_cnt];
-                // printf("transpose(): DEBUG: subtile %d: out_row[%d] = elem_matrix[%d][%d] = 0x%02x, j_max=%d, write_elems=%d\n", c, transpose_mode*j + elem_cnt, c*(DATAMOVER_BANDWIDTH_ELEMS / transpose_mode) + j, i + elem_cnt, elem_matrix[c*(DATAMOVER_BANDWIDTH_ELEMS / transpose_mode) + j][i + elem_cnt], j_max, write_elems);
               }
             }
             this->streamer_out.print_state();
@@ -218,7 +210,6 @@ void Datamover::transpose(uint8_t transpose_mode) {
             for(int j = 0; j < j_max; j++) {
               for(int elem_cnt = 0; elem_cnt < transpose_mode; elem_cnt++) {
                 out_row[transpose_mode*j + elem_cnt] = elem_matrix[c*(DATAMOVER_BANDWIDTH_ELEMS / transpose_mode) + j][i + elem_cnt];
-                // printf("transpose(): DEBUG: subtile %d: out_row[%d] = elem_matrix[%d][%d] = 0x%02x, j_max=%d, write_elems=%d\n", c, transpose_mode*j + elem_cnt, c*(DATAMOVER_BANDWIDTH_ELEMS / transpose_mode) + j, i + elem_cnt, elem_matrix[c*(DATAMOVER_BANDWIDTH_ELEMS / transpose_mode) + j][i + elem_cnt], j_max, write_elems);
               }
             }
             this->streamer_out.print_state();
@@ -244,7 +235,6 @@ void Datamover::transpose(uint8_t transpose_mode) {
             for(int j = 0; j < DATAMOVER_BANDWIDTH_ELEMS / transpose_mode; j++) {
               for(int elem_cnt = 0; elem_cnt < transpose_mode; elem_cnt++) {
                 out_row[transpose_mode*j + elem_cnt] = elem_matrix[c*(DATAMOVER_BANDWIDTH_ELEMS / transpose_mode) + j][i + elem_cnt];
-                // printf("transpose(): DEBUG: out_row[%d] = elem_matrix[%d][%d] = 0x%02x\n", transpose_mode*j + elem_cnt, c*(DATAMOVER_BANDWIDTH_ELEMS / transpose_mode) + j, i + elem_cnt, elem_matrix[c*(DATAMOVER_BANDWIDTH_ELEMS / transpose_mode) + j][i + elem_cnt]);
               }
             }
             this->streamer_out.print_state();
@@ -357,8 +347,7 @@ void Datamover::cim_layout_conversion() {   // ToDo: Rewrite HAL to support part
   // Same as copy() ------------------------------
   int num_tiles = this->tot_len / DATAMOVER_BANDWIDTH_ELEMS;
   int leftover_rows = this->tot_len % DATAMOVER_BANDWIDTH_ELEMS;
-  int total_elems = this->matrix_dim_m * this->matrix_dim_n;
-  int leftover_elems = total_elems % DATAMOVER_BANDWIDTH_ELEMS;
+  int leftover_elems = this->total_elements % DATAMOVER_BANDWIDTH_ELEMS;
 
   for(int tile_counter = 0; tile_counter < num_tiles; tile_counter++) {
     printf("cim_layout_conversion(): Processing tile %d\n", tile_counter);
@@ -385,13 +374,126 @@ void Datamover::cim_layout_conversion() {   // ToDo: Rewrite HAL to support part
         this->store_to_memory_functional(out_addr, elem_matrix[i], DATAMOVER_BANDWIDTH_ELEMS, nullptr);
         printf("cim_layout_conversion(): wrote leftover row %d: 0x...%08x to out_addr(%p)\n", i+1, *(uint64_t*)elem_matrix[i], out_addr);
       }
-      // this->store_to_memory_functional(out_addr, elem_matrix[i], DATAMOVER_BANDWIDTH_ELEMS, nullptr);
-      // printf("cim_layout_conversion(): wrote leftover row %d: 0x%08x to out_addr(0x%08x)\n", i, *(uint64_t*)elem_matrix[i], out_addr);
     }
   }
   // --------------------------------------------
 
   // Write to HWPE register to indicate completion
   printf("cim_layout_conversion(): Data conversion completed, writing to finished register\n");
+  this->datamover_finished = 1;
+}
+
+void Datamover::unfold() {
+  update_streamer_config();
+
+  int dim_h = this->matrix_dim_m;   // height of the input matrix corresponds to the M dimension
+  int dim_w = this->matrix_dim_n;   // width of the input matrix corresponds to the N dimension
+
+  printf("unfold(): Starting matrix (num_channels = %d, dim_h=%d, dim_w=%d) unfold\n", this->num_channels, dim_h, dim_w);
+  this->trace.msg(vp::Trace::LEVEL_INFO, "unfold(): Starting matrix (num_channels = %d, dim_h=%d, dim_w=%d) unfold\n", this->num_channels, dim_h, dim_w);
+
+  int c_tiles = (this->num_channels + DATAMOVER_BANDWIDTH_ELEMS - 1) / DATAMOVER_BANDWIDTH_ELEMS;   // including partial tiles
+  int w_tiles = (dim_w + DATAMOVER_BANDWIDTH_ELEMS - 1) / DATAMOVER_BANDWIDTH_ELEMS;   // including partial tiles
+  int leftover_rows_c = this->num_channels % DATAMOVER_BANDWIDTH_ELEMS;
+  int leftover_cols_w = dim_w % DATAMOVER_BANDWIDTH_ELEMS;
+  uint8_t out_row[DATAMOVER_BANDWIDTH_ELEMS];
+
+  printf("unfold(): num_channels = %d, matrix_dim_h=%d, matrix_dim_w=%d, leftover_rows_c=%d, leftover_cols_w=%d\n",
+    this->num_channels, dim_h, dim_w, leftover_rows_c, leftover_cols_w);
+
+  for(int h_counter = 0; h_counter < dim_h; h_counter++) {
+    for(int w_tile_counter = 0; w_tile_counter < w_tiles; w_tile_counter++) {
+      for(int c_tile_counter = 0; c_tile_counter < c_tiles; c_tile_counter++) {
+        printf("unfold(): Processing tile (h_counter = %d / %d, w_tile_counter = %d / %d, c_tile_counter = %d / %d)\n", h_counter+1, dim_h, w_tile_counter+1, w_tiles, c_tile_counter+1, c_tiles);
+        if((c_tile_counter == c_tiles - 1 && leftover_rows_c > 0) && (w_tile_counter == w_tiles - 1 && leftover_cols_w > 0)) {
+          printf("unfold(): Processing last tile of h = %u / %u with leftover rows and cols (c_tile = %d / %d, w_tile = %d / %d, leftover_rows_c = %d, leftover_cols_w = %d)\n", h_counter+1, dim_h, c_tile_counter+1, c_tiles, w_tile_counter+1, w_tiles, leftover_rows_c, leftover_cols_w);
+          fill_elem_matrix(DATAMOVER_BANDWIDTH_ELEMS);  // Note: fill_elem_matrix(leftover_rows_c) would be sufficient, but that would introduce problems with the streamer configuration
+          int subtiles = (leftover_rows_c + DATAMOVER_BANDWIDTH_ELEMS - 1) / DATAMOVER_BANDWIDTH_ELEMS; // number of subtiles needed to cover leftover rows (ceil division)
+          int j_max, write_elems;
+          for(int c = 0; c < subtiles; c++) {
+            for(int i = 0; i < leftover_cols_w; i++) {
+              if((c == subtiles - 1) && (leftover_rows_c % DATAMOVER_BANDWIDTH_ELEMS != 0)) {
+                j_max = leftover_rows_c % DATAMOVER_BANDWIDTH_ELEMS;
+                write_elems = j_max;
+              }
+              else {
+                j_max = DATAMOVER_BANDWIDTH_ELEMS;
+                write_elems = DATAMOVER_BANDWIDTH_ELEMS;
+              }
+              for(int j = 0; j < j_max; j++) {
+                out_row[j] = elem_matrix[c*DATAMOVER_BANDWIDTH_ELEMS + j][i];
+              }
+              this->streamer_out.print_state();
+              uint32_t out_addr = this->streamer_out.iterate();
+              this->store_to_memory_functional(out_addr, out_row, write_elems, nullptr);
+              printf("unfold(): wrote row %d: 0x...%08x to out_addr(%p)\n", i+1, *(uint64_t*)out_row, out_addr);
+            }
+            for(int i = leftover_cols_w; i < DATAMOVER_BANDWIDTH_ELEMS; i++) {
+              this->streamer_out.iterate();  // skip writing remaining rows of the tile     ToDo: optimize in RTL if possible
+              printf("unfold(): skipped writing row %d\n", i+1);
+            }
+          }
+        }
+        else if(c_tile_counter == c_tiles - 1 && leftover_rows_c > 0) {  // last tiles in c-dimension with leftover rows
+          printf("unfold(): Processing last C-tile (%d / %d) with leftover rows (%d)\n", c_tile_counter+1, c_tiles, leftover_rows_c);
+          fill_elem_matrix(DATAMOVER_BANDWIDTH_ELEMS);    // Note: fill_elem_matrix(leftover_rows_c) would be sufficient, but that would introduce problems with the streamer configuration
+          int subtiles = (leftover_rows_c + DATAMOVER_BANDWIDTH_ELEMS - 1) / DATAMOVER_BANDWIDTH_ELEMS; // number of subtiles needed to cover leftover rows (ceil division)
+          int j_max, write_elems;
+          for(int c = 0; c < subtiles; c++) {
+            for(int i = 0; i < DATAMOVER_BANDWIDTH_ELEMS; i++) {
+              if((c == subtiles - 1) && (leftover_rows_c % DATAMOVER_BANDWIDTH_ELEMS != 0)) {
+                j_max = leftover_rows_c % DATAMOVER_BANDWIDTH_ELEMS;
+                write_elems = j_max;
+              }
+              else {
+                j_max = DATAMOVER_BANDWIDTH_ELEMS;
+                write_elems = DATAMOVER_BANDWIDTH_ELEMS;
+              }
+              for(int j = 0; j < j_max; j++) {
+                out_row[j] = elem_matrix[c*DATAMOVER_BANDWIDTH_ELEMS + j][i];
+              }
+              this->streamer_out.print_state();
+              uint32_t out_addr = this->streamer_out.iterate();
+              this->store_to_memory_functional(out_addr, out_row, write_elems, nullptr);
+              printf("unfold(): wrote row %d: 0x...%08x to out_addr(%p)\n", i+1, *(uint64_t*)out_row, out_addr);
+            }
+          }
+        }
+        else if(w_tile_counter == w_tiles - 1 && leftover_cols_w > 0) {  // last tiles in w-dimension with leftover cols
+          printf("unfold(): Processing last W-tile (%d / %d) with leftover cols (%d)\n", w_tile_counter+1, w_tiles, leftover_cols_w);
+          fill_elem_matrix(DATAMOVER_BANDWIDTH_ELEMS);
+          for(int i = 0; i < leftover_cols_w; i++) {
+            for(int j = 0; j < DATAMOVER_BANDWIDTH_ELEMS; j++) {
+              out_row[j] = elem_matrix[j][i];
+            }
+            this->streamer_out.print_state();
+            uint32_t out_addr = this->streamer_out.iterate();
+            this->store_to_memory_functional(out_addr, out_row, DATAMOVER_BANDWIDTH_ELEMS, nullptr);
+            printf("unfold(): wrote row %d: 0x...%08x to out_addr(%p)\n", i+1, *(uint64_t*)out_row, out_addr);
+          }
+          for(int i = leftover_cols_w; i < DATAMOVER_BANDWIDTH_ELEMS; i++) {
+            this->streamer_out.iterate();  // skip writing remaining rows of the tile     ToDo: optimize in RTL if possible
+            printf("unfold(): skipped writing row %d\n", i+1);
+          }
+        }
+        else {  // complete tiles
+          printf("unfold(): Processing complete tile (c_tile = %d / %d, w_tile = %d / %d, h_counter = %u / %u)\n", c_tile_counter+1, c_tiles, w_tile_counter+1, w_tiles, h_counter+1, dim_h);
+          fill_elem_matrix(DATAMOVER_BANDWIDTH_ELEMS);
+          for(int i = 0; i < DATAMOVER_BANDWIDTH_ELEMS; i++) {
+            for(int j = 0; j < DATAMOVER_BANDWIDTH_ELEMS; j++) {
+              out_row[j] = elem_matrix[j][i];
+            }
+            this->streamer_out.print_state();
+            uint32_t out_addr = this->streamer_out.iterate();
+            this->store_to_memory_functional(out_addr, out_row, DATAMOVER_BANDWIDTH_ELEMS, nullptr);
+            printf("unfold(): wrote row %d: 0x...%08x to out_addr(%p)\n", i+1, *(uint64_t*)out_row, out_addr);
+          }
+        }
+      }
+    }
+  }
+
+  // Write to HWPE register to indicate completion
+  printf("unfold(): Unfolding completed, writing to finished register\n");
   this->datamover_finished = 1;
 }
