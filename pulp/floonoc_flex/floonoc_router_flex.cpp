@@ -291,6 +291,9 @@ void Router::unstall_queue(int from_node)
     // request gets granted. Just unstall the queue and trigger the fsm, in case
     // we can now send a new request
     int queue = this->get_req_queue(from_node);
+    if (queue == -1)
+        return; // Prevent negative index access
+
     this->trace.msg(vp::Trace::LEVEL_TRACE,
                     "Unstalling queue (node: %d, queue: %d)\n", from_node,
                     queue);
@@ -302,6 +305,9 @@ void Router::unstall_queue(int from_node)
 void Router::stall_queue(int from_node)
 {
     int queue = this->get_req_queue(from_node);
+    if (queue == -1)
+        return; // Prevent negative index access
+
     this->trace.msg(vp::Trace::LEVEL_TRACE,
                     "Stalling queue (node: %d, queue: %d)\n", from_node, queue);
     *(this->stalled_queues[queue]) = true;
@@ -321,7 +327,7 @@ int Router::get_req_queue(int from_node)
     }
     this->trace.msg(vp::Trace::LEVEL_ERROR, "Unknown from_node %d\n",
                     from_node);
-    return 0;
+    return -1;
 }
 
 void Router::reset(bool active)
