@@ -35,7 +35,7 @@ int main() {
   }
   flex_global_barrier_polling();
   if (flex_get_cluster_id() == 0 && flex_is_first_core()) {
-    printf("Chip: SoftHier\n");
+    printf("Chip: SoftHier_3D\n"); // Can I get this from chip itself? Probably
     printf("Model: FlooNoc_Flex\n");
   }
   flex_global_barrier_polling();

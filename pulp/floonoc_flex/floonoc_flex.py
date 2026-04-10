@@ -245,7 +245,7 @@ class FlooNocFlex(gvsoc.systree.Component):
         """
         return gvsoc.systree.SlaveItf(self, f'wide_input_{node_id}', signature='io')
 
-    def generate_routing_tables(self, routing_mode: int, dim_x: int, dim_y: int, routing_path: str):
+    def generate_routing_tables(self, routing_mode: int, dim_x: int, dim_y: int, routing_path: str): #Deprecate this too complex method
             """
             Generates routing tables for the routers based on grid dimensions.
             Safely handles sparse Network Interface (NI) IDs.
@@ -354,18 +354,16 @@ class FlooNocFlex(gvsoc.systree.Component):
             
             self.add_property('routing_tables', routing_tables)
 
-    def generate_routing_tables_magia(self, routing_mode: int, dim_x: int, dim_y: int, routing_path: str):
+    def generate_routing_tables_mesh_2d(self, dim_x: int, dim_y: int):
         """
         Generates routing tables for the routers based on grid dimensions.
         """
-        routing_mode = 1 # Hardcoded here for now
         nb_nodes = self.get_property('nb_nodes')
         links = self.get_property('links')
 
         routers = [r[0] for r in self.get_property('routers')]
         nis = [n[0] for n in self.get_property('network_interfaces')]
 
-        # Safely generate a dictionary of dictionaries using strict string keys
         routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
 
         ni_to_router = {}
@@ -393,6 +391,50 @@ class FlooNocFlex(gvsoc.systree.Component):
                     next_hop = src + 1 if dst_x > src_x else src - 1
                 else:
                     next_hop = src + dim_x if dst_y > src_y else src - dim_x
+
+                routing_tables[str(src)][str(dst)] = next_hop
+
+        self.add_property('routing_tables', routing_tables)
+
+    def generate_routing_tables_mesh_3d(self, dim_x: int, dim_y: int, dim_z: int):
+        """
+        Generates routing tables for the routers based on grid dimensions.
+        """
+        nb_nodes = self.get_property('nb_nodes')
+        links = self.get_property('links')
+
+        routers = [r[0] for r in self.get_property('routers')]
+        nis = [n[0] for n in self.get_property('network_interfaces')]
+
+        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
+
+        ni_to_router = {}
+        for link in links:
+            node_a, node_b = link[0], link[1]
+            if node_a in nis and node_b in routers:
+                ni_to_router[node_a] = node_b
+            elif node_b in nis and node_a in routers:
+                ni_to_router[node_b] = node_a
+
+        for src in routers:
+            for dst in range(nb_nodes):
+                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
+
+                if target_router == -1:
+                    continue
+                if src == target_router:
+                    routing_tables[str(src)][str(dst)] = dst
+                    continue
+
+                src_x, src_y, src_z = src % dim_x, (src // dim_x) % dim_y, src // (dim_x * dim_y)
+                dst_x, dst_y, dst_z = target_router % dim_x, (target_router // dim_x) % dim_y, target_router // (dim_x * dim_y)
+
+                if src_x != dst_x:
+                    next_hop = src + 1 if dst_x > src_x else src - 1
+                elif src_y != dst_y:
+                    next_hop = src + dim_x if dst_y > src_y else src - dim_x
+                else:
+                    next_hop = src + dim_x * dim_y if dst_z > src_z else src - dim_x * dim_y
 
                 routing_tables[str(src)][str(dst)] = next_hop
 

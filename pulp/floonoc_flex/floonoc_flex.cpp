@@ -280,7 +280,7 @@ void FlooNoc::router_init_neighbours(Router *router,
                                      std::vector<Router *> &routers)
 {
     int node_id = router->node_id;
-    int current_port = 1; // To bypass local
+    int current_port = 0;
 
     for (int i = 0; i < this->links.size(); i++)
     {
@@ -301,7 +301,8 @@ void FlooNoc::router_init_neighbours(Router *router,
             // The neighbor is a Network Interface
             if (this->network_interfaces[neighbor_id] != NULL)
             {
-                // RIGHT NOW THIS CONDITION IS SAME AS OTHER ONE
+                // RIGHT NOW THIS CONDITION IS SAME AS OTHER ONE but could add
+                // different behaviour later on
                 router->set_neighbour(current_port,
                                       this->network_interfaces[neighbor_id],
                                       neighbor_id);

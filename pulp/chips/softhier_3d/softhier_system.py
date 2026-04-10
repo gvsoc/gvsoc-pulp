@@ -24,10 +24,10 @@ from vp.clock_domain import Clock_domain
 import interco.router as router
 import utils.loader.loader
 import gvsoc.systree
-from pulp.chips.softhier.cluster_unit import ClusterUnit, ClusterArch
-from pulp.chips.softhier.softhier_ctrl import SoftHierCtrl
-from pulp.chips.softhier.softhier_arch import SoftHierArch
-from pulp.chips.softhier.error_detector import ErrorDetector
+from pulp.chips.softhier_3d.cluster_unit import ClusterUnit, ClusterArch
+from pulp.chips.softhier_3d.softhier_ctrl import SoftHierCtrl
+from pulp.chips.softhier_3d.softhier_arch import SoftHierArch
+from pulp.chips.softhier_3d.error_detector import ErrorDetector
 # from pulp.floonoc.floonoc import FlooNocClusterGridNarrowWide
 from pulp.floonoc_flex.floonoc_flex import FlooNocFlex
 import math
@@ -52,8 +52,8 @@ class SoftHierSystem(gvsoc.systree.Component):
         #############
         # Assertion #
         #############
-        assert(arch.topology == '2DMesh', f'NoC Topology currectly only support 2DMesh')
-        assert(arch.num_cluster_x * arch.num_cluster_y == arch.num_cluster, f"Topology dimesion not match total number of clusters")
+        assert(arch.topology == '3DMesh', f'NoC Topology testing 3DMesh')
+        assert(arch.num_cluster_x * arch.num_cluster_y * arch.num_cluster_z == arch.num_cluster, f"Topology dimesion not match total number of clusters")
 
         ##############
         # Components #
@@ -92,15 +92,16 @@ class SoftHierSystem(gvsoc.systree.Component):
         #Control register
         softhier_ctrl = SoftHierCtrl(self, 'softhier_ctrl', num_cluster=arch.num_cluster, num_core_per_cluster=arch.num_core_per_cluster)
 
-        # --- FlooNoC Flex Initialization & Topology Building ---
-        router_degrees = 5
+       # --- FlooNoC Flex Initialization & Topology Building ---
+
+        router_degrees = 7
         
-        # Calculate Dimensions
+        # Calculate Dimensions (Adding a 1-node border for targets on all 3 axes)
         dim_x = arch.num_cluster_x + 2
         dim_y = arch.num_cluster_y + 2
+        dim_z = arch.num_cluster_z + 2
         
-        # Define Mesh size and number of nodes
-        MESH_SIZE = dim_x * dim_y
+        MESH_SIZE = dim_x * dim_y * dim_z
         nb_nodes = MESH_SIZE * 2
 
         noc = FlooNocFlex(self, 'noc',      
@@ -110,58 +111,65 @@ class SoftHierSystem(gvsoc.systree.Component):
                 router_input_queue_size=16,
                 ni_outstanding_reqs=arch.noc_outstanding)
 
-        # Get router ID for 2D mesh
-        def get_router_id(x, y):
-            return y * dim_x + x
-        
-        # Offset by MESH_SIZE to separate from routers
-        def get_ni_id(x, y):
-            return MESH_SIZE + (y * dim_x + x)
+        def get_router_id(x, y, z):
+            # 3D Math: z * (Area) + y * (Width) + x
+            return z * (dim_x * dim_y) + y * dim_x + x
+            
+        def get_ni_id(x, y, z):
+            return MESH_SIZE + get_router_id(x, y, z)
 
         routers_map = {} 
         nis_map = {}     
 
-        # 1. Add routers at cluster centers
-        for y in range(1, arch.num_cluster_y + 1):
-            for x in range(1, arch.num_cluster_x + 1):
-                r_id = get_router_id(x, y)
-                routers_map[(x, y)] = r_id
-                noc.add_router(r_id, num_queues=5) 
+        # Add routers
+        for z in range(dim_z):
+            for y in range(dim_y):
+                for x in range(dim_x):
+                    r_id = get_router_id(x, y, z)
+                    routers_map[(x, y, z)] = r_id
+                    noc.add_router(r_id, num_queues=router_degrees)
 
-        # 2. Add network interfaces everywhere except the 4 corners
-        for y in range(dim_y):
-            for x in range(dim_x):
-                if (x == 0 and y == 0) or (x == 0 and y == dim_y - 1) or \
-                   (x == dim_x - 1 and y == 0) or (x == dim_x - 1 and y == dim_y - 1):
-                    continue
-                ni_id = get_ni_id(x, y)
-                nis_map[(x, y)] = ni_id
-                noc.add_network_interface(ni_id)
+        # Add network interfaces everywhere except the 8 corners
+        for z in range(dim_z):
+            for y in range(dim_y):
+                for x in range(dim_x):
+                    if (x == 0 or x == dim_x - 1) and (y == 0 or y == dim_y - 1) and (z == 0 or z == dim_z - 1):
+                        continue
+                    ni_id = get_ni_id(x, y, z)
+                    nis_map[(x, y, z)] = ni_id
+                    noc.add_network_interface(ni_id)
 
-        # 3. Add links (NI <-> Nearest Router)
-        for (nx, ny), ni_id in nis_map.items():
-            rx = max(1, min(nx, arch.num_cluster_x))
-            ry = max(1, min(ny, arch.num_cluster_y))
-            r_id = routers_map[(rx, ry)]
-            # Only add the link once; C++ treats it as bidirectional
+        # Add links (NI <-> Local Router 1:1 mapping)
+        for (nx, ny, nz), ni_id in nis_map.items():
+            # Fix: No clamping needed! Connect directly to the local router
+            r_id = routers_map[(nx, ny, nz)]
             noc.add_link(ni_id, r_id, latency=1)
 
-        # 4. Add links (Router <-> Router Mesh Network)
-        for y in range(1, arch.num_cluster_y + 1):
-            for x in range(1, arch.num_cluster_x + 1):
-                r_id = routers_map[(x, y)]
-                # Link East
-                if x < arch.num_cluster_x:
-                    east_id = routers_map[(x + 1, y)]
-                    noc.add_link(r_id, east_id, latency=1)
-                # Link South
-                if y < arch.num_cluster_y:
-                    south_id = routers_map[(x, y + 1)]
-                    noc.add_link(r_id, south_id, latency=1)
+        # Add links (Router <-> Router Mesh Network)
+        for z in range(dim_z):
+            for y in range(dim_y):
+                for x in range(dim_x):
+                    r_id = routers_map[(x, y, z)]
+                    
+                    # Link East (X-axis)
+                    if x < dim_x - 1:
+                        east_id = routers_map[(x + 1, y, z)]
+                        noc.add_link(r_id, east_id, latency=1)
+                        
+                    # Link South (Y-axis)
+                    if y < dim_y - 1:
+                        south_id = routers_map[(x, y + 1, z)]
+                        noc.add_link(r_id, south_id, latency=1)
+                        
+                    # Link Down (Z-axis)
+                    if z < dim_z - 1:
+                        down_id = routers_map[(x, y, z + 1)]
+                        noc.add_link(r_id, down_id, latency=1)
 
-        # 5. Generate routing tables
-        # MUST use _magia to generate JSON Dictionaries instead of Arrays for C++
-        noc.generate_routing_tables_mesh_2d(dim_x=dim_x, dim_y=dim_y)
+        # Generate routing tables
+        # Could either be changed to import from json or generated by floogen
+        # In any case, should be a function call to floonoc_flex so chip doesn't change
+        noc.generate_routing_tables_mesh_3d(dim_x=dim_x, dim_y=dim_y, dim_z=dim_z)
 
         ############
         # Bindings #
@@ -175,11 +183,13 @@ class SoftHierSystem(gvsoc.systree.Component):
 
         # Clusters
         for cluster_id in range(arch.num_cluster):
+            # 3D Coordinate Extraction
             x_id = int(cluster_id % arch.num_cluster_x)
-            y_id = int(cluster_id / arch.num_cluster_x)
+            y_id = int((cluster_id // arch.num_cluster_x) % arch.num_cluster_y)
+            z_id = int(cluster_id // (arch.num_cluster_x * arch.num_cluster_y))
             
-            # Retrieve the UNIQUE Network Interface ID for this cluster
-            ni_node_id = nis_map[(x_id + 1, y_id + 1)]
+            # Retrieve the UNIQUE Network Interface ID for this 3D cluster
+            ni_node_id = nis_map[(x_id + 1, y_id + 1, z_id + 1)]
             
             narrow_arbiter = router.Router(self, f'narrow_arbiter_{cluster_id}', bandwidth=8)
             narrow_arbiter.o_MAP(virtual_interco.i_INPUT())
