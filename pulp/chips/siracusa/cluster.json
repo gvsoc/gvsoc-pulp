@@ -178,6 +178,22 @@
             }
         },
 
+        "redmule": {
+            "mapping": {
+                "base": "0x10201C00",
+                "size": "0x00000200",
+                "remove_offset": "0x10201C00"
+            },
+            "tcdm_bank_width": 4,
+            "tcdm_bank_number": 16,
+            "elem_size": 4,
+            "ce_height": 12,
+            "ce_width": 4,
+            "ce_pipe": 3,
+            "queue_depth": 8,
+            "fold_tiles_mapping": 0
+        },
+
         "dbg_unit": {
             "base": "0x10300000",
             "size"  : "0x00008000"

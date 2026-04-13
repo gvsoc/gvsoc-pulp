@@ -25,6 +25,7 @@ from pulp.mchan.mchan_v7 import Mchan
 from pulp.timer.timer_v2 import Timer
 from pulp.cluster.cluster_control_v2 import Cluster_control
 from pulp.neureka.neureka import Neureka
+from pulp.light_redmule.light_redmule import LightRedmule
 from pulp.icache_ctrl.icache_ctrl_v2 import Icache_ctrl
 
 
@@ -123,6 +124,21 @@ class Cluster(st.Component):
         # NEUREKA
         neureka = Neureka(self, 'neureka')
 
+        # Light_RedMulE
+        redmule_config = self.get_property('peripherals/redmule')
+        redmule = LightRedmule(
+            self,
+            'redmule',
+            tcdm_bank_width    = redmule_config.get('tcdm_bank_width', 4),
+            tcdm_bank_number   = redmule_config.get('tcdm_bank_number', 16),
+            elem_size          = redmule_config.get('elem_size', 4),
+            ce_height          = redmule_config.get('ce_height', 12),
+            ce_width           = redmule_config.get('ce_width', 4),
+            ce_pipe            = redmule_config.get('ce_pipe', 3),
+            queue_depth        = redmule_config.get('queue_depth', 8),
+            fold_tiles_mapping = redmule_config.get('fold_tiles_mapping', 0),
+        )
+
         # Icache controller
         icache_ctrl = Icache_ctrl(self, 'icache_ctrl')
 
@@ -212,6 +228,11 @@ class Cluster(st.Component):
 
         periph_ico.add_mapping('neureka', **self._reloc_mapping(self.get_property('peripherals/neureka/mapping')))
         self.bind(periph_ico, 'neureka', neureka, 'input')
+
+        # Light_RedMulE bindings (uses TCDM port shared with Neureka)
+        periph_ico.add_mapping('redmule', **self._reloc_mapping(self.get_property('peripherals/redmule/mapping')))
+        self.bind(periph_ico, 'redmule', redmule, 'input')
+        self.bind(redmule, 'tcdm', l1, 'neureka_in')
 
         # MCHAN
         self.bind(mchan, 'ext_irq_itf', self, 'dma_irq')
