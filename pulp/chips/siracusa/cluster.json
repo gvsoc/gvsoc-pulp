@@ -1,5 +1,7 @@
 
 {
+    "accelerator": "neureka",
+
     "alias": "0x00000000",
     "mapping": {
         "base": "0x10000000",
