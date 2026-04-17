@@ -106,7 +106,7 @@ class NetworkInterface : public FloonocNode
     int get_id();
     // This gets called by the top noc to grant a a request denied by a target
     void grant(vp::IoReq *req);
-    void set_router(int nw, Router *router);
+    void set_router(int nw, Router *router, int latency = 1);
 
   private:
     // Callback called when a target request is asynchronously granted after a
@@ -135,6 +135,8 @@ class NetworkInterface : public FloonocNode
 
     // Support for flexible topologies
     int node_id;
+    int router_in_latency = 1;
+
     vp::IoMaster wide_output_itf;
     vp::IoMaster narrow_output_itf;
     // Input IO interface where wide incoming bursts are injected into the
