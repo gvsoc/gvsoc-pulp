@@ -48,6 +48,7 @@ Router::Router(FlooNoc *noc, std::string name, int node_id, int num_queues,
     this->input_queues.resize(this->num_queues, nullptr);
     this->output_nodes.resize(this->num_queues, nullptr);
     this->stalled_queues.resize(this->num_queues, nullptr);
+    this->input_latencies.resize(this->num_queues, 1);
 
     // Create a queue for each direction
     for (int i = 0; i < this->num_queues; i++)
@@ -71,11 +72,12 @@ Router::~Router()
     }
 }
 
-void Router::set_neighbour(int dir, FloonocNode *node, int neighbor_id)
+void Router::set_neighbour(int dir, FloonocNode *node, int neighbor_id, int latency)
 {
     this->output_nodes[dir] = node;
     this->neighbor_to_queue[neighbor_id] = dir;
     this->queue_to_neighbor[dir] = neighbor_id;
+    this->input_latencies[dir] = latency;
 }
 
 void Router::set_routing_table(std::vector<int> table)
@@ -106,10 +108,8 @@ bool Router::handle_request(FloonocNode *node, vp::IoReq *req, int from_node)
     // And push it to the queue. The queue will automatically trigger the FSM if
     // needed
     RouterQueue *queue = this->input_queues[queue_index];
-    queue->queue.push_back(req, 1); // The queue has an intrinsic delay of 1.
-                                    // With this additional delay, we model the
-                                    // fact that a real router takes 2 cycles to
-                                    // forward a request
+    int latency = this->input_latencies[queue_index];
+    queue->queue.push_back(req, latency); // Physical delay representing link latency
 
     // We let the source enqueue one more request than what is possible to model
     // the fact the request is stalled. This will then stall the source which

@@ -68,13 +68,14 @@ class Router : public FloonocNode
     int node_id;
     int num_queues;
 
-    void set_neighbour(int dir, FloonocNode *node, int neighbor_id);
+    void set_neighbour(int dir, FloonocNode *node, int neighbor_id, int latency = 1);
 
     // Pass the routing table during initialization
     void set_routing_table(std::vector<int> table);
 
   private:
     std::vector<int> routing_table; // Index: dest_node -> Value: next_hop_node
+    std::vector<int> input_latencies; // Index: queue_index -> Value: latency
     std::unordered_map<int, int>
         neighbor_to_queue; // Key: neighbor_id -> Value: queue_index
     std::unordered_map<int, int>

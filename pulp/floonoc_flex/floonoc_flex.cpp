@@ -206,23 +206,27 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
 
     // Build the NI-to-Router map from the links array
     std::vector<int> ni_to_router_map(this->nb_nodes, -1);
+    std::vector<int> ni_to_router_latency(this->nb_nodes, 1);
 
     for (int i = 0; i < this->links.size(); i++)
     {
         int node_a = this->links[i][0];
         int node_b = this->links[i][1];
+        int latency = this->links[i][2]; // Latency is guaranteed to be the third element
 
         // If Node A is an NI and Node B is a Router
         if (this->network_interfaces[node_a] != NULL &&
             this->req_routers[node_b] != NULL)
         {
             ni_to_router_map[node_a] = node_b;
+            ni_to_router_latency[node_a] = latency;
         }
         // If Node B is an NI and Node A is a Router
         else if (this->network_interfaces[node_b] != NULL &&
                  this->req_routers[node_a] != NULL)
         {
             ni_to_router_map[node_b] = node_a;
+            ni_to_router_latency[node_b] = latency;
         }
     }
 
@@ -234,16 +238,17 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
         if (ni)
         {
             int target_router_id = ni_to_router_map[i];
+            int latency = ni_to_router_latency[i];
 
             if (target_router_id != -1 &&
                 this->req_routers[target_router_id] != NULL)
             {
                 ni->set_router(NetworkInterface::NW_REQ,
-                               this->req_routers[target_router_id]);
+                               this->req_routers[target_router_id], latency);
                 ni->set_router(NetworkInterface::NW_RSP,
-                               this->rsp_routers[target_router_id]);
+                               this->rsp_routers[target_router_id], latency);
                 ni->set_router(NetworkInterface::NW_WIDE,
-                               this->wide_routers[target_router_id]);
+                               this->wide_routers[target_router_id], latency);
             }
             else
             {
@@ -298,6 +303,8 @@ void FlooNoc::router_init_neighbours(Router *router,
 
         if (neighbor_id != -1)
         {
+            int latency = this->links[i][2]; // Latency is guaranteed to be the third element
+
             // The neighbor is a Network Interface
             if (this->network_interfaces[neighbor_id] != NULL)
             {
@@ -305,7 +312,7 @@ void FlooNoc::router_init_neighbours(Router *router,
                 // different behaviour later on
                 router->set_neighbour(current_port,
                                       this->network_interfaces[neighbor_id],
-                                      neighbor_id);
+                                      neighbor_id, latency);
                 current_port++;
             }
             // The neighbor is another Router
@@ -314,7 +321,7 @@ void FlooNoc::router_init_neighbours(Router *router,
                 // Plug the Router into the next available routing port and
                 // register its ID
                 router->set_neighbour(current_port, routers[neighbor_id],
-                                      neighbor_id);
+                                      neighbor_id, latency);
                 current_port++;
             }
         }
