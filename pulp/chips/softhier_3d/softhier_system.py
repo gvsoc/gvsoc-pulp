@@ -208,17 +208,24 @@ class SoftHierSystem(gvsoc.systree.Component):
             cluster_list[cluster_id].o_NARROW_SOC(narrow_arbiter.i_INPUT())
             cluster_list[cluster_id].o_WIDE_SOC(wide_arbiter.i_INPUT())
             
+            # For Narrow Mapping
+            narrow_base = arch.cluster_tcdm_remote + cluster_id * arch.cluster_tcdm_size
             noc.o_NARROW_MAP(cluster_list[cluster_id].i_NARROW_INPUT(),
-                           base=arch.cluster_tcdm_remote  + cluster_id * arch.cluster_tcdm_size,
-                           size=arch.cluster_tcdm_size,
-                           node_id=ni_node_id,
-                           rm_base=True)
-                           
+                            base=narrow_base,
+                            size=arch.cluster_tcdm_size,
+                            node_id=ni_node_id,
+                            rm_base=False, # Disable automatic base removal
+                            remove_offset=narrow_base - arch.cluster_tcdm_base) # Shift to TCDM base
+
+            # For Wide Mapping
             wide_base = arch.cluster_tcdm_remote + cluster_id * arch.cluster_tcdm_size
             wide_name = cluster_list[cluster_id].i_WIDE_INPUT().component.name
-            
+
             noc.get_property('mappings')[f"wide_{wide_name}"] = {
-                'base': wide_base, 'size': arch.cluster_tcdm_size, 'node_id': ni_node_id, 'remove_offset': wide_base
+                'base': wide_base, 
+                'size': arch.cluster_tcdm_size, 
+                'node_id': ni_node_id, 
+                'remove_offset': wide_base - arch.cluster_tcdm_base # Shift to TCDM base
             }
             noc.o_WIDE_BIND(cluster_list[cluster_id].i_WIDE_INPUT(), ni_node_id)
 
