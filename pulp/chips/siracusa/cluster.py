@@ -25,6 +25,7 @@ from pulp.mchan.mchan_v7 import Mchan
 from pulp.timer.timer_v2 import Timer
 from pulp.cluster.cluster_control_v2 import Cluster_control
 from pulp.neureka.neureka import Neureka
+from pulp.light_redmule.light_redmule import LightRedmule
 from pulp.icache_ctrl.icache_ctrl_v2 import Icache_ctrl
 
 
@@ -61,7 +62,7 @@ class Cluster(st.Component):
 
     """
 
-    def __init__(self, parent, name, config_file, cid: int=0):
+    def __init__(self, parent, name, config_file, cid: int=0, accelerator: str=None):
         super(Cluster, self).__init__(parent, name)
 
         #
@@ -69,6 +70,16 @@ class Cluster(st.Component):
         #
 
         self.add_properties(self.load_property_file(config_file))
+
+        # Accelerator variant — 'neureka' (default) or 'redmule'.
+        # Neureka and Light_RedMulE share the L1 `neureka_in` TCDM port, so
+        # the cluster must pick exactly one. The constructor kwarg, if
+        # provided, overrides the `accelerator` key in cluster.json.
+        if accelerator is None:
+            accelerator = self.get_property('accelerator') or 'neureka'
+        if accelerator not in ('neureka', 'redmule'):
+            raise ValueError(f"accelerator must be 'neureka' or 'redmule', got {accelerator!r}")
+        self.accelerator = accelerator
 
         nb_pe               = self.get_property('nb_pe', int)
         cluster_size        = self.get_property('mapping/size', int)
@@ -120,8 +131,25 @@ class Cluster(st.Component):
         # Cluster control
         cluster_control = Cluster_control(self, 'cluster_ctrl', nb_core=nb_pe)
 
-        # NEUREKA
-        neureka = Neureka(self, 'neureka')
+        # Accelerator — Neureka or Light_RedMulE, mutually exclusive
+        neureka = None
+        redmule = None
+        if self.accelerator == 'neureka':
+            neureka = Neureka(self, 'neureka')
+        else:
+            redmule_config = self.get_property('peripherals/redmule')
+            redmule = LightRedmule(
+                self,
+                'redmule',
+                tcdm_bank_width    = redmule_config.get('tcdm_bank_width', 4),
+                tcdm_bank_number   = redmule_config.get('tcdm_bank_number', 16),
+                elem_size          = redmule_config.get('elem_size', 4),
+                ce_height          = redmule_config.get('ce_height', 12),
+                ce_width           = redmule_config.get('ce_width', 4),
+                ce_pipe            = redmule_config.get('ce_pipe', 3),
+                queue_depth        = redmule_config.get('queue_depth', 8),
+                fold_tiles_mapping = redmule_config.get('fold_tiles_mapping', 0),
+            )
 
         # Icache controller
         icache_ctrl = Icache_ctrl(self, 'icache_ctrl')
@@ -144,7 +172,8 @@ class Cluster(st.Component):
         self.bind(l1, 'cluster_ico', cluster_ico, 'input')
 
         # Wmem
-        self.bind(neureka, 'wmem_out', wmem, 'input')
+        if neureka is not None:
+            self.bind(neureka, 'wmem_out', wmem, 'input')
 
         # Cores
         for i in range(0, nb_pe):
@@ -210,8 +239,14 @@ class Cluster(st.Component):
         periph_ico.add_mapping('dma', **self._reloc_mapping(self.get_property('peripherals/dma/mapping')))
         self.bind(periph_ico, 'dma', mchan, 'in_%d' % nb_pe)
 
-        periph_ico.add_mapping('neureka', **self._reloc_mapping(self.get_property('peripherals/neureka/mapping')))
-        self.bind(periph_ico, 'neureka', neureka, 'input')
+        if neureka is not None:
+            periph_ico.add_mapping('neureka', **self._reloc_mapping(self.get_property('peripherals/neureka/mapping')))
+            self.bind(periph_ico, 'neureka', neureka, 'input')
+        else:
+            # Light_RedMulE takes the L1 `neureka_in` TCDM slot.
+            periph_ico.add_mapping('redmule', **self._reloc_mapping(self.get_property('peripherals/redmule/mapping')))
+            self.bind(periph_ico, 'redmule', redmule, 'input')
+            self.bind(redmule, 'tcdm', l1, 'neureka_in')
 
         # MCHAN
         self.bind(mchan, 'ext_irq_itf', self, 'dma_irq')
@@ -239,10 +274,11 @@ class Cluster(st.Component):
             self.bind(pes[i], 'halt_status', cluster_control, 'core_halt_%d' % i)
 
         # NEUREKA
-        for i in range(0, nb_pe):
-            self.bind(neureka, 'irq', event_unit, 'in_event_%d_pe_%d' % (neureka_irq, i))
+        if neureka is not None:
+            for i in range(0, nb_pe):
+                self.bind(neureka, 'irq', event_unit, 'in_event_%d_pe_%d' % (neureka_irq, i))
 
-        self.bind(neureka, 'out', l1, 'neureka_in')
+            self.bind(neureka, 'out', l1, 'neureka_in')
 
         # Icache controller
         self.bind(icache_ctrl, 'enable', icache, 'enable')

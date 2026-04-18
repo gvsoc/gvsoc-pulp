@@ -24,7 +24,7 @@ import interco.router_proxy as router_proxy
 
 class Pulp_open(st.Component):
 
-    def __init__(self, parent, name, parser, soc_config_file='pulp/chips/siracusa/soc.json', cluster_config_file='pulp/chips/siracusa/cluster.json', padframe_config_file='pulp/chips/siracusa/padframe.json'):
+    def __init__(self, parent, name, parser, soc_config_file='pulp/chips/siracusa/soc.json', cluster_config_file='pulp/chips/siracusa/cluster.json', padframe_config_file='pulp/chips/siracusa/padframe.json', accelerator: str=None):
         super(Pulp_open, self).__init__(parent, name)
 
         #
@@ -34,6 +34,9 @@ class Pulp_open(st.Component):
         soc_config_file = self.add_property('soc_config_file', soc_config_file)
         cluster_config_file = self.add_property('cluster_config_file', cluster_config_file)
         nb_cluster = self.add_property('nb_cluster', 1)
+        # Accelerator variant for the cluster(s): 'neureka' (default) or 'redmule'.
+        # None means "inherit from cluster.json's `accelerator` key, or default to neureka".
+        self.accelerator = accelerator
 
     
         #
@@ -56,7 +59,7 @@ class Pulp_open(st.Component):
         clusters = []
         for cid in range(0, nb_cluster):
             cluster_name = get_cluster_name(cid)
-            clusters.append(Cluster(self, cluster_name, config_file=cluster_config_file, cid=cid))
+            clusters.append(Cluster(self, cluster_name, config_file=cluster_config_file, cid=cid, accelerator=self.accelerator))
 
         # Soc
         soc = Soc(self, 'soc', parser, config_file=soc_config_file, chip=self, cluster=clusters[0])
