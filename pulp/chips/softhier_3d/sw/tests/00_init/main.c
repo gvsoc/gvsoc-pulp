@@ -3,6 +3,9 @@
 #include "softhier_runtime.h"
 
 int main() {
+  if (flex_is_first_core()) {
+    printf("Cluster %d booted successfully!\n", flex_get_cluster_id());
+  }
   flex_global_barrier_init();
   for (int i = 0; i < 10; i++) {
     flex_global_barrier_polling();

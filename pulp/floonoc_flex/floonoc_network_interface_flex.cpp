@@ -131,6 +131,14 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address,
         router_req->set_opcode(req->get_opcode());
         router_req->set_second_data(req->get_second_data());
 
+        /*
+        printf(
+            "[Trace] NI %d injecting packet. Addr: 0x%lx, Size: %d, is_req "
+            "parameter: %d, REQ_SRC_NI is NULL: %d\n",
+            this->ni.node_id, burst_base, burst_size, is_req,
+            (*(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI) == NULL));
+        */
+
         if (*(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI))
         {
             if (wide)
@@ -483,8 +491,10 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req,
         }
         else
         {
+            /*
             printf("Request packet arrived at correct destination! Node %d\n",
                    this->node_id);
+            */
         }
 
         if ((req->get_is_write() && !req->get_int(FlooNoc::REQ_IS_ADDRESS)) ||
@@ -509,9 +519,16 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req,
             // network.
             vp::IoReqStatus result = target->req(req);
 
+            /*
+            printf("[Trace] NI %d attempted memory access at local addr 0x%lx. "
+                   "Result code: %d (0=OK, 1=DENIED, 2=UNIMPL, 3=INVALID)\n",
+                   this->node_id, req->get_addr(), result);
+            */
+
             if (result == vp::IO_REQ_OK)
             {
-                this->response_queue.push_delayed(req, req->get_latency() + this->router_in_latency);
+                this->response_queue.push_delayed(
+                    req, req->get_latency() + this->router_in_latency);
             }
             else if (result == vp::IO_REQ_DENIED)
             {
@@ -674,15 +691,19 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
 void NetworkInterface::handle_response(vp::IoReq *req)
 {
-    NetworkInterface *origin_ni = *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);
+    NetworkInterface *origin_ni =
+        *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);
     if (origin_ni == NULL)
     {
-        this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received response from router (req: %p)\n", req);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG,
+                        "Received response from router (req: %p)\n", req);
 
         int dest_id = (int)(long)*req->arg_get(FlooNoc::REQ_DEST_ID);
         if (dest_id != this->node_id)
         {
-            printf("ERROR: Response packet arrived at wrong destination! Expected node %d, got %d\n", this->node_id, dest_id);
+            printf("ERROR: Response packet arrived at wrong destination! "
+                   "Expected node %d, got %d\n",
+                   this->node_id, dest_id);
         }
 
         vp::IoReq *burst = *(vp::IoReq **)req->arg_get(FlooNoc::REQ_BURST);
@@ -695,8 +716,10 @@ void NetworkInterface::handle_response(vp::IoReq *req)
         }
         else
         {
-            *(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE) -= req->get_size();
-            if (*(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE) == 0)
+            *(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE) -=
+                req->get_size();
+            if (*(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE) ==
+                0)
             {
                 this->nb_pending_bursts[wide]--;
                 burst->get_resp_port()->resp(burst);

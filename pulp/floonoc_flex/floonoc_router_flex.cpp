@@ -72,7 +72,8 @@ Router::~Router()
     }
 }
 
-void Router::set_neighbour(int dir, FloonocNode *node, int neighbor_id, int latency)
+void Router::set_neighbour(int dir, FloonocNode *node, int neighbor_id,
+                           int latency)
 {
     this->output_nodes[dir] = node;
     this->neighbor_to_queue[neighbor_id] = dir;
@@ -87,6 +88,11 @@ void Router::set_routing_table(std::vector<int> table)
 
 bool Router::handle_request(FloonocNode *node, vp::IoReq *req, int from_node)
 {
+    /*
+    printf("[Trace] Router %d received packet from node %d. Target node: %d\n",
+           this->node_id, from_node, req->get_int(FlooNoc::REQ_DEST_ID));
+    */
+
     this->trace.msg(
         vp::Trace::LEVEL_DEBUG,
         "Handle request (req: %p, base: 0x%x, size: 0x%x, from: %d)\n", req,
@@ -109,7 +115,8 @@ bool Router::handle_request(FloonocNode *node, vp::IoReq *req, int from_node)
     // needed
     RouterQueue *queue = this->input_queues[queue_index];
     int latency = this->input_latencies[queue_index];
-    queue->queue.push_back(req, latency); // Physical delay representing link latency
+    queue->queue.push_back(req,
+                           latency); // Physical delay representing link latency
 
     // We let the source enqueue one more request than what is possible to model
     // the fact the request is stalled. This will then stall the source which
