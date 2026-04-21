@@ -188,4 +188,8 @@ class NetworkInterface : public FloonocNode
     vp::Queue response_queue;
 
     int nb_pending_bursts[2];
+
+    // Performance Counters
+    uint64_t stat_injected_packets = 0;
+    uint64_t stat_received_responses = 0;
 };

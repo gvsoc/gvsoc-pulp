@@ -183,6 +183,9 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             // Only send one request per cycle to the same output
             if (output_full[out_queue_id])
             {
+                // Performance Counter
+                _this->stat_stall_cycles++;
+
                 _this->trace.msg(
                     vp::Trace::LEVEL_TRACE,
                     "Output queue is full, skipping (out queue: %d)\n",
@@ -202,6 +205,9 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             // we'll retry later
             if (*(_this->stalled_queues[out_queue_id]))
             {
+                // Performance Counter
+                _this->stat_stall_cycles++;
+
                 _this->trace.msg(
                     vp::Trace::LEVEL_TRACE,
                     "Output queue is stalled, skipping (out queue: %d)\n",
@@ -219,6 +225,9 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             // Since we now know, that the request will be propagated, remove it
             // from the queue
             queue->queue.pop();
+
+            // Performance Counter
+            _this->stat_routed_packets++;
 
             if (queue->queue.size() ==
                 _this->queue_size) // Remember we let the source enqueue one

@@ -212,7 +212,8 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
     {
         int node_a = this->links[i][0];
         int node_b = this->links[i][1];
-        int latency = this->links[i][2]; // Latency is guaranteed to be the third element
+        int latency =
+            this->links[i][2]; // Latency is guaranteed to be the third element
 
         // If Node A is an NI and Node B is a Router
         if (this->network_interfaces[node_a] != NULL &&
@@ -263,6 +264,47 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
 
 FlooNoc::~FlooNoc()
 {
+    // === PRINT PERFORMANCE REPORT ===
+    printf(
+        "\n===============================================================\n");
+    printf("                  FlooNoC Performance Report                   \n");
+    printf("===============================================================\n");
+
+    printf("\n--- Network Interfaces (Traffic Load) ---\n");
+    printf(" Node ID | Injected Packets | Received Responses\n");
+    printf("---------------------------------------------------------------\n");
+    for (NetworkInterface *ni : this->network_interfaces)
+    {
+        if (ni)
+        {
+            printf("   %3d   | %16lu | %18lu\n", ni->get_id(),
+                   ni->stat_injected_packets, ni->stat_received_responses);
+        }
+    }
+
+    printf("\n--- Routers (Routing & Congestion) ---\n");
+    printf(" Node ID | Routed Packets | Stalled Cycles | Congestion Rate \n");
+    printf("---------------------------------------------------------------\n");
+    for (Router *router : this->req_routers)
+    {
+        if (router)
+        {
+            double congestion = 0.0;
+            if (router->stat_routed_packets + router->stat_stall_cycles > 0)
+            {
+                congestion =
+                    (double)router->stat_stall_cycles /
+                    (router->stat_routed_packets + router->stat_stall_cycles) *
+                    100.0;
+            }
+            printf("   %3d   | %14lu | %14lu | %13.2f %%\n", router->node_id,
+                   router->stat_routed_packets, router->stat_stall_cycles,
+                   congestion);
+        }
+    }
+    printf(
+        "===============================================================\n\n");
+
     for (Router *router : this->req_routers)
     {
         delete router;
@@ -303,7 +345,9 @@ void FlooNoc::router_init_neighbours(Router *router,
 
         if (neighbor_id != -1)
         {
-            int latency = this->links[i][2]; // Latency is guaranteed to be the third element
+            int latency =
+                this->links[i]
+                           [2]; // Latency is guaranteed to be the third element
 
             // The neighbor is a Network Interface
             if (this->network_interfaces[neighbor_id] != NULL)
