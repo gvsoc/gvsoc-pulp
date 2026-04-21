@@ -99,5 +99,5 @@ sh-3d-test-sw:
 	@! grep -q "ebreak" sw_build/softhier.dump || (echo "Error: 'ebreak' found in sw_build/softhier.dump" && exit 1)
 
 # Run target: Executes the freshly built binary
-sh-3d-test-run:
+sh-3d-test-run: sh-3d-test-sw
 	./install/bin/gvsoc --target=pulp.chips.softhier_3d.softhier_target --binary sw_build/softhier.elf run

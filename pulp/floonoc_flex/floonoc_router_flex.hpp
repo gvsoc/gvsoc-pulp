@@ -74,6 +74,10 @@ class Router : public FloonocNode
     // Pass the routing table during initialization
     void set_routing_table(std::vector<int> table);
 
+    // Performance Counters
+    uint64_t stat_routed_packets = 0;
+    uint64_t stat_stall_cycles = 0;
+
   private:
     std::vector<int> routing_table; // Index: dest_node -> Value: next_hop_node
     std::vector<int> input_latencies; // Index: queue_index -> Value: latency
@@ -117,8 +121,4 @@ class Router : public FloonocNode
     vp::Signal<uint64_t> signal_req;
     vp::Signal<uint64_t> signal_req_size;
     vp::Signal<bool> signal_req_is_write;
-
-    // Performance Counters
-    uint64_t stat_routed_packets = 0;
-    uint64_t stat_stall_cycles = 0;
 };
