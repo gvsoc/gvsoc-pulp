@@ -282,10 +282,12 @@ FlooNoc::~FlooNoc()
         }
     }
 
-    printf("\n--- Routers (Routing & Congestion) ---\n");
+    printf("\n--- WIDE Routers (Data Routing & Congestion) ---\n");
     printf(" Node ID | Routed Packets | Stalled Cycles | Congestion Rate \n");
     printf("---------------------------------------------------------------\n");
-    for (Router *router : this->req_routers)
+
+    // CHANGE THIS LINE from req_routers to wide_routers
+    for (Router *router : this->wide_routers)
     {
         if (router)
         {
