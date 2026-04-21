@@ -63,5 +63,5 @@ class SoftHierArch:
         self.soc_register_eoc        = 0x70000000
 
         #NoC
-        self.noc_outstanding         = 64
-        self.noc_link_width          = 512
+        self.noc_outstanding         = 8 #64
+        self.noc_link_width          = 64 #512
