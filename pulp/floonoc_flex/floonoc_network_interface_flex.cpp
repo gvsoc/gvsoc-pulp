@@ -214,6 +214,9 @@ void NetworkQueue::send_router_req()
     this->queue.pop();
     vp::IoReq *burst = *(vp::IoReq **)req->arg_get(FlooNoc::REQ_BURST);
 
+    // Performance Counter
+    this->ni.stat_injected_packets++;
+
     if (*(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI))
     {
         int *nb_req;
@@ -470,6 +473,9 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req,
     if (origin_ni == NULL)
     {
         this->response_queue.push_delayed(req, this->router_in_latency);
+
+        // Performance Counter
+        this->stat_received_responses++;
     }
     else
     {

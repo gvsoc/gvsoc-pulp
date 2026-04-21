@@ -68,7 +68,8 @@ class Router : public FloonocNode
     int node_id;
     int num_queues;
 
-    void set_neighbour(int dir, FloonocNode *node, int neighbor_id, int latency = 1);
+    void set_neighbour(int dir, FloonocNode *node, int neighbor_id,
+                       int latency = 1);
 
     // Pass the routing table during initialization
     void set_routing_table(std::vector<int> table);
@@ -116,4 +117,8 @@ class Router : public FloonocNode
     vp::Signal<uint64_t> signal_req;
     vp::Signal<uint64_t> signal_req_size;
     vp::Signal<bool> signal_req_is_write;
+
+    // Performance Counters
+    uint64_t stat_routed_packets = 0;
+    uint64_t stat_stall_cycles = 0;
 };
