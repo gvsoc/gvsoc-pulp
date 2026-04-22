@@ -286,7 +286,6 @@ FlooNoc::~FlooNoc()
     printf(" Node ID | Routed Packets | Stalled Cycles | Congestion Rate \n");
     printf("---------------------------------------------------------------\n");
 
-    // CHANGE THIS LINE from req_routers to wide_routers
     for (Router *router : this->wide_routers)
     {
         if (router)
