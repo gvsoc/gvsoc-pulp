@@ -10,19 +10,19 @@ third_party/toolchain:
 	wget https://github.com/husterZC/gun_toolchain/releases/download/v2.0.0/toolchain.tar.xz &&\
 	tar -xvf toolchain.tar.xz
 
-config_file ?= "pulp/pulp/chips/softhier_3d/softhier_arch.py"
+config_file_3d ?= "pulp/pulp/chips/softhier_3d/softhier_arch.py"
 ifdef cfg
-	config_file = "$(cfg)"
+	config_file_3d = "$(cfg)"
 endif
 
 sh-3d-config:
-	@if [ "$(config_file)" != "pulp/pulp/chips/softhier_3d/softhier_arch.py" ]; then \
-		cp -f $(config_file) pulp/pulp/chips/softhier_3d/softhier_arch.py; \
+	@if [ "$(config_file_3d)" != "pulp/pulp/chips/softhier_3d/softhier_arch.py" ]; then \
+		cp -f $(config_file_3d) pulp/pulp/chips/softhier_3d/softhier_arch.py; \
 	fi
-	python3 pulp/pulp/chips/softhier_3d/utils/config.py $(config_file)
+	python3 pulp/pulp/chips/softhier_3d/utils/config.py $(config_file_3d)
 
 sh-3d-hw:
-	make sh-config
+	make sh-3d-config
 	make TARGETS=pulp.chips.softhier_3d.softhier_target all
 
 ######################################################################
@@ -52,24 +52,6 @@ sh-3d-sw-clean:
 
 sh-3d-run:
 	./install/bin/gvsoc --target=pulp.chips.softhier_3d.softhier_target --binary sw_build/softhier.elf run
-
-######################################################################
-## 				Make Targets for Extended Software	 				##
-######################################################################
-
-# Define the folder where your new main.c lives
-EXT_APP_DIR ?= pulp/pulp/chips/softhier_3d/sw/extended_test
-EXT_CMAKE_ARG = "-DSRC_DIR=$(abspath $(EXT_APP_DIR))"
-
-# Compile the extended test into a separate build folder
-sh-3d-ext-sw:
-	rm -rf sw_build_ext && mkdir sw_build_ext
-	cd sw_build_ext && $(CMAKE) $(EXT_CMAKE_ARG) $(arch_cmake_arg) ../pulp/pulp/chips/softhier_3d/sw/ && make
-	@! grep -q "ebreak" sw_build_ext/softhier.dump || (echo "Error: 'ebreak' found in sw_build_ext/softhier.dump" && exit 1)
-
-# Clean the extended build
-sh-3d-ext-sw-clean:
-	rm -rf sw_build_ext
 
 ######################################################################
 ## 				Make Targets for Run Extended Simulator		 		##
