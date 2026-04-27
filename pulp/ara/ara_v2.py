@@ -36,6 +36,7 @@ def extend_isa(isa_instance: Isa):
         if vle_pattern.match(insn.label) is not None or vlse_pattern.match(insn.label) is not None or \
                 vlux_pattern.match(insn.label) is not None or vlox_pattern.match(insn.label) is not None:
             insn.add_tag('vload')
+            insn.set_latency(1)
             if vlse_pattern.match(insn.label) is not None:
                 insn.add_tag('vload_strided')
             if vlux_pattern.match(insn.label) is not None or vlox_pattern.match(insn.label) is not None:
@@ -43,6 +44,7 @@ def extend_isa(isa_instance: Isa):
         elif vse_pattern.match(insn.label) is not None or vsse_pattern.match(insn.label) is not None or \
                 vsux_pattern.match(insn.label) is not None or vsox_pattern.match(insn.label) is not None:
             insn.add_tag('vstore')
+            insn.set_latency(3)
             if vsse_pattern.match(insn.label) is not None:
                 insn.add_tag('vstore_strided')
             if vsux_pattern.match(insn.label) is not None or vsox_pattern.match(insn.label) is not None:
@@ -57,10 +59,21 @@ def extend_isa(isa_instance: Isa):
         # Vector instructions can be given latencies like that
         # if insn.label.find('vfmac') == 0:
         #     insn.set_latency(1)
-        if insn.label.startswith('vle64'):
+        if insn.label.startswith('vadd'):
             insn.set_latency(4)
-        elif insn.label.startswith('vse64'):
-            insn.set_latency(5)
+        elif insn.label.startswith('vsub'):
+            insn.set_latency(4)
+        elif insn.label.startswith('vfadd'):
+            insn.set_latency(4)
+        elif insn.label.startswith('vfsub'):
+            insn.set_latency(4)
+        elif insn.label.startswith('vfmul'):
+            insn.set_latency(4)
+        elif insn.label.startswith('vfnmsac'):
+            insn.set_latency(4)
+        elif insn.label.startswith('vfmacc'):
+            insn.set_latency(4)
+
 
 
 
