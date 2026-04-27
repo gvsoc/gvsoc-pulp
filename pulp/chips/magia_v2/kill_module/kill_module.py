@@ -25,7 +25,8 @@ class KillModule(gvsoc.systree.Component):
                 name: str,
                 kill_addr_base: int,
                 kill_addr_size: int,
-                nb_cores_to_wait: int):
+                nb_cores_to_wait: int,
+                done_irq_enable: bool = False):
 
         super().__init__(parent, name)
 
@@ -33,9 +34,13 @@ class KillModule(gvsoc.systree.Component):
             'kill_addr_base' : kill_addr_base,
             'kill_addr_size' : kill_addr_size,
             'nb_cores_to_wait' : nb_cores_to_wait,
+            'done_irq_enable' : done_irq_enable,
         })
 
         self.add_sources(['pulp/chips/magia_v2/kill_module/kill_module.cpp'])
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')
+
+    def o_IRQ_DONE(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('irq_done', itf, signature='wire<bool>')

@@ -71,6 +71,8 @@ class MagiaArch:
     N_TILES_X           = 4
     N_TILES_Y           = 4
 
+    ENABLE_PCIE_VFIO            = True
+
 class MagiaTree(Tree):
     def __init__(self, parent, name):
         super().__init__(parent, name)
