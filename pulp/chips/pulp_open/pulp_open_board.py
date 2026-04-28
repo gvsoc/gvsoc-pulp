@@ -68,10 +68,10 @@ class Pulp_open_board(st.Component):
             )
             self.register_flash(flash)
             # Point the Hyperflash C++ model at the image gvrun will write.
-            # gvrun writes to {work_dir}/build/{flash.name}.bin; GVSoC runs
-            # with cwd == work_dir (see gvsoc/runner.py), so a relative path
-            # is sufficient.
-            hyperflash.add_property('content/image', 'build/hyperflash.bin')
+            # gvrun writes to {work_dir}/{image-basename}; GVSoC runs with
+            # cwd == work_dir (see gvsoc/runner.py), so a relative path is
+            # sufficient.
+            hyperflash.add_property('content/image', flash.get_image_basename())
 
         self.bind(pulp, 'hyper0_cs1_data', hyperflash, 'input')
 
