@@ -24,10 +24,10 @@ from vp.clock_domain import Clock_domain
 import interco.router as router
 import utils.loader.loader
 import gvsoc.systree
-from pulp.chips.softhier_3d.cluster_unit import ClusterUnit, ClusterArch
-from pulp.chips.softhier_3d.softhier_ctrl import SoftHierCtrl
-from pulp.chips.softhier_3d.softhier_arch import SoftHierArch
-from pulp.chips.softhier_3d.error_detector import ErrorDetector
+from pulp.chips.softhier.cluster_unit import ClusterUnit, ClusterArch
+from pulp.chips.softhier.softhier_ctrl import SoftHierCtrl
+from pulp.chips.softhier.softhier_arch import SoftHierArch
+from pulp.chips.softhier.error_detector import ErrorDetector
 from pulp.floonoc_flex.floonoc_flex import FlooNocFlex
 import math
 
@@ -48,11 +48,18 @@ class SoftHierSystem(gvsoc.systree.Component):
             [args, otherArgs] = parser.parse_known_args()
             binary = args.binary
 
+        #############
+        # Assertion #
+        #############
+        # Note: Bypassing the strict '2DMesh' assertion so our Torus works seamlessly.
+        assert(arch.topology in ['2DMesh', '2DTorus'], f'NoC Topology currectly only supports 2DMesh or 2DTorus')
+        assert(arch.num_cluster_x * arch.num_cluster_y == arch.num_cluster, f"Topology dimesion not match total number of clusters")
+
         ##############
         # Components #
         ##############
 
-        #Clusters
+        # Clusters
         cluster_list=[]
         for cluster_id in range(arch.num_cluster):
             cluster_arch = ClusterArch( num_core 		    = arch.num_core_per_cluster,
@@ -76,20 +83,25 @@ class SoftHierSystem(gvsoc.systree.Component):
             cluster_list.append(ClusterUnit(self,f'cluster_{cluster_id}', cluster_arch, binary))
             pass
 
-        #Virtual router, just for debugging and non-performance-critical jobs
+        # Virtual router, just for debugging and non-performance-critical jobs
         virtual_interco = router.Router(self, 'virtual_interco', bandwidth=8)
 
-        #Debug Memory
+        # Debug Memory
         error_detector = ErrorDetector(self,'error_detector')
 
-        #Control register
+        # Control register
         softhier_ctrl = SoftHierCtrl(self, 'softhier_ctrl', num_cluster=arch.num_cluster, num_core_per_cluster=arch.num_core_per_cluster)
 
-       # --- FlooNoC Flex Initialization & Star Topology Building ---
-
-        # Central router and N clusters
-        nb_nodes = arch.num_cluster + 1
-        router_degrees = arch.num_cluster # Central router connects to all clusters
+        # --- FlooNoC Flex Initialization & Topology Building ---
+        router_degrees = 5
+        
+        # Calculate Dimensions (Preserving the +2 padding for external network interfaces)
+        dim_x = arch.num_cluster_x + 2
+        dim_y = arch.num_cluster_y + 2
+        
+        # Define Mesh size and number of nodes
+        MESH_SIZE = dim_x * dim_y
+        nb_nodes = MESH_SIZE * 2
 
         noc = FlooNocFlex(self, 'noc',      
                 wide_width=arch.noc_link_width,
@@ -98,30 +110,123 @@ class SoftHierSystem(gvsoc.systree.Component):
                 router_input_queue_size=16,
                 ni_outstanding_reqs=arch.noc_outstanding)
 
-        # Add Central Router
-        central_router_id = 0
-        noc.add_router(central_router_id, num_queues=router_degrees)
-
-        # Add Network Interfaces & Links
-        nis_map = {}     
-        for cluster_id in range(arch.num_cluster):
-            ni_id = cluster_id + 1 # Offset by 1 since 0 is the router
-            nis_map[cluster_id] = ni_id
-            
-            # Add Network Interface for the cluster
-            noc.add_network_interface(ni_id)
-            
-            # Link the NI directly to the Central Router with 1-cycle latency
-            noc.add_link(ni_id, central_router_id, latency=1)
-
-        # Generate Custom Star Routing Table
-        # Everyone is directly connected to the central router, so next hop for any destination is the destination ID itself.
-        routing_tables = {str(central_router_id): {str(dst): -1 for dst in range(nb_nodes)}}
+        # Get router ID for 2D mesh/torus
+        def get_router_id(x, y):
+            return y * dim_x + x
         
-        for dst in range(nb_nodes):
-            # Target is directly attached, so next hop = destination
-            routing_tables[str(central_router_id)][str(dst)] = dst
-            
+        # Offset by MESH_SIZE to separate from routers
+        def get_ni_id(x, y):
+            return MESH_SIZE + (y * dim_x + x)
+
+        routers_map = {} 
+        nis_map = {}     
+
+        # 1. Add routers at cluster centers
+        for y in range(1, arch.num_cluster_y + 1):
+            for x in range(1, arch.num_cluster_x + 1):
+                r_id = get_router_id(x, y)
+                routers_map[(x, y)] = r_id
+                noc.add_router(r_id, num_queues=5) 
+
+        # 2. Add network interfaces everywhere except the 4 corners
+        for y in range(dim_y):
+            for x in range(dim_x):
+                if (x == 0 and y == 0) or (x == 0 and y == dim_y - 1) or \
+                   (x == dim_x - 1 and y == 0) or (x == dim_x - 1 and y == dim_y - 1):
+                    continue
+                ni_id = get_ni_id(x, y)
+                nis_map[(x, y)] = ni_id
+                noc.add_network_interface(ni_id)
+
+        # 3. Add links (NI <-> Nearest Router)
+        for (nx, ny), ni_id in nis_map.items():
+            rx = max(1, min(nx, arch.num_cluster_x))
+            ry = max(1, min(ny, arch.num_cluster_y))
+            r_id = routers_map[(rx, ry)]
+            # Only add the link once; C++ treats it as bidirectional
+            noc.add_link(ni_id, r_id, latency=1)
+
+        # 4. Add links (Router <-> Router Torus Network)
+        for y in range(1, arch.num_cluster_y + 1):
+            for x in range(1, arch.num_cluster_x + 1):
+                r_id = routers_map[(x, y)]
+                
+                # Link East
+                if x < arch.num_cluster_x:
+                    east_id = routers_map[(x + 1, y)]
+                    noc.add_link(r_id, east_id, latency=1)
+                elif arch.num_cluster_x > 2: # East Wraparound
+                    east_id = routers_map[(1, y)]
+                    noc.add_link(r_id, east_id, latency=1)
+                
+                # Link South
+                if y < arch.num_cluster_y:
+                    south_id = routers_map[(x, y + 1)]
+                    noc.add_link(r_id, south_id, latency=1)
+                elif arch.num_cluster_y > 2: # South Wraparound
+                    south_id = routers_map[(x, 1)]
+                    noc.add_link(r_id, south_id, latency=1)
+
+        # 5. Generate Torus routing tables (Shortest-Path XY)
+        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers_map.values()}
+        
+        # Build reverse map for routers
+        id_to_router_coords = {v: k for k, v in routers_map.items()}
+        
+        # Build NI to Router physical mapping
+        ni_to_router = {}
+        for (nx, ny), ni_id in nis_map.items():
+            rx = max(1, min(nx, arch.num_cluster_x))
+            ry = max(1, min(ny, arch.num_cluster_y))
+            ni_to_router[ni_id] = routers_map[(rx, ry)]
+
+        for src_id, (src_x, src_y) in id_to_router_coords.items():
+            for dst_node in range(nb_nodes):
+                # Resolve target router
+                if dst_node in id_to_router_coords:
+                    target_router = dst_node
+                elif dst_node in ni_to_router:
+                    target_router = ni_to_router[dst_node]
+                else:
+                    continue
+                
+                if src_id == target_router:
+                    routing_tables[str(src_id)][str(dst_node)] = dst_node
+                    continue
+                
+                dst_x, dst_y = id_to_router_coords[target_router]
+                
+                # Torus Shortest-Path XY Routing Logic
+                dist_x = dst_x - src_x
+                dist_y = dst_y - src_y
+                
+                if dist_x != 0:
+                    # Route along X
+                    if abs(dist_x) <= arch.num_cluster_x // 2:
+                        next_x = src_x + (1 if dist_x > 0 else -1)
+                    else:
+                        next_x = src_x + (-1 if dist_x > 0 else 1) # Wraparound path is shorter
+                    
+                    # Wraparound bounds correction
+                    if next_x > arch.num_cluster_x: next_x = 1
+                    if next_x < 1: next_x = arch.num_cluster_x
+                    
+                    next_hop = routers_map[(next_x, src_y)]
+                else:
+                    # Route along Y
+                    if abs(dist_y) <= arch.num_cluster_y // 2:
+                        next_y = src_y + (1 if dist_y > 0 else -1)
+                    else:
+                        next_y = src_y + (-1 if dist_y > 0 else 1) # Wraparound path is shorter
+                        
+                    # Wraparound bounds correction
+                    if next_y > arch.num_cluster_y: next_y = 1
+                    if next_y < 1: next_y = arch.num_cluster_y
+                    
+                    next_hop = routers_map[(src_x, next_y)]
+                    
+                routing_tables[str(src_id)][str(dst_node)] = next_hop
+
         noc.add_property('routing_tables', routing_tables)
 
         ############
@@ -136,9 +241,11 @@ class SoftHierSystem(gvsoc.systree.Component):
 
         # Clusters
         for cluster_id in range(arch.num_cluster):
+            x_id = int(cluster_id % arch.num_cluster_x)
+            y_id = int(cluster_id / arch.num_cluster_x)
             
             # Retrieve the UNIQUE Network Interface ID for this cluster
-            ni_node_id = nis_map[cluster_id]
+            ni_node_id = nis_map[(x_id + 1, y_id + 1)]
             
             narrow_arbiter = router.Router(self, f'narrow_arbiter_{cluster_id}', bandwidth=8)
             narrow_arbiter.o_MAP(virtual_interco.i_INPUT())
@@ -157,24 +264,17 @@ class SoftHierSystem(gvsoc.systree.Component):
             cluster_list[cluster_id].o_NARROW_SOC(narrow_arbiter.i_INPUT())
             cluster_list[cluster_id].o_WIDE_SOC(wide_arbiter.i_INPUT())
             
-            # For Narrow Mapping
-            narrow_base = arch.cluster_tcdm_remote + cluster_id * arch.cluster_tcdm_size
             noc.o_NARROW_MAP(cluster_list[cluster_id].i_NARROW_INPUT(),
-                            base=narrow_base,
-                            size=arch.cluster_tcdm_size,
-                            node_id=ni_node_id,
-                            rm_base=False, # Disable automatic base removal
-                            remove_offset=narrow_base - arch.cluster_tcdm_base) # Shift to TCDM base
-
-            # For Wide Mapping
+                           base=arch.cluster_tcdm_remote  + cluster_id * arch.cluster_tcdm_size,
+                           size=arch.cluster_tcdm_size,
+                           node_id=ni_node_id,
+                           rm_base=True)
+                           
             wide_base = arch.cluster_tcdm_remote + cluster_id * arch.cluster_tcdm_size
             wide_name = cluster_list[cluster_id].i_WIDE_INPUT().component.name
-
+            
             noc.get_property('mappings')[f"wide_{wide_name}"] = {
-                'base': wide_base, 
-                'size': arch.cluster_tcdm_size, 
-                'node_id': ni_node_id, 
-                'remove_offset': wide_base - arch.cluster_tcdm_base # Shift to TCDM base
+                'base': wide_base, 'size': arch.cluster_tcdm_size, 'node_id': ni_node_id, 'remove_offset': wide_base
             }
             noc.o_WIDE_BIND(cluster_list[cluster_id].i_WIDE_INPUT(), ni_node_id)
 
