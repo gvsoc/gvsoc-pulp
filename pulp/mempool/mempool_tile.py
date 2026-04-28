@@ -23,7 +23,7 @@ import pulp.mempool.l1_subsystem as l1_subsystem
 import interco.router as router
 import gvsoc.systree as st
 from pulp.snitch.sequencer import Sequencer
-from pulp.mempool.l1_interconnect.l1_address_scrambler import L1_AddressScrambler
+from pulp.mempool.l1_interconnect.l1_address_scrambler import L1AddressScrambler
 
 class Tile(st.Component):
 
@@ -72,9 +72,9 @@ class Tile(st.Component):
         # Address Scrambler
         l1_addr_scrambler_list = []
         for i in range(0, nb_cores_per_tile):
-            l1_addr_scrambler_list.append(L1_AddressScrambler(self, f'addr_scrambler{i}', \
-                                                       bypass=False, num_tiles=int(total_cores/nb_cores_per_tile), \
-                                                       seq_mem_size_per_tile=512*nb_cores_per_tile, byte_offset=2, \
+            l1_addr_scrambler_list.append(L1AddressScrambler(self, f'addr_scrambler{i}',
+                                                       bypass=False, num_tiles=int(total_cores/nb_cores_per_tile),
+                                                       seq_mem_size_per_tile=512*nb_cores_per_tile, byte_offset=2,
                                                        num_banks_per_tile=nb_cores_per_tile*bank_factor))
 
         # Route
