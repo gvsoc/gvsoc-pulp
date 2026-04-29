@@ -39,7 +39,7 @@ class BandwidthLimiter
 {
 public:
     // Overall bandwidth to be respected, and global latency to be applied to each request
-    BandwidthLimiter(L1_RemoteItf *top, int64_t bandwidth, int64_t latency, bool shared_rw_bandwidth);
+    BandwidthLimiter(L1_RemoteItf *top, int64_t bandwidth, int64_t latency, bool shared_rw_bandwidth, int throttle);
     // Can be called on any request going through the limiter to add the fixed latency and impact
     // the latency and duration with the current utilization of the limiter with respect to the
     // bandwidth
@@ -59,6 +59,7 @@ private:
     int64_t next_write_burst_cycle = 0;
     // Indicates whether the read and write share the bandwidth
     bool shared_rw_bandwidth = false;
+    int throttle = 0;
 };
 
 class L1_RemoteItf : public vp::Component
@@ -79,6 +80,7 @@ private:
     BandwidthLimiter *resp_bw_limiter;
     int req_latency;
     int resp_latency;
+    int throttle;
 
     vp::IoSlave input_itf;
     vp::IoMaster output_itf;
@@ -89,13 +91,15 @@ private:
 L1_RemoteItf::L1_RemoteItf(vp::ComponentConf &config)
     : vp::Component(config)
 {
+    traces.new_trace("trace", &trace, vp::DEBUG);
     req_latency = this->get_js_config()->get_int("req_latency");
     resp_latency = this->get_js_config()->get_int("resp_latency");
     int bandwidth = this->get_js_config()->get_int("bandwidth");
     bool shared_rw_bandwidth = this->get_js_config()->get_child_bool("shared_rw_bandwidth");
+    throttle = this->get_js_config()->get_int("throttle");
 
-    this->req_bw_limiter = new BandwidthLimiter(this, bandwidth, req_latency, shared_rw_bandwidth);
-    this->resp_bw_limiter = new BandwidthLimiter(this, bandwidth, resp_latency, shared_rw_bandwidth);
+    this->req_bw_limiter = new BandwidthLimiter(this, bandwidth, req_latency, shared_rw_bandwidth, throttle);
+    this->resp_bw_limiter = new BandwidthLimiter(this, bandwidth, resp_latency, shared_rw_bandwidth, 0);
 
     this->input_itf.set_req_meth(&L1_RemoteItf::req);
     this->new_slave_port("input", &this->input_itf);
@@ -138,12 +142,13 @@ vp::IoReqStatus L1_RemoteItf::handle_req(vp::IoReq *req, int port)
     return retval;
 }
 
-BandwidthLimiter::BandwidthLimiter(L1_RemoteItf *top, int64_t bandwidth, int64_t latency, bool shared_rw_bandwidth)
+BandwidthLimiter::BandwidthLimiter(L1_RemoteItf *top, int64_t bandwidth, int64_t latency, bool shared_rw_bandwidth, int throttle)
 {
     this->top = top;
     this->latency = latency;
     this->bandwidth = bandwidth;
     this->shared_rw_bandwidth = shared_rw_bandwidth;
+    this->throttle = throttle;
 }
 
 void BandwidthLimiter::apply_bandwidth(int64_t cycles, vp::IoReq *req)
@@ -156,6 +161,11 @@ void BandwidthLimiter::apply_bandwidth(int64_t cycles, vp::IoReq *req)
 
         // Duration in cycles of this burst in this router according to router bandwidth
         int64_t burst_duration = (size + this->bandwidth - 1) / this->bandwidth;
+
+        if (this->throttle > 0)
+        {
+            burst_duration *= (this->throttle + 1);
+        }
 
         // Update burst duration
         // This will update it only if it is bigger than the current duration, in case there is a

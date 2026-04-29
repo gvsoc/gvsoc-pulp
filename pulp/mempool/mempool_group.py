@@ -19,7 +19,6 @@
 
 import gvsoc.systree as st
 import interco.router as router
-from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 from interco.interleaver import Interleaver
 import math
 from pulp.mempool.mempool_tile import Tile
@@ -28,7 +27,7 @@ from pulp.mempool.l2_interconnect.hierarchical_interco import Hierarchical_Inter
 
 class Group(st.Component):
 
-    def __init__(self, parent, name, parser, terapool: bool=False, async_l1_interco: bool=False, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64):
+    def __init__(self, parent, name, parser, terapool: bool=False, async_l1_interco: bool=False, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_dmas_per_group: int=1):
         super().__init__(parent, name)
 
         ################################################################
@@ -36,10 +35,12 @@ class Group(st.Component):
         ################################################################
         # Hardware parameters
         if terapool:
+            assert nb_dmas_per_group == nb_sub_groups_per_group
             nb_remote_group_ports = nb_groups - 1
             nb_tiles_per_sub_group = int((total_cores/nb_groups/nb_sub_groups_per_group)/nb_cores_per_tile)
             nb_banks_per_sub_group = int((total_cores/nb_groups/nb_sub_groups_per_group)) * bank_factor
         else:
+            assert nb_dmas_per_group == 1
             nb_remote_ports = nb_groups - 1
             nb_tiles_per_group = int((total_cores/nb_groups)/nb_cores_per_tile)
             nb_banks_per_tile = nb_cores_per_tile * bank_factor
@@ -103,31 +104,13 @@ class Group(st.Component):
                 group_remote_out_interfaces.append(tile_itf_list)
 
         # DMA network(virtual, to emulate multiple backends)
-        if terapool:
-            # DMA TCDM Interface
-            dma_tcdm_itf = router.Router(self, f'dma_tcdm_itf')
-            dma_tcdm_itf.add_mapping('output')
-
+        if not terapool:
+            # DMA Traffic Demux
+            dma_mux = router.Router(self, 'dma_mux', latency=4, bandwidth=axi_data_width)
+            dma_mux.add_mapping('tcdm', base=0x0, size=total_cores * bank_factor * 1024)
+            dma_mux.add_mapping('axi')
             # DMA TCDM Interleaver
-            dma_tcdm_interleaver = DmaInterleaver(self, f'dma_tcdm_interleaver', nb_master_ports=1, nb_banks=nb_sub_groups_per_group, bank_width=nb_banks_per_sub_group*4)
-
-            # DMA AXI Interface
-            dma_axi_itf = router.Router(self, f'dma_axi_itf')
-            dma_axi_itf.add_mapping('output')
-
-            # DMA AXI Interleaver
-            dma_axi_interleaver = Interleaver(self, f'dma_axi_interleaver', nb_masters=1, nb_slaves=nb_sub_groups_per_group, interleaving_bits=int(math.log2(nb_banks_per_sub_group*4)), offset_translation=False)
-        else:
-            # DMA TCDM Interface
-            dma_tcdm_itf = router.Router(self, f'dma_tcdm_itf', bandwidth=axi_data_width)
-            dma_tcdm_itf.add_mapping('output')
-
-            # DMA TCDM Interleaver
-            dma_tcdm_interleaver = DmaInterleaver(self, f'dma_tcdm_interleaver', nb_master_ports=1, nb_banks=nb_tiles_per_group, bank_width=nb_banks_per_tile*4)
-
-            # DMA AXI Interface
-            dma_axi_itf = router.Router(self, f'dma_axi_itf', bandwidth=axi_data_width)
-            dma_axi_itf.add_mapping('output')
+            dma_tcdm_interleaver = Interleaver(self, 'dma_tcdm_interleaver', nb_slaves=nb_tiles_per_group, nb_masters=1, interleaving_bits=int(math.log2(nb_banks_per_tile*4)), offset_translation=False)
 
         # Group-level AXI Interconnect, does not exist in Terapool
         if not terapool:
@@ -210,20 +193,11 @@ class Group(st.Component):
             self.bind(axi_ico, 'output', axi_itf, 'input')
 
         # DMA network(virtual, to emulate multiple backends)
-        self.bind(dma_tcdm_itf, 'output', dma_tcdm_interleaver, 'input')
-        if terapool:
-            for i in range(0, nb_sub_groups_per_group):
-                self.bind(dma_tcdm_interleaver, f'out_{i}', self.sub_group_list[i], 'dma_tcdm')
-        else:
+        if not terapool:
+            self.bind(dma_mux, 'tcdm', dma_tcdm_interleaver, 'in_0')
+            self.bind(dma_mux, 'axi', axi_ico, f'input_{nb_tiles_per_group}')
             for i in range(0, nb_tiles_per_group):
                 self.bind(dma_tcdm_interleaver, f'out_{i}', self.tile_list[i], 'dma_tcdm')
-
-        if terapool:
-            self.bind(dma_axi_itf, 'output', dma_axi_interleaver, 'in_0')
-            for i in range(0, nb_sub_groups_per_group):
-                self.bind(dma_axi_interleaver, f'out_{i}', self.sub_group_list[i], 'dma_axi')
-        else:
-            self.bind(dma_axi_itf, 'output', axi_ico, f'input_{nb_tiles_per_group}')
 
         # Loader
         if terapool:
@@ -286,5 +260,10 @@ class Group(st.Component):
             self.bind(axi_itf, 'output', self, 'axi_out_0')
 
         # DMA
-        self.bind(self, 'dma_tcdm', dma_tcdm_itf, 'input')
-        self.bind(self, 'dma_axi', dma_axi_itf, 'input')
+        if terapool:
+            for i in range(nb_dmas_per_group):
+                self.bind(self, f'dma_tcdm_{i}', self.sub_group_list[i], 'dma_tcdm_0')
+                self.bind(self, f'dma_axi_{i}', self.sub_group_list[i], 'dma_axi_0')
+        else:
+            self.bind(self, 'dma_tcdm_0', dma_mux, 'input')
+            self.bind(self, 'dma_axi_0', dma_mux, 'input')
