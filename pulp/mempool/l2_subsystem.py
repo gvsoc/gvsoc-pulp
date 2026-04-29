@@ -17,8 +17,8 @@
 
 import gvsoc.systree
 from memory.memory import Memory
-from interco.router import Router
 from interco.interleaver import Interleaver
+from pulp.mempool.l1_interconnect.l1_remote_itf import L1_RemoteItf
 import math
 
 class L2_subsystem(gvsoc.systree.Component):
@@ -67,8 +67,7 @@ class L2_subsystem(gvsoc.systree.Component):
 
         input_itfs = []
         for i in range(0, nb_masters):
-            input_itf = Router(self, f'input_itf_{i}', bandwidth=port_bandwidth)
-            input_itf.add_mapping('output')
+            input_itf = L1_RemoteItf(self, f'input_itf_{i}', bandwidth=port_bandwidth, req_latency=1, resp_latency=1, shared_rw_bandwidth=True, throttle=3)
             input_itfs.append(input_itf)
 
         #

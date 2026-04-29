@@ -23,7 +23,6 @@ from interco.interleaver import Interleaver
 from pulp.mempool.xbar.mempool_xbar import MempoolXbar
 from pulp.mempool.l1_interconnect.l1_remote_itf import L1_RemoteItf
 from pulp.mempool.xbar.mempool_xbar_selector import MempoolXbarSelector
-from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 import math
 
 class L1_subsystem(gvsoc.systree.Component):
@@ -175,7 +174,7 @@ class L1_subsystem(gvsoc.systree.Component):
         dma_interface.add_mapping('output')
 
         # DMA Interleaver
-        dma_interleaver = DmaInterleaver(self, 'dma_interleaver', nb_master_ports=1, nb_banks=nb_banks_per_tile, bank_width=4)
+        dma_interleaver = Interleaver(self, 'dma_interleaver', nb_slaves=nb_banks_per_tile, nb_masters=1, interleaving_bits=2, enable_shift=(total_banks - 1).bit_length(), offset_translation=False)
 
         #
         # Bindings
@@ -227,7 +226,7 @@ class L1_subsystem(gvsoc.systree.Component):
                 self.bind(remote_group_out_interfaces[i], 'output', self, f'remote_group_out{i}')
 
         self.bind(self, 'dma', dma_interface, 'input')
-        self.bind(dma_interface, 'output', dma_interleaver, 'input')
+        self.bind(dma_interface, 'output', dma_interleaver, 'in_0')
 
         for i in range(0, nb_banks_per_tile):
             self.bind(dma_interleaver, f'out_{i}', l1_banks[i], 'input')

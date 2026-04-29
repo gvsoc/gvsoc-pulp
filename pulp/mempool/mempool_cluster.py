@@ -19,14 +19,12 @@
 
 import interco.router as router
 import gvsoc.systree as st
-from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
-from interco.interleaver import Interleaver
 import math
 from pulp.mempool.mempool_group import Group
 
 class Cluster(st.Component):
 
-    def __init__(self, parent, name, parser, async_l1_interco: bool=False, terapool: bool=False, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1):
+    def __init__(self, parent, name, parser, async_l1_interco: bool=False, terapool: bool=False, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1, nb_dmas_per_group: int=1):
         super().__init__(parent, name)
 
         ################################################################
@@ -43,7 +41,7 @@ class Cluster(st.Component):
         self.group_list = []
         for i in range(0, nb_groups):
             self.group_list.append(Group(self, f'group_{i}', parser=parser, async_l1_interco=async_l1_interco, terapool=terapool, group_id=i, nb_cores_per_tile=nb_cores_per_tile, 
-                nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width))
+                nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width, nb_dmas_per_group=nb_dmas_per_group))
 
         # AXI Interface
         if terapool:
@@ -52,20 +50,6 @@ class Cluster(st.Component):
                 itf = router.Router(self, f'axi_itf_{i}', bandwidth=axi_data_width, latency=2)
                 itf.add_mapping('output')
                 axi_itf.append(itf)
-
-        # DMA TCDM Interface
-        dma_tcdm_itf = router.Router(self, f'dma_tcdm_itf')
-        dma_tcdm_itf.add_mapping('output')
-
-        # DMA TCDM Interleaver
-        dma_tcdm_interleaver = DmaInterleaver(self, f'dma_tcdm_interleaver', nb_master_ports=1, nb_banks=nb_groups, bank_width=nb_banks_per_group*4)
-
-        # DMA AXI Interface
-        dma_axi_itf = router.Router(self, f'dma_axi_itf')
-        dma_axi_itf.add_mapping('output')
-
-        # DMA AXI Interleaver
-        dma_axi_interleaver = Interleaver(self, f'dma_axi_interleaver', nb_masters=1, nb_slaves=nb_groups, interleaving_bits=int(math.log2(nb_banks_per_group*4)), offset_translation=False)
 
         ################################################################
         ##########               Design Bindings              ##########
@@ -116,14 +100,7 @@ class Cluster(st.Component):
         for i in range(0, nb_groups):
             self.bind(self, 'rocache_cfg', self.group_list[i], 'rocache_cfg')
 
-        self.bind(self, 'dma_tcdm', dma_tcdm_itf, 'input')
-        self.bind(dma_tcdm_itf, 'output', dma_tcdm_interleaver, 'input')
-        
         for i in range(0, nb_groups):
-            self.bind(dma_tcdm_interleaver, f'out_{i}', self.group_list[i], 'dma_tcdm')
-
-        self.bind(self, 'dma_axi', dma_axi_itf, 'input')
-        self.bind(dma_axi_itf, 'output', dma_axi_interleaver, 'in_0')
-
-        for i in range(0, nb_groups):
-            self.bind(dma_axi_interleaver, f'out_{i}', self.group_list[i], 'dma_axi')
+            for j in range(0, nb_dmas_per_group):
+                self.bind(self, f'dma_tcdm_{i}_{j}', self.group_list[i], f'dma_tcdm_{j}')
+                self.bind(self, f'dma_axi_{i}_{j}', self.group_list[i], f'dma_axi_{j}')

@@ -19,7 +19,6 @@
 
 import gvsoc.systree as st
 import interco.router as router
-from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 from interco.interleaver import Interleaver
 import math
 from pulp.mempool.mempool_tile import Tile
@@ -67,16 +66,12 @@ class Sub_group(st.Component):
             sub_group_out_interfaces.append(tile_itf_list)
 
         # DMA network(virtual, to emulate multiple backends)
-        # DMA TCDM Interface
-        dma_tcdm_itf = router.Router(self, f'dma_tcdm_itf', bandwidth=axi_data_width)
-        dma_tcdm_itf.add_mapping('output')
-
+        # DMA Traffic Demux
+        dma_mux = router.Router(self, 'dma_mux', latency=4, bandwidth=axi_data_width)
+        dma_mux.add_mapping('tcdm', base=0x0, size=total_cores * bank_factor * 1024)
+        dma_mux.add_mapping('axi')
         # DMA TCDM Interleaver
-        dma_tcdm_interleaver = DmaInterleaver(self, f'dma_tcdm_interleaver', nb_master_ports=1, nb_banks=nb_tiles_per_sub_group, bank_width=nb_banks_per_tile*4)
-
-        # DMA AXI Interface
-        dma_axi_itf = router.Router(self, f'dma_axi_itf', bandwidth=axi_data_width)
-        dma_axi_itf.add_mapping('output')
+        dma_tcdm_interleaver = Interleaver(self, f'dma_tcdm_interleaver', nb_slaves=nb_tiles_per_sub_group, nb_masters=1, interleaving_bits=int(math.log2(nb_banks_per_tile*4)), offset_translation=False)
 
         # SG-level AXI Interconnect
         # L2 cache rules
@@ -121,10 +116,10 @@ class Sub_group(st.Component):
         self.bind(axi_ico, 'output', axi_itf, 'input')
 
         # DMA network(virtual, to emulate multiple backends)
-        self.bind(dma_tcdm_itf, 'output', dma_tcdm_interleaver, 'input')
+        self.bind(dma_mux, 'tcdm', dma_tcdm_interleaver, 'in_0')
+        self.bind(dma_mux, 'axi', axi_ico, f'input_{nb_tiles_per_sub_group}')
         for i in range(0, nb_tiles_per_sub_group):
             self.bind(dma_tcdm_interleaver, f'out_{i}', self.tile_list[i], 'dma_tcdm')
-        self.bind(dma_axi_itf, 'output', axi_ico, f'input_{nb_tiles_per_sub_group}')
 
         #Group loader -> Tile loader
         for i in range(0, nb_tiles_per_sub_group):
@@ -159,5 +154,5 @@ class Sub_group(st.Component):
         self.bind(axi_itf, 'output', self, 'axi_out')
 
         # DMA
-        self.bind(self, 'dma_tcdm', dma_tcdm_itf, 'input')
-        self.bind(self, 'dma_axi', dma_axi_itf, 'input')
+        self.bind(self, 'dma_tcdm_0', dma_mux, 'input')
+        self.bind(self, 'dma_axi_0', dma_mux, 'input')
