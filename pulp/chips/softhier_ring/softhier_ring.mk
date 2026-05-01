@@ -10,20 +10,20 @@ third_party/toolchain:
 	wget https://github.com/husterZC/gun_toolchain/releases/download/v2.0.0/toolchain.tar.xz &&\
 	tar -xvf toolchain.tar.xz
 
-config_file ?= "pulp/pulp/chips/softhier_torus/softhier_arch.py"
+config_file_ring ?= "pulp/pulp/chips/softhier_ring/softhier_arch.py"
 ifdef cfg
-	config_file = "$(cfg)"
+	config_file_ring = "$(cfg)"
 endif
 
-sh-torus-config:
-	@if [ "$(config_file)" != "pulp/pulp/chips/softhier_torus/softhier_arch.py" ]; then \
-		cp -f $(config_file) pulp/pulp/chips/softhier_torus/softhier_arch.py; \
+sh-ring-config:
+	@if [ "$(config_file_ring)" != "pulp/pulp/chips/softhier_ring/softhier_arch.py" ]; then \
+		cp -f $(config_file_ring) pulp/pulp/chips/softhier_ring/softhier_arch.py; \
 	fi
-	python3 pulp/pulp/chips/softhier_torus/utils/config.py $(config_file)
+	python3 pulp/pulp/chips/softhier_ring/utils/config.py $(config_file_ring)
 
-sh-torus-hw:
-	make sh-config
-	make TARGETS=pulp.chips.softhier_torus.softhier_target all
+sh-ring-hw:
+	make sh-ring-config
+	make TARGETS=pulp.chips.softhier_ring.softhier_target all
 
 ######################################################################
 ## 				Make Targets for SoftHier Software	 				##
@@ -37,12 +37,12 @@ endif
 
 arch_cmake_arg := "-DRISCV_ARCH=rv32imafdv_zfh"
 
-sh-torus-sw:
+sh-ring-sw:
 	rm -rf sw_build && mkdir sw_build
-	cd sw_build && $(CMAKE) $(sw_cmake_arg) $(arch_cmake_arg) ../pulp/pulp/chips/softhier_torus/sw/ && make
+	cd sw_build && $(CMAKE) $(sw_cmake_arg) $(arch_cmake_arg) ../pulp/pulp/chips/softhier_ring/sw/ && make
 	@! grep -q "ebreak" sw_build/softhier.dump || (echo "Error: 'ebreak' found in sw_build/softhier.dump" && exit 1)
 
-sh-torus-sw-clean:
+sh-ring-sw-clean:
 	rm -rf sw_build
 
 
@@ -50,15 +50,15 @@ sh-torus-sw-clean:
 ## 				Make Targets for Run Simulator		 				##
 ######################################################################
 
-sh-torus-run:
-	./install/bin/gvsoc --target=pulp.chips.softhier_torus.softhier_target --binary sw_build/softhier.elf run
+sh-ring-run:
+	./install/bin/gvsoc --target=pulp.chips.softhier_ring.softhier_target --binary sw_build/softhier.elf run
 
 ######################################################################
 ##              Make Targets for Automated Test Suite               ##
 ######################################################################
 
 # Define the base software directory (where CMakeLists.txt lives)
-SW_BASE_DIR = pulp/pulp/chips/softhier_torus/sw
+SW_BASE_DIR = pulp/pulp/chips/softhier_ring/sw
 
 # Default to the test name if no TEST variable is provided
 TEST ?= 00_init
@@ -67,11 +67,16 @@ TEST ?= 00_init
 TEST_DIR = $(abspath $(SW_BASE_DIR)/tests/$(TEST))
 
 # Build target: Compiles whatever is inside $(TEST_DIR)
-sh-3d-test-sw:
+sh-ring-test-sw:
 	rm -rf sw_build && mkdir sw_build
 	cd sw_build && $(CMAKE) "-DSRC_DIR=$(TEST_DIR)" $(arch_cmake_arg) ../$(SW_BASE_DIR) && make
 	@! grep -q "ebreak" sw_build/softhier.dump || (echo "Error: 'ebreak' found in sw_build/softhier.dump" && exit 1)
 
 # Run target: Executes the freshly built binary
-sh-torus-test-run: sh-torus-test-sw
-	./install/bin/gvsoc --target=pulp.chips.softhier_torus.softhier_target --binary sw_build/softhier.elf run
+sh-ring-test-run: sh-ring-test-sw
+	./install/bin/gvsoc --target=pulp.chips.softhier_ring.softhier_target --binary sw_build/softhier.elf run
+
+sh-ring-test-sw: sh-ring-config
+	rm -rf sw_build && mkdir sw_build
+	cd sw_build && $(CMAKE) "-DSRC_DIR=$(TEST_DIR)" $(arch_cmake_arg) ../$(SW_BASE_DIR) && make
+	@! grep -q "ebreak" sw_build/softhier.dump || (echo "Error: 'ebreak' found in sw_build/softhier.dump" && exit 1)
