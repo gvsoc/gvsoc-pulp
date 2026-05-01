@@ -149,8 +149,8 @@ int main() {
 #include "softhier_runtime.h"
 
 // Transfer parameters
-#define TILE_SIZE 16384     // 16 KB per transfer
-#define NUM_ITERATIONS 1024 // Number of outer loops
+#define TILE_SIZE 16384    // 16 KB per transfer
+#define NUM_ITERATIONS 256 // Number of outer loops
 #define BATCH_SIZE                                                             \
   8 // Async DMA requests before syncing (Must be <= ARCH_IDMA_OUTSTAND_TXN)
 

@@ -29,6 +29,9 @@ class FlooNocDirection(IntEnum):
     DIR_4 = 5
     DIR_5 = 6
     DIR_6 = 7
+    DIR_7 = 8
+    DIR_8 = 9
+#Can add more as required
 
 class FlooNocFlex(gvsoc.systree.Component):
     """FlooNoc instance for a flexible topology
@@ -439,6 +442,56 @@ class FlooNocFlex(gvsoc.systree.Component):
                 routing_tables[str(src)][str(dst)] = next_hop
 
         self.add_property('routing_tables', routing_tables)
+
+    def generate_routing_tables_ring(self):
+            """
+            Generates routing tables for a Ring topology.
+            Calculates the shortest path (clockwise or counter-clockwise) for routing.
+            """
+            nb_nodes = self.get_property('nb_nodes')
+            links = self.get_property('links')
+
+            routers = sorted([r[0] for r in self.get_property('routers')])
+            nis = [n[0] for n in self.get_property('network_interfaces')]
+            num_routers = len(routers)
+
+            routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
+
+            ni_to_router = {}
+            for link in links:
+                node_a, node_b = link[0], link[1]
+                if node_a in nis and node_b in routers:
+                    ni_to_router[node_a] = node_b
+                elif node_b in nis and node_a in routers:
+                    ni_to_router[node_b] = node_a
+
+            for src in routers:
+                src_idx = routers.index(src)
+                for dst in range(nb_nodes):
+                    
+                    target_router = dst if dst in routers else ni_to_router.get(dst, -1)
+
+                    if target_router == -1:
+                        continue
+                    
+                    if src == target_router:
+                        routing_tables[str(src)][str(dst)] = dst
+                        continue
+
+                    target_idx = routers.index(target_router)
+
+                    cw_dist = (target_idx - src_idx) % num_routers
+                    ccw_dist = (src_idx - target_idx) % num_routers
+
+                    if cw_dist <= ccw_dist:
+                        next_hop_idx = (src_idx + 1) % num_routers
+                    else:
+                        next_hop_idx = (src_idx - 1) % num_routers
+
+                    next_hop = routers[next_hop_idx]
+                    routing_tables[str(src)][str(dst)] = next_hop
+
+            self.add_property('routing_tables', routing_tables)
 
 
     def load_from_floogen(self, network_path: str, routing_path: str, routing_mode: int, dim_x: int, dim_y: int):
