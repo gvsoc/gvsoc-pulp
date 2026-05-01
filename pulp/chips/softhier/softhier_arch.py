@@ -21,13 +21,13 @@ class SoftHierArch:
     def __init__(self):
 
         #Cluster
-        self.num_cluster             = 16
-        self.num_core_per_cluster    = 3
+        self.num_cluster             = 64
+        self.num_core_per_cluster    = 1
 
         #Topology
         self.topology                = '2DMesh'
-        self.num_cluster_x           = 4
-        self.num_cluster_y           = 4
+        self.num_cluster_x           = 8
+        self.num_cluster_y           = 8
 
         self.cluster_tcdm_bank_width = 4
         self.cluster_tcdm_bank_nb    = 128
@@ -62,5 +62,5 @@ class SoftHierArch:
         self.soc_register_eoc        = 0x70000000
 
         #NoC
-        self.noc_outstanding         = 8 #64
-        self.noc_link_width          = 64 #512
+        self.noc_outstanding         = 64
+        self.noc_link_width          = 512
