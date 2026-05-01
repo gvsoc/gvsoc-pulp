@@ -18,7 +18,7 @@
 
 import gvsoc.runner
 import gvsoc.systree
-from pulp.chips.softhier_torus.softhier_system import SoftHierPlatform
+from pulp.chips.softhier_ring.softhier_system import SoftHierPlatform
 
 GAPY_TARGET = True
 

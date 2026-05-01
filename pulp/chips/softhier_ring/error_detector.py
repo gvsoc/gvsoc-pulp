@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2020 ETH Zurich and University of Bologna
+# Copyright (C) 2020 GreenWaves Technologies, SAS, ETH Zurich and University of Bologna
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,16 +14,14 @@
 # limitations under the License.
 #
 
-# Author: Chi Zhang <chizhang@ethz.ch>
-
-import gvsoc.runner
 import gvsoc.systree
-from pulp.chips.softhier_torus.softhier_system import SoftHierPlatform
 
-GAPY_TARGET = True
+class ErrorDetector(gvsoc.systree.Component):
 
-class Target(gvsoc.runner.Target):
+    def __init__(self, parent, name):
+        super(ErrorDetector, self).__init__(parent, name)
 
-    def __init__(self, parser, options):
-        super(Target, self).__init__(parser, options,
-            model=SoftHierPlatform, description="SoftHier Platform")
+        self.add_sources(['pulp/chips/softhier_ring/error_detector.cpp'])
+
+    def i_INPUT(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'input', signature='io')

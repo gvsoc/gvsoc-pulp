@@ -42,9 +42,6 @@ Router::Router(FlooNoc *noc, std::string name, int node_id, int num_queues,
     this->node_id = node_id;
     this->num_queues = num_queues;
     this->queue_size = queue_size;
-
-    this->num_queues = 7; // Disallow other number of queues for now
-
     this->input_queues.resize(this->num_queues, nullptr);
     this->output_nodes.resize(this->num_queues, nullptr);
     this->stalled_queues.resize(this->num_queues, nullptr);
