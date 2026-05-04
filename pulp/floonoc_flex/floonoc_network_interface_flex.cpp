@@ -157,6 +157,7 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address,
 
             if (entry == NULL)
             {
+
                 // Burst is invalid if no target is found
                 this->trace.msg(vp::Trace::LEVEL_ERROR,
                                 "No entry found for base 0x%x\n", burst_base);
@@ -170,6 +171,9 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address,
             }
             else
             {
+                /*
+                printf("INJECT | NI %d | Dest: %d | Addr: 0x%lx | Size: %lu\n",
+                       this->ni.get_id(), entry->node_id, burst_base, size); */
                 // Be careful to not have any request which is crossing 2
                 // entries
 
@@ -472,7 +476,7 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req,
 
     if (origin_ni == NULL)
     {
-        this->response_queue.push_delayed(req, this->router_in_latency);
+        this->handle_response(req);
 
         // Performance Counter
         this->stat_received_responses++;
@@ -533,8 +537,14 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req,
 
             if (result == vp::IO_REQ_OK)
             {
-                this->response_queue.push_delayed(
-                    req, req->get_latency() + this->router_in_latency);
+                if (req->get_latency() > 0)
+                {
+                    this->response_queue.push_delayed(req, req->get_latency());
+                }
+                else
+                {
+                    this->handle_response(req);
+                }
             }
             else if (result == vp::IO_REQ_DENIED)
             {
