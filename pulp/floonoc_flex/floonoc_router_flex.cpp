@@ -72,10 +72,24 @@ Router::~Router()
 void Router::set_neighbour(int dir, FloonocNode *node, int neighbor_id,
                            int latency)
 {
+    if (dir >= this->num_queues)
+    {
+        printf("\n[FATAL] Memory Corruption! Router %d tried to map neighbor "
+               "%d to port %d, but num_queues is %d.\n",
+               this->node_id, neighbor_id, dir, this->num_queues);
+        printf("Check your Python script for duplicate add_link() calls!\n");
+        exit(1);
+    }
     this->output_nodes[dir] = node;
     this->neighbor_to_queue[neighbor_id] = dir;
     this->queue_to_neighbor[dir] = neighbor_id;
     this->input_latencies[dir] = latency;
+
+    /*
+    printf(
+        "[INIT] Router %d mapped neighbor %d to queue index %d (latency %d)\n",
+        this->node_id, neighbor_id, dir, latency);
+    */
 }
 
 void Router::set_routing_table(std::vector<int> table)
@@ -177,12 +191,25 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             // Get output queue ID from next position
             int out_queue_id = _this->get_req_queue(next_node);
 
+            if (out_queue_id < 0 || out_queue_id >= _this->num_queues)
+            {
+                printf("\n[FATAL] Router %d tried to route packet to NextHop "
+                       "%d, but get_req_queue returned %d!\n",
+                       _this->node_id, next_node, out_queue_id);
+                printf("Original Destination was: %d\n", to_node);
+                exit(1);
+            }
+
             // Only send one request per cycle to the same output
             if (output_full[out_queue_id])
             {
                 // Performance Counter
                 _this->stat_stall_cycles++;
-
+                /*
+                printf(
+                    "STALL_COLLISION | Router %d | Output %d full this cycle\n",
+                    _this->node_id, out_queue_id);
+                */
                 _this->trace.msg(
                     vp::Trace::LEVEL_TRACE,
                     "Output queue is full, skipping (out queue: %d)\n",
@@ -204,7 +231,11 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             {
                 // Performance Counter
                 _this->stat_stall_cycles++;
-
+                /*
+                printf("STALL_BACKPRESSURE | Router %d | Output %d downstream "
+                       "full\n",
+                       _this->node_id, out_queue_id);
+                */
                 _this->trace.msg(
                     vp::Trace::LEVEL_TRACE,
                     "Output queue is stalled, skipping (out queue: %d)\n",
@@ -222,6 +253,12 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             // Since we now know, that the request will be propagated, remove it
             // from the queue
             queue->queue.pop();
+
+            /*
+            printf("ROUTED | Router %d | InQueue: %d | OutQueue: %d | RR_Next: "
+                   "%d\n",
+                   _this->node_id, in_queue_index, out_queue_id,
+                   _this->current_queue); */
 
             // Performance Counter
             _this->stat_routed_packets++;
@@ -287,6 +324,13 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 // This is determining the routes the requests will take in the network
 void Router::get_next_router_pos(int to_node, int &next_node)
 {
+    if (to_node < 0 || to_node >= this->routing_table.size())
+    {
+        printf("\n[FATAL] Router %d asked to route to Node %d, but "
+               "routing_table size is %lu!\n",
+               this->node_id, to_node, this->routing_table.size());
+        exit(1);
+    }
     if (to_node != this->node_id)
     {
         next_node = this->routing_table[to_node];
@@ -294,6 +338,10 @@ void Router::get_next_router_pos(int to_node, int &next_node)
     else
     {
         next_node = this->node_id;
+        /*
+        printf("PATH | Router %d | DestNode: %d | NextHopNode: %d\n",
+               this->node_id, to_node, next_node);
+        */
         return;
     }
 }
