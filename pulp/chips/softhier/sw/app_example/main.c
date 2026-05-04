@@ -185,7 +185,7 @@ int main() {
   // 2. Master Core Prints Configuration
   if (my_cid == 0 && flex_is_first_core()) {
     printf("[Global Sync] Starting Uniform Random NoC Benchmark...\n");
-    printf("Topology: 2DMesh (%dx%d)\n", ARCH_NUM_CLUSTER_X,
+    printf("Topology: Flex-2DMesh (%dx%d)\n", ARCH_NUM_CLUSTER_X,
            ARCH_NUM_CLUSTER_Y);
     printf("Traffic: Uniform Random\n");
     printf("Workload: %d KB per DMA, %d batch size, %d iterations\n",
