@@ -534,7 +534,7 @@ class FlooNocFlex(gvsoc.systree.Component):
                     self.add_link(src_id, dst_id, 1)
 
             # Generate Routing Tables
-            self.generate_routing_tables(
+            self.generate_routing_tables( #This method is to be deprecated
                 routing_mode=routing_mode, 
                 dim_x=dim_x, 
                 dim_y=dim_y, 

@@ -129,52 +129,42 @@ class SoftHierSystem(gvsoc.systree.Component):
                 routers_map[(x, y)] = r_id
                 noc.add_router(r_id, num_queues=5) 
 
-        '''
-        # Add network interfaces everywhere except the 4 corners
-        for y in range(dim_y):
-            for x in range(dim_x):
-                if (x == 0 and y == 0) or (x == 0 and y == dim_y - 1) or \
-                   (x == dim_x - 1 and y == 0) or (x == dim_x - 1 and y == dim_y - 1):
-                    continue
-                ni_id = get_ni_id(x, y)
-                nis_map[(x, y)] = ni_id
-                noc.add_network_interface(ni_id)
-        '''
-
-        # Add ACTIVE NIs (no halo)
+        # Instantiate the NIs and populate the dictionary
         for y in range(1, arch.num_cluster_y + 1):
             for x in range(1, arch.num_cluster_x + 1):
                 ni_id = get_ni_id(x, y)
                 nis_map[(x, y)] = ni_id
                 noc.add_network_interface(ni_id)
-        
-                # Link directly to the co-located router
+
+        '''
+        Due to how the original SoftHier implements the round robin with certain directions prioritized,
+        this behaviour is emulated by generating the links in a specific order.
+        '''
+
+        # Add Horizontal Links (Right / Left priority)
+        # We iterate X backwards (max to 1). 
+        # For any router (X), the link to (X+1) is created before the link from (X-1).
+        for y in range(1, arch.num_cluster_y + 1):
+            for x in range(arch.num_cluster_x - 1, 0, -1):
+                r_id = routers_map[(x, y)]
+                east_id = routers_map[(x + 1, y)]
+                noc.add_link(r_id, east_id, latency=1)
+
+        # Add Vertical Links (Up / Down priority)
+        # We iterate Y backwards for Up links to be prioritized
+        for x in range(1, arch.num_cluster_x + 1):
+            for y in range(arch.num_cluster_y - 1, 0, -1):
+                r_id = routers_map[(x, y)]
+                north_id = routers_map[(x, y + 1)]
+                noc.add_link(r_id, north_id, latency=1)
+
+        #Add the NI <-> Router links
+        for y in range(1, arch.num_cluster_y + 1):
+            for x in range(1, arch.num_cluster_x + 1):
+                ni_id = get_ni_id(x, y)
                 r_id = routers_map[(x, y)]
                 noc.add_link(ni_id, r_id, latency=1)
-
-        '''
-        # Add links (NI <-> Nearest Router)
-        for (nx, ny), ni_id in nis_map.items():
-            rx = max(1, min(nx, arch.num_cluster_x))
-            ry = max(1, min(ny, arch.num_cluster_y))
-            r_id = routers_map[(rx, ry)]
-            # Only add the link once; C++ treats it as bidirectional
-            noc.add_link(ni_id, r_id, latency=1)
-        '''
-
-        # Add links (Router <-> Router Mesh Network)
-        for y in range(1, arch.num_cluster_y + 1):
-            for x in range(1, arch.num_cluster_x + 1):
-                r_id = routers_map[(x, y)]
-                # Link East
-                if x < arch.num_cluster_x:
-                    east_id = routers_map[(x + 1, y)]
-                    noc.add_link(r_id, east_id, latency=1)
-                # Link South
-                if y < arch.num_cluster_y:
-                    south_id = routers_map[(x, y + 1)]
-                    noc.add_link(r_id, south_id, latency=1)
-
+        
         # Generate routing tables
         noc.generate_routing_tables_mesh_2d(dim_x=dim_x, dim_y=dim_y)
 
