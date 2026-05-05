@@ -112,6 +112,9 @@ class NetworkInterface : public FloonocNode
     uint64_t stat_injected_packets = 0;
     uint64_t stat_received_responses = 0;
 
+    uint64_t stat_total_packet_latency = 0;
+    uint64_t stat_arrived_packets = 0;
+
   private:
     // Callback called when a target request is asynchronously granted after a
     // denied error was reported
