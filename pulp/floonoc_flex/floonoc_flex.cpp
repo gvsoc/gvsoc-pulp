@@ -303,6 +303,27 @@ FlooNoc::~FlooNoc()
                    congestion);
         }
     }
+    printf("===============================================================\n");
+
+    // Calculate and print the global average packet latency in cycles
+    uint64_t global_latency_cycles = 0;
+    uint64_t global_arrived_pkts = 0;
+    for (NetworkInterface *ni : this->network_interfaces)
+    {
+        if (ni)
+        {
+            global_latency_cycles += ni->stat_total_packet_latency;
+            global_arrived_pkts += ni->stat_arrived_packets;
+        }
+    }
+
+    double global_avg_lat_cycles =
+        global_arrived_pkts > 0
+            ? ((double)global_latency_cycles / global_arrived_pkts)
+            : 0.0;
+
+    printf("\nGlobal Average Packet Latency: %.2f cycles\n",
+           global_avg_lat_cycles);
     printf(
         "===============================================================\n\n");
 
