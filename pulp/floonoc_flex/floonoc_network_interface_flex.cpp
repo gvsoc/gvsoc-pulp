@@ -130,6 +130,8 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address,
         router_req->set_is_write(req->get_is_write());
         router_req->set_opcode(req->get_opcode());
         router_req->set_second_data(req->get_second_data());
+        *router_req->arg_get(FlooNoc::REQ_INJECT_TIME) =
+            (void *)(long)this->ni.clock.get_cycles();
 
         /*
         printf(
@@ -501,10 +503,12 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req,
         }
         else
         {
-            /*
-            printf("Request packet arrived at correct destination! Node %d\n",
-                   this->node_id);
-            */
+            // Packet yas arrived correctly
+            int64_t inject_cycle =
+                (int64_t)(long)*req->arg_get(FlooNoc::REQ_INJECT_TIME);
+            this->stat_total_packet_latency +=
+                (this->clock.get_cycles() - inject_cycle);
+            this->stat_arrived_packets++;
         }
 
         if ((req->get_is_write() && !req->get_int(FlooNoc::REQ_IS_ADDRESS)) ||

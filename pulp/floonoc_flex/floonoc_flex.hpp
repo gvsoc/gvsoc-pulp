@@ -107,8 +107,10 @@ class FlooNoc : public vp::Component
            // 0 for data
     static constexpr int REQ_DEST_ID =
         4; // Node ID of the destination target for flexible topologies
+    static constexpr int REQ_INJECT_TIME =
+        5; // Cycle timestamp when the packet was injected into the NoC
     static constexpr int REQ_NB_ARGS =
-        5; // Number of request data required by this model
+        6; // Number of request data required by this model
 
     // The following constants gives the index in the queue array of the queue
     // associated to each direction
