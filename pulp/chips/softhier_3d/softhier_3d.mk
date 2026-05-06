@@ -54,14 +54,6 @@ sh-3d-run:
 	./install/bin/gvsoc --target=pulp.chips.softhier_3d.softhier_target --binary sw_build/softhier.elf run
 
 ######################################################################
-## 				Make Targets for Run Extended Simulator		 		##
-######################################################################
-
-# Run GVSoC using the newly built extended binary
-sh-3d-ext-run:
-	./install/bin/gvsoc --target=pulp.chips.softhier_3d.softhier_target --binary sw_build_ext/softhier.elf run
-
-######################################################################
 ##              Make Targets for Automated Test Suite               ##
 ######################################################################
 
@@ -81,5 +73,5 @@ sh-3d-test-sw:
 	@! grep -q "ebreak" sw_build/softhier.dump || (echo "Error: 'ebreak' found in sw_build/softhier.dump" && exit 1)
 
 # Run target: Executes the freshly built binary
-sh-3d-test-run: sh-3d-test-sw
+sh-3d-test-run: #sh-3d-test-sw
 	./install/bin/gvsoc --target=pulp.chips.softhier_3d.softhier_target --binary sw_build/softhier.elf run
