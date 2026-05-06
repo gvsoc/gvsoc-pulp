@@ -141,7 +141,6 @@ class SoftHierSystem(gvsoc.systree.Component):
 
         # Add links (NI <-> Local Router 1:1 mapping)
         for (nx, ny, nz), ni_id in nis_map.items():
-            # Fix: No clamping needed! Connect directly to the local router
             r_id = routers_map[(nx, ny, nz)]
             noc.add_link(ni_id, r_id, latency=1)
 
