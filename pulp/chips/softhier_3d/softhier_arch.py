@@ -21,14 +21,14 @@ class SoftHierArch:
     def __init__(self):
 
         #Cluster
-        self.num_cluster             = 125
+        self.num_cluster             = 64
         self.num_core_per_cluster    = 1
 
         #Topology
         self.topology                = '3DMesh'
-        self.num_cluster_x           = 5
-        self.num_cluster_y           = 5
-        self.num_cluster_z           = 5
+        self.num_cluster_x           = 4
+        self.num_cluster_y           = 4
+        self.num_cluster_z           = 4
 
         self.cluster_tcdm_bank_width = 4
         self.cluster_tcdm_bank_nb    = 128
