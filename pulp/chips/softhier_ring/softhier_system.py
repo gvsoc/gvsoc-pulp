@@ -97,9 +97,12 @@ class SoftHierSystem(gvsoc.systree.Component):
         
         nb_nodes = arch.num_cluster * 2
 
+        router_degrees = 3
+
         noc = FlooNocFlex(self, 'noc',      
                 wide_width=arch.noc_link_width,
                 narrow_width=8,
+                router_degrees=router_degrees,
                 nb_nodes=nb_nodes,
                 router_input_queue_size=16,
                 ni_outstanding_reqs=arch.noc_outstanding)

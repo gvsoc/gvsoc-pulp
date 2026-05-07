@@ -7,9 +7,9 @@
 // ==========================================
 #define TILE_SIZE 16384 // 16 KB per transfer
 #define TOTAL_TRANSFERS                                                        \
-  102400 // Global total number of transfers across the ENTIRE NoC,
-         // 102400/64=1600 transfers per cluster, better to keep a multiple of
-         // ARCH_NUM_CLUSTER
+  10000 // Global total number of transfers across the ENTIRE NoC,
+        // 102400/64=1600 transfers per cluster, better to keep a multiple of
+        // ARCH_NUM_CLUSTER
 #define CYCLES_PER_PACKET 139
 #define BATCH_SIZE 8 // Max outstanding txns before waiting
 
@@ -58,8 +58,7 @@ int main() {
   if (my_cid == 0 && flex_is_first_core()) {
     printf(
         "[Global Sync] Starting Controlled Uniform Random NoC Benchmark...\n");
-    printf("Topology: Flex-3D Mesh (%dx%dx%d)\n", ARCH_NUM_CLUSTER_X,
-           ARCH_NUM_CLUSTER_Y, ARCH_NUM_CLUSTER_Z);
+    printf("Topology: Ring\n");
     printf("Global Workload: %d total transfers (%d KB each)\n",
            TOTAL_TRANSFERS, (TILE_SIZE / 1024));
     printf("Base Transfers per cluster: %d\n",

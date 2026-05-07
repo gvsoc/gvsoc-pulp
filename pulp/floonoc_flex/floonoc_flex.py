@@ -443,6 +443,166 @@ class FlooNocFlex(gvsoc.systree.Component):
 
         self.add_property('routing_tables', routing_tables)
 
+    def generate_routing_tables_torus_2d(self, dim_x: int, dim_y: int):
+        """
+        Generates routing tables for the routers based on grid dimensions for a 2D Torus.
+        Calculates the shortest path accounting for wrap-around edges on the active grid.
+        """
+        nb_nodes = self.get_property('nb_nodes')
+        links = self.get_property('links')
+
+        routers = [r[0] for r in self.get_property('routers')]
+        nis = [n[0] for n in self.get_property('network_interfaces')]
+
+        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
+
+        ni_to_router = {}
+        for link in links:
+            node_a, node_b = link[0], link[1]
+            if node_a in nis and node_b in routers:
+                ni_to_router[node_a] = node_b
+            elif node_b in nis and node_a in routers:
+                ni_to_router[node_b] = node_a
+
+        # Calculate the active grid dimensions (ignoring the 0 and Max halos)
+        size_x = dim_x - 2
+        size_y = dim_y - 2
+
+        for src in routers:
+            for dst in range(nb_nodes):
+                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
+
+                if target_router == -1:
+                    continue
+                if src == target_router:
+                    routing_tables[str(src)][str(dst)] = dst
+                    continue
+
+                src_x, src_y = src % dim_x, src // dim_x
+                dst_x, dst_y = target_router % dim_x, target_router // dim_x
+
+                # Route along the X-axis first
+                if src_x != dst_x:
+                    # Shift to a 0-indexed active space to make modulo math work
+                    sx = src_x - 1
+                    dx = dst_x - 1
+                    
+                    # Calculate shortest distance in both directions around the X-ring
+                    dist_right = (dx - sx) % size_x
+                    dist_left = (sx - dx) % size_x
+                    
+                    if dist_right <= dist_left:
+                        next_sx = (sx + 1) % size_x
+                    else:
+                        next_sx = (sx - 1) % size_x
+                        
+                    # Shift back to the 1-indexed physical chip space
+                    next_x = next_sx + 1
+                    next_hop = src_y * dim_x + next_x
+
+                # Once aligned on X, route along the Y-axis
+                else:
+                    # Shift to a 0-indexed active space
+                    sy = src_y - 1
+                    dy = dst_y - 1
+                    
+                    # Calculate shortest distance in both directions around the Y-ring
+                    dist_down = (dy - sy) % size_y
+                    dist_up = (sy - dy) % size_y
+                    
+                    if dist_down <= dist_up:
+                        next_sy = (sy + 1) % size_y
+                    else:
+                        next_sy = (sy - 1) % size_y
+                        
+                    # Shift back to the 1-indexed physical chip space
+                    next_y = next_sy + 1
+                    next_hop = next_y * dim_x + src_x
+
+                routing_tables[str(src)][str(dst)] = next_hop
+
+        self.add_property('routing_tables', routing_tables)
+
+    def generate_routing_tables_torus_3d(self, dim_x: int, dim_y: int, dim_z: int):
+        """
+        Generates routing tables for a 3D Torus.
+        Calculates the shortest path using XYZ-Routing (X first, then Y, then Z).
+        """
+        nb_nodes = self.get_property('nb_nodes')
+        links = self.get_property('links')
+
+        routers = [r[0] for r in self.get_property('routers')]
+        nis = [n[0] for n in self.get_property('network_interfaces')]
+
+        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
+
+        ni_to_router = {}
+        for link in links:
+            node_a, node_b = link[0], link[1]
+            if node_a in nis and node_b in routers:
+                ni_to_router[node_a] = node_b
+            elif node_b in nis and node_a in routers:
+                ni_to_router[node_b] = node_a
+
+        for src in routers:
+            for dst in range(nb_nodes):
+                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
+
+                if target_router == -1:
+                    continue
+                if src == target_router:
+                    routing_tables[str(src)][str(dst)] = dst
+                    continue
+
+                # Unflatten 3D Coordinates
+                src_x = src % dim_x
+                src_y = (src // dim_x) % dim_y
+                src_z = src // (dim_x * dim_y)
+
+                dst_x = target_router % dim_x
+                dst_y = (target_router // dim_x) % dim_y
+                dst_z = target_router // (dim_x * dim_y)
+
+                # 1. Route along the X-axis first
+                if src_x != dst_x:
+                    dist_right = (dst_x - src_x) % dim_x
+                    dist_left = (src_x - dst_x) % dim_x
+                    
+                    if dist_right <= dist_left:
+                        next_x = (src_x + 1) % dim_x
+                    else:
+                        next_x = (src_x - 1) % dim_x
+                        
+                    next_hop = src_z * (dim_x * dim_y) + src_y * dim_x + next_x
+
+                # 2. Once aligned on X, route along the Y-axis
+                elif src_y != dst_y:
+                    dist_down = (dst_y - src_y) % dim_y
+                    dist_up = (src_y - dst_y) % dim_y
+                    
+                    if dist_down <= dist_up:
+                        next_y = (src_y + 1) % dim_y
+                    else:
+                        next_y = (src_y - 1) % dim_y
+                        
+                    next_hop = src_z * (dim_x * dim_y) + next_y * dim_x + src_x
+
+                # 3. Once aligned on X and Y, route along the Z-axis
+                else:
+                    dist_in = (dst_z - src_z) % dim_z
+                    dist_out = (src_z - dst_z) % dim_z
+                    
+                    if dist_in <= dist_out:
+                        next_z = (src_z + 1) % dim_z
+                    else:
+                        next_z = (src_z - 1) % dim_z
+                        
+                    next_hop = next_z * (dim_x * dim_y) + src_y * dim_x + src_x
+
+                routing_tables[str(src)][str(dst)] = next_hop
+
+        self.add_property('routing_tables', routing_tables)
+
     def generate_routing_tables_ring(self):
             """
             Generates routing tables for a Ring topology.
@@ -492,6 +652,109 @@ class FlooNocFlex(gvsoc.systree.Component):
                     routing_tables[str(src)][str(dst)] = next_hop
 
             self.add_property('routing_tables', routing_tables)
+
+    def generate_routing_tables_deadlock_free(self):
+        """
+        Generates deadlock-free routing tables for any topology using the Up/Down Spanning Tree Routing Algorithm.
+        To be used in topologies with deadlocks
+        """
+        nb_nodes = self.get_property('nb_nodes')
+        links = self.get_property('links')
+
+        routers = [r[0] for r in self.get_property('routers')]
+        nis = [n[0] for n in self.get_property('network_interfaces')]
+
+        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
+
+        # Build Adjacency List for Routers and NI Mapping
+        adj = {r: [] for r in routers}
+        ni_to_router = {}
+        
+        for link in links:
+            node_a, node_b = link[0], link[1]
+            if node_a in nis and node_b in routers:
+                ni_to_router[node_a] = node_b
+            elif node_b in nis and node_a in routers:
+                ni_to_router[node_b] = node_a
+            elif node_a in routers and node_b in routers:
+                adj[node_a].append(node_b)
+                adj[node_b].append(node_a)
+
+        for r in routers:
+            adj[r] = list(set(adj[r])) # Remove duplicate links if any
+
+        # Build Spanning Tree (BFS) to assign Levels
+        # Pick the center of the grid as the root to minimize average hop count
+        root = routers[len(routers) // 2] 
+        levels = {r: -1 for r in routers}
+        levels[root] = 0
+        
+        queue = [root]
+        while queue:
+            curr = queue.pop(0)
+            for neighbor in adj[curr]:
+                if levels[neighbor] == -1:
+                    levels[neighbor] = levels[curr] + 1
+                    queue.append(neighbor)
+
+        # Helper to determine link direction
+        # UP: Towards the root (lower level, or same level & lower ID for tie-breaking)
+        def is_up(u, v):
+            if levels[v] < levels[u]:
+                return True
+            if levels[v] == levels[u] and v < u:
+                return True
+            return False
+
+        # Find valid deadlock-free shortest paths for each router pair
+        for src in routers:
+            # We use BFS to find the shortest path that obeys Up/Down rules.
+            # State tracks: (current_node, has_gone_down)
+            best_first_hop = {}
+            visited = set() 
+            visited.add((src, False))
+            
+            # Queue stores: (current_node, has_gone_down, first_hop_taken)
+            bfs_queue = [(src, False, -1)]
+            
+            while bfs_queue:
+                curr, has_gone_down, first_hop = bfs_queue.pop(0)
+                
+                # If this is the first time reaching this node, it is the shortest valid path
+                if curr != src and curr not in best_first_hop:
+                    best_first_hop[curr] = first_hop
+                    
+                for neighbor in adj[curr]:
+                    going_up = is_up(curr, neighbor)
+                    going_down = not going_up
+                    
+                    # Deadlock rule: No UP turns allowed after going DOWN
+                    if has_gone_down and going_up:
+                        continue 
+                        
+                    new_has_gone_down = has_gone_down or going_down
+                    state = (neighbor, new_has_gone_down)
+                    
+                    if state not in visited:
+                        visited.add(state)
+                        fh = neighbor if first_hop == -1 else first_hop
+                        bfs_queue.append((neighbor, new_has_gone_down, fh))
+
+            # Populate routing table for this source router
+            for dst in range(nb_nodes):
+                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
+                
+                if target_router == -1:
+                    continue
+                if src == target_router:
+                    routing_tables[str(src)][str(dst)] = dst
+                elif target_router in best_first_hop:
+                    routing_tables[str(src)][str(dst)] = best_first_hop[target_router]
+                else:
+                    # Fallback (Should only trigger if grid is completely physically disconnected)
+                    routing_tables[str(src)][str(dst)] = src
+
+        self.add_property('routing_tables', routing_tables)
 
 
     def load_from_floogen(self, network_path: str, routing_path: str, routing_mode: int, dim_x: int, dim_y: int):

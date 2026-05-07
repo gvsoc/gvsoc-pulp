@@ -93,7 +93,7 @@ class SoftHierSystem(gvsoc.systree.Component):
         softhier_ctrl = SoftHierCtrl(self, 'softhier_ctrl', num_cluster=arch.num_cluster, num_core_per_cluster=arch.num_core_per_cluster)
 
         # --- FlooNoC Flex Initialization & Topology Building ---
-        router_degrees = 7
+        router_degrees = 5
         
         # Calculate Dimensions (Preserving the +2 padding for external network interfaces)
         dim_x = arch.num_cluster_x + 2
@@ -121,113 +121,61 @@ class SoftHierSystem(gvsoc.systree.Component):
         routers_map = {} 
         nis_map = {}     
 
-        # 1. Add routers at cluster centers
+        # Add routers at cluster centers
         for y in range(1, arch.num_cluster_y + 1):
             for x in range(1, arch.num_cluster_x + 1):
                 r_id = get_router_id(x, y)
                 routers_map[(x, y)] = r_id
                 noc.add_router(r_id, num_queues=5) 
 
-        # 2. Add network interfaces everywhere except the 4 corners
-        for y in range(dim_y):
-            for x in range(dim_x):
-                if (x == 0 and y == 0) or (x == 0 and y == dim_y - 1) or \
-                   (x == dim_x - 1 and y == 0) or (x == dim_x - 1 and y == dim_y - 1):
-                    continue
+        # Instantiate the NIs and populate the dictionary
+        for y in range(1, arch.num_cluster_y + 1):
+            for x in range(1, arch.num_cluster_x + 1):
                 ni_id = get_ni_id(x, y)
                 nis_map[(x, y)] = ni_id
                 noc.add_network_interface(ni_id)
 
-        # 3. Add links (NI <-> Nearest Router)
-        for (nx, ny), ni_id in nis_map.items():
-            rx = max(1, min(nx, arch.num_cluster_x))
-            ry = max(1, min(ny, arch.num_cluster_y))
-            r_id = routers_map[(rx, ry)]
-            # Only add the link once; C++ treats it as bidirectional
-            noc.add_link(ni_id, r_id, latency=1)
+        '''
+        Torus Link Generation: 
+        Inner links are generated backwards to preserve Right/Up priority.
+        Wrap-around links are appended last to close the torus rings.
+        '''
 
-        # 4. Add links (Router <-> Router Torus Network)
+        # Add Horizontal Links (Torus Rings on X-axis)
+        for y in range(1, arch.num_cluster_y + 1):
+            # Inner horizontal links (Right before Left priority)
+            for x in range(arch.num_cluster_x - 1, 0, -1):
+                r_id = routers_map[(x, y)]
+                east_id = routers_map[(x + 1, y)]
+                noc.add_link(r_id, east_id, latency=1)
+            
+            # Wrap-around horizontal link (Right-most to Left-most)
+            r_rightmost = routers_map[(arch.num_cluster_x, y)]
+            r_leftmost = routers_map[(1, y)]
+            noc.add_link(r_rightmost, r_leftmost, latency=1)
+
+        # Add Vertical Links (Torus Rings on Y-axis)
+        for x in range(1, arch.num_cluster_x + 1):
+            # Inner vertical links (Up before Down priority)
+            for y in range(arch.num_cluster_y - 1, 0, -1):
+                r_id = routers_map[(x, y)]
+                north_id = routers_map[(x, y + 1)]
+                noc.add_link(r_id, north_id, latency=1)
+            
+            # Wrap-around vertical link (Bottom-most to Top-most)
+            r_bottom = routers_map[(x, arch.num_cluster_y)]
+            r_top = routers_map[(x, 1)]
+            noc.add_link(r_bottom, r_top, latency=1)
+
+        # Add the NI <-> Router links
         for y in range(1, arch.num_cluster_y + 1):
             for x in range(1, arch.num_cluster_x + 1):
+                ni_id = get_ni_id(x, y)
                 r_id = routers_map[(x, y)]
-                
-                # Link East
-                if x < arch.num_cluster_x:
-                    east_id = routers_map[(x + 1, y)]
-                    noc.add_link(r_id, east_id, latency=1)
-                elif arch.num_cluster_x > 2: # East Wraparound
-                    east_id = routers_map[(1, y)]
-                    noc.add_link(r_id, east_id, latency=1)
-                
-                # Link South
-                if y < arch.num_cluster_y:
-                    south_id = routers_map[(x, y + 1)]
-                    noc.add_link(r_id, south_id, latency=1)
-                elif arch.num_cluster_y > 2: # South Wraparound
-                    south_id = routers_map[(x, 1)]
-                    noc.add_link(r_id, south_id, latency=1)
+                noc.add_link(ni_id, r_id, latency=1)
 
-        # 5. Generate Torus routing tables (Shortest-Path XY)
-        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers_map.values()}
-        
-        # Build reverse map for routers
-        id_to_router_coords = {v: k for k, v in routers_map.items()}
-        
-        # Build NI to Router physical mapping
-        ni_to_router = {}
-        for (nx, ny), ni_id in nis_map.items():
-            rx = max(1, min(nx, arch.num_cluster_x))
-            ry = max(1, min(ny, arch.num_cluster_y))
-            ni_to_router[ni_id] = routers_map[(rx, ry)]
-
-        for src_id, (src_x, src_y) in id_to_router_coords.items():
-            for dst_node in range(nb_nodes):
-                # Resolve target router
-                if dst_node in id_to_router_coords:
-                    target_router = dst_node
-                elif dst_node in ni_to_router:
-                    target_router = ni_to_router[dst_node]
-                else:
-                    continue
-                
-                if src_id == target_router:
-                    routing_tables[str(src_id)][str(dst_node)] = dst_node
-                    continue
-                
-                dst_x, dst_y = id_to_router_coords[target_router]
-                
-                # Torus Shortest-Path XY Routing Logic
-                dist_x = dst_x - src_x
-                dist_y = dst_y - src_y
-                
-                if dist_x != 0:
-                    # Route along X
-                    if abs(dist_x) <= arch.num_cluster_x // 2:
-                        next_x = src_x + (1 if dist_x > 0 else -1)
-                    else:
-                        next_x = src_x + (-1 if dist_x > 0 else 1) # Wraparound path is shorter
-                    
-                    # Wraparound bounds correction
-                    if next_x > arch.num_cluster_x: next_x = 1
-                    if next_x < 1: next_x = arch.num_cluster_x
-                    
-                    next_hop = routers_map[(next_x, src_y)]
-                else:
-                    # Route along Y
-                    if abs(dist_y) <= arch.num_cluster_y // 2:
-                        next_y = src_y + (1 if dist_y > 0 else -1)
-                    else:
-                        next_y = src_y + (-1 if dist_y > 0 else 1) # Wraparound path is shorter
-                        
-                    # Wraparound bounds correction
-                    if next_y > arch.num_cluster_y: next_y = 1
-                    if next_y < 1: next_y = arch.num_cluster_y
-                    
-                    next_hop = routers_map[(src_x, next_y)]
-                    
-                routing_tables[str(src_id)][str(dst_node)] = next_hop
-
-        noc.add_property('routing_tables', routing_tables)
+        #Generate routing tables
+        noc.generate_routing_tables_deadlock_free()
 
         ############
         # Bindings #
