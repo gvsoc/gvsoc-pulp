@@ -21,13 +21,13 @@ class SoftHierArch:
     def __init__(self):
 
         #Cluster
-        self.num_cluster             = 4
-        self.num_core_per_cluster    = 3
+        self.num_cluster             = 100
+        self.num_core_per_cluster    = 1
 
         #Topology
         self.topology                = '2DTorus'
-        self.num_cluster_x           = 2
-        self.num_cluster_y           = 2
+        self.num_cluster_x           = 10
+        self.num_cluster_y           = 10
 
         self.cluster_tcdm_bank_width = 4
         self.cluster_tcdm_bank_nb    = 128
