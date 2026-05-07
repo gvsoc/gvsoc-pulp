@@ -21,8 +21,8 @@ class SoftHierArch:
     def __init__(self):
 
         #Cluster
-        self.num_cluster             = 7
-        self.num_core_per_cluster    = 3
+        self.num_cluster             = 10
+        self.num_core_per_cluster    = 1
 
         #Topology
         self.topology                = 'Ring'
