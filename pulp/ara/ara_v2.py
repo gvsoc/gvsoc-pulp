@@ -69,7 +69,7 @@ def extend_isa(isa_instance: Isa):
             insn.add_field('out_chaining_factor', '0.0f')
 
 def attach(component: Component, vlen: int, nb_lanes: int, use_spatz: bool=False,
-        spatz_nb_ports: int|None=None, lane_width=8):
+        spatz_nb_ports: int|None=None, lane_width=8, vlsu_v2: bool=False):
     component.add_sources([
         "cpu/iss_v2/src/vector_unit/vector_unit.cpp",
         "cpu/iss_v2/src/vector_unit/vector_unit_compute.cpp",
@@ -77,9 +77,20 @@ def attach(component: Component, vlen: int, nb_lanes: int, use_spatz: bool=False
     ])
 
     if use_spatz:
-        component.add_sources([
-            "cpu/iss_v2/src/cores/spatz/spatz_vlsu.cpp",
-        ])
+        # Pick the v1 or v2 io-protocol implementation of the spatz VLSU. The
+        # v2 variant talks to the TCDM through io_v2.hpp, which forces the
+        # whole ISS translation unit to use the v2 protocol — see types.hpp.
+        if vlsu_v2:
+            component.add_sources([
+                "cpu/iss_v2/src/cores/spatz/spatz_vlsu_v2.cpp",
+            ])
+            component.add_c_flags([
+                "-DCONFIG_GVSOC_ISS_VLSU_V2=1",
+            ])
+        else:
+            component.add_sources([
+                "cpu/iss_v2/src/cores/spatz/spatz_vlsu.cpp",
+            ])
         component.add_c_flags([
             "-DCONFIG_GVSOC_ISS_USE_SPATZ",
         ])
