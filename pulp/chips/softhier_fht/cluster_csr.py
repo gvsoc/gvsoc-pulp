@@ -21,7 +21,7 @@ class ClusterCSR(gvsoc.systree.Component):
     def __init__(self, parent, name, nb_cores=1, cluster_id=0):
         super(ClusterCSR, self).__init__(parent, name)
 
-        self.add_sources(['pulp/chips/softhier_hexamesh/cluster_csr.cpp'])
+        self.add_sources(['pulp/chips/softhier_fht/cluster_csr.cpp'])
 
         self.add_properties({
             'nb_cores': nb_cores,
