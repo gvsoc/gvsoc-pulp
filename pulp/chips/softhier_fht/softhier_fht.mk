@@ -10,20 +10,20 @@ third_party/toolchain:
 	wget https://github.com/husterZC/gun_toolchain/releases/download/v2.0.0/toolchain.tar.xz &&\
 	tar -xvf toolchain.tar.xz
 
-config_file_hft ?= "pulp/pulp/chips/softhier_hft/softhier_arch.py"
+config_file_fht ?= "pulp/pulp/chips/softhier_fht/softhier_arch.py"
 ifdef cfg
-	config_file_hft = "$(cfg)"
+	config_file_fht = "$(cfg)"
 endif
 
-sh-hft-config:
-	@if [ "$(config_file_hft)" != "pulp/pulp/chips/softhier_hft/softhier_arch.py" ]; then \
-		cp -f $(config_file_hft) pulp/pulp/chips/softhier_hft/softhier_arch.py; \
+sh-fht-config:
+	@if [ "$(config_file_fht)" != "pulp/pulp/chips/softhier_fht/softhier_arch.py" ]; then \
+		cp -f $(config_file_fht) pulp/pulp/chips/softhier_fht/softhier_arch.py; \
 	fi
-	python3 pulp/pulp/chips/softhier_hft/utils/config.py $(config_file_hft)
+	python3 pulp/pulp/chips/softhier_fht/utils/config.py $(config_file_fht)
 
-sh-hft-hw:
-	make sh-hft-config
-	make TARGETS=pulp.chips.softhier_hft.softhier_target all
+sh-fht-hw:
+	make sh-fht-config
+	make TARGETS=pulp.chips.softhier_fht.softhier_target all
 
 ######################################################################
 ## 				Make Targets for SoftHier Software	 				##
@@ -37,12 +37,12 @@ endif
 
 arch_cmake_arg := "-DRISCV_ARCH=rv32imafdv_zfh"
 
-sh-hft-sw:
+sh-fht-sw:
 	rm -rf sw_build && mkdir sw_build
-	cd sw_build && $(CMAKE) $(sw_cmake_arg) $(arch_cmake_arg) ../pulp/pulp/chips/softhier_hft/sw/ && make
+	cd sw_build && $(CMAKE) $(sw_cmake_arg) $(arch_cmake_arg) ../pulp/pulp/chips/softhier_fht/sw/ && make
 	@! grep -q "ebreak" sw_build/softhier.dump || (echo "Error: 'ebreak' found in sw_build/softhier.dump" && exit 1)
 
-sh-hft-sw-clean:
+sh-fht-sw-clean:
 	rm -rf sw_build
 
 
@@ -50,15 +50,15 @@ sh-hft-sw-clean:
 ## 				Make Targets for Run Simulator		 				##
 ######################################################################
 
-sh-hft-run:
-	./install/bin/gvsoc --target=pulp.chips.softhier_hft.softhier_target --binary sw_build/softhier.elf run
+sh-fht-run:
+	./install/bin/gvsoc --target=pulp.chips.softhier_fht.softhier_target --binary sw_build/softhier.elf run
 
 ######################################################################
 ##              Make Targets for Automated Test Suite               ##
 ######################################################################
 
 # Define the base software directory (where CMakeLists.txt lives)
-SW_BASE_DIR = pulp/pulp/chips/softhier_hft/sw
+SW_BASE_DIR = pulp/pulp/chips/softhier_fht/sw
 
 # Default to the test name if no TEST variable is provided
 TEST ?= 00_init
@@ -67,11 +67,11 @@ TEST ?= 00_init
 TEST_DIR = $(abspath $(SW_BASE_DIR)/tests/$(TEST))
 
 # Build target: Compiles whatever is inside $(TEST_DIR)
-sh-hft-test-sw:
+sh-fht-test-sw:
 	rm -rf sw_build && mkdir sw_build
 	cd sw_build && $(CMAKE) "-DSRC_DIR=$(TEST_DIR)" $(arch_cmake_arg) ../$(SW_BASE_DIR) && make
 	@! grep -q "ebreak" sw_build/softhier.dump || (echo "Error: 'ebreak' found in sw_build/softhier.dump" && exit 1)
 
 # Run target: Executes the freshly built binary
-sh-hft-test-run: sh-hft-test-sw
-	./install/bin/gvsoc --target=pulp.chips.softhier_hft.softhier_target --binary sw_build/softhier.elf run
+sh-fht-test-run: sh-fht-test-sw
+	./install/bin/gvsoc --target=pulp.chips.softhier_fht.softhier_target --binary sw_build/softhier.elf run

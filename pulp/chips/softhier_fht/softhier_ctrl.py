@@ -22,7 +22,7 @@ class SoftHierCtrl(gvsoc.systree.Component):
 
         super().__init__(parent, name)
 
-        self.add_sources(['pulp/chips/softhier_hft/softhier_ctrl.cpp'])
+        self.add_sources(['pulp/chips/softhier_fht/softhier_ctrl.cpp'])
 
         self.add_properties({
             'num_cluster': num_cluster,
