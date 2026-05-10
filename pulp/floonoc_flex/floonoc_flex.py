@@ -637,6 +637,83 @@ class FlooNocFlex(gvsoc.systree.Component):
 
         self.add_property('routing_tables', routing_tables)
 
+    def generate_routing_tables_hier_ring(self, dim_g: int, dim_l: int):
+        """
+        Generates routing tables for a Hierarchical Ring topology.
+        Implements deadlock-free linear (dateline) routing on both local and global rings.
+        """
+        nb_nodes = self.get_property('nb_nodes')
+        links = self.get_property('links')
+
+        routers = sorted([r[0] for r in self.get_property('routers')])
+        nis = [n[0] for n in self.get_property('network_interfaces')]
+        
+        # N is the total number of local clusters/routers
+        N = dim_g * dim_l
+
+        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
+
+        # Build NI to Router mapping
+        ni_to_router = {}
+        for link in links:
+            node_a, node_b = link[0], link[1]
+            if node_a in nis and node_b in routers:
+                ni_to_router[node_a] = node_b
+            elif node_b in nis and node_a in routers:
+                ni_to_router[node_b] = node_a
+
+        for src in routers:
+            for dst in range(nb_nodes):
+                
+                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
+
+                if target_router == -1:
+                    continue
+                
+                if src == target_router:
+                    routing_tables[str(src)][str(dst)] = dst
+                    continue
+
+                # Determine target's global group 
+                if target_router >= N: 
+                    target_g = target_router - N 
+                else:
+                    target_g = target_router // dim_l
+
+                if src >= N:
+                    src_g = src - N
+                    
+                    if src_g == target_g:
+                        # Reached the correct global group. Route DOWN to the local bridge.
+                        next_hop = target_g * dim_l
+                    else:
+                        # Route along the global ring (deadlock-free linear routing)
+                        if target_g > src_g:
+                            next_hop = N + src_g + 1
+                        else:
+                            next_hop = N + src_g - 1
+
+                else:
+                    src_g = src // dim_l
+                    bridge_id = src_g * dim_l
+                    
+                    if src_g == target_g:
+                        # Intra-ring traffic. Route along the local ring (deadlock-free).
+                        if target_router > src:
+                            next_hop = src + 1
+                        else:
+                            next_hop = src - 1
+                    else:
+                        # Inter-ring traffic. Need to route towards the local bridge.
+                        if src == bridge_id:
+                            next_hop = N + src_g
+                        else:
+                            next_hop = src - 1
+
+                routing_tables[str(src)][str(dst)] = next_hop
+
+        self.add_property('routing_tables', routing_tables)
+
     def generate_routing_tables_deadlock_free(self):
         """
         Generates deadlock-free routing tables for any topology using the Up/Down Spanning Tree Routing Algorithm.
