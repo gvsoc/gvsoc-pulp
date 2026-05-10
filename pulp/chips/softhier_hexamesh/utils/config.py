@@ -4,13 +4,13 @@ import math
 import argparse
 
 parser = argparse.ArgumentParser(description="Generate C and S header files from a Softhier configuration file.")
-parser.add_argument("input_file", nargs="?", default="pulp/pulp/chips/softhier/softhier_arch.py", help="Path to the input Python file")
+parser.add_argument("input_file", nargs="?", default="pulp/pulp/chips/softhier_hexamesh/softhier_arch.py", help="Path to the input Python file")
 args = parser.parse_args()
 input_file = args.input_file
 
 # Read the input Python file
-C_header_file = 'pulp/pulp/chips/softhier/sw/runtime/include/softhier_arch.h'
-S_header_file = 'pulp/pulp/chips/softhier/sw/runtime/include/softhier_arch.inc'
+C_header_file = 'pulp/pulp/chips/softhier_hexamesh/sw/runtime/include/softhier_arch.h'
+S_header_file = 'pulp/pulp/chips/softhier_hexamesh/sw/runtime/include/softhier_arch.inc'
 
 # Initialize a dictionary to store the class attributes and their values
 attributes = {}
@@ -37,7 +37,7 @@ with open(C_header_file, 'w') as file:
     
     file.write('\n#endif // SOFTHIERARCH_H\n')
 
-print(f'Header file "{C_header_file}" generated successfully.')
+print(f'Header file "{C_header_file}"for HexaMesh generated successfully.')
 
 # Write the output S header file
 with open(S_header_file, 'w') as file:
@@ -53,4 +53,4 @@ with open(S_header_file, 'w') as file:
     
     file.write('\n#endif // SOFTHIERARCH_H\n')
 
-print(f'Header file "{S_header_file}" generated successfully.')
+print(f'Header file "{S_header_file}" for HexaMesh generated successfully.')

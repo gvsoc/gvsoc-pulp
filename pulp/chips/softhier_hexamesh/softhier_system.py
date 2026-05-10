@@ -24,11 +24,10 @@ from vp.clock_domain import Clock_domain
 import interco.router as router
 import utils.loader.loader
 import gvsoc.systree
-from pulp.chips.softhier.cluster_unit import ClusterUnit, ClusterArch
-from pulp.chips.softhier.softhier_ctrl import SoftHierCtrl
-from pulp.chips.softhier.softhier_arch import SoftHierArch
-from pulp.chips.softhier.error_detector import ErrorDetector
-# from pulp.floonoc.floonoc import FlooNocClusterGridNarrowWide
+from pulp.chips.softhier_hexamesh.cluster_unit import ClusterUnit, ClusterArch
+from pulp.chips.softhier_hexamesh.softhier_ctrl import SoftHierCtrl
+from pulp.chips.softhier_hexamesh.softhier_arch import SoftHierArch
+from pulp.chips.softhier_hexamesh.error_detector import ErrorDetector
 from pulp.floonoc_flex.floonoc_flex import FlooNocFlex
 import math
 
@@ -52,8 +51,8 @@ class SoftHierSystem(gvsoc.systree.Component):
         #############
         # Assertion #
         #############
-        assert(arch.topology == '2DMesh', f'NoC Topology currectly only support 2DMesh')
-        assert(arch.num_cluster_x * arch.num_cluster_y == arch.num_cluster, f"Topology dimesion not match total number of clusters")
+        assert(arch.topology == 'HexaMesh', f'NoC topology should be HexaMesh')
+        assert(1 + 3 * arch.num_rings * (arch.num_rings + 1) == arch.num_cluster, f"Topology dimensions are mismatched")
 
         ##############
         # Components #
@@ -92,16 +91,11 @@ class SoftHierSystem(gvsoc.systree.Component):
         #Control register
         softhier_ctrl = SoftHierCtrl(self, 'softhier_ctrl', num_cluster=arch.num_cluster, num_core_per_cluster=arch.num_core_per_cluster)
 
-        # --- FlooNoC Flex Initialization & Topology Building ---
-        router_degrees = 5
+        # --- FlooNoC Flex Initialization & HexaMesh Topology Building ---
         
-        # Calculate Dimensions
-        dim_x = arch.num_cluster_x + 2
-        dim_y = arch.num_cluster_y + 2
-        
-        # Define Mesh size and number of nodes
-        MESH_SIZE = dim_x * dim_y
-        nb_nodes = MESH_SIZE * 2
+        # A HexaMesh router has up to 6 neighbors + 1 NI connection
+        router_degrees = 7
+        nb_nodes = arch.num_cluster * 2 # N Routers + N NIs
 
         noc = FlooNocFlex(self, 'noc',  
                 narrow_width=8,    
@@ -111,62 +105,72 @@ class SoftHierSystem(gvsoc.systree.Component):
                 router_input_queue_size=16,
                 ni_outstanding_reqs=arch.noc_outstanding)
 
-        # Get router ID for 2D mesh
-        def get_router_id(x, y):
-            return y * dim_x + x
+        # --- Coordinate Generation (Axial Coordinates) ---
+        ring_walk_dirs = [(-1, 1), (-1, 0), (0, -1), (1, -1), (1, 0), (0, 1)]
         
-        # Offset by MESH_SIZE to separate from routers
-        def get_ni_id(x, y):
-            return MESH_SIZE + (y * dim_x + x)
+        coords = [(0, 0)]
+        ring = 1
+        while len(coords) < arch.num_cluster:
+            q, r = ring, 0 
+            for dq, dr in ring_walk_dirs:
+                for _ in range(ring):
+                    if len(coords) < arch.num_cluster:
+                        coords.append((q, r))
+                    q += dq
+                    r += dr
+            ring += 1
 
+        coord_to_id = {coord: idx for idx, coord in enumerate(coords)}
         routers_map = {} 
         nis_map = {}     
 
-        # Add routers at cluster centers
-        for y in range(1, arch.num_cluster_y + 1):
-            for x in range(1, arch.num_cluster_x + 1):
-                r_id = get_router_id(x, y)
-                routers_map[(x, y)] = r_id
-                noc.add_router(r_id, num_queues=5) 
+        # Instantiate Routers and NIs
+        for cluster_id, (q, r) in enumerate(coords):
+            r_id = cluster_id
+            ni_id = arch.num_cluster + cluster_id
+            
+            routers_map[cluster_id] = r_id
+            nis_map[cluster_id] = ni_id
 
-        # Instantiate the NIs and populate the dictionary
-        for y in range(1, arch.num_cluster_y + 1):
-            for x in range(1, arch.num_cluster_x + 1):
-                ni_id = get_ni_id(x, y)
-                nis_map[(x, y)] = ni_id
-                noc.add_network_interface(ni_id)
-
-        '''
-        Due to how the original SoftHier implements the round robin with certain directions prioritized,
-        this behaviour is emulated by generating the links in a specific order.
-        '''
-
-        # Add Horizontal Links (Right / Left priority)
-        # We iterate X backwards (max to 1). 
-        # For any router (X), the link to (X+1) is created before the link from (X-1).
-        for y in range(1, arch.num_cluster_y + 1):
-            for x in range(arch.num_cluster_x - 1, 0, -1):
-                r_id = routers_map[(x, y)]
-                east_id = routers_map[(x + 1, y)]
+            noc.add_router(r_id, num_queues=router_degrees) 
+            noc.add_network_interface(ni_id)
+        
+        # Axis 1: East (1, 0) / West (-1, 0) priority
+        coords_q_desc = sorted(coords, key=lambda c: c[0], reverse=True)
+        for q, r in coords_q_desc:
+            east_neighbor = (q + 1, r)
+            if east_neighbor in coord_to_id:
+                r_id = routers_map[coord_to_id[(q, r)]]
+                east_id = routers_map[coord_to_id[east_neighbor]]
                 noc.add_link(r_id, east_id, latency=1)
 
-        # Add Vertical Links (Up / Down priority)
-        # We iterate Y backwards for Up links to be prioritized
-        for x in range(1, arch.num_cluster_x + 1):
-            for y in range(arch.num_cluster_y - 1, 0, -1):
-                r_id = routers_map[(x, y)]
-                north_id = routers_map[(x, y + 1)]
-                noc.add_link(r_id, north_id, latency=1)
+        # Axis 2: SouthEast (0, 1) / NorthWest (0, -1) priority
+        coords_r_desc = sorted(coords, key=lambda c: c[1], reverse=True)
+        for q, r in coords_r_desc:
+            se_neighbor = (q, r + 1)
+            if se_neighbor in coord_to_id:
+                r_id = routers_map[coord_to_id[(q, r)]]
+                se_id = routers_map[coord_to_id[se_neighbor]]
+                noc.add_link(r_id, se_id, latency=1)
 
-        #Add the NI <-> Router links
-        for y in range(1, arch.num_cluster_y + 1):
-            for x in range(1, arch.num_cluster_x + 1):
-                ni_id = get_ni_id(x, y)
-                r_id = routers_map[(x, y)]
-                noc.add_link(ni_id, r_id, latency=1)
+        # Axis 3: SouthWest (-1, 1) / NorthEast (1, -1) priority
+        coords_sw_desc = sorted(coords, key=lambda c: -c[0] + c[1], reverse=True)
+        for q, r in coords_sw_desc:
+            sw_neighbor = (q - 1, r + 1)
+            if sw_neighbor in coord_to_id:
+                r_id = routers_map[coord_to_id[(q, r)]]
+                sw_id = routers_map[coord_to_id[sw_neighbor]]
+                noc.add_link(r_id, sw_id, latency=1)
+
+        # Add NI <-> Router links
+        for cluster_id, _ in enumerate(coords):
+            ni_id = nis_map[cluster_id]
+            r_id = routers_map[cluster_id]
+            noc.add_link(ni_id, r_id, latency=1)
         
         # Generate routing tables
-        noc.generate_routing_tables_mesh_2d(dim_x=dim_x, dim_y=dim_y)
+        # noc.generate_routing_tables_deadlock_free() is slightly slower
+        noc.generate_routing_tables_hexamesh()
 
         ############
         # Bindings #
@@ -180,11 +184,8 @@ class SoftHierSystem(gvsoc.systree.Component):
 
         # Clusters
         for cluster_id in range(arch.num_cluster):
-            x_id = int(cluster_id % arch.num_cluster_x)
-            y_id = int(cluster_id / arch.num_cluster_x)
             
-            # Retrieve the UNIQUE Network Interface ID for this cluster
-            ni_node_id = nis_map[(x_id + 1, y_id + 1)]
+            ni_node_id = nis_map[cluster_id]
             
             narrow_arbiter = router.Router(self, f'narrow_arbiter_{cluster_id}', bandwidth=8)
             narrow_arbiter.o_MAP(virtual_interco.i_INPUT())
