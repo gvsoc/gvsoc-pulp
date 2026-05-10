@@ -10,7 +10,7 @@
   10000 // Global total number of transfers across the ENTIRE NoC,
         // 102400/64=1600 transfers per cluster, better to keep a multiple of
         // ARCH_NUM_CLUSTER
-#define CYCLES_PER_PACKET 139
+#define CYCLES_PER_PACKET 655
 #define BATCH_SIZE 8 // Max outstanding txns before waiting
 
 #define SRC_BUF 0x00000
