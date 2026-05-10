@@ -804,6 +804,94 @@ class FlooNocFlex(gvsoc.systree.Component):
 
         self.add_property('routing_tables', routing_tables)
 
+    def generate_routing_tables_hexamesh(self):
+        """
+        Generates routing tables for a HexaMesh topology using Axial Dimension Order Routing
+
+        """
+        nb_nodes = self.get_property('nb_nodes')
+        links = self.get_property('links')
+
+        routers = sorted([r[0] for r in self.get_property('routers')])
+        nis = [n[0] for n in self.get_property('network_interfaces')]
+        num_routers = len(routers)
+
+        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
+
+        # Map NIs to routers
+        ni_to_router = {}
+        for link in links:
+            node_a, node_b = link[0], link[1]
+            if node_a in nis and node_b in routers:
+                ni_to_router[node_a] = node_b
+            elif node_b in nis and node_a in routers:
+                ni_to_router[node_b] = node_a
+
+        # Unfurl the HexaMesh coordinates
+        ring_walk_dirs = [(-1, 1), (-1, 0), (0, -1), (1, -1), (1, 0), (0, 1)]
+        coords = [(0, 0)] # Center router
+        ring = 1
+        
+        while len(coords) < num_routers:
+            q, r = ring, 0 
+            for dq, dr in ring_walk_dirs:
+                for _ in range(ring):
+                    if len(coords) < num_routers:
+                        coords.append((q, r))
+                    q += dq
+                    r += dr
+            ring += 1
+
+        id_to_coord = {r_id: coord for r_id, coord in zip(routers, coords)}
+        coord_to_id = {coord: r_id for r_id, coord in zip(routers, coords)}
+
+        # Apply ADOR with Boundary Sliding
+        for src in routers:
+            src_q, src_r = id_to_coord[src]
+
+            for dst in range(nb_nodes):
+                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
+                
+                if target_router == -1:
+                    continue 
+                
+                if src == target_router:
+                    routing_tables[str(src)][str(dst)] = dst
+                    continue
+
+                dst_q, dst_r = id_to_coord[target_router]
+
+                # Q-THEN-R ROUTING
+                if src_q != dst_q:
+                    next_q = src_q + 1 if dst_q > src_q else src_q - 1
+                    next_r = src_r
+                else:
+                    next_q = src_q
+                    next_r = src_r + 1 if dst_r > src_r else src_r - 1
+
+                # If the strict path is inside the instantiated grid, take it.
+                if (next_q, next_r) in coord_to_id:
+                    next_hop_router = coord_to_id[(next_q, next_r)]
+                else:
+                    # Boundary Sliding: Glide along valid physical neighbors
+                    best_dist = float('inf')
+                    best_neighbor = src
+                    
+                    for dq, dr in [(-1, 1), (1, -1), (0, 1), (0, -1), (1, 0), (-1, 0)]:
+                        test_q, test_r = src_q + dq, src_r + dr
+                        
+                        if (test_q, test_r) in coord_to_id:
+                            dist = (abs(test_q - dst_q) + abs(test_q + test_r - dst_q - dst_r) + abs(test_r - dst_r)) // 2
+                            if dist < best_dist:
+                                best_dist = dist
+                                best_neighbor = coord_to_id[(test_q, test_r)]
+                                
+                    next_hop_router = best_neighbor
+
+                routing_tables[str(src)][str(dst)] = next_hop_router
+
+        self.add_property('routing_tables', routing_tables)
+
     def generate_routing_tables_arc_model(self, dim_x: int, dim_y: int):
         """
         Implementation of Algorithm 3 from 'Developing Deadlock-Free Routing Algorithms in Torus NoC'
