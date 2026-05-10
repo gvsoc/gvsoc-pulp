@@ -21,7 +21,7 @@ class ErrorDetector(gvsoc.systree.Component):
     def __init__(self, parent, name):
         super(ErrorDetector, self).__init__(parent, name)
 
-        self.add_sources(['pulp/chips/softhier/error_detector.cpp'])
+        self.add_sources(['pulp/chips/softhier_hexamesh/error_detector.cpp'])
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')

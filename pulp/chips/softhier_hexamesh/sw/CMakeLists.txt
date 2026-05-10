@@ -11,12 +11,10 @@ set(OBJDUMPER "riscv32-unknown-elf-objdump")
 set(SRC_DIR ${SRC_DIR} CACHE STRING "Source directory")
 if (NOT SRC_DIR)
     set(SRC_DIR "${CMAKE_SOURCE_DIR}/app_example")
-    # Add the selected subdirectory
-    add_subdirectory(${SRC_DIR})
-else()
-    # Add the selected subdirectory
-    add_subdirectory(${SRC_DIR} ${CMAKE_BINARY_DIR}/app)
 endif()
+
+# AUTO-DETECT: Find all .c files in the target folder automatically
+file(GLOB SOURCES "${SRC_DIR}/*.c")
 
 
 if (NOT INCLUDE_DIRS)
