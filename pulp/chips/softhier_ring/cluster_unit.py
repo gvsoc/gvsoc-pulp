@@ -28,7 +28,7 @@ import gvsoc.runner
 import math
 from pulp.snitch.sequencer import Sequencer
 import utils.loader.loader
-from pulp.chips.softhier.cluster_csr import ClusterCSR
+from pulp.chips.softhier_ring.cluster_csr import ClusterCSR
 
 
 GAPY_TARGET = True
