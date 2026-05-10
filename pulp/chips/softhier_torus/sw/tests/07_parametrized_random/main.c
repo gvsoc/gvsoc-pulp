@@ -7,8 +7,8 @@
 // ==========================================
 #define TILE_SIZE 16384 // 16 KB per transfer
 #define TOTAL_TRANSFERS                                                        \
-  100000 // Global total number of transfers across the ENTIRE NoC
-#define CYCLES_PER_PACKET 819
+  10000 // Global total number of transfers across the ENTIRE NoC
+#define CYCLES_PER_PACKET 655
 #define BATCH_SIZE 8 // Max outstanding txns before waiting
 
 #define SRC_BUF 0x00000
