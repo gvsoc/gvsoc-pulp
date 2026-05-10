@@ -591,59 +591,56 @@ class FlooNocFlex(gvsoc.systree.Component):
         self.add_property('routing_tables', routing_tables)
 
     def generate_routing_tables_ring(self):
-            """
-            Generates routing tables for a Ring topology.
-            Calculates the shortest path (clockwise or counter-clockwise) for routing.
-            """
-            nb_nodes = self.get_property('nb_nodes')
-            links = self.get_property('links')
+        """
+        Generates routing tables for a Ring topology.
+        Calculates the path linearly to avoid wrap-around cyclic dependencies.
+        """
+        nb_nodes = self.get_property('nb_nodes')
+        links = self.get_property('links')
 
-            routers = sorted([r[0] for r in self.get_property('routers')])
-            nis = [n[0] for n in self.get_property('network_interfaces')]
-            num_routers = len(routers)
+        routers = sorted([r[0] for r in self.get_property('routers')])
+        nis = [n[0] for n in self.get_property('network_interfaces')]
+        num_routers = len(routers)
 
-            routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
+        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
 
-            ni_to_router = {}
-            for link in links:
-                node_a, node_b = link[0], link[1]
-                if node_a in nis and node_b in routers:
-                    ni_to_router[node_a] = node_b
-                elif node_b in nis and node_a in routers:
-                    ni_to_router[node_b] = node_a
+        ni_to_router = {}
+        for link in links:
+            node_a, node_b = link[0], link[1]
+            if node_a in nis and node_b in routers:
+                ni_to_router[node_a] = node_b
+            elif node_b in nis and node_a in routers:
+                ni_to_router[node_b] = node_a
 
-            for src in routers:
-                src_idx = routers.index(src)
-                for dst in range(nb_nodes):
-                    
-                    target_router = dst if dst in routers else ni_to_router.get(dst, -1)
+        for src in routers:
+            src_idx = routers.index(src)
+            for dst in range(nb_nodes):
+                
+                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
 
-                    if target_router == -1:
-                        continue
-                    
-                    if src == target_router:
-                        routing_tables[str(src)][str(dst)] = dst
-                        continue
+                if target_router == -1:
+                    continue
+                
+                if src == target_router:
+                    routing_tables[str(src)][str(dst)] = dst
+                    continue
 
-                    target_idx = routers.index(target_router)
+                target_idx = routers.index(target_router)
 
-                    cw_dist = (target_idx - src_idx) % num_routers
-                    ccw_dist = (src_idx - target_idx) % num_routers
+                if target_idx > src_idx:
+                    next_hop_idx = src_idx + 1
+                else:
+                    next_hop_idx = src_idx - 1
 
-                    if cw_dist <= ccw_dist:
-                        next_hop_idx = (src_idx + 1) % num_routers
-                    else:
-                        next_hop_idx = (src_idx - 1) % num_routers
+                next_hop = routers[next_hop_idx]
+                routing_tables[str(src)][str(dst)] = next_hop
 
-                    next_hop = routers[next_hop_idx]
-                    routing_tables[str(src)][str(dst)] = next_hop
-
-            self.add_property('routing_tables', routing_tables)
+        self.add_property('routing_tables', routing_tables)
 
     def generate_routing_tables_deadlock_free(self):
         """
         Generates deadlock-free routing tables for any topology using the Up/Down Spanning Tree Routing Algorithm.
-        To be used in topologies with deadlocks
+        To be used in topologies with deadlocks, currently used in 3D Torus
         """
         nb_nodes = self.get_property('nb_nodes')
         links = self.get_property('links')
