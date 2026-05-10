@@ -25,7 +25,7 @@ class SoftHierArch:
         self.num_core_per_cluster    = 1
 
         #Topology
-        self.topology                = 'HFT' # HexaFoldedTorus
+        self.topology                = 'FHT' # FoldedHexaTorus
         self.num_rings               = 6
 
         self.cluster_tcdm_bank_width = 4
