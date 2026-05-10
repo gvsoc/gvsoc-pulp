@@ -56,7 +56,7 @@ int main() {
   if (my_cid == 0 && flex_is_first_core()) {
     printf(
         "[Global Sync] Starting Controlled Uniform Random NoC Benchmark...\n");
-    printf("Topology: Flex-3DTorus (%dx%d)\n", ARCH_NUM_CLUSTER_X,
+    printf("Topology: Flex-2DTorus (%dx%d)\n", ARCH_NUM_CLUSTER_X,
            ARCH_NUM_CLUSTER_Y);
     printf("Global Workload: %d total transfers (%d KB each)\n",
            TOTAL_TRANSFERS, (TILE_SIZE / 1024));
