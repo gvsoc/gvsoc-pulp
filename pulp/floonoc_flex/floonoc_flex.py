@@ -443,7 +443,7 @@ class FlooNocFlex(gvsoc.systree.Component):
 
         self.add_property('routing_tables', routing_tables)
 
-    def generate_routing_tables_torus_2d(self, dim_x: int, dim_y: int):
+    def generate_routing_tables_torus_2d(self, dim_x: int, dim_y: int): #Deadlocks, to be removed
         """
         Generates routing tables for the routers based on grid dimensions for a 2D Torus.
         Calculates the shortest path accounting for wrap-around edges on the active grid.
@@ -464,7 +464,6 @@ class FlooNocFlex(gvsoc.systree.Component):
             elif node_b in nis and node_a in routers:
                 ni_to_router[node_b] = node_a
 
-        # Calculate the active grid dimensions (ignoring the 0 and Max halos)
         size_x = dim_x - 2
         size_y = dim_y - 2
 
@@ -481,13 +480,10 @@ class FlooNocFlex(gvsoc.systree.Component):
                 src_x, src_y = src % dim_x, src // dim_x
                 dst_x, dst_y = target_router % dim_x, target_router // dim_x
 
-                # Route along the X-axis first
                 if src_x != dst_x:
-                    # Shift to a 0-indexed active space to make modulo math work
                     sx = src_x - 1
                     dx = dst_x - 1
                     
-                    # Calculate shortest distance in both directions around the X-ring
                     dist_right = (dx - sx) % size_x
                     dist_left = (sx - dx) % size_x
                     
@@ -496,17 +492,13 @@ class FlooNocFlex(gvsoc.systree.Component):
                     else:
                         next_sx = (sx - 1) % size_x
                         
-                    # Shift back to the 1-indexed physical chip space
                     next_x = next_sx + 1
                     next_hop = src_y * dim_x + next_x
 
-                # Once aligned on X, route along the Y-axis
                 else:
-                    # Shift to a 0-indexed active space
                     sy = src_y - 1
                     dy = dst_y - 1
                     
-                    # Calculate shortest distance in both directions around the Y-ring
                     dist_down = (dy - sy) % size_y
                     dist_up = (sy - dy) % size_y
                     
@@ -515,7 +507,6 @@ class FlooNocFlex(gvsoc.systree.Component):
                     else:
                         next_sy = (sy - 1) % size_y
                         
-                    # Shift back to the 1-indexed physical chip space
                     next_y = next_sy + 1
                     next_hop = next_y * dim_x + src_x
 
@@ -523,7 +514,7 @@ class FlooNocFlex(gvsoc.systree.Component):
 
         self.add_property('routing_tables', routing_tables)
 
-    def generate_routing_tables_torus_3d(self, dim_x: int, dim_y: int, dim_z: int):
+    def generate_routing_tables_torus_3d(self, dim_x: int, dim_y: int, dim_z: int): #Deadlocks, to be removed
         """
         Generates routing tables for a 3D Torus.
         Calculates the shortest path using XYZ-Routing (X first, then Y, then Z).
@@ -554,7 +545,6 @@ class FlooNocFlex(gvsoc.systree.Component):
                     routing_tables[str(src)][str(dst)] = dst
                     continue
 
-                # Unflatten 3D Coordinates
                 src_x = src % dim_x
                 src_y = (src // dim_x) % dim_y
                 src_z = src // (dim_x * dim_y)
@@ -563,7 +553,6 @@ class FlooNocFlex(gvsoc.systree.Component):
                 dst_y = (target_router // dim_x) % dim_y
                 dst_z = target_router // (dim_x * dim_y)
 
-                # 1. Route along the X-axis first
                 if src_x != dst_x:
                     dist_right = (dst_x - src_x) % dim_x
                     dist_left = (src_x - dst_x) % dim_x
@@ -575,7 +564,6 @@ class FlooNocFlex(gvsoc.systree.Component):
                         
                     next_hop = src_z * (dim_x * dim_y) + src_y * dim_x + next_x
 
-                # 2. Once aligned on X, route along the Y-axis
                 elif src_y != dst_y:
                     dist_down = (dst_y - src_y) % dim_y
                     dist_up = (src_y - dst_y) % dim_y
@@ -587,7 +575,6 @@ class FlooNocFlex(gvsoc.systree.Component):
                         
                     next_hop = src_z * (dim_x * dim_y) + next_y * dim_x + src_x
 
-                # 3. Once aligned on X and Y, route along the Z-axis
                 else:
                     dist_in = (dst_z - src_z) % dim_z
                     dist_out = (src_z - dst_z) % dim_z
@@ -666,7 +653,6 @@ class FlooNocFlex(gvsoc.systree.Component):
 
         routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
 
-        # Build Adjacency List for Routers and NI Mapping
         adj = {r: [] for r in routers}
         ni_to_router = {}
         
@@ -681,10 +667,8 @@ class FlooNocFlex(gvsoc.systree.Component):
                 adj[node_b].append(node_a)
 
         for r in routers:
-            adj[r] = list(set(adj[r])) # Remove duplicate links if any
+            adj[r] = list(set(adj[r]))
 
-        # Build Spanning Tree (BFS) to assign Levels
-        # Pick the center of the grid as the root to minimize average hop count
         root = routers[len(routers) // 2] 
         levels = {r: -1 for r in routers}
         levels[root] = 0
@@ -697,8 +681,6 @@ class FlooNocFlex(gvsoc.systree.Component):
                     levels[neighbor] = levels[curr] + 1
                     queue.append(neighbor)
 
-        # Helper to determine link direction
-        # UP: Towards the root (lower level, or same level & lower ID for tie-breaking)
         def is_up(u, v):
             if levels[v] < levels[u]:
                 return True
@@ -706,21 +688,16 @@ class FlooNocFlex(gvsoc.systree.Component):
                 return True
             return False
 
-        # Find valid deadlock-free shortest paths for each router pair
         for src in routers:
-            # We use BFS to find the shortest path that obeys Up/Down rules.
-            # State tracks: (current_node, has_gone_down)
             best_first_hop = {}
             visited = set() 
             visited.add((src, False))
             
-            # Queue stores: (current_node, has_gone_down, first_hop_taken)
             bfs_queue = [(src, False, -1)]
             
             while bfs_queue:
                 curr, has_gone_down, first_hop = bfs_queue.pop(0)
                 
-                # If this is the first time reaching this node, it is the shortest valid path
                 if curr != src and curr not in best_first_hop:
                     best_first_hop[curr] = first_hop
                     
@@ -728,7 +705,6 @@ class FlooNocFlex(gvsoc.systree.Component):
                     going_up = is_up(curr, neighbor)
                     going_down = not going_up
                     
-                    # Deadlock rule: No UP turns allowed after going DOWN
                     if has_gone_down and going_up:
                         continue 
                         
@@ -740,7 +716,6 @@ class FlooNocFlex(gvsoc.systree.Component):
                         fh = neighbor if first_hop == -1 else first_hop
                         bfs_queue.append((neighbor, new_has_gone_down, fh))
 
-            # Populate routing table for this source router
             for dst in range(nb_nodes):
                 target_router = dst if dst in routers else ni_to_router.get(dst, -1)
                 
@@ -751,8 +726,97 @@ class FlooNocFlex(gvsoc.systree.Component):
                 elif target_router in best_first_hop:
                     routing_tables[str(src)][str(dst)] = best_first_hop[target_router]
                 else:
-                    # Fallback (Should only trigger if grid is completely physically disconnected)
                     routing_tables[str(src)][str(dst)] = src
+
+        self.add_property('routing_tables', routing_tables)
+
+    def generate_routing_tables_arc_model(self, dim_x: int, dim_y: int):
+        """
+        Implementation of Algorithm 3 from 'Developing Deadlock-Free Routing Algorithms in Torus NoC'
+        Uses (EWs + WEs + NSe + SN FirstHop) arcs combined with XY routing.
+        """
+        nb_nodes = self.get_property('nb_nodes')
+        links = self.get_property('links')
+        routers = [r[0] for r in self.get_property('routers')]
+        nis = [n[0] for n in self.get_property('network_interfaces')]
+
+        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
+
+        ni_to_router = {}
+        for link in links:
+            node_a, node_b = link[0], link[1]
+            if node_a in nis and node_b in routers:
+                ni_to_router[node_a] = node_b
+            elif node_b in nis and node_a in routers:
+                ni_to_router[node_b] = node_a
+
+        min_x, max_x = 1, dim_x - 2
+        min_y, max_y = 1, dim_y - 2
+        w = max_x - min_x + 1
+        h = max_y - min_y + 1
+
+        for src in routers:
+            sx = src % dim_x
+            sy = src // dim_x
+
+            for dst in range(nb_nodes):
+                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
+                
+                if target_router == -1:
+                    continue
+                if src == target_router:
+                    routing_tables[str(src)][str(dst)] = dst
+                    continue
+
+                dx = target_router % dim_x
+                dy = target_router // dim_x
+                
+                delta_x = abs(dx - sx)
+                delta_y = abs(dy - sy)
+                
+                if (dy > sy) and (sx > dx) and (delta_x > w // 2):
+                    if sx == max_x:
+                        next_sx = min_x
+                    else:
+                        next_sx = sx + 1
+                    next_hop = sy * dim_x + next_sx
+                    
+                elif (dy > sy) and (dx > sx) and (delta_x > w // 2):
+                    if sx == min_x:
+                        next_sx = max_x
+                    else:
+                        next_sx = sx - 1
+                    next_hop = sy * dim_x + next_sx
+
+                elif (dx > sx) and (dy > sy) and (delta_y > h // 2):
+                    if sy == min_y:
+                        next_sy = max_y
+                    else:
+                        next_sy = sy - 1
+                    next_hop = next_sy * dim_x + sx
+
+                elif (sy == max_y) and (dy < sy) and (delta_y > h // 2):
+                    next_sy = min_y
+                    next_hop = next_sy * dim_x + sx
+
+                else:
+                    if sx != dx:
+                        if sx == min_x and dx > sx and dy > sy:
+                            next_sy = sy + 1
+                            next_hop = next_sy * dim_x + sx
+                        
+                        elif sx == max_x and dx < sx and dy > sy:
+                            next_sy = sy + 1
+                            next_hop = next_sy * dim_x + sx
+                            
+                        else:
+                            next_sx = sx + 1 if dx > sx else sx - 1
+                            next_hop = sy * dim_x + next_sx
+                    else:
+                        next_sy = sy + 1 if dy > sy else sy - 1
+                        next_hop = next_sy * dim_x + sx
+
+                routing_tables[str(src)][str(dst)] = next_hop
 
         self.add_property('routing_tables', routing_tables)
 
