@@ -9,7 +9,7 @@
 #define TOTAL_TRANSFERS                                                        \
   9906 // Global total number of transfers across the ENTIRE NoC, better to
        // keep a multiple of ARCH_NUM_CLUSTER
-#define CYCLES_PER_PACKET 332
+#define CYCLES_PER_PACKET 369
 #define BATCH_SIZE 8 // Max outstanding txns before waiting
 
 #define SRC_BUF 0x00000

@@ -51,7 +51,7 @@ class SoftHierSystem(gvsoc.systree.Component):
         #############
         # Assertion #
         #############
-        assert(arch.topology == 'HexaMesh', f'NoC topology should be HexaMesh')
+        assert(arch.topology == 'FHT', f'NoC topology should be FHT (FoldedHexaTorus)')
         assert(1 + 3 * arch.num_rings * (arch.num_rings + 1) == arch.num_cluster, f"Topology dimensions are mismatched")
 
         ##############
@@ -91,9 +91,9 @@ class SoftHierSystem(gvsoc.systree.Component):
         #Control register
         softhier_ctrl = SoftHierCtrl(self, 'softhier_ctrl', num_cluster=arch.num_cluster, num_core_per_cluster=arch.num_core_per_cluster)
 
-        # --- FlooNoC Flex Initialization & HexaMesh Topology Building ---
+        # --- FlooNoC Flex Initialization & FoldedHexaTorus Topology Building ---
         
-        # A HexaMesh router has up to 6 neighbors + 1 NI connection
+        # A HexaTorus router has exactly 6 neighbors + 1 NI connection
         router_degrees = 7
         nb_nodes = arch.num_cluster * 2 # N Routers + N NIs
 
@@ -135,32 +135,59 @@ class SoftHierSystem(gvsoc.systree.Component):
             noc.add_router(r_id, num_queues=router_degrees) 
             noc.add_network_interface(ni_id)
         
+        # ==========================================
+        # TORUS WRAP-AROUND LOGIC (THE FOLDING MATH)
+        # ==========================================
+        R = arch.num_rings
+        # The 6 periodic lattice translation vectors that map the boundary edges 
+        # of a Hexagon to its opposite sides to create the Torus
+        C_vectors = [
+            (R + 1, R),
+            (-R, 2 * R + 1),
+            (-2 * R - 1, R + 1),
+            (-R - 1, -R),
+            (R, -2 * R - 1),
+            (2 * R + 1, -R - 1)
+        ]
+
+        def get_torus_neighbor(q, r, dq, dr):
+            """Calculates the Torus neighbor, wrapping around the hex edges if needed."""
+            nq, nr = q + dq, r + dr
+            if (nq, nr) in coord_to_id:
+                return coord_to_id[(nq, nr)] # Internal link
+            
+            # If off-chip, shift back using the periodic lattice vectors
+            for cq, cr in C_vectors:
+                wq, wr = nq - cq, nr - cr
+                if (wq, wr) in coord_to_id:
+                    return coord_to_id[(wq, wr)] # Wrap-around link
+            return -1
+
+        # --- Add Inter-Router Links (Prioritized Sweeping) ---
+        
         # Axis 1: East (1, 0) / West (-1, 0) priority
         coords_q_desc = sorted(coords, key=lambda c: c[0], reverse=True)
         for q, r in coords_q_desc:
-            east_neighbor = (q + 1, r)
-            if east_neighbor in coord_to_id:
+            east_id = get_torus_neighbor(q, r, 1, 0)
+            if east_id != -1:
                 r_id = routers_map[coord_to_id[(q, r)]]
-                east_id = routers_map[coord_to_id[east_neighbor]]
-                noc.add_link(r_id, east_id, latency=1)
+                noc.add_link(r_id, routers_map[east_id], latency=1)
 
         # Axis 2: SouthEast (0, 1) / NorthWest (0, -1) priority
         coords_r_desc = sorted(coords, key=lambda c: c[1], reverse=True)
         for q, r in coords_r_desc:
-            se_neighbor = (q, r + 1)
-            if se_neighbor in coord_to_id:
+            se_id = get_torus_neighbor(q, r, 0, 1)
+            if se_id != -1:
                 r_id = routers_map[coord_to_id[(q, r)]]
-                se_id = routers_map[coord_to_id[se_neighbor]]
-                noc.add_link(r_id, se_id, latency=1)
+                noc.add_link(r_id, routers_map[se_id], latency=1)
 
         # Axis 3: SouthWest (-1, 1) / NorthEast (1, -1) priority
         coords_sw_desc = sorted(coords, key=lambda c: -c[0] + c[1], reverse=True)
         for q, r in coords_sw_desc:
-            sw_neighbor = (q - 1, r + 1)
-            if sw_neighbor in coord_to_id:
+            sw_id = get_torus_neighbor(q, r, -1, 1)
+            if sw_id != -1:
                 r_id = routers_map[coord_to_id[(q, r)]]
-                sw_id = routers_map[coord_to_id[sw_neighbor]]
-                noc.add_link(r_id, sw_id, latency=1)
+                noc.add_link(r_id, routers_map[sw_id], latency=1)
 
         # Add NI <-> Router links
         for cluster_id, _ in enumerate(coords):
@@ -169,8 +196,7 @@ class SoftHierSystem(gvsoc.systree.Component):
             noc.add_link(ni_id, r_id, latency=1)
         
         # Generate routing tables
-        # noc.generate_routing_tables_deadlock_free() is slightly slower
-        noc.generate_routing_tables_hexamesh()
+        noc.generate_routing_tables_deadlock_free()
 
         ############
         # Bindings #
