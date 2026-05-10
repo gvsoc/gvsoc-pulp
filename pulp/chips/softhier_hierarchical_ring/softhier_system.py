@@ -51,10 +51,7 @@ class SoftHierSystem(gvsoc.systree.Component):
         #############
         # Assertion #
         #############
-        assert(arch.topology in ['2DMesh', '3DMesh', '2DTorus', '3DTorus', 'Ring'], f'NoC Topology currently only supports 2DMesh, 3DMesh, 2DTorus, 3DTorus, or Ring')
-        # Bypassing the cluster x/y dimension check for a 1D Ring topology
-        if arch.topology != 'Ring':
-            assert(arch.num_cluster_x * arch.num_cluster_y == arch.num_cluster, f"Topology dimesion not match total number of clusters")
+        assert(arch.topology in ['2DMesh', '3DMesh', '2DTorus', '3DTorus', 'Ring', 'HierRing'], f'NoC Topology currently only supports 2DMesh, 3DMesh, 2DTorus, 3DTorus, Ring or HierRing')
 
         ##############
         # Components #
@@ -95,9 +92,14 @@ class SoftHierSystem(gvsoc.systree.Component):
 
         # --- FlooNoC Flex Initialization & Topology Building ---
         
-        nb_nodes = arch.num_cluster * 2
+        N = arch.num_cluster
+        G = arch.num_global_clusters
+        L = arch.num_local_clusters
+        
+        # Total nodes: N (Local Routers) + G (Global Routers) + N (NIs)
+        nb_nodes = (N * 2) + G
 
-        router_degrees = 3
+        router_degrees = 4
 
         noc = FlooNocFlex(self, 'noc',      
                 wide_width=arch.noc_link_width,
@@ -109,33 +111,48 @@ class SoftHierSystem(gvsoc.systree.Component):
 
         routers_map = {} 
         nis_map = {}     
+        global_routers_map = {}
 
-        # Add routers and network interfaces
-        for i in range(arch.num_cluster):
-            r_id = i
-            ni_id = arch.num_cluster + i
+        # 1. Instantiate Routers, NIs, and Link them hierarchically
+        for g in range(G):
+            # Instantiate the Global Router for this Local Ring
+            gr_id = N + g
+            global_routers_map[g] = gr_id
+            noc.add_router(gr_id, num_queues=3) # Global Left, Global Right, Local Down
             
-            routers_map[i] = r_id
-            nis_map[i] = ni_id
-            
-            # 3 ports: 1 for local NI, 1 for Left neighbor, 1 for Right neighbor
-            noc.add_router(r_id, num_queues=3) 
-            noc.add_network_interface(ni_id)
+            # Loop through the clusters within this Local Ring
+            for l in range(L):
+                cluster_id = (g * L) + l
+                lr_id = cluster_id             # Local Routers take IDs 0 to N-1
+                ni_id = N + G + cluster_id     # NIs take IDs N+G to 2N+G-1
+                
+                routers_map[cluster_id] = lr_id
+                nis_map[cluster_id] = ni_id
+                
+                # The first cluster in the local ring acts as the Bridge to the Global Ring
+                if l == 0:
+                    noc.add_router(lr_id, num_queues=4) # Local Left, Local Right, NI, Global Up
+                    noc.add_link(lr_id, gr_id, latency=1) # Connect Bridge UP to Global Router
+                else:
+                    noc.add_router(lr_id, num_queues=3) # Local Left, Local Right, NI
+                
+                noc.add_network_interface(ni_id)
+                
+                # Link NI to its Local Router
+                noc.add_link(ni_id, lr_id, latency=1)
+                
+                # Link Local Ring (Wrap around within the group)
+                next_l = (l + 1) % L
+                next_lr_id = (g * L) + next_l
+                noc.add_link(lr_id, next_lr_id, latency=1)
 
-        # Add links (NI <-> Router)
-        for i in range(arch.num_cluster):
-            r_id = routers_map[i]
-            ni_id = nis_map[i]
-            noc.add_link(ni_id, r_id, latency=1)
+            # Link Global Ring (Wrap around between Global Routers)
+            next_g = (g + 1) % G
+            next_gr_id = N + next_g
+            noc.add_link(gr_id, next_gr_id, latency=1)
 
-        # Add links (Router <-> Router Ring Network)
-        for i in range(arch.num_cluster):
-            r_id = routers_map[i]
-            next_r_id = routers_map[(i + 1) % arch.num_cluster]
-            noc.add_link(r_id, next_r_id, latency=1)
-
-        # Generate routing tables
-        noc.generate_routing_tables_ring()
+        # Generate routing tables using the new hierarchical logic (to be implemented in floonoc_flex.py)
+        noc.generate_routing_tables_hier_ring(dim_g=G, dim_l=L)
 
         ############
         # Bindings #
