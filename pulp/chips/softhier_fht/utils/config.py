@@ -37,7 +37,7 @@ with open(C_header_file, 'w') as file:
     
     file.write('\n#endif // SOFTHIERARCH_H\n')
 
-print(f'Header file "{C_header_file}"for HexaFoldedTorus generated successfully.')
+print(f'Header file "{C_header_file}" for FoldedHexaTorus generated successfully.')
 
 # Write the output S header file
 with open(S_header_file, 'w') as file:
@@ -53,4 +53,4 @@ with open(S_header_file, 'w') as file:
     
     file.write('\n#endif // SOFTHIERARCH_H\n')
 
-print(f'Header file "{S_header_file}" for HexaFoldedTorus generated successfully.')
+print(f'Header file "{S_header_file}" for FoldedHexaTorus generated successfully.')
