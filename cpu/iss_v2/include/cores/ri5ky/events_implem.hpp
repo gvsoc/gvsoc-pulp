@@ -93,3 +93,35 @@ inline void Ri5kyEvents::event_jump_account()
     this->iss.exec.stall_cycles_inc(1);
     this->iss.csr.pccr_account(CSR_PCER_JUMP, 1);
 }
+
+inline void Ri5kyEvents::event_jalr_account(int rs1)
+{
+    // Taken-jump pipeline flush — same one-cycle bubble as JAL.
+    this->iss.exec.stall_cycles_inc(1);
+    this->iss.csr.pccr_account(CSR_PCER_JUMP, 1);
+
+    // RI5CY's jr_stall_o: if the source register is being written by an
+    // in-flight instruction (still in EX/WB/ALU-forward at the time the
+    // JALR enters ID), the controller deasserts write-enable for one
+    // cycle until the producer's forward path clears. Match against the
+    // last retired destination register; r0 / x0 is never a real
+    // producer so we ignore it explicitly.
+    if (rs1 != 0 && rs1 == this->prev_dest_reg)
+    {
+        this->iss.exec.stall_cycles_inc(1);
+    }
+
+    // The taken jump drains the pipeline behind us — clear the producer
+    // history so the next JALR doesn't see a stale prev_dest from
+    // before this flush.
+    this->prev_dest_reg = -1;
+}
+
+inline void Ri5kyEvents::event_retire_account(iss_insn_t *insn)
+{
+    // Remember the destination register of the just-retired instruction
+    // so a following jalr can detect the jr_stall hazard. Stores have
+    // out_regs[0] == 0 (x0) which is fine — x0 can never be a real
+    // producer.
+    this->prev_dest_reg = (int)insn->out_regs[0];
+}

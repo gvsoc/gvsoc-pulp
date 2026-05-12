@@ -11,6 +11,7 @@ void Ri5kyEvents::reset(bool active)
     Events::reset(active);
     if (active) {
         this->cycles_start_cyclestamp = -1;
+        this->prev_dest_reg = -1;
     } else {
         // Anchor the cycle counter at reset deassert so PCCR[0] starts
         // counting from cycle 0 regardless of whether the core ever

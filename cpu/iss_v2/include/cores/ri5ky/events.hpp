@@ -28,6 +28,8 @@ public:
     inline void event_store_account(int incr);
     inline void event_branch_account();
     inline void event_jump_account();
+    inline void event_jalr_account(int rs1);
+    inline void event_retire_account(iss_insn_t *insn);
     inline void event_load_load_account(int incr);
 
     void flush_cycles();
@@ -36,4 +38,11 @@ private:
 
     int64_t imiss_start_cyclestamp;
     int64_t cycles_start_cyclestamp;
+    // Destination register of the last retired instruction. Updated by
+    // event_retire_account; consumed by event_jalr_account to detect
+    // the jr_stall hazard (jalr's rs1 was just written by the previous
+    // insn, mirroring the RTL controller's jr_stall_o on EX/WB/ALU
+    // forward). -1 means "no recent producer" — set at reset and after
+    // every jalr (since the taken-jump flush drains the pipeline).
+    int prev_dest_reg;
 };
