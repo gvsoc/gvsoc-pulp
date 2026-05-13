@@ -6,11 +6,9 @@
 // Benchmark Configuration
 // ==========================================
 #define TILE_SIZE 16384 // 16 KB per transfer
-#define TOTAL_TRANSFERS                                                        \
-  9906 // Global total number of transfers across the ENTIRE NoC, better to
-       // keep a multiple of ARCH_NUM_CLUSTER
-#define CYCLES_PER_PACKET 369
-#define BATCH_SIZE 8 // Max outstanding txns before waiting
+#define TOTAL_TRANSFERS 9971
+#define CYCLES_PER_PACKET 492
+#define BATCH_SIZE 15 // Max outstanding txns before waiting
 
 #define SRC_BUF 0x00000
 #define DST_BUF 0x80000
@@ -83,7 +81,7 @@ int main() {
           asm volatile("nop");
         }
         // Schedule the next packet
-        next_injection += CYCLES_PER_PACKET;
+        next_injection = get_cycles() + CYCLES_PER_PACKET;
       }
 
       uint32_t dest_cid = get_random_cid();
