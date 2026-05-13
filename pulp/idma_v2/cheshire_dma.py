@@ -29,7 +29,8 @@ class CheshireDmaV2(gvsoc.systree.Component):
             transfer_queue_size: int=8,
             burst_queue_size: int=8,
             loc_base: int=0,
-            loc_size: int=0):
+            loc_size: int=0,
+            axi_width: int=8):
 
         super().__init__(parent, name)
 
@@ -47,6 +48,7 @@ class CheshireDmaV2(gvsoc.systree.Component):
             "burst_queue_size": burst_queue_size,
             "loc_base": loc_base,
             "loc_size": loc_size,
+            "axi_width": axi_width,
         })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:

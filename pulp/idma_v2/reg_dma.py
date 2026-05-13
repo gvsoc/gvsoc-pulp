@@ -49,6 +49,7 @@ class RegDmaV2(gvsoc.systree.Component):
             "loc_base": config.loc_base,
             "loc_size": config.loc_size,
             "tcdm_width": config.tcdm_width,
+            "axi_width": config.axi_width,
         })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:

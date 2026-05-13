@@ -41,3 +41,8 @@ class RegDmaConfig(Config):
     tcdm_width: int = cfg_field(default=0, desc=(
         "Width of the local interconnect, in bytes."
     ))
+
+    axi_width: int = cfg_field(default=8, desc=(
+        "Width of the AXI interconnect, in bytes. Used as the beat size when "
+        "the AXI backend streams a burst onto the io_v2 master."
+    ))

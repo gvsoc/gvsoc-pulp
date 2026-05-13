@@ -31,7 +31,8 @@ class SnitchDmaV2(gvsoc.systree.Component):
             burst_size: int=0,
             loc_base: int=0,
             loc_size: int=0,
-            tcdm_width: int=0):
+            tcdm_width: int=0,
+            axi_width: int=8):
 
         super().__init__(parent, name)
 
@@ -51,6 +52,7 @@ class SnitchDmaV2(gvsoc.systree.Component):
             "loc_base": loc_base,
             "loc_size": loc_size,
             "tcdm_width": tcdm_width,
+            "axi_width": axi_width,
         })
 
     def i_OFFLOAD(self) -> gvsoc.systree.SlaveItf:
