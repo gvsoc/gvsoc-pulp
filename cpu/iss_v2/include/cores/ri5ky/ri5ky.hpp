@@ -29,7 +29,7 @@ class Ri5ky
 public:
     Ri5ky(Iss &iss);
 
-    void start() {}
+    void start();
     void stop() {}
     void reset(bool active) {}
 

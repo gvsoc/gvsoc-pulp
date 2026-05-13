@@ -125,3 +125,16 @@ inline void Ri5kyEvents::event_retire_account(iss_insn_t *insn)
     // producer.
     this->prev_dest_reg = (int)insn->out_regs[0];
 }
+
+inline void Ri5kyEvents::event_insn_latency_account(iss_insn_t *insn,
+                                                    int latency)
+{
+    // RI5CY's multi-cycle units (multiplier FSM, serial divider, …) drop
+    // mult_ready / div_ready / similar to 0 during their internal cycles,
+    // which gates ex_ready_o and then id_ready_o (riscv_id_stage.sv:1781).
+    // The follower in ID can therefore not advance — regardless of any
+    // data dependency on the result — so we charge the latency as an
+    // unconditional structural stall. The value comes from the decoder
+    // tagging done in Ri5ky::start().
+    this->iss.exec.stall_cycles_inc(latency);
+}

@@ -30,6 +30,7 @@ public:
     inline void event_jump_account();
     inline void event_jalr_account(int rs1);
     inline void event_retire_account(iss_insn_t *insn);
+    inline void event_insn_latency_account(iss_insn_t *insn, int latency);
     inline void event_load_load_account(int incr);
 
     void flush_cycles();
