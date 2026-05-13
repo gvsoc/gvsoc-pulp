@@ -21,7 +21,7 @@ import yaml
 from floogen.config_parser import parse_config
 from floogen.model.network import Network
 
-class FlooNocDirection(IntEnum):
+class FlooNocDirection(IntEnum): #Deprecated, not in use
     DIR_LOCAL = 1
     DIR_1 = 2
     DIR_2 = 3
@@ -717,6 +717,7 @@ class FlooNocFlex(gvsoc.systree.Component):
     def generate_routing_tables_deadlock_free(self):
         """
         Generates deadlock-free routing tables for any topology using the Up/Down Spanning Tree Routing Algorithm.
+        It is however not minimal in terms of hops and therefore sacrifices BW/Latency.
         To be used in topologies with deadlocks, currently used in 3D Torus
         """
         nb_nodes = self.get_property('nb_nodes')
@@ -889,6 +890,130 @@ class FlooNocFlex(gvsoc.systree.Component):
                     next_hop_router = best_neighbor
 
                 routing_tables[str(src)][str(dst)] = next_hop_router
+
+        self.add_property('routing_tables', routing_tables)
+    
+    def generate_routing_tables_fht(self):
+        """
+        Generates routing tables using Multiple Spanning Trees without Virtual Channels.
+        Attempts to minimize cyclic dependencies by geographically grouping destinations 
+        to their closest tree root.
+        """
+        nb_nodes = self.get_property('nb_nodes')
+        links = self.get_property('links')
+        num_trees = 4
+
+        # Sorting ensures determinism
+        routers = sorted([r[0] for r in self.get_property('routers')])
+        nis = [n[0] for n in self.get_property('network_interfaces')]
+
+        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
+
+        adj = {r: [] for r in routers}
+        ni_to_router = {}
+        
+        for link in links:
+            node_a, node_b = link[0], link[1]
+            if node_a in nis and node_b in routers:
+                ni_to_router[node_a] = node_b
+            elif node_b in nis and node_a in routers:
+                ni_to_router[node_b] = node_a
+            elif node_a in routers and node_b in routers:
+                adj[node_a].append(node_b)
+                adj[node_b].append(node_a)
+
+        for r in routers:
+            adj[r] = sorted(list(set(adj[r])))
+
+        # 1. Select distributed roots across the topology
+        step = max(1, len(routers) // num_trees)
+        roots = [routers[(i * step) % len(routers)] for i in range(num_trees)]
+        
+        # 2. Compute BFS Levels (Altitude) for EACH tree
+        tree_levels = []
+        for root in roots:
+            levels = {r: -1 for r in routers}
+            levels[root] = 0
+            queue = [root]
+            while queue:
+                curr = queue.pop(0)
+                for neighbor in adj[curr]:
+                    if levels[neighbor] == -1:
+                        levels[neighbor] = levels[curr] + 1
+                        queue.append(neighbor)
+            tree_levels.append(levels)
+
+        # 3. Assign each destination router to its CLOSEST root
+        # This geographic partitioning minimizes overlapping turn conflicts
+        router_to_tree_idx = {}
+        for r in routers:
+            closest_tree_idx = 0
+            min_dist = float('inf')
+            for t_idx, levels in enumerate(tree_levels):
+                if levels[r] < min_dist:
+                    min_dist = levels[r]
+                    closest_tree_idx = t_idx
+            router_to_tree_idx[r] = closest_tree_idx
+
+        # 4. Compute best next hops for EACH tree independently
+        best_next_hops = {i: {r: {} for r in routers} for i in range(num_trees)}
+
+        for t_idx, levels in enumerate(tree_levels):
+            def is_up(u, v, lvl=levels):
+                if lvl[v] < lvl[u]:
+                    return True
+                if lvl[v] == lvl[u] and v < u:
+                    return True
+                return False
+
+            for src in routers:
+                best_first_hop = {}
+                visited = set() 
+                visited.add((src, False))
+                
+                bfs_queue = [(src, False, -1)]
+                
+                while bfs_queue:
+                    curr, has_gone_down, first_hop = bfs_queue.pop(0)
+                    
+                    if curr != src and curr not in best_first_hop:
+                        best_first_hop[curr] = first_hop
+                        
+                    for neighbor in adj[curr]:
+                        going_up = is_up(curr, neighbor)
+                        going_down = not going_up
+                        
+                        if has_gone_down and going_up:
+                            continue 
+                            
+                        new_has_gone_down = has_gone_down or going_down
+                        state = (neighbor, new_has_gone_down)
+                        
+                        if state not in visited:
+                            visited.add(state)
+                            fh = neighbor if first_hop == -1 else first_hop
+                            bfs_queue.append((neighbor, new_has_gone_down, fh))
+                            
+                best_next_hops[t_idx][src] = best_first_hop
+
+        # 5. Populate routing tables based on the DESTINATION'S assigned tree
+        for src in routers:
+            for dst in range(nb_nodes):
+                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
+                
+                if target_router == -1:
+                    continue
+                if src == target_router:
+                    routing_tables[str(src)][str(dst)] = dst
+                    continue
+                
+                # Fetch which tree "owns" this destination
+                assigned_tree = router_to_tree_idx[target_router]
+                
+                if target_router in best_next_hops[assigned_tree][src]:
+                    routing_tables[str(src)][str(dst)] = best_next_hops[assigned_tree][src][target_router]
+                else:
+                    routing_tables[str(src)][str(dst)] = src
 
         self.add_property('routing_tables', routing_tables)
 
