@@ -21,14 +21,14 @@ class SoftHierArch:
     def __init__(self):
 
         #Cluster
-        self.num_cluster             = 127 
+        self.num_cluster             = 169
         # 1 + 3*num_rings*(num_rings+1)
         self.num_core_per_cluster    = 1
 
         #Topology
         self.topology                = 'FHT' 
         # FoldedHexaTorus
-        self.num_rings               = 6
+        self.num_rings               = 7
 
         self.cluster_tcdm_bank_width = 4
         self.cluster_tcdm_bank_nb    = 128
