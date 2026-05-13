@@ -138,3 +138,39 @@ inline void Ri5kyEvents::event_insn_latency_account(iss_insn_t *insn,
     // tagging done in Ri5ky::start().
     this->iss.exec.stall_cycles_inc(latency);
 }
+
+inline void Ri5kyEvents::event_div_account(iss_reg_t dividend, iss_reg_t divisor,
+                                            bool is_signed, bool is_rem)
+{
+    // RI5CY's divider (riscv_alu_div.sv) is a serial bit-iteration unit
+    // whose cycle count is dominated by the divisor's leading-zero
+    // pre-shift (riscv_alu.sv:1035-1036). Per-div total cycles:
+    //   * positive (or unsigned) divisor:  clz(divisor) + 3
+    //   * zero divisor:                    35  (clz(0) treated as 32)
+    //   * negative signed divisor:         clz(~divisor) + 2  (the RTL
+    //     drops the +1 div_shift adjustment when div_op_a_signed=1).
+    //
+    // The follower in ID is held for the entire FSM (div_ready gates
+    // ex_ready_o which gates id_ready_o), so the stall is structural
+    // regardless of whether the result is used.
+    int32_t d = (int32_t)divisor;
+    int cycles;
+    if (d == 0)
+    {
+        cycles = 35;
+    }
+    else if (is_signed && d < 0)
+    {
+        uint32_t inv = ~(uint32_t)d;
+        int clz_inv = (inv == 0) ? 32 : __builtin_clz(inv);
+        cycles = clz_inv + 2;
+    }
+    else
+    {
+        cycles = __builtin_clz((uint32_t)d) + 3;
+    }
+
+    // The div instruction itself already costs 1 dispatch cycle; charge
+    // the rest as stall.
+    this->iss.exec.stall_cycles_inc(cycles - 1);
+}

@@ -31,6 +31,8 @@ public:
     inline void event_jalr_account(int rs1);
     inline void event_retire_account(iss_insn_t *insn);
     inline void event_insn_latency_account(iss_insn_t *insn, int latency);
+    inline void event_div_account(iss_reg_t dividend, iss_reg_t divisor,
+                                  bool is_signed, bool is_rem);
     inline void event_load_load_account(int incr);
 
     void flush_cycles();
