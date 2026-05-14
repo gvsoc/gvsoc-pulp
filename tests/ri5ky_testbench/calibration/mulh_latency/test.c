@@ -71,6 +71,24 @@ static inline uint32_t time_indep(uint32_t a, uint32_t b)
     return end - start;
 }
 
+static inline uint32_t time_indep_pcer(uint32_t a, uint32_t b,
+                                       calib_pccr_t *before,
+                                       calib_pccr_t *after)
+{
+    register uint32_t op_a __asm__("a0") = a;
+    register uint32_t op_b __asm__("a1") = b;
+    uint32_t start = calib_cycles();
+    calib_pccr_read(before);
+    __asm__ volatile (
+        THIRTY_TWO_INDEP_MULH THIRTY_TWO_INDEP_MULH
+        : : "r"(op_a), "r"(op_b)
+        : "t0", "t1", "t2", "t3", "t4", "t5", "t6", "a2"
+    );
+    calib_pccr_read(after);
+    uint32_t end = calib_cycles();
+    return end - start;
+}
+
 static inline uint32_t time_dep(uint32_t a, uint32_t b)
 {
     register uint32_t op_a __asm__("a0") = a;
@@ -98,10 +116,15 @@ int main(void)
     calib_enable_pccr();
     uint32_t indep_slow = time_indep(0x12345678, 0x87654321);
     uint32_t dep_slow   = time_dep  (0x12345678, 0x87654321);
+    calib_pccr_t pcer_before, pcer_after;
+    time_indep_pcer(0x12345678, 0x87654321, &pcer_before, &pcer_after);
 
     CALIB_REPORT("mulh_latency_indep_fastmode", N_OPS, indep_fast);
     CALIB_REPORT("mulh_latency_indep_slowmode", N_OPS, indep_slow);
     CALIB_REPORT("mulh_latency_dep_fastmode",   N_OPS, dep_fast);
     CALIB_REPORT("mulh_latency_dep_slowmode",   N_OPS, dep_slow);
+    // PCER captured for the indep mulh block (the dep block has the same
+    // structural cycle count plus the mv-seed instruction).
+    CALIB_PCER_REPORT("mulh_latency", pcer_before, pcer_after);
     return 0;
 }

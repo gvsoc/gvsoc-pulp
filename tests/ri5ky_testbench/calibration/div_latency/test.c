@@ -88,6 +88,24 @@
 
 TIME_INDEP(main,  "div",  0x12345678, 0x9876)
 TIME_DEP  (main,  "div",  0x12345678, 0x9876)
+
+// Main-case PCER variant: captures PCER deltas around the indep block.
+static inline uint32_t time_indep_main_pcer(calib_pccr_t *before,
+                                             calib_pccr_t *after)
+{
+    register uint32_t op_a __asm__("a0") = 0x12345678;
+    register uint32_t op_b __asm__("a1") = 0x9876;
+    uint32_t start = calib_cycles();
+    calib_pccr_read(before);
+    __asm__ volatile (
+        SIXTEEN_INDEP_DIV("div")
+        : : "r"(op_a), "r"(op_b)
+        : "t0", "t1", "t2", "t3"
+    );
+    calib_pccr_read(after);
+    uint32_t end = calib_cycles();
+    return end - start;
+}
 TIME_INDEP(one,   "div",  0x12345678, 0x00000001)
 TIME_DEP  (one,   "div",  0x12345678, 0x00000001)
 TIME_INDEP(msb,   "div",  0x12345678, 0x40000000)
@@ -136,6 +154,8 @@ int main(void)
     calib_enable_pccr();
     main_indep_cycles = time_indep_main();
     main_dep_cycles   = time_dep_main();
+    calib_pccr_t pcer_before, pcer_after;
+    time_indep_main_pcer(&pcer_before, &pcer_after);
     one_indep_cycles  = time_indep_one();
     one_dep_cycles    = time_dep_one();
     msb_indep_cycles  = time_indep_msb();
@@ -155,6 +175,8 @@ int main(void)
     CALIB_REPORT("div_latency_zero_dep_slowmode",   N_OPS, zero_dep_cycles);
     CALIB_REPORT("div_latency_divu_indep_slowmode", N_OPS, divu_indep_cycles);
     CALIB_REPORT("div_latency_rem_indep_slowmode",  N_OPS, rem_indep_cycles);
+    // PCER captured for the main-case indep div block.
+    CALIB_PCER_REPORT("div_latency", pcer_before, pcer_after);
 
     return 0;
 }

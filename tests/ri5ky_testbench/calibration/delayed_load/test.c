@@ -34,16 +34,36 @@
 
 #define SIXTEEN_TRIOS  FOUR_TRIOS FOUR_TRIOS FOUR_TRIOS FOUR_TRIOS
 
+#define DO_THE_TRIOS \
+    SIXTEEN_TRIOS SIXTEEN_TRIOS \
+    SIXTEEN_TRIOS SIXTEEN_TRIOS
+
 static inline uint32_t time_block(volatile uint32_t *base)
 {
     register uint32_t *p __asm__("a0") = (uint32_t *)base;
     uint32_t start = calib_cycles();
     __asm__ volatile (
-        SIXTEEN_TRIOS SIXTEEN_TRIOS
-        SIXTEEN_TRIOS SIXTEEN_TRIOS
+        DO_THE_TRIOS
         : : "r"(p)
         : "t0", "t1", "t2", "t3", "a1", "memory"
     );
+    uint32_t end = calib_cycles();
+    return end - start;
+}
+
+static inline uint32_t time_block_pcer(volatile uint32_t *base,
+                                       calib_pccr_t *before,
+                                       calib_pccr_t *after)
+{
+    register uint32_t *p __asm__("a0") = (uint32_t *)base;
+    uint32_t start = calib_cycles();
+    calib_pccr_read(before);
+    __asm__ volatile (
+        DO_THE_TRIOS
+        : : "r"(p)
+        : "t0", "t1", "t2", "t3", "a1", "memory"
+    );
+    calib_pccr_read(after);
     uint32_t end = calib_cycles();
     return end - start;
 }
@@ -57,8 +77,11 @@ int main(void)
 
     calib_enable_pccr();
     uint32_t slow_cycles = time_block(SLOW_MEM_BASE);
+    calib_pccr_t before, after;
+    time_block_pcer(SLOW_MEM_BASE, &before, &after);
 
     CALIB_REPORT("delayed_load_fastmode", N_TRIOS, fast_cycles);
     CALIB_REPORT("delayed_load_slowmode", N_TRIOS, slow_cycles);
+    CALIB_PCER_REPORT("delayed_load", before, after);
     return 0;
 }

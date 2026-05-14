@@ -98,7 +98,6 @@ inline void Ri5kyEvents::event_jalr_account(int rs1)
 {
     // Taken-jump pipeline flush — same one-cycle bubble as JAL.
     this->iss.exec.stall_cycles_inc(1);
-    this->iss.csr.pccr_account(CSR_PCER_JUMP, 1);
 
     // RI5CY's jr_stall_o: if the source register is being written by an
     // in-flight instruction (still in EX/WB/ALU-forward at the time the
@@ -106,9 +105,20 @@ inline void Ri5kyEvents::event_jalr_account(int rs1)
     // cycle until the producer's forward path clears. Match against the
     // last retired destination register; r0 / x0 is never a real
     // producer so we ignore it explicitly.
+    //
+    // PCER bookkeeping: while the JALR is held in ID by jr_stall the RTL
+    // has id_valid_o = 0 (riscv_id_stage.sv:1782), and the cs_registers
+    // PCCR_in[7] gate `& id_valid_q` (riscv_cs_registers.sv:1104) keeps
+    // the JUMP counter from firing — so a stalled JALR shows up as a
+    // JR_STALL event but NOT as a JUMP event. Mirror that here.
     if (rs1 != 0 && rs1 == this->prev_dest_reg)
     {
         this->iss.exec.stall_cycles_inc(1);
+        this->iss.csr.pccr_account(CSR_PCER_JMP_STALL, 1);
+    }
+    else
+    {
+        this->iss.csr.pccr_account(CSR_PCER_JUMP, 1);
     }
 
     // The taken jump drains the pipeline behind us — clear the producer

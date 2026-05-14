@@ -30,16 +30,36 @@ static volatile uint32_t buf[8] __attribute__((aligned(64)));
 
 #define THIRTY_TWO_PAIRS  EIGHT_PAIRS EIGHT_PAIRS EIGHT_PAIRS EIGHT_PAIRS
 
+#define DO_THE_PAIRS \
+    THIRTY_TWO_PAIRS THIRTY_TWO_PAIRS \
+    THIRTY_TWO_PAIRS THIRTY_TWO_PAIRS
+
 static inline uint32_t time_block(volatile uint32_t *base)
 {
     register uint32_t *p __asm__("a0") = (uint32_t *)base;
     uint32_t start = calib_cycles();
     __asm__ volatile (
-        THIRTY_TWO_PAIRS THIRTY_TWO_PAIRS
-        THIRTY_TWO_PAIRS THIRTY_TWO_PAIRS
+        DO_THE_PAIRS
         : : "r"(p)
         : "t0", "t1", "t2", "t3", "t4", "t5", "t6", "a1", "memory"
     );
+    uint32_t end = calib_cycles();
+    return end - start;
+}
+
+static inline uint32_t time_block_pcer(volatile uint32_t *base,
+                                       calib_pccr_t *before,
+                                       calib_pccr_t *after)
+{
+    register uint32_t *p __asm__("a0") = (uint32_t *)base;
+    uint32_t start = calib_cycles();
+    calib_pccr_read(before);
+    __asm__ volatile (
+        DO_THE_PAIRS
+        : : "r"(p)
+        : "t0", "t1", "t2", "t3", "t4", "t5", "t6", "a1", "memory"
+    );
+    calib_pccr_read(after);
     uint32_t end = calib_cycles();
     return end - start;
 }
@@ -53,8 +73,11 @@ int main(void)
 
     calib_enable_pccr();
     uint32_t slow_cycles = time_block(buf);
+    calib_pccr_t before, after;
+    time_block_pcer(buf, &before, &after);
 
     CALIB_REPORT("load_use_fastmode", N_PAIRS, fast_cycles);
     CALIB_REPORT("load_use_slowmode", N_PAIRS, slow_cycles);
+    CALIB_PCER_REPORT("load_use", before, after);
     return 0;
 }

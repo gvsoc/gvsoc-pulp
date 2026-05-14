@@ -46,14 +46,25 @@
     ONE_JR_TRIPLET(5) ONE_JR_TRIPLET(6) \
     ONE_JR_TRIPLET(7) ONE_JR_TRIPLET(8)
 
+#define DO_THE_TRIPLETS \
+    EIGHT_JR_TRIPLETS EIGHT_JR_TRIPLETS \
+    EIGHT_JR_TRIPLETS EIGHT_JR_TRIPLETS
+
 static inline uint32_t time_block(void)
 {
     uint32_t start = calib_cycles();
-    __asm__ volatile (
-        EIGHT_JR_TRIPLETS EIGHT_JR_TRIPLETS
-        EIGHT_JR_TRIPLETS EIGHT_JR_TRIPLETS
-        : : : "t0"
-    );
+    __asm__ volatile (DO_THE_TRIPLETS : : : "t0");
+    uint32_t end = calib_cycles();
+    return end - start;
+}
+
+static inline uint32_t time_block_pcer(calib_pccr_t *before,
+                                       calib_pccr_t *after)
+{
+    uint32_t start = calib_cycles();
+    calib_pccr_read(before);
+    __asm__ volatile (DO_THE_TRIPLETS : : : "t0");
+    calib_pccr_read(after);
     uint32_t end = calib_cycles();
     return end - start;
 }
@@ -65,8 +76,11 @@ int main(void)
 
     calib_enable_pccr();
     uint32_t slow_cycles = time_block();
+    calib_pccr_t before, after;
+    time_block_pcer(&before, &after);
 
     CALIB_REPORT("jr_stall_fastmode", N_TRIPLETS, fast_cycles);
     CALIB_REPORT("jr_stall_slowmode", N_TRIPLETS, slow_cycles);
+    CALIB_PCER_REPORT("jr_stall", before, after);
     return 0;
 }

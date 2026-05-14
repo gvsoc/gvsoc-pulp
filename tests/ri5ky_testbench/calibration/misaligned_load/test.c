@@ -39,16 +39,36 @@ static volatile uint8_t fast_buf[64] __attribute__((aligned(64)));
     EIGHT_MISALIGNED_LOADS EIGHT_MISALIGNED_LOADS \
     EIGHT_MISALIGNED_LOADS EIGHT_MISALIGNED_LOADS
 
+#define DO_THE_LOADS \
+    THIRTY_TWO_LOADS THIRTY_TWO_LOADS \
+    THIRTY_TWO_LOADS THIRTY_TWO_LOADS
+
 static inline uint32_t time_block(volatile uint8_t *base)
 {
     register uint8_t *p __asm__("a0") = (uint8_t *)base;
     uint32_t start = calib_cycles();
     __asm__ volatile (
-        THIRTY_TWO_LOADS THIRTY_TWO_LOADS
-        THIRTY_TWO_LOADS THIRTY_TWO_LOADS
+        DO_THE_LOADS
         : : "r"(p)
         : "t0", "t1", "t2", "t3", "t4", "t5", "t6", "a1", "memory"
     );
+    uint32_t end = calib_cycles();
+    return end - start;
+}
+
+static inline uint32_t time_block_pcer(volatile uint8_t *base,
+                                       calib_pccr_t *before,
+                                       calib_pccr_t *after)
+{
+    register uint8_t *p __asm__("a0") = (uint8_t *)base;
+    uint32_t start = calib_cycles();
+    calib_pccr_read(before);
+    __asm__ volatile (
+        DO_THE_LOADS
+        : : "r"(p)
+        : "t0", "t1", "t2", "t3", "t4", "t5", "t6", "a1", "memory"
+    );
+    calib_pccr_read(after);
     uint32_t end = calib_cycles();
     return end - start;
 }
@@ -65,10 +85,16 @@ int main(void)
     calib_enable_pccr();
     uint32_t fastmem_slowmode = time_block(fast_buf);
     uint32_t slowmem_slowmode = time_block(SLOW_BUF);
+    calib_pccr_t pcer_before, pcer_after;
+    time_block_pcer(fast_buf, &pcer_before, &pcer_after);
 
     CALIB_REPORT("misaligned_load_fastmem_fastmode", N_LOADS, fastmem_fastmode);
     CALIB_REPORT("misaligned_load_fastmem_slowmode", N_LOADS, fastmem_slowmode);
     CALIB_REPORT("misaligned_load_slowmem_fastmode", N_LOADS, slowmem_fastmode);
     CALIB_REPORT("misaligned_load_slowmem_slowmode", N_LOADS, slowmem_slowmode);
+    // PCER captured for the fast-mem variant only (misaligned access pattern;
+    // the slow-mem variant exercises the same instructions just with a
+    // bigger memory latency).
+    CALIB_PCER_REPORT("misaligned_load", pcer_before, pcer_after);
     return 0;
 }

@@ -31,19 +31,39 @@ static volatile uint32_t buf[8] __attribute__((aligned(64)));
 
 #define THIRTY_TWO_LOADS  EIGHT_LOADS EIGHT_LOADS EIGHT_LOADS EIGHT_LOADS
 
+#define DO_THE_LOADS \
+    THIRTY_TWO_LOADS THIRTY_TWO_LOADS \
+    THIRTY_TWO_LOADS THIRTY_TWO_LOADS \
+    THIRTY_TWO_LOADS THIRTY_TWO_LOADS \
+    THIRTY_TWO_LOADS THIRTY_TWO_LOADS
+
 static inline uint32_t time_block(volatile uint32_t *base)
 {
     register uint32_t *p __asm__("a0") = (uint32_t *)base;
     uint32_t start = calib_cycles();
     __asm__ volatile (
         // 256 loads, fully unrolled, no branches in between.
-        THIRTY_TWO_LOADS THIRTY_TWO_LOADS
-        THIRTY_TWO_LOADS THIRTY_TWO_LOADS
-        THIRTY_TWO_LOADS THIRTY_TWO_LOADS
-        THIRTY_TWO_LOADS THIRTY_TWO_LOADS
+        DO_THE_LOADS
         : : "r"(p)
         : "t0", "t1", "t2", "t3", "t4", "t5", "t6", "a1", "memory"
     );
+    uint32_t end = calib_cycles();
+    return end - start;
+}
+
+static inline uint32_t time_block_pcer(volatile uint32_t *base,
+                                       calib_pccr_t *before,
+                                       calib_pccr_t *after)
+{
+    register uint32_t *p __asm__("a0") = (uint32_t *)base;
+    uint32_t start = calib_cycles();
+    calib_pccr_read(before);
+    __asm__ volatile (
+        DO_THE_LOADS
+        : : "r"(p)
+        : "t0", "t1", "t2", "t3", "t4", "t5", "t6", "a1", "memory"
+    );
+    calib_pccr_read(after);
     uint32_t end = calib_cycles();
     return end - start;
 }
@@ -58,7 +78,13 @@ int main(void)
     calib_enable_pccr();
     uint32_t slow_cycles = time_block(buf);
 
+    // PCER capture in a separate run — the 12 csrr around the asm block
+    // would otherwise inflate the cycle measurement.
+    calib_pccr_t before, after;
+    time_block_pcer(buf, &before, &after);
+
     CALIB_REPORT("pipelined_loads_fastmode", N_LOADS, fast_cycles);
     CALIB_REPORT("pipelined_loads_slowmode", N_LOADS, slow_cycles);
+    CALIB_PCER_REPORT("pipelined_loads", before, after);
     return 0;
 }

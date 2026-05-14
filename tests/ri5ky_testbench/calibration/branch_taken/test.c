@@ -34,14 +34,25 @@
     EIGHT_TAKEN_BRANCHES EIGHT_TAKEN_BRANCHES \
     EIGHT_TAKEN_BRANCHES EIGHT_TAKEN_BRANCHES
 
+#define DO_THE_BRANCHES \
+    THIRTY_TWO_BRANCHES THIRTY_TWO_BRANCHES \
+    THIRTY_TWO_BRANCHES THIRTY_TWO_BRANCHES
+
 static inline uint32_t time_block(void)
 {
     uint32_t start = calib_cycles();
-    __asm__ volatile (
-        THIRTY_TWO_BRANCHES THIRTY_TWO_BRANCHES
-        THIRTY_TWO_BRANCHES THIRTY_TWO_BRANCHES
-        :::
-    );
+    __asm__ volatile (DO_THE_BRANCHES :::);
+    uint32_t end = calib_cycles();
+    return end - start;
+}
+
+static inline uint32_t time_block_pcer(calib_pccr_t *before,
+                                       calib_pccr_t *after)
+{
+    uint32_t start = calib_cycles();
+    calib_pccr_read(before);
+    __asm__ volatile (DO_THE_BRANCHES :::);
+    calib_pccr_read(after);
     uint32_t end = calib_cycles();
     return end - start;
 }
@@ -53,8 +64,11 @@ int main(void)
 
     calib_enable_pccr();
     uint32_t slow_cycles = time_block();
+    calib_pccr_t before, after;
+    time_block_pcer(&before, &after);
 
     CALIB_REPORT("branch_taken_fastmode", N_BRANCHES, fast_cycles);
     CALIB_REPORT("branch_taken_slowmode", N_BRANCHES, slow_cycles);
+    CALIB_PCER_REPORT("branch_taken", before, after);
     return 0;
 }
