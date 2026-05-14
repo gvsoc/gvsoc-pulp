@@ -34,7 +34,12 @@
     EIGHT_TAKEN_BRANCHES EIGHT_TAKEN_BRANCHES \
     EIGHT_TAKEN_BRANCHES EIGHT_TAKEN_BRANCHES
 
+// Force a known alignment so the prefetcher state is the same regardless
+// of how much code precedes the asm block. Without this, RI5CY's
+// prefetch-buffer-empty (PCCR_IMISS) count flips between 0 and 128
+// depending on whether the first beq lands at a "good" or "bad" offset.
 #define DO_THE_BRANCHES \
+    ".p2align 4\n" \
     THIRTY_TWO_BRANCHES THIRTY_TWO_BRANCHES \
     THIRTY_TWO_BRANCHES THIRTY_TWO_BRANCHES
 
