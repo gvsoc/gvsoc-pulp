@@ -95,7 +95,14 @@ bool IDmaBeTcdm::can_accept_burst()
 
 bool IDmaBeTcdm::can_accept_data()
 {
-    return this->write_current_chunk_size == 0 && this->write_ack_timestamp == -1
+    // Accept a new chunk as long as:
+    //   * no chunk is mid-issuance (we serialise line issuance at 1/cycle),
+    //   * the ack FIFO has room (latency-deferred acks can keep accumulating
+    //     without ever throttling fresh chunk arrivals — the bus, not the
+    //     ack pipeline, is the rate limiter),
+    //   * the downstream is not currently denying/blocking us.
+    return this->write_current_chunk_size == 0
+        && (int)this->write_pending_acks.size() < this->write_pending_acks_max
         && !this->granted_blocked && !this->denied_blocked;
 }
 
@@ -122,10 +129,10 @@ void IDmaBeTcdm::reset(bool active)
     if (active)
     {
         this->current_burst_size = 0;
-        this->read_pending_line_size = 0;
 
         this->write_current_chunk_size = 0;
-        this->write_ack_timestamp = -1;
+        this->write_pending_acks.clear();
+        this->read_pending_pushes.clear();
 
         this->last_line_timestamp = -1;
 
@@ -139,44 +146,60 @@ void IDmaBeTcdm::reset(bool active)
 
 
 
-void IDmaBeTcdm::write_complete_sync(int64_t latency, uint64_t size)
+void IDmaBeTcdm::write_complete_sync(int64_t /*line_latency*/ latency, uint64_t /*line_size*/ size)
 {
-    if (latency == 0)
+    // write_line() has already advanced both the burst position and the
+    // current-chunk cursor. If write_current_chunk_size is 0, this was the
+    // last line of the chunk; queue the chunk-level ack and let the bus
+    // start the next chunk next cycle. If it's not the last line, just
+    // schedule the FSM to issue the next line one cycle from now —
+    // throughput is one line per cycle, latency only delays acks.
+    bool is_last_line = (this->write_current_chunk_size == 0);
+
+    if (is_last_line)
     {
-        // Inline path: ack the chunk and chain.
-        this->remove_chunk_from_current_burst(size);
-        this->write_handle_req_ack();
+        int64_t ack_cycle = this->clock.get_cycles() + latency;
+        this->write_pending_acks.push_back({
+            this->write_current_transfer,
+            this->write_current_chunk_data_start,
+            this->write_current_chunk_ack_size,
+            ack_cycle
+        });
+        // Wake the FSM when the head of the ack FIFO becomes due. If this is
+        // the only entry that's the cycle we just set; otherwise the
+        // existing scheduling already covers it (ClockEvent dedup keeps the
+        // earlier wakeup).
+        int64_t delay = ack_cycle - this->clock.get_cycles();
+        this->fsm_event.enqueue(std::max(delay, (int64_t)1));
     }
     else
     {
-        // Deferred ack via the existing wall-clock machinery.
-        this->write_ack_timestamp = this->clock.get_cycles() + latency;
-        this->write_ack_size = size;
-        this->fsm_event.enqueue(latency);
+        // Multi-line chunk: pace at one line per cycle.
+        this->fsm_event.enqueue();
     }
 }
 
 
 
-void IDmaBeTcdm::read_complete_sync(int64_t latency, uint64_t size)
+void IDmaBeTcdm::read_complete_sync(int64_t latency, uint64_t size, IdmaTransfer *transfer)
 {
-    // pending_line_data holds the buffer just allocated for this line.
+    // pending_line_data holds the buffer the read_line() (or tcdm_response()
+    // for the GRANTED path) just allocated. Park it in the per-line FIFO
+    // along with its ready-cycle. The fsm_handler drains the queue in order,
+    // pacing at the destination BE's accept rate.
     uint8_t *data = this->pending_line_data;
     this->pending_line_data = nullptr;
 
-    if (latency == 0 && this->be->is_ready_to_accept_data(this->burst_queue_transfer.front()))
-    {
-        IdmaTransfer *transfer = this->burst_queue_transfer.front();
-        this->remove_chunk_from_current_burst(size);
-        this->be->write_data(transfer, data, size);
-    }
-    else
-    {
-        this->read_pending_timestamp = this->clock.get_cycles() + latency;
-        this->read_pending_line_data = data;
-        this->read_pending_line_size = size;
-        this->fsm_event.enqueue(latency);
-    }
+    int64_t now = this->clock.get_cycles();
+    this->read_pending_pushes.push_back({
+        transfer,
+        data,
+        size,
+        now + latency
+    });
+
+    int64_t delay = latency;
+    this->fsm_event.enqueue(std::max(delay, (int64_t)1));
 }
 
 
@@ -226,7 +249,10 @@ void IDmaBeTcdm::write_line()
         return;
     }
 
-    // Accepted — advance chunk pointers.
+    // Accepted — advance chunk pointers AND the burst position. Advancing
+    // current_burst_base/size here (rather than at ack time) is what lets
+    // the next chunk's write_data() see the correct base address even while
+    // this chunk's ack is still parked in write_pending_acks.
     this->write_current_chunk_base += size;
     this->write_current_chunk_size -= size;
     this->write_current_chunk_data += size;
@@ -238,11 +264,13 @@ void IDmaBeTcdm::write_line()
             trace.force_warning("Invalid access during TCDM write line (base: 0x%lx, size: 0x%lx)\n",
                 base, size);
         }
+        this->remove_chunk_from_current_burst(size);
         this->write_complete_sync(req->get_latency(), size);
         return;
     }
 
-    // IO_REQ_GRANTED — wait for tcdm_response().
+    // IO_REQ_GRANTED — wait for tcdm_response(). Burst position will be
+    // advanced once the response fires (single in-flight in this branch).
     this->granted_blocked = true;
     this->pending_line_is_write = true;
     this->pending_line_size = size;
@@ -310,6 +338,16 @@ void IDmaBeTcdm::read_line()
         return;
     }
 
+    // 1 line per cycle on the bus — gate so we don't issue twice in the
+    // same cycle even if the FSM gets nudged from multiple paths.
+    if (this->last_line_timestamp != -1
+        && this->last_line_timestamp >= this->clock.get_cycles())
+    {
+        this->update();
+        return;
+    }
+    this->last_line_timestamp = this->clock.get_cycles();
+
     vp::IoReq *req = &this->req;
 
     uint64_t base = this->current_burst_base;
@@ -342,6 +380,8 @@ void IDmaBeTcdm::read_line()
         this->pending_line_is_write = false;
         this->pending_line_size = size;
         this->pending_line_data = nullptr;
+        // Roll back the line-rate gate so retry can re-issue this cycle.
+        this->last_line_timestamp = -1;
         return;
     }
 
@@ -354,11 +394,20 @@ void IDmaBeTcdm::read_line()
             trace.force_warning("Invalid access during TCDM read line (base: 0x%lx, size: 0x%lx)\n",
                 base, size);
         }
-        this->read_complete_sync(req->get_latency(), size);
+        // Capture transfer BEFORE remove_chunk_from_current_burst, which
+        // pops burst_queue_transfer when the last line of the burst is
+        // issued. read_complete_sync still needs the pointer.
+        IdmaTransfer *transfer = this->burst_queue_transfer.front();
+        // Advance burst position now that the line has been issued, so the
+        // *next* read_line() picks up at base+size even though this line's
+        // ready_cycle is still in the future.
+        this->remove_chunk_from_current_burst(size);
+        this->read_complete_sync(req->get_latency(), size, transfer);
         return;
     }
 
-    // IO_REQ_GRANTED — wait for tcdm_response().
+    // IO_REQ_GRANTED — wait for tcdm_response(). Burst position will be
+    // advanced when the response actually fires (single in-flight only).
     this->granted_blocked = true;
     this->pending_line_is_write = false;
     this->pending_line_size = size;
@@ -382,11 +431,16 @@ void IDmaBeTcdm::tcdm_response(vp::Block *__this, vp::IoReq *req)
 
     if (_this->pending_line_is_write)
     {
+        // DONE path advances the burst position inside write_line(); for the
+        // GRANTED path it has to happen here, when the response really lands.
+        _this->remove_chunk_from_current_burst(_this->pending_line_size);
         _this->write_complete_sync(req->get_latency(), _this->pending_line_size);
     }
     else
     {
-        _this->read_complete_sync(req->get_latency(), _this->pending_line_size);
+        IdmaTransfer *transfer = _this->burst_queue_transfer.front();
+        _this->remove_chunk_from_current_burst(_this->pending_line_size);
+        _this->read_complete_sync(req->get_latency(), _this->pending_line_size, transfer);
     }
 
     _this->update();
@@ -408,52 +462,76 @@ void IDmaBeTcdm::tcdm_retry(vp::Block *__this)
 void IDmaBeTcdm::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 {
     IDmaBeTcdm *_this = (IDmaBeTcdm *)__this;
+    int64_t now = _this->clock.get_cycles();
 
-    // Pending write ack timer.
-    if (_this->write_ack_timestamp != -1)
+    // Drain due chunk-acks from the FIFO. Multiple chunks can be acked in
+    // the same cycle (the latency window of an earlier chunk may overlap
+    // with later chunks' arrival times). Acks come out in FIFO order — the
+    // bus is in-order, so each entry's cycle is >= the previous one's.
+    while (!_this->write_pending_acks.empty())
     {
-        if (_this->write_ack_timestamp <= _this->clock.get_cycles())
+        auto &front = _this->write_pending_acks.front();
+        if (front.cycle > now)
         {
-            _this->write_ack_timestamp = -1;
-            _this->remove_chunk_from_current_burst(_this->write_ack_size);
-            _this->write_handle_req_ack();
+            _this->fsm_event.enqueue(front.cycle - now);
+            break;
         }
-        else
-        {
-            _this->fsm_event.enqueue(_this->write_ack_timestamp - _this->clock.get_cycles());
-        }
+        IdmaTransfer *transfer = front.transfer;
+        uint8_t *data = front.data;
+        uint64_t size = front.size;
+        _this->write_pending_acks.pop_front();
+
+        _this->be->update();
+        _this->be->ack_data(transfer, data, size);
     }
 
-    // Continue the current write chunk if one is in progress.
-    if (_this->write_current_chunk_size > 0 && _this->write_ack_timestamp == -1)
+    // Continue the current write chunk if one is in progress (multi-line
+    // chunks only — for chunk_size <= line_size, write_data() issues the
+    // line inline and bytes_remaining is already 0 by the time we get here).
+    if (_this->write_current_chunk_size > 0)
     {
         _this->write_line();
     }
 
-    // Read burst processing.
-    if (_this->burst_queue_is_write.size() > 0 && !_this->burst_queue_is_write.front())
+    // Issue the next read line if the head burst is a read, the burst still
+    // has data, and the FIFO has room. The 1-line-per-cycle gate lives
+    // inside read_line() (last_line_timestamp).
+    if (_this->burst_queue_is_write.size() > 0
+        && !_this->burst_queue_is_write.front()
+        && _this->current_burst_size > 0
+        && (int)_this->read_pending_pushes.size() < _this->read_pending_pushes_max)
     {
-        if (_this->current_burst_size > 0 && _this->read_pending_line_size == 0)
-        {
-            _this->read_line();
-        }
+        _this->read_line();
+        // Stay scheduled for next cycle so we keep issuing lines as long as
+        // there is work to do.
+        _this->fsm_event.enqueue();
+    }
 
-        if (_this->read_pending_line_size > 0
-            && _this->be->is_ready_to_accept_data(_this->burst_queue_transfer.front()))
+    // Drain the pending-push FIFO independently of the burst queue: by the
+    // time the last read's push fires, current_burst_size has already
+    // decremented to 0 and the burst has been popped from
+    // burst_queue_is_write — but the chunk still owes a forward to the
+    // destination BE.
+    while (!_this->read_pending_pushes.empty())
+    {
+        auto &front = _this->read_pending_pushes.front();
+        if (front.ready_cycle > now)
         {
-            if (_this->read_pending_timestamp <= _this->clock.get_cycles())
-            {
-                uint64_t size = _this->read_pending_line_size;
-                _this->read_pending_line_size = 0;
-                IdmaTransfer *transfer = _this->burst_queue_transfer.front();
-                _this->remove_chunk_from_current_burst(size);
-                _this->be->write_data(transfer, _this->read_pending_line_data, size);
-            }
-            else
-            {
-                _this->fsm_event.enqueue(_this->read_pending_timestamp - _this->clock.get_cycles());
-            }
+            _this->fsm_event.enqueue(front.ready_cycle - now);
+            break;
         }
+        if (!_this->be->is_ready_to_accept_data(front.transfer))
+        {
+            break;
+        }
+        IdmaTransfer *transfer = front.transfer;
+        uint8_t *data = front.data;
+        uint64_t size = front.size;
+        _this->read_pending_pushes.pop_front();
+
+        _this->be->write_data(transfer, data, size);
+        _this->fsm_event.enqueue();
+        break;
     }
 }
 

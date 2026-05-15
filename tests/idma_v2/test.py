@@ -65,6 +65,7 @@ def build_case(case_name: str) -> dict:
         src_stride=0, dst_stride=0, reps=1, config=0,
         router_bandwidth=8, router_latency=1,
         router_kind=KIND_BANDWIDTH,
+        idma_axi_width=8,
     )
     if case_name == '1d_small':
         # 64 byte 1D copy mem_a -> mem_b. Smallest interesting case.
@@ -110,11 +111,15 @@ def build_case(case_name: str) -> dict:
             'router_bandwidth': 4,
         }
     if case_name == 'bw_16':
-        # 4 KiB 1D copy with router bandwidth doubled (16 B/cyc).
+        # 4 KiB 1D copy with router bandwidth doubled (16 B/cyc). Widen the
+        # iDMA's AXI master to match — otherwise the master caps the
+        # effective throughput at axi_width * 1 beat/cyc = 8 B/cyc and the
+        # extra router bandwidth has nowhere to go.
         return {**common,
             'src': MEM_A_BASE, 'dst': MEM_B_BASE,
             'length': 0x1000, 'pattern_seed': 0x16,
             'router_bandwidth': 16,
+            'idma_axi_width': 16,
         }
     if case_name == 'lat_10':
         # 4 KiB 1D copy with extra fixed router latency annotation.
@@ -269,10 +274,11 @@ class Chip(gvsoc.systree.Component):
         ).get_value()
 
         spec = build_case(case)
-        # Router knobs live in spec but must not leak into the tester ctor.
+        # Router/iDMA knobs live in spec but must not leak into the tester ctor.
         router_bandwidth = spec.pop('router_bandwidth')
         router_latency   = spec.pop('router_latency')
         router_kind      = spec.pop('router_kind')
+        idma_axi_width   = spec.pop('idma_axi_width')
 
         clock = vp.clock_domain.Clock_domain(self, 'clock', frequency=100_000_000)
 
@@ -302,6 +308,7 @@ class Chip(gvsoc.systree.Component):
             loc_base=TCDM_BASE,
             loc_size=TCDM_SIZE,
             tcdm_width=8,
+            axi_width=idma_axi_width,
         ))
         clock.o_CLOCK(idma.i_CLOCK())
 

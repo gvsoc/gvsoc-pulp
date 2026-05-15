@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include <deque>
 #include <vp/vp.hpp>
 #include <vp/itf/io_v2.hpp>
 #include "../idma.hpp"
@@ -62,8 +63,10 @@ private:
     // Handle a synchronous DONE for a write line: latency may be 0 (handle
     // inline) or > 0 (defer via the existing write_ack_timestamp machinery).
     void write_complete_sync(int64_t latency, uint64_t size);
-    // Handle a synchronous DONE for a read line.
-    void read_complete_sync(int64_t latency, uint64_t size);
+    // Handle a synchronous DONE for a read line. `transfer` is captured at
+    // the caller (read_line / tcdm_response) BEFORE remove_chunk_from_current_burst()
+    // potentially pops it off burst_queue_transfer.
+    void read_complete_sync(int64_t latency, uint64_t size, IdmaTransfer *transfer);
 
     IdmaBeProducer *be;
     vp::IoMaster ico_itf{&IDmaBeTcdm::tcdm_retry, &IDmaBeTcdm::tcdm_response};
@@ -88,12 +91,44 @@ private:
     uint64_t write_current_chunk_ack_size;
     uint8_t *write_current_chunk_data;
     uint8_t *write_current_chunk_data_start;
-    int64_t write_ack_timestamp;
-    uint64_t write_ack_size;
 
-    int64_t read_pending_timestamp;
-    uint8_t *read_pending_line_data;
-    uint64_t read_pending_line_size;
+    // FIFO of write-chunks whose lines have been issued on the TCDM bus but
+    // whose ack to the source has not yet fired. Each entry represents one
+    // chunk (i.e. one ack_data() call to the source) — for multi-line chunks
+    // the entry is pushed only when the last line is issued, with
+    // `cycle = T_last_line_issue + latency`. Decoupling the ack queue from
+    // line issuance lets TCDM accept one new chunk every cycle even though
+    // the per-line latency may be several cycles — latency only delays the
+    // ack, it does not block the bus.
+    struct PendingAck
+    {
+        IdmaTransfer *transfer;
+        uint8_t      *data;
+        uint64_t      size;
+        int64_t       cycle;
+    };
+    std::deque<PendingAck> write_pending_acks;
+    // Cap on simultaneously-pending chunk acks. Anything bigger than the
+    // central BE will ever push at once is fine; 16 is plenty for the
+    // 4 KiB-burst / 8 B-line case where the bandwidth router latency is
+    // ~2 cycles.
+    int write_pending_acks_max = 16;
+
+    // FIFO of read lines issued on the TCDM bus but not yet handed to the
+    // destination BE. Pipelines reads at 1 line per cycle: while one line's
+    // latency window is still elapsing, more lines can be issued behind it.
+    // Drained in order in fsm_handler, paced by `ready_cycle` and by the
+    // destination BE's readiness.
+    struct PendingRead
+    {
+        IdmaTransfer *transfer;
+        uint8_t      *data;
+        uint64_t      size;
+        int64_t       ready_cycle;
+    };
+    std::deque<PendingRead> read_pending_pushes;
+    int read_pending_pushes_max = 16;
+
     int64_t last_line_timestamp;
     IdmaTransfer *write_current_transfer;
 
