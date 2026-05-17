@@ -127,7 +127,14 @@ bool Router::handle_request(FloonocNode *node, vp::IoReq *req, int from_node)
     RouterQueue *queue = this->input_queues[queue_index];
     int latency = this->input_latencies[queue_index];
     queue->queue.push_back(req,
-                           latency); // Physical delay representing link latency
+                           latency); // Delay representing link latency
+
+    // Update peak queue depth performance metric
+    int current_depth = queue->queue.size();
+    if (current_depth > queue->peak_queue_depth)
+    {
+        queue->peak_queue_depth = current_depth;
+    }
 
     // We let the source enqueue one more request than what is possible to model
     // the fact the request is stalled. This will then stall the source which
@@ -391,6 +398,19 @@ int Router::get_req_queue(int from_node)
     return -1;
 }
 
+int Router::get_max_peak_queue_depth()
+{
+    int max_peak = 0;
+    for (int i = 0; i < this->num_queues; i++)
+    {
+        if (this->input_queues[i]->peak_queue_depth > max_peak)
+        {
+            max_peak = this->input_queues[i]->peak_queue_depth;
+        }
+    }
+    return max_peak;
+}
+
 void Router::reset(bool active)
 {
     if (active)
@@ -407,4 +427,5 @@ RouterQueue::RouterQueue(vp::Block *parent, std::string name,
                          vp::ClockEvent *ready_event)
     : queue(parent, name, ready_event)
 {
+    this->peak_queue_depth = 0;
 }

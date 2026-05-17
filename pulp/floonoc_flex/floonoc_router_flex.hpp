@@ -36,6 +36,7 @@ class RouterQueue
                 vp::ClockEvent *ready_event = NULL);
     vp::Queue queue;
     FloonocNode *stalled_node;
+    int peak_queue_depth;
 };
 
 /**
@@ -73,6 +74,8 @@ class Router : public FloonocNode
 
     // Pass the routing table during initialization
     void set_routing_table(std::vector<int> table);
+
+    int get_max_peak_queue_depth();
 
     // Performance Counters
     uint64_t stat_routed_packets = 0;
