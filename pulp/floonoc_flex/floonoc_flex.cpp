@@ -298,9 +298,10 @@ FlooNoc::~FlooNoc()
                     (router->stat_routed_packets + router->stat_stall_cycles) *
                     100.0;
             }
-            printf("   %3d   | %14lu | %14lu | %13.2f %%\n", router->node_id,
-                   router->stat_routed_packets, router->stat_stall_cycles,
-                   congestion);
+            int max_router_peak = router->get_max_peak_queue_depth();
+            printf("   %3d   | %14lu | %14lu | %13.2f %% | %16d\n",
+                   router->node_id, router->stat_routed_packets,
+                   router->stat_stall_cycles, congestion, max_router_peak);
         }
     }
     printf("===============================================================\n");
