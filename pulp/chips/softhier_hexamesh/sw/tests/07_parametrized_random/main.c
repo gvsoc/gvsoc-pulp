@@ -1,3 +1,4 @@
+#include "softhier_arch.h"
 #include "softhier_dma_pattern.h"
 #include "softhier_printf.h"
 #include "softhier_runtime.h"
@@ -6,10 +7,8 @@
 // Benchmark Configuration
 // ==========================================
 #define TILE_SIZE 16384 // 16 KB per transfer
-#define TOTAL_TRANSFERS                                                        \
-  9906 // Global total number of transfers across the ENTIRE NoC, better to
-       // keep a multiple of ARCH_NUM_CLUSTER
-#define CYCLES_PER_PACKET 332
+#define TOTAL_TRANSFERS 9906
+#define CYCLES_PER_PACKET 256
 #define BATCH_SIZE 8 // Max outstanding txns before waiting
 
 #define SRC_BUF 0x00000
