@@ -33,6 +33,7 @@ public:
     inline void event_insn_latency_account(iss_insn_t *insn, int latency);
     inline void event_div_account(iss_reg_t dividend, iss_reg_t divisor,
                                   bool is_signed, bool is_rem);
+    inline void event_scoreboard_stall(uint8_t reason);
     inline void event_load_load_account(int incr);
 
     void flush_cycles();

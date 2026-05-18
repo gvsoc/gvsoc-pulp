@@ -136,6 +136,18 @@ inline void Ri5kyEvents::event_retire_account(iss_insn_t *insn)
     this->prev_dest_reg = (int)insn->out_regs[0];
 }
 
+inline void Ri5kyEvents::event_scoreboard_stall(uint8_t reason)
+{
+    // The scoreboard hands us the opaque reason byte that the producer
+    // stored when it invalidated the blocking register. Map it onto
+    // RI5CY's PCER counters. PCCR_LD_STALL pulses per load-use hazard
+    // (riscv_controller.sv:1050-1065 → perf_ld_stall_o).
+    if (reason == ISS_STALL_REASON_LOAD)
+    {
+        this->iss.csr.pccr_account(CSR_PCER_LD_STALL, 1);
+    }
+}
+
 inline void Ri5kyEvents::event_insn_latency_account(iss_insn_t *insn,
                                                     int latency)
 {
