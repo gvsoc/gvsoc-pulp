@@ -24,34 +24,27 @@
 
 
 IDmaBe::IDmaBe(vp::Component *idma, IdmaTransferProducer *me,
-    IdmaBeConsumer *loc_be_read, IdmaBeConsumer *loc_be_write,
-    IdmaBeConsumer *ext_be_read, IdmaBeConsumer *ext_be_write)
+    IdmaBeConsumer *be_read, IdmaBeConsumer *be_write)
 :   Block(idma, "be"),
     fsm_event(this, &IDmaBe::fsm_handler)
 {
     // Middle-end and backend protocols will be used later for interaction
     this->me = me;
-    this->loc_be_read = loc_be_read;
-    this->loc_be_write = loc_be_write;
-    this->ext_be_read = ext_be_read;
-    this->ext_be_write = ext_be_write;
+    this->be_read = be_read;
+    this->be_write = be_write;
 
     // Declare our own trace so that we can individually activate traces
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
-
-    // Get the local area description to differentiate local and remote backend protocols
-    this->loc_base = idma->get_js_config()->get_int("loc_base");
-    this->loc_size = idma->get_js_config()->get_int("loc_size");
 }
 
 
 
-IdmaBeConsumer *IDmaBe::get_be_consumer(uint64_t base, uint64_t size, bool is_read)
+IdmaBeConsumer *IDmaBe::get_be_consumer(uint64_t /*base*/, uint64_t /*size*/, bool is_read)
 {
-    // Returns local backend if it falls within local area, or external backend otherwise
-    bool is_loc = base >= this->loc_base && base + size <= this->loc_base + this->loc_size;
-    return is_loc ? (is_read ? this->loc_be_read :  this->loc_be_write) :
-        (is_read ? this->ext_be_read : this->ext_be_write);
+    // Single protocol path: all bursts go through the read/write back-end
+    // pair regardless of address. Local TCDM accesses, if any, must loop
+    // back through the external interconnect just like in RTL.
+    return is_read ? this->be_read : this->be_write;
 }
 
 

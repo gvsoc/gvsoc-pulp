@@ -28,14 +28,19 @@
 #define AXI_PAGE_SIZE (1 << 12)
 
 
-
 IDmaBeAxi::IDmaBeAxi(vp::Component *idma, std::string itf_name, IdmaBeProducer *be)
 :   Block(idma, itf_name),
+    adapter(this, "adapter",
+            idma->get_js_config()->get_int("axi_width"),
+            this),
     fsm_event(this, &IDmaBeAxi::fsm_handler)
 {
     this->be = be;
 
-    idma->new_master_port(itf_name, &this->ico_itf, this);
+    // The owning component exposes the bus-facing master under `itf_name`;
+    // bind to the adapter's output, with the adapter as the callback context
+    // so its static trampolines dispatch to our on_beat / on_retry handlers.
+    idma->new_master_port(itf_name, &this->adapter.out(), &this->adapter);
 
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
@@ -47,8 +52,9 @@ IDmaBeAxi::IDmaBeAxi(vp::Component *idma, std::string itf_name, IdmaBeProducer *
         this->trace.fatal("idma_v2: axi_width must be > 0\n");
     }
 
-    // One beat per axi_width bytes, plus one extra in case the first beat is
-    // unaligned and shrinks below width (very loose upper bound).
+    // One beat per axi_width bytes (writes), plus one extra in case the first
+    // beat is unaligned and shrinks below width. Reads only ever consume
+    // beats[0] (a single full-size req per burst).
     int max_beats_per_burst = (AXI_PAGE_SIZE + this->axi_width - 1) / this->axi_width + 1;
 
     this->burst_info.resize(this->burst_queue_size);
@@ -60,7 +66,7 @@ IDmaBeAxi::IDmaBeAxi(vp::Component *idma, std::string itf_name, IdmaBeProducer *
         info->burst_id = i;
         info->beats.resize(max_beats_per_burst);
         // All beats from a given slot share the same initiator handle so the
-        // resp callback can recover the slot in O(1).
+        // on_beat callback can recover the slot in O(1).
         for (vp::IoReq &beat : info->beats)
         {
             beat.initiator = info;
@@ -104,9 +110,7 @@ void IDmaBeAxi::reset(bool active)
             info->bytes_buffered = 0;
             info->bytes_issued = 0;
             info->bytes_responded = 0;
-            info->bytes_pushed = 0;
             info->bytes_acked = 0;
-            info->beat_ready_cycles.clear();
             info->write_pending_acks.clear();
             info->write_bytes_source_acked = 0;
             info->next_beat_idx = 0;
@@ -155,9 +159,7 @@ void IDmaBeAxi::enqueue_burst(uint64_t base, uint64_t size, bool is_write, IdmaT
     info->bytes_buffered = 0;
     info->bytes_issued = 0;
     info->bytes_responded = 0;
-    info->bytes_pushed = 0;
     info->bytes_acked = 0;
-    info->beat_ready_cycles.clear();
     info->write_pending_acks.clear();
     info->write_bytes_source_acked = 0;
     info->next_beat_idx = 0;
@@ -167,10 +169,6 @@ void IDmaBeAxi::enqueue_burst(uint64_t base, uint64_t size, bool is_write, IdmaT
     if (is_write)
     {
         this->write_fill_queue.push(info);
-    }
-    else
-    {
-        this->read_push_queue.push(info);
     }
 
     this->update();
@@ -201,92 +199,117 @@ bool IDmaBeAxi::issue_beat()
 
     BurstInfo *info = this->pending_bursts.front();
 
-    // Writes can only issue beats from the bytes already buffered by
-    // write_data(). Reads are gated purely by total_size.
-    uint64_t limit = info->is_write ? info->bytes_buffered : info->total_size;
-    if (info->bytes_issued >= limit)
-    {
-        return false;
-    }
-
-    uint64_t remaining = info->total_size - info->bytes_issued;
-    uint64_t beat_size = std::min((uint64_t)this->axi_width, remaining);
-    // For writes also clamp to the buffered prefix so we never issue a beat
-    // whose data hasn't arrived yet.
     if (info->is_write)
     {
-        beat_size = std::min(beat_size, info->bytes_buffered - info->bytes_issued);
-    }
-
-    bool is_first = (info->bytes_issued == 0);
-    bool is_last  = (info->bytes_issued + beat_size == info->total_size);
-
-    int slot_idx = (int)info->burst_id;
-    vp::IoReq *beat = &info->beats[info->next_beat_idx];
-    info->next_beat_idx++;
-
-    beat->prepare();
-    beat->set_is_write(info->is_write);
-    beat->set_addr(info->base + info->bytes_issued);
-    beat->set_size(beat_size);
-    beat->set_data(this->burst_data[slot_idx] + info->bytes_issued);
-    beat->is_first = is_first;
-    beat->is_last  = is_last;
-    beat->burst_id = info->burst_id;
-    beat->set_resp_status(vp::IO_RESP_OK);
-
-    this->trace.msg(vp::Trace::LEVEL_TRACE,
-        "Sending %s beat (slot: %d, addr: 0x%lx, size: 0x%lx, first: %d, last: %d)\n",
-        info->is_write ? "write" : "read", slot_idx,
-        beat->get_addr(), beat_size, is_first ? 1 : 0, is_last ? 1 : 0);
-
-    vp::IoReqStatus status = this->ico_itf.req(beat);
-
-    if (status == vp::IO_REQ_DENIED)
-    {
-        // Roll back the slot's beat-pool cursor; we'll re-issue the same beat
-        // on retry. is_first/is_last/burst_id are recomputed at re-issue.
-        info->next_beat_idx--;
-        this->denied_blocked = true;
-        this->trace.msg(vp::Trace::LEVEL_TRACE,
-            "Beat denied by AXI (slot: %d)\n", slot_idx);
-        return false;
-    }
-
-    // Beat accepted (either DONE inline or GRANTED for deferred resp).
-    info->bytes_issued += beat_size;
-
-    // Once every beat of this burst has been issued, pop it from the issue
-    // queue. The slot stays alive until bytes_responded == total_size.
-    if (info->bytes_issued == info->total_size)
-    {
-        this->pending_bursts.pop();
-        // The central BE may now legally start a new transfer; nudge it.
-        this->be->update();
-    }
-
-    if (status == vp::IO_REQ_DONE)
-    {
-        if (beat->get_resp_status() == vp::IO_RESP_INVALID)
+        // Writes can only issue beats from the bytes already buffered by
+        // write_data(). Walk one axi_width-sized beat per call.
+        uint64_t limit = info->bytes_buffered;
+        if (info->bytes_issued >= limit)
         {
-            this->trace.force_warning(
-                "Invalid access during AXI %s beat (addr: 0x%lx, size: 0x%lx)\n",
-                info->is_write ? "write" : "read",
-                beat->get_addr(), beat_size);
+            return false;
         }
-        this->handle_beat_resp(info, beat_size, beat->get_latency());
-    }
-    // IO_REQ_GRANTED: response will arrive later via axi_response().
 
-    return true;
+        uint64_t remaining = info->total_size - info->bytes_issued;
+        uint64_t beat_size = std::min((uint64_t)this->axi_width, remaining);
+        beat_size = std::min(beat_size, info->bytes_buffered - info->bytes_issued);
+
+        bool is_first = (info->bytes_issued == 0);
+        bool is_last  = (info->bytes_issued + beat_size == info->total_size);
+
+        int slot_idx = (int)info->burst_id;
+        vp::IoReq *beat = &info->beats[info->next_beat_idx];
+        info->next_beat_idx++;
+
+        beat->prepare();
+        beat->set_is_write(true);
+        beat->set_addr(info->base + info->bytes_issued);
+        beat->set_size(beat_size);
+        beat->set_data(this->burst_data[slot_idx] + info->bytes_issued);
+        beat->is_first = is_first;
+        beat->is_last  = is_last;
+        beat->burst_id = info->burst_id;
+        beat->set_resp_status(vp::IO_RESP_OK);
+
+        this->trace.msg(vp::Trace::LEVEL_TRACE,
+            "Sending write beat (slot: %d, addr: 0x%lx, size: 0x%lx, first: %d, last: %d)\n",
+            slot_idx, beat->get_addr(), beat_size,
+            is_first ? 1 : 0, is_last ? 1 : 0);
+
+        vp::IoReqStatus status = this->adapter.submit(beat);
+        // The adapter never returns IO_REQ_DONE — every accepted submit becomes
+        // a future on_beat callback.
+        if (status == vp::IO_REQ_DENIED)
+        {
+            // Roll back the slot's beat-pool cursor; we'll re-issue the same
+            // beat on retry. The adapter has already cleared its in-flight
+            // tracking for the denied req.
+            info->next_beat_idx--;
+            this->denied_blocked = true;
+            this->trace.msg(vp::Trace::LEVEL_TRACE,
+                "Write beat denied by AXI (slot: %d)\n", slot_idx);
+            return false;
+        }
+
+        info->bytes_issued += beat_size;
+        if (info->bytes_issued == info->total_size)
+        {
+            this->pending_bursts.pop();
+            // The central BE may now legally start a new transfer; nudge it.
+            this->be->update();
+        }
+        return true;
+    }
+    else
+    {
+        // Reads: exactly one full-size req per burst.
+        int slot_idx = (int)info->burst_id;
+        vp::IoReq *beat = &info->beats[0];
+
+        beat->prepare();
+        beat->set_is_write(false);
+        beat->set_addr(info->base);
+        beat->set_size(info->total_size);
+        beat->set_data(this->burst_data[slot_idx]);
+        beat->is_first = true;
+        beat->is_last  = true;
+        beat->burst_id = info->burst_id;
+        beat->set_resp_status(vp::IO_RESP_OK);
+
+        this->trace.msg(vp::Trace::LEVEL_TRACE,
+            "Sending read burst (slot: %d, addr: 0x%lx, size: 0x%lx)\n",
+            slot_idx, info->base, info->total_size);
+
+        vp::IoReqStatus status = this->adapter.submit(beat);
+        if (status == vp::IO_REQ_DENIED)
+        {
+            this->denied_blocked = true;
+            this->trace.msg(vp::Trace::LEVEL_TRACE,
+                "Read burst denied by AXI (slot: %d)\n", slot_idx);
+            return false;
+        }
+
+        info->bytes_issued = info->total_size;
+        this->pending_bursts.pop();
+        this->be->update();
+        return true;
+    }
 }
 
 
 
-void IDmaBeAxi::handle_beat_resp(BurstInfo *info, uint64_t size, int64_t latency)
+void IDmaBeAxi::on_beat(const BeatResponseAdapter::BeatEvent &event)
 {
-    int64_t now = this->clock.get_cycles();
-    info->bytes_responded += size;
+    BurstInfo *info = (BurstInfo *)event.req->initiator;
+
+    if (event.status == vp::IO_RESP_INVALID)
+    {
+        this->trace.force_warning(
+            "Invalid access during AXI %s beat (slot: %ld, addr: 0x%lx, size: 0x%lx)\n",
+            info->is_write ? "write" : "read",
+            info->burst_id, event.req->get_addr(), event.size);
+    }
+
+    info->bytes_responded += event.size;
 
     if (info->is_write)
     {
@@ -311,50 +334,37 @@ void IDmaBeAxi::handle_beat_resp(BurstInfo *info, uint64_t size, int64_t latency
         {
             this->trace.msg(vp::Trace::LEVEL_TRACE,
                 "Write burst done (slot: %ld)\n", info->burst_id);
-
             this->free_bursts.push(info);
             this->be->update();
         }
         return;
     }
 
-    // Read beat: each beat carries its own ready-cycle (response time +
-    // annotated latency). Stash it in order so the FSM can release one
-    // chunk downstream per ready beat.
-    info->beat_ready_cycles.push_back(now + latency);
-
-    // Schedule the FSM as soon as the head of the deque is ready.
-    int64_t head_ready = info->beat_ready_cycles.front();
-    int64_t delay = head_ready - now;
-    this->fsm_event.enqueue(std::max(delay, (int64_t)1));
-}
-
-
-
-void IDmaBeAxi::axi_response(vp::Block *__this, vp::IoReq *req)
-{
-    IDmaBeAxi *_this = (IDmaBeAxi *)__this;
-    BurstInfo *info = (BurstInfo *)req->initiator;
-
-    if (req->get_resp_status() == vp::IO_RESP_INVALID)
+    // Read beat. The adapter has already paced this at the modeled ready
+    // cycle. Forward straight to the destination BE if it can take the
+    // chunk now — this saves a 1-cycle fsm hop per beat and keeps the
+    // steady-state read pipeline at 1 beat/cycle (matching the pre-adapter
+    // timing). When the destination is back-pressured we fall back to
+    // queueing and let fsm_handler drain when it becomes ready.
+    if (this->be->is_ready_to_accept_data(info->transfer))
     {
-        _this->trace.force_warning(
-            "Invalid access during AXI %s beat (addr: 0x%lx, size: 0x%lx)\n",
-            info->is_write ? "write" : "read", req->get_addr(), req->get_size());
+        this->read_ack_queue.push({info, event.size});
+        this->be->write_data(info->transfer, event.data, event.size);
     }
-
-    _this->handle_beat_resp(info, req->get_size(), req->get_latency());
+    else
+    {
+        this->read_push_queue.push(std::make_tuple(info, event.data, event.size));
+        this->fsm_event.enqueue();
+    }
 }
 
 
 
-void IDmaBeAxi::axi_retry(vp::Block *__this)
+void IDmaBeAxi::on_retry()
 {
-    IDmaBeAxi *_this = (IDmaBeAxi *)__this;
-
-    _this->trace.msg(vp::Trace::LEVEL_TRACE, "AXI retry — resuming issue\n");
-    _this->denied_blocked = false;
-    _this->update();
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "AXI retry — resuming issue\n");
+    this->denied_blocked = false;
+    this->update();
 }
 
 
@@ -389,7 +399,7 @@ void IDmaBeAxi::write_data(IdmaTransfer *transfer, uint8_t *data, uint64_t size)
 
         std::memcpy(this->burst_data[info->burst_id] + info->bytes_buffered, src, take);
         info->bytes_buffered += take;
-        // Record the source pointer + this slot's share of it so handle_beat_resp
+        // Record the source pointer + this slot's share of it so on_beat
         // can return ownership to the source as the write beats are responded.
         // In practice source chunks (e.g. TCDM lines) never straddle a burst
         // boundary, so `take == size` on the first iteration and this entry
@@ -460,65 +470,39 @@ void IDmaBeAxi::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 {
     IDmaBeAxi *_this = (IDmaBeAxi *)__this;
 
-    // 1. Issue one beat per cycle, as long as something is pending and the
-    //    downstream isn't currently denying us.
+    // 1. Issue beats while there is something pending and the downstream
+    //    isn't denying us. One issue per fsm tick (reads issue full-size
+    //    once; writes pace at one axi_width-sized beat per cycle).
     if (_this->issue_beat())
     {
         _this->fsm_event.enqueue();
     }
 
-    // 2. Forward one read chunk to the destination BE per cycle, as long as
-    //    the next beat's per-beat ready cycle has elapsed and the
-    //    destination is ready. The head of `beat_ready_cycles` belongs to
-    //    the chunk being forwarded right now.
-    while (!_this->read_push_queue.empty())
+    // 2. Forward one read chunk to the destination BE per cycle. The adapter
+    //    has already paced beat arrivals at one per cycle, so the queue
+    //    naturally throttles itself — we only stall here when the
+    //    destination BE isn't ready.
+    if (!_this->read_push_queue.empty())
     {
-        BurstInfo *info = _this->read_push_queue.front();
-        int64_t now = _this->clock.get_cycles();
+        auto &front = _this->read_push_queue.front();
+        BurstInfo *info = std::get<0>(front);
+        uint8_t *data  = std::get<1>(front);
+        uint64_t size  = std::get<2>(front);
 
-        if (info->beat_ready_cycles.empty())
+        if (_this->be->is_ready_to_accept_data(info->transfer))
         {
-            // No beat response in the queue yet.
-            break;
-        }
-        int64_t ready = info->beat_ready_cycles.front();
-        if (ready > now)
-        {
-            _this->fsm_event.enqueue(ready - now);
-            break;
-        }
-        if (!_this->be->is_ready_to_accept_data(info->transfer))
-        {
-            break;
-        }
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,
+                "Forwarding read chunk (slot: %ld, size: 0x%lx)\n",
+                info->burst_id, size);
 
-        // Chunk size: matches the beat that just became ready. We know its
-        // size implicitly from the slot's geometry — the beat boundary is at
-        // bytes_pushed (start) and bytes_pushed + min(axi_width,
-        // total_size - bytes_pushed) (end).
-        uint64_t remaining = info->total_size - info->bytes_pushed;
-        uint64_t chunk = std::min(remaining, (uint64_t)_this->axi_width);
-        uint8_t *data = _this->burst_data[info->burst_id] + info->bytes_pushed;
-
-        _this->trace.msg(vp::Trace::LEVEL_TRACE,
-            "Forwarding read chunk (slot: %ld, offset: 0x%lx, size: 0x%lx)\n",
-            info->burst_id, info->bytes_pushed, chunk);
-
-        info->beat_ready_cycles.pop_front();
-        _this->read_ack_queue.push({info, chunk});
-        info->bytes_pushed += chunk;
-
-        bool finished = (info->bytes_pushed == info->total_size);
-        if (finished)
-        {
+            _this->read_ack_queue.push({info, size});
             _this->read_push_queue.pop();
+            _this->be->write_data(info->transfer, data, size);
+            // Stay scheduled in case more chunks are queued.
+            _this->fsm_event.enqueue();
         }
-
-        _this->be->write_data(info->transfer, data, chunk);
-
-        // Pace at one chunk per cycle.
-        _this->fsm_event.enqueue();
-        break;
+        // If BE not ready, leave the queue alone — be->update() will nudge us
+        // when it becomes ready.
     }
 }
 

@@ -14,9 +14,35 @@
 # limitations under the License.
 #
 
+"""Configuration dataclass for :class:`ips.pulp.idma_v2.reg_dma.RegDmaV2`."""
+
 from config_tree import Config, cfg_field
 
+
 class RegDmaConfig(Config):
+    """Configuration for the io_v2 register-front-end iDMA.
+
+    Attributes
+    ----------
+    transfer_queue_size : int
+        Maximum number of in-flight transfer descriptors queued in
+        the register front-end. Default 8.
+    burst_queue_size : int
+        Maximum number of in-flight bursts owned by each back-end's
+        slot pool. Default 8.
+    burst_size : int
+        Optional cap on a logical burst's size (bytes). ``0`` means
+        no cap; the back-end uses the AXI page size (4 KiB) as the
+        natural upper bound. Default 0.
+    axi_width : int
+        Width of the AXI bus in bytes. Used as the beat size on the
+        AXI back-end: a logical read burst is announced as one
+        io_v2 req of size = total burst bytes and the
+        :class:`utils.io_v2_beat_adapter.BeatResponseAdapter`
+        spreads the ``ceil(total / axi_width)`` response beats one
+        per cycle. Writes stream beat-by-beat onto the AXI master.
+        Default 8.
+    """
 
     transfer_queue_size: int = cfg_field(default=8, desc=(
         "Number of transfer requests which can be queued to the DMA."
@@ -27,19 +53,8 @@ class RegDmaConfig(Config):
     ))
 
     burst_size: int = cfg_field(default=0, desc=(
-        "Burst size."
-    ))
-
-    loc_base: int = cfg_field(default=0, desc=(
-        "Base address of the local area."
-    ))
-
-    loc_size: int = cfg_field(default=0, desc=(
-        "Size of the local area."
-    ))
-
-    tcdm_width: int = cfg_field(default=0, desc=(
-        "Width of the local interconnect, in bytes."
+        "Optional cap on a logical burst's size in bytes (0 = use the "
+        "natural AXI-page upper bound of 4 KiB)."
     ))
 
     axi_width: int = cfg_field(default=8, desc=(

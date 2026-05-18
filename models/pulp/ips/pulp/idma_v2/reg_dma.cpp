@@ -16,57 +16,51 @@
 
 /*
  * Authors: Germain Haugou, ETH Zurich (germain.haugou@iis.ee.ethz.ch)
- *          Lorenzo Ruotolo, Politecnico di Torino (lorenzo.ruotolo@polito.it)
  */
 
 #include <vp/vp.hpp>
-#include "fe/idma_fe_cheshire.hpp"
+#include "fe/idma_fe_reg.hpp"
 #include "me/idma_me_2d.hpp"
 #include "be/idma_be.hpp"
 #include "be/idma_be_axi.hpp"
-#include "be/idma_be_tcdm.hpp"
 
 
 
 /**
- * @brief Cheshire DMA
+ * @brief Reg DMA
  *
  * This puts together:
- *   - Cheshire custom DMA register-based front-end
+ *   - Register-based front-end to enqueue transfers from a bus
  *   - 2D middle end to add support for 2D transfers
- *   - AXI and TCDM backend protocols to interact with external AXI interconnect and local
- *   TCDM memory
+ *   - AXI read/write back-ends used for every transfer (the iDMA's only
+ *     egress is the AXI master pair, matching RTL)
  */
-class CheshireDma : public vp::Component
+class RegDma : public vp::Component
 {
 public:
-    CheshireDma(vp::ComponentConf &config);
+    RegDma(vp::ComponentConf &config);
 
 private:
-    IDmaFeCheshire fe;
+    IDmaFeReg fe;
     IDmaMe2D me;
     IDmaBeAxi be_axi_read;
     IDmaBeAxi be_axi_write;
-    IDmaBeTcdm be_tcdm_read;
-    IDmaBeTcdm be_tcdm_write;
     IDmaBe be;
 };
 
 
 
-CheshireDma::CheshireDma(vp::ComponentConf &config)
+RegDma::RegDma(vp::ComponentConf &config)
     : vp::Component(config),
     fe(this, &this->me),
     me(this, &this->fe, &this->be),
     be_axi_read(this, "axi_read", &this->be), be_axi_write(this, "axi_write", &this->be),
-    be_tcdm_read(this, "tcdm_read", &this->be), be_tcdm_write(this, "tcdm_write", &this->be),
-    be(this, &this->me, &this->be_tcdm_read, &this->be_tcdm_write,
-        &this->be_axi_read, &this->be_axi_write)
+    be(this, &this->me, &this->be_axi_read, &this->be_axi_write)
 {
 }
 
 
 extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
-    return new CheshireDma(config);
+    return new RegDma(config);
 }

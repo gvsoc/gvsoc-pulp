@@ -36,8 +36,8 @@ from interco.router_v2 import (Router, RouterConfig, RouterMapping,
                                   KIND_BANDWIDTH, KIND_BACKPRESSURE)
 from gvrun.parameter import TargetParameter
 
-from pulp.idma_v2.reg_dma import RegDmaV2
-from pulp.idma_v2.reg_dma_config import RegDmaConfig
+from ips.pulp.idma_v2.reg_dma import RegDmaV2
+from ips.pulp.idma_v2.reg_dma_config import RegDmaConfig
 
 from idma_tester import IDmaTesterV2
 
@@ -301,13 +301,12 @@ class Chip(gvsoc.systree.Component):
         clock.o_CLOCK(tcdm.i_CLOCK())
 
         # --- iDMA (DUT) ---
+        # AXI-only egress: TCDM accesses loop back through the shared
+        # router's `tcdm` mapping → tcdm_junction → tcdm.i_INPUT().
         idma = RegDmaV2(self, 'idma', config=RegDmaConfig(
             transfer_queue_size=4,
             burst_queue_size=4,
             burst_size=0,
-            loc_base=TCDM_BASE,
-            loc_size=TCDM_SIZE,
-            tcdm_width=8,
             axi_width=idma_axi_width,
         ))
         clock.o_CLOCK(idma.i_CLOCK())
@@ -330,13 +329,12 @@ class Chip(gvsoc.systree.Component):
         shared_router = Router(self, 'router', config=shared_cfg)
         clock.o_CLOCK(shared_router.i_CLOCK())
 
-        # `tcdm_junction`: 2-input pass-through router in front of the TCDM.
-        # The iDMA's o_TCDM emits *already-translated* local addresses (it
-        # subtracts loc_base internally), so the junction has a single
-        # mapping at base=0 / size=TCDM_SIZE / remove_base=False so local
-        # addresses go through unchanged. The tester reaches the same
-        # junction via shared_router's `tcdm` mapping which rebases the
-        # global TCDM_BASE address into the same local space first.
+        # `tcdm_junction`: pass-through router in front of the TCDM.
+        # All TCDM traffic — from the tester and from the iDMA's AXI
+        # master — now reaches the TCDM through this single junction
+        # via the shared router's `tcdm` mapping (which rebases
+        # TCDM_BASE → 0 first). io_v2 requires one master per slave
+        # port so we keep the junction as the fan-in.
         tcdm_cfg = RouterConfig(kind=KIND_BANDWIDTH, latency=0, bandwidth=8)
         tcdm_junction = Router(self, 'tcdm_junction', config=tcdm_cfg)
         clock.o_CLOCK(tcdm_junction.i_CLOCK())
@@ -363,10 +361,6 @@ class Chip(gvsoc.systree.Component):
         tester.o_MEM (shared_router.i_INPUT(1))
         idma.o_AXI_READ (shared_router.i_INPUT(2))
         idma.o_AXI_WRITE(shared_router.i_INPUT(3))
-
-        # iDMA's o_TCDM read+write also need separate junction inputs.
-        idma.o_TCDM_READ (tcdm_junction.i_INPUT(1))
-        idma.o_TCDM_WRITE(tcdm_junction.i_INPUT(2))
 
         # IRQ wire (not via router — direct).
         idma.o_IRQ(tester.i_IRQ())

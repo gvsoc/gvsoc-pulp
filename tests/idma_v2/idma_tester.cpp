@@ -40,7 +40,7 @@
 #include <cstring>
 
 
-// iDMA register offsets (mirror gvsoc/pulp/pulp/idma_v2/fe/idma_fe_reg.cpp).
+// iDMA register offsets (mirror gvsoc/pulp/models/pulp/ips/pulp/idma_v2/fe/idma_fe_reg.cpp).
 static constexpr uint64_t IDMA_REG_TRIGGER     = 0x10;
 static constexpr uint64_t IDMA_REG_DST         = 0xd0;
 static constexpr uint64_t IDMA_REG_SRC         = 0xd8;

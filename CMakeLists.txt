@@ -1,7 +1,8 @@
 install(DIRECTORY . DESTINATION ${CMAKE_INSTALL_PREFIX}/generators
-FILES_MATCHING PATTERN "*.py" PATTERN "*.json" PATTERN __pycache__ EXCLUDE PATTERN test EXCLUDE PATTERN targets EXCLUDE)
+FILES_MATCHING PATTERN "*.py" PATTERN "*.json" PATTERN __pycache__ EXCLUDE PATTERN test EXCLUDE PATTERN targets EXCLUDE PATTERN models EXCLUDE)
 
 install(DIRECTORY targets DESTINATION ${CMAKE_INSTALL_PREFIX}
 FILES_MATCHING PATTERN "*.py" PATTERN "*.json" PATTERN __pycache__ EXCLUDE)
 
 add_subdirectory(pulp)
+add_subdirectory(models/pulp)

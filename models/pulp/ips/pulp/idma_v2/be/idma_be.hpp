@@ -203,10 +203,11 @@ public:
 /**
  * @brief Backend
  *
- * The backend takes care of moving data from source and destination.
- * It is connected to a local backend and a remote backend.
- * The backends are selecting based on the transfer source and destination addresses
- * which are compared to the local area given to this backend.
+ * The backend takes care of moving data between source and destination through
+ * a single protocol back-end pair (one read, one write). All addresses are
+ * routed unconditionally to that back-end, matching the RTL where the iDMA
+ * has a single AXI master and any "TCDM-local" shortcut would have to be
+ * synthesised by an external AXI→memory bridge.
  */
 class IDmaBe : public vp::Block, public IdmaTransferConsumer, public IdmaBeProducer
 {
@@ -216,12 +217,11 @@ public:
      *
      * @param idma The top iDMA block.
      * @param me The middle-end
-     * @param loc_be The local backend, selected when an address falls into the local range.
-     * @param ext_be The external backend, selected when an address does not fall into the local
-     *  range.
+     * @param be_read  The protocol back-end used for every read burst.
+     * @param be_write The protocol back-end used for every write burst.
      */
-    IDmaBe(vp::Component *idma, IdmaTransferProducer *me, IdmaBeConsumer *loc_be_read,
-        IdmaBeConsumer *loc_be_write, IdmaBeConsumer *ext_be_read, IdmaBeConsumer *ext_be_write);
+    IDmaBe(vp::Component *idma, IdmaTransferProducer *me,
+        IdmaBeConsumer *be_read, IdmaBeConsumer *be_write);
 
     void reset(bool active);
 
@@ -261,14 +261,8 @@ private:
     IdmaBeConsumer *current_transfer_src_be;
     // Destination backend protocol of the current transfer
     IdmaBeConsumer *current_transfer_dst_be;
-    // Backend for local area
-    IdmaBeConsumer *loc_be_read;
-    IdmaBeConsumer *loc_be_write;
-    // Backend for external area
-    IdmaBeConsumer *ext_be_read;
-    IdmaBeConsumer *ext_be_write;
-    // Base address of the local area
-    uint64_t loc_base;
-    // Size of the local area
-    uint64_t loc_size;
+    // Read and write protocol back-ends. Every burst is routed through
+    // these, regardless of address.
+    IdmaBeConsumer *be_read;
+    IdmaBeConsumer *be_write;
 };
