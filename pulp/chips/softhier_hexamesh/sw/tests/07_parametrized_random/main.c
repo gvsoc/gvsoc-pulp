@@ -6,10 +6,10 @@
 // ==========================================
 // Benchmark Configuration
 // ==========================================
-#define TILE_SIZE 16384 // 16 KB per transfer
+#define TILE_SIZE 1024 // 16 KB per transfer
 #define TOTAL_TRANSFERS 9906
-#define CYCLES_PER_PACKET 256
-#define BATCH_SIZE 8 // Max outstanding txns before waiting
+#define CYCLES_PER_PACKET 35
+#define BATCH_SIZE 16 // Max outstanding txns before waiting
 
 #define SRC_BUF 0x00000
 #define DST_BUF 0x80000
@@ -65,34 +65,44 @@ int main() {
   }
 
   flex_global_barrier_polling();
+  uint32_t start_time = 0;
 
   if (my_cid == 0 && flex_is_first_core()) {
     flex_timer_start();
+    start_time = get_cycles();
   }
 
   if (flex_is_dm_core()) {
-    // Record the start time
+
+    uint32_t precomputed_dests[100];
+    for (uint32_t k = 0; k < transfers_per_cluster; k++) {
+      precomputed_dests[k] = get_random_cid();
+    }
+
     uint32_t next_injection = get_cycles();
+    uint32_t batch_counter = 0; // Track batch size without modulo
 
     for (uint32_t k = 0; k < transfers_per_cluster; k++) {
 
-      // Precise Pacing: Wait until the exact cycle for the next packet
       if (CYCLES_PER_PACKET > 0) {
         while (get_cycles() < next_injection) {
           asm volatile("nop");
         }
-        // Schedule the next packet
+        // next_injection = get_cycles() + CYCLES_PER_PACKET;
         next_injection += CYCLES_PER_PACKET;
       }
 
-      uint32_t dest_cid = get_random_cid();
-      uint32_t dst_offset = DST_BUF + ((k % 16) * TILE_SIZE);
+      // Fast bitwise AND instead of modulo (k & 15)
+      uint32_t dst_offset = DST_BUF + ((k & 15) * TILE_SIZE);
 
-      flex_dma_async_1d(remote_cid(dest_cid, dst_offset), local(SRC_BUF),
-                        TILE_SIZE);
+      flex_dma_async_1d(remote_cid(precomputed_dests[k], dst_offset),
+                        local(SRC_BUF), TILE_SIZE);
 
-      if ((k + 1) % BATCH_SIZE == 0) {
+      // Fast batch check instead of modulo
+      batch_counter++;
+      if (batch_counter == BATCH_SIZE) {
         flex_dma_async_wait_all();
+        batch_counter = 0;
       }
     }
 
@@ -103,6 +113,8 @@ int main() {
 
   if (my_cid == 0 && flex_is_first_core()) {
     flex_timer_end();
+    uint32_t end_time = get_cycles();
+    printf("Pure Benchmark Cycles: %u\n", (end_time - start_time));
     printf("Controlled Uniform Random Benchmark Finished Successfully!\n");
   }
 
