@@ -357,6 +357,77 @@ class FlooNocFlex(gvsoc.systree.Component):
             
             self.add_property('routing_tables', routing_tables)
 
+    def generate_routing_tables_shortest_path(self):
+        """
+        Generates routing tables based on the shortest path (minimum hops) between 
+        all nodes using a Breadth-First Search (BFS) algorithm.
+        """
+        nb_nodes = self.get_property('nb_nodes')
+        links = self.get_property('links')
+
+        routers = [r[0] for r in self.get_property('routers')]
+        nis = [n[0] for n in self.get_property('network_interfaces')]
+
+        # Initialize routing tables
+        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
+
+        # Build an adjacency list for the routers and map Network Interfaces to their attached routers
+        adj = {r: [] for r in routers}
+        ni_to_router = {}
+        
+        for link in links:
+            node_a, node_b = link[0], link[1]
+            if node_a in nis and node_b in routers:
+                ni_to_router[node_a] = node_b
+            elif node_b in nis and node_a in routers:
+                ni_to_router[node_b] = node_a
+            elif node_a in routers and node_b in routers:
+                adj[node_a].append(node_b)
+                adj[node_b].append(node_a)
+
+        # Remove any duplicates
+        for r in routers:
+            adj[r] = list(set(adj[r]))
+
+        # Calculate shortest paths
+        for src in routers:
+            best_first_hop = {}
+            visited = set([src])
+            
+            queue = []
+            
+            for neighbor in adj[src]:
+                queue.append((neighbor, neighbor))
+                visited.add(neighbor)
+                best_first_hop[neighbor] = neighbor
+                
+            # Traverse the topology
+            while queue:
+                curr, first_hop = queue.pop(0)
+                
+                for neighbor in adj[curr]:
+                    if neighbor not in visited:
+                        visited.add(neighbor)
+                        # Inherit the first hop
+                        best_first_hop[neighbor] = first_hop
+                        queue.append((neighbor, first_hop))
+
+            # Populate the routing table for this source router
+            for dst in range(nb_nodes):
+                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
+                
+                if target_router == -1:
+                    continue
+                
+                if src == target_router:
+                    routing_tables[str(src)][str(dst)] = dst
+                elif target_router in best_first_hop:
+                    routing_tables[str(src)][str(dst)] = best_first_hop[target_router]
+                else:
+                    routing_tables[str(src)][str(dst)] = src
+
+        self.add_property('routing_tables', routing_tables)
+
     def generate_routing_tables_mesh_2d(self, dim_x: int, dim_y: int):
         """
         Generates routing tables for the routers based on grid dimensions.
