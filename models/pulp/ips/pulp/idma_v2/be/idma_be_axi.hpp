@@ -26,7 +26,6 @@
 #include <vector>
 #include <vp/vp.hpp>
 #include <vp/itf/io_v2.hpp>
-#include <utils/io_v2_beat_adapter.hpp>
 #include "../idma.hpp"
 #include "idma_be.hpp"
 
@@ -36,23 +35,19 @@
  * Wire shapes:
  *   - Reads:  one IoReq per logical AXI burst with size = total_burst_bytes,
  *             is_first = is_last = true. The slave responds in any of the
- *             three io_v2 forms (sync DONE, async big-packet, beat stream).
- *             A `BeatResponseAdapter` between this backend and the bus
- *             normalises the response into one `on_beat` callback per
- *             axi_width-sized beat, paced at one beat per cycle regardless
- *             of the slave's actual response form.
+ *             three io_v2 forms. The framework auto-inserts an
+ *             IoV2BeatAdapter on the downstream when the slave's signature is
+ *             IoV2BigPacket; that adapter normalises the response into one
+ *             resp() per axi_width-sized beat, paced at one beat per cycle.
  *   - Writes: N IoReqs per burst, size = axi_width per beat (with the tail
  *             possibly smaller), is_first / is_last / burst_id set on each.
- *             The adapter passes each beat req through 1:1 (single-chunk
- *             responses) so the backend sees one `on_beat` per write beat
- *             ack — same cadence as today.
+ *             Each write beat receives a single resp() back.
  *
  * Per-burst state lives in BurstInfo slots; the slot stays alive until every
  * beat has been responded to (writes) or until the destination BE has
  * acknowledged every chunk pushed downstream (reads).
  */
-class IDmaBeAxi : public vp::Block, public IdmaBeConsumer,
-                  public BeatResponseAdapter::Handler
+class IDmaBeAxi : public vp::Block, public IdmaBeConsumer
 {
 public:
     IDmaBeAxi(vp::Component *idma, std::string itf_name, IdmaBeProducer *be);
@@ -69,10 +64,6 @@ public:
     bool can_accept_burst() override;
     bool can_accept_data() override;
     bool is_empty() override;
-
-    // BeatResponseAdapter::Handler
-    void on_beat(const BeatResponseAdapter::BeatEvent &beat) override;
-    void on_retry() override;
 
 private:
     // Per-burst state. One BurstInfo + one data buffer + one beat pool per slot,
@@ -119,6 +110,11 @@ private:
     };
 
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
+    // io_v2 master callbacks. Fired once per response beat by either the
+    // downstream IoV2BigPacket slave (after the auto-inserted adapter has
+    // normalised) or by a directly-bound IoV2Beat slave.
+    static void resp_meth(vp::Block *__this, vp::IoReq *req);
+    static void retry_meth(vp::Block *__this);
 
     // Allocate the next free slot, initialise it for a new burst, and queue it
     // for issue (and, for writes, for filling).
@@ -130,9 +126,10 @@ private:
     bool issue_beat();
 
     IdmaBeProducer *be;
-    // The adapter owns the bus-facing IoMaster. It normalises whatever
-    // response form the slave produces into a uniform on_beat callback stream.
-    BeatResponseAdapter adapter;
+    // Bus-facing IoMaster. Declared with signature IoV2Beat on the Python
+    // generator; the framework auto-inserts an IoV2BeatAdapter downstream
+    // when the bound slave's signature is IoV2BigPacket.
+    vp::IoMaster bus;
     vp::Trace trace;
     vp::ClockEvent fsm_event;
 
@@ -156,7 +153,7 @@ private:
     // write_data(). Front-most slot is the current fill target.
     std::queue<BurstInfo *> write_fill_queue;
     // Per-beat read chunks waiting to be forwarded to the destination BE.
-    // Pushed in order by on_beat (already paced at 1/cycle by the adapter)
+    // Pushed in order by resp_meth (already paced at 1/cycle by the adapter)
     // and drained at the destination BE's accept rate by the FSM. One tuple
     // per beat: (slot, data slice, size).
     std::queue<std::tuple<BurstInfo *, uint8_t *, uint64_t>> read_push_queue;
@@ -166,6 +163,6 @@ private:
     std::queue<std::pair<BurstInfo *, uint64_t>> read_ack_queue;
 
     // v2 deny/retry: when the AXI master gets IO_REQ_DENIED on a send, it
-    // suspends issuing until on_retry() fires.
+    // suspends issuing until retry_meth() fires.
     bool denied_blocked = false;
 };

@@ -37,6 +37,7 @@ RTL.
 from typing_extensions import override
 import gvsoc.systree
 from gvsoc.gui import Signal, DisplayPulse, DisplayLogicBox
+from gvsoc.signature import IoV2Beat
 from ips.pulp.idma_v2.reg_dma_config import RegDmaConfig
 
 
@@ -155,7 +156,6 @@ class RegDmaV2(gvsoc.systree.Component):
             'ips/pulp/idma_v2/me/idma_me_2d.cpp',
             'ips/pulp/idma_v2/be/idma_be.cpp',
             'ips/pulp/idma_v2/be/idma_be_axi.cpp',
-            'utils/io_v2_beat_adapter.cpp',
         ])
 
         self.add_properties({
@@ -164,6 +164,10 @@ class RegDmaV2(gvsoc.systree.Component):
             "burst_size" : config.burst_size,
             "axi_width": config.axi_width,
         })
+
+        # Remember axi_width on the Python object — the o_AXI_* methods
+        # declare beat-mode bindings against this.
+        self._axi_width = config.axi_width
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         """Returns the io_v2 register-file slave port.
@@ -185,19 +189,19 @@ class RegDmaV2(gvsoc.systree.Component):
         :meth:`o_AXI_READ` and :meth:`o_AXI_WRITE` on separate
         router inputs.
         """
-        self.itf_bind('axi_read', itf, signature='io_v2')
-        self.itf_bind('axi_write', itf, signature='io_v2')
+        self.itf_bind('axi_read', itf, signature=IoV2Beat(self._axi_width))
+        self.itf_bind('axi_write', itf, signature=IoV2Beat(self._axi_width))
 
     def o_AXI_READ(self, itf: gvsoc.systree.SlaveItf):
         """Binds the system-side AXI read master to ``itf``.
 
         Each logical read burst is issued as exactly one io_v2 req
-        of size = total burst bytes; the back-end's
-        :class:`utils.io_v2_beat_adapter.BeatResponseAdapter`
-        normalises the response into one callback per
-        ``config.axi_width``-sized beat.
+        of size = total burst bytes. The framework auto-inserts an
+        ``IoV2BeatAdapter`` on the path when the bound slave is
+        ``IoV2BigPacket`` so the back-end always observes per-beat
+        responses (one callback per ``config.axi_width`` bytes).
         """
-        self.itf_bind('axi_read', itf, signature='io_v2')
+        self.itf_bind('axi_read', itf, signature=IoV2Beat(self._axi_width))
 
     def o_AXI_WRITE(self, itf: gvsoc.systree.SlaveItf):
         """Binds the system-side AXI write master to ``itf``.
@@ -206,7 +210,7 @@ class RegDmaV2(gvsoc.systree.Component):
         ``config.axi_width`` bytes, ``is_first`` / ``is_last`` /
         ``burst_id`` set per beat).
         """
-        self.itf_bind('axi_write', itf, signature='io_v2')
+        self.itf_bind('axi_write', itf, signature=IoV2Beat(self._axi_width))
 
     def o_IRQ(self, itf: gvsoc.systree.SlaveItf):
         """Binds the completion interrupt wire to ``itf``.

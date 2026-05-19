@@ -30,17 +30,18 @@
 
 IDmaBeAxi::IDmaBeAxi(vp::Component *idma, std::string itf_name, IdmaBeProducer *be)
 :   Block(idma, itf_name),
-    adapter(this, "adapter",
-            idma->get_js_config()->get_int("axi_width"),
-            this),
+    bus(&IDmaBeAxi::retry_meth, &IDmaBeAxi::resp_meth),
     fsm_event(this, &IDmaBeAxi::fsm_handler)
 {
     this->be = be;
 
-    // The owning component exposes the bus-facing master under `itf_name`;
-    // bind to the adapter's output, with the adapter as the callback context
-    // so its static trampolines dispatch to our on_beat / on_retry handlers.
-    idma->new_master_port(itf_name, &this->adapter.out(), &this->adapter);
+    // The owning component exposes the bus-facing master under `itf_name`,
+    // with `this` (the IDmaBeAxi block) as the callback context so the
+    // static resp_meth / retry_meth dispatch directly to us. The Python
+    // generator declares signature IoV2Beat on this port, so the framework
+    // will auto-insert an IoV2BeatAdapter downstream when the bound slave
+    // declares IoV2BigPacket.
+    idma->new_master_port(itf_name, &this->bus, this);
 
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
@@ -66,7 +67,7 @@ IDmaBeAxi::IDmaBeAxi(vp::Component *idma, std::string itf_name, IdmaBeProducer *
         info->burst_id = i;
         info->beats.resize(max_beats_per_burst);
         // All beats from a given slot share the same initiator handle so the
-        // on_beat callback can recover the slot in O(1).
+        // resp_meth callback can recover the slot in O(1).
         for (vp::IoReq &beat : info->beats)
         {
             beat.initiator = info;
@@ -235,14 +236,14 @@ bool IDmaBeAxi::issue_beat()
             slot_idx, beat->get_addr(), beat_size,
             is_first ? 1 : 0, is_last ? 1 : 0);
 
-        vp::IoReqStatus status = this->adapter.submit(beat);
-        // The adapter never returns IO_REQ_DONE — every accepted submit becomes
-        // a future on_beat callback.
+        vp::IoReqStatus status = this->bus.req(beat);
+        // An IoV2Beat master never surfaces IO_REQ_DONE: an auto-inserted
+        // IoV2BeatAdapter converts inline DONE into scheduled beat callbacks,
+        // and a directly-bound IoV2Beat slave responds asynchronously per beat.
         if (status == vp::IO_REQ_DENIED)
         {
             // Roll back the slot's beat-pool cursor; we'll re-issue the same
-            // beat on retry. The adapter has already cleared its in-flight
-            // tracking for the denied req.
+            // beat on retry. The downstream has not taken the request.
             info->next_beat_idx--;
             this->denied_blocked = true;
             this->trace.msg(vp::Trace::LEVEL_TRACE,
@@ -279,7 +280,7 @@ bool IDmaBeAxi::issue_beat()
             "Sending read burst (slot: %d, addr: 0x%lx, size: 0x%lx)\n",
             slot_idx, info->base, info->total_size);
 
-        vp::IoReqStatus status = this->adapter.submit(beat);
+        vp::IoReqStatus status = this->bus.req(beat);
         if (status == vp::IO_REQ_DENIED)
         {
             this->denied_blocked = true;
@@ -297,19 +298,22 @@ bool IDmaBeAxi::issue_beat()
 
 
 
-void IDmaBeAxi::on_beat(const BeatResponseAdapter::BeatEvent &event)
+void IDmaBeAxi::resp_meth(vp::Block *__this, vp::IoReq *req)
 {
-    BurstInfo *info = (BurstInfo *)event.req->initiator;
+    auto *self = (IDmaBeAxi *)__this;
+    BurstInfo *info = (BurstInfo *)req->initiator;
+    uint64_t beat_size = req->get_size();
+    uint8_t *beat_data = req->get_data();
 
-    if (event.status == vp::IO_RESP_INVALID)
+    if (req->get_resp_status() == vp::IO_RESP_INVALID)
     {
-        this->trace.force_warning(
+        self->trace.force_warning(
             "Invalid access during AXI %s beat (slot: %ld, addr: 0x%lx, size: 0x%lx)\n",
             info->is_write ? "write" : "read",
-            info->burst_id, event.req->get_addr(), event.size);
+            info->burst_id, req->get_addr(), beat_size);
     }
 
-    info->bytes_responded += event.size;
+    info->bytes_responded += beat_size;
 
     if (info->is_write)
     {
@@ -325,46 +329,47 @@ void IDmaBeAxi::on_beat(const BeatResponseAdapter::BeatEvent &event)
             uint64_t chunk_end = info->write_bytes_source_acked + front.second;
             if (chunk_end > info->bytes_responded) break;
 
-            this->be->ack_data(info->transfer, front.first, front.second);
+            self->be->ack_data(info->transfer, front.first, front.second);
             info->write_bytes_source_acked = chunk_end;
             info->write_pending_acks.pop_front();
         }
 
         if (info->bytes_responded == info->total_size)
         {
-            this->trace.msg(vp::Trace::LEVEL_TRACE,
+            self->trace.msg(vp::Trace::LEVEL_TRACE,
                 "Write burst done (slot: %ld)\n", info->burst_id);
-            this->free_bursts.push(info);
-            this->be->update();
+            self->free_bursts.push(info);
+            self->be->update();
         }
         return;
     }
 
-    // Read beat. The adapter has already paced this at the modeled ready
+    // Read beat. The downstream has already paced this at the modeled ready
     // cycle. Forward straight to the destination BE if it can take the
     // chunk now — this saves a 1-cycle fsm hop per beat and keeps the
-    // steady-state read pipeline at 1 beat/cycle (matching the pre-adapter
-    // timing). When the destination is back-pressured we fall back to
-    // queueing and let fsm_handler drain when it becomes ready.
-    if (this->be->is_ready_to_accept_data(info->transfer))
+    // steady-state read pipeline at 1 beat/cycle. When the destination is
+    // back-pressured we fall back to queueing and let fsm_handler drain
+    // when it becomes ready.
+    if (self->be->is_ready_to_accept_data(info->transfer))
     {
-        this->read_ack_queue.push({info, event.size});
-        this->be->write_data(info->transfer, event.data, event.size);
+        self->read_ack_queue.push({info, beat_size});
+        self->be->write_data(info->transfer, beat_data, beat_size);
     }
     else
     {
-        this->read_push_queue.push(std::make_tuple(info, event.data, event.size));
-        this->fsm_event.enqueue();
+        self->read_push_queue.push(std::make_tuple(info, beat_data, beat_size));
+        self->fsm_event.enqueue();
     }
 }
 
 
 
-void IDmaBeAxi::on_retry()
+void IDmaBeAxi::retry_meth(vp::Block *__this)
 {
-    this->trace.msg(vp::Trace::LEVEL_TRACE, "AXI retry — resuming issue\n");
-    this->denied_blocked = false;
-    this->update();
+    auto *self = (IDmaBeAxi *)__this;
+    self->trace.msg(vp::Trace::LEVEL_TRACE, "AXI retry — resuming issue\n");
+    self->denied_blocked = false;
+    self->update();
 }
 
 
@@ -399,7 +404,7 @@ void IDmaBeAxi::write_data(IdmaTransfer *transfer, uint8_t *data, uint64_t size)
 
         std::memcpy(this->burst_data[info->burst_id] + info->bytes_buffered, src, take);
         info->bytes_buffered += take;
-        // Record the source pointer + this slot's share of it so on_beat
+        // Record the source pointer + this slot's share of it so resp_meth
         // can return ownership to the source as the write beats are responded.
         // In practice source chunks (e.g. TCDM lines) never straddle a burst
         // boundary, so `take == size` on the first iteration and this entry
