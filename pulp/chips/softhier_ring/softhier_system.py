@@ -136,6 +136,7 @@ class SoftHierSystem(gvsoc.systree.Component):
 
         # Generate routing tables
         noc.generate_routing_tables_ring()
+        # noc.generate_routing_tables_shortest_path()
 
         ############
         # Bindings #
