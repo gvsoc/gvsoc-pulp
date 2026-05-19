@@ -153,6 +153,8 @@ class SoftHierSystem(gvsoc.systree.Component):
 
         # Generate routing tables using the new hierarchical logic (to be implemented in floonoc_flex.py)
         noc.generate_routing_tables_hier_ring(dim_g=G, dim_l=L)
+        # noc.generate_routing_tables_shortest_path()
+
 
         ############
         # Bindings #
