@@ -5,10 +5,10 @@
 // ==========================================
 // Benchmark Configuration
 // ==========================================
-#define TILE_SIZE 16384 // 16 KB per transfer
+#define TILE_SIZE 16384
 #define TOTAL_TRANSFERS 9971
-#define CYCLES_PER_PACKET 492
-#define BATCH_SIZE 15 // Max outstanding txns before waiting
+#define CYCLES_PER_PACKET 256
+#define BATCH_SIZE 8
 
 #define SRC_BUF 0x00000
 #define DST_BUF 0x80000
@@ -81,7 +81,7 @@ int main() {
           asm volatile("nop");
         }
         // Schedule the next packet
-        next_injection = get_cycles() + CYCLES_PER_PACKET;
+        next_injection += CYCLES_PER_PACKET;
       }
 
       uint32_t dest_cid = get_random_cid();
