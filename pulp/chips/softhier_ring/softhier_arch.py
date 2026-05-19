@@ -21,7 +21,7 @@ class SoftHierArch:
     def __init__(self):
 
         #Cluster
-        self.num_cluster             = 100
+        self.num_cluster             = 10
         self.num_core_per_cluster    = 1
 
         #Topology
