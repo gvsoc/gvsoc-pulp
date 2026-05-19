@@ -131,8 +131,8 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address,
         router_req->set_opcode(req->get_opcode());
         router_req->set_second_data(req->get_second_data());
         // Code for measuring End-to-End latency (from NI enqueue to exit)
-        //*router_req->arg_get(FlooNoc::REQ_INJECT_TIME) =
-        //    (void *)(long)this->ni.clock.get_cycles();
+        *router_req->arg_get(FlooNoc::REQ_INJECT_TIME) =
+            (void *)(long)this->ni.clock.get_cycles();
 
         /*
         printf(
@@ -220,8 +220,8 @@ void NetworkQueue::send_router_req()
     vp::IoReq *req = this->queue.front();
     this->queue.pop();
     // For measuring network latency (from network entry to exit)
-    *req->arg_get(FlooNoc::REQ_INJECT_TIME) =
-        (void *)(long)this->ni.clock.get_cycles();
+    //*req->arg_get(FlooNoc::REQ_INJECT_TIME) =
+    //    (void *)(long)this->ni.clock.get_cycles();
 
     vp::IoReq *burst = *(vp::IoReq **)req->arg_get(FlooNoc::REQ_BURST);
 

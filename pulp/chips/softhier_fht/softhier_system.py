@@ -197,7 +197,7 @@ class SoftHierSystem(gvsoc.systree.Component):
         
         # Generate routing tables
         # noc.generate_routing_tables_deadlock_free() # works up to 40 000 Gbps at 127 nodes
-        noc.generate_routing_tables_fht() # 
+        noc.generate_routing_tables_shortest_path() # 
 
         ############
         # Bindings #
