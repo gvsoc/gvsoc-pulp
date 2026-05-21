@@ -91,7 +91,20 @@ void NetworkQueueV2::enqueue_router_req(vp::IoReq *req, bool is_address, bool wi
 
     while(burst_size > 0)
     {
-        uint64_t size = is_address ? burst_size : std::min(this->width, burst_size);
+        // The address phase of a *write* is metadata-only (no payload) and
+        // the destination NI drops it wholesale, so we can keep it as a
+        // single full-size FloonocReqV2. The address phase of a *read*,
+        // however, is forwarded by the destination NI to its downstream
+        // target — if that target is a beat-based router with an
+        // auto-inserted IoV2BeatAdapter, a multi-beat resp() callback would
+        // crash the NI (which consumes its FloonocReqV2 on the first resp).
+        // Pace read address phases at ``width`` so every FloonocReqV2
+        // round-trip is a single-beat downstream exchange.
+        uint64_t size;
+        if (is_address && req->get_is_write())
+            size = burst_size;
+        else
+            size = std::min(this->width, burst_size);
         FloonocReqV2 *router_req = new FloonocReqV2();
 
         router_req->prepare();
@@ -437,10 +450,10 @@ vp::IoReqStatus NetworkInterfaceV2::handle_req(vp::IoReq *req, bool wide)
     // Use the v2 IoReq remaining_size field to track how many bytes still need
     // to be returned through the mesh before we can ack the burst.
     req->remaining_size = req->get_size();
-    // Remember which external port to use for the response (single field of
-    // vp::IoReq we can repurpose without subclassing the external request).
-    req->initiator = wide ? (void *)&this->wide_input_itf
-                          : (void *)&this->narrow_input_itf;
+    // We do NOT clobber req->initiator here: v2 masters such as the iDMA
+    // backend use that field for their own bookkeeping (BurstInfo*) and
+    // expect it to survive the round-trip through the mesh. The NI instead
+    // picks the response port from the inner FloonocReqV2's `wide` flag.
 
     vp::IoReq **queue;
     if (wide)
@@ -499,14 +512,18 @@ bool NetworkInterfaceV2::handle_request(FloonocNodeV2 *node, FloonocReqV2 *req, 
         vp::IoReq *burst = req->burst;
         bool wide = req->wide;
 
+        // The inner FloonocReqV2's `wide` flag tells us which external slave
+        // port the burst entered through; we use that to dispatch the
+        // response rather than burst->initiator (which belongs to the
+        // master, e.g. the iDMA's BurstInfo*).
+        vp::IoSlave *port = wide ? &this->wide_input_itf : &this->narrow_input_itf;
+
         if (burst->get_is_write())
         {
             this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received write burst response (burst: %p)\n",
                 burst);
             this->nb_pending_bursts[wide]--;
 
-            // Reply through the same external slave port the burst came in on.
-            vp::IoSlave *port = (vp::IoSlave *)burst->initiator;
             burst->set_resp_status(vp::IO_RESP_OK);
             port->resp(burst);
         }
@@ -521,7 +538,6 @@ bool NetworkInterfaceV2::handle_request(FloonocNodeV2 *node, FloonocReqV2 *req, 
             {
                 this->trace.msg(vp::Trace::LEVEL_DEBUG, "Finished burst (burst: %p)\n", burst);
                 this->nb_pending_bursts[wide]--;
-                vp::IoSlave *port = (vp::IoSlave *)burst->initiator;
                 burst->set_resp_status(vp::IO_RESP_OK);
                 port->resp(burst);
             }
