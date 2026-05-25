@@ -91,20 +91,14 @@ void NetworkQueueV2::enqueue_router_req(vp::IoReq *req, bool is_address, bool wi
 
     while(burst_size > 0)
     {
-        // The address phase of a *write* is metadata-only (no payload) and
-        // the destination NI drops it wholesale, so we can keep it as a
-        // single full-size FloonocReqV2. The address phase of a *read*,
-        // however, is forwarded by the destination NI to its downstream
-        // target — if that target is a beat-based router with an
-        // auto-inserted IoV2BeatAdapter, a multi-beat resp() callback would
-        // crash the NI (which consumes its FloonocReqV2 on the first resp).
-        // Pace read address phases at ``width`` so every FloonocReqV2
-        // round-trip is a single-beat downstream exchange.
-        uint64_t size;
-        if (is_address && req->get_is_write())
-            size = burst_size;
-        else
-            size = std::min(this->width, burst_size);
+        // Address phases (read AR and write AW) are metadata-only headers —
+        // one FloonocReqV2 per burst. Data and response phases are paced at
+        // the carrier queue's beat width. Beat-based downstreams may answer
+        // a forwarded read with a multi-beat resp() stream; the NI's
+        // wide_response / narrow_response path is built to absorb that
+        // (each beat forwards as a partial response chunk; the FloonocReqV2
+        // is only released on the last beat).
+        uint64_t size = is_address ? burst_size : std::min(this->width, burst_size);
         FloonocReqV2 *router_req = new FloonocReqV2();
 
         router_req->prepare();
@@ -684,9 +678,20 @@ void NetworkInterfaceV2::handle_response(FloonocReqV2 *req)
 {
     if (!req->get_is_write())
     {
-        // Read response: send data back through the rsp/wide network to the
-        // originating NI. handle_rsp allocates a fresh FloonocReqV2 for the
-        // return trip, so the incoming req is safe to delete on the way out.
+        // Read response: forward the data back through the rsp/wide network
+        // to the originating NI. handle_rsp allocates a *fresh* FloonocReqV2
+        // for the return trip and copies the relevant fields, so the
+        // incoming req survives even if we still need it for further beats.
+        //
+        // io_v2 slaves may answer in three forms — sync DONE, async
+        // big-packet (single resp with is_first==is_last==true) or beat
+        // stream (N resps reusing the same IoReq, with is_first/is_last
+        // mutated per beat and cumulative sizes equal to the request size).
+        // For each beat we ship a partial response of req->get_size() bytes;
+        // the source NI accumulates ``remaining_size`` and replies to the
+        // upstream master when it reaches zero. The FloonocReqV2 is only
+        // released once the downstream slave signals is_last — until then
+        // it must stay alive for the next beat to mutate.
         NetworkInterfaceV2 *origin_ni = req->src_ni;
 
         req->dest_x = origin_ni->x;
@@ -721,5 +726,12 @@ void NetworkInterfaceV2::handle_response(FloonocReqV2 *req)
             this->rsp_queue.handle_rsp(req, true);
         }
     }
-    delete req;
+    // Keep the FloonocReqV2 alive across the beats of a multi-beat resp().
+    // Only release it on the last beat — sync DONE and async big-packet
+    // both deliver is_last=true on their single resp, so they release
+    // immediately as before.
+    if (req->is_last)
+    {
+        delete req;
+    }
 }
