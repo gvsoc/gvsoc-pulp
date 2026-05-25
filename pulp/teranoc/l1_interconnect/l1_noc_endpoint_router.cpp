@@ -22,9 +22,7 @@
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
 #include "floonoc.hpp"
-
-#define GET_BITS(x, start, end) \
-    (((x) >> (start)) & ((1U << ((end) - (start) + 1)) - 1))
+#include "pulp/mempool/common/interco_utils.hpp"
 
 class L1NocEndpointRouter : public vp::Component
 {
@@ -46,8 +44,6 @@ private:
 
     unsigned int constant_bits_lsb;
     unsigned int tile_id_bits;
-
-    unsigned int clog2(int value);
 };
 
 
@@ -104,17 +100,6 @@ void L1NocEndpointRouter::grant(vp::Block *__this, vp::IoReq *req)
 
 void L1NocEndpointRouter::response(vp::Block *__this, vp::IoReq *req)
 {
-}
-
-unsigned int L1NocEndpointRouter::clog2(int value)
-{
-    unsigned int result = 0;
-    value--;
-    while (value > 0) {
-        value >>= 1;
-        result++;
-    }
-    return result;
 }
 
 extern "C" vp::Component *gv_new(vp::ComponentConf &config)

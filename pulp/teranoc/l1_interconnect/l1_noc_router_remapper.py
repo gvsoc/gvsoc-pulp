@@ -20,12 +20,12 @@ import gvsoc.systree
 
 class L1NocRouterRemapper(gvsoc.systree.Component):
 
-    def __init__(self, parent: gvsoc.systree.Component, name: str, nb_ports: int=2, remap_group_size: int=1, interleaved: bool=False):
+    def __init__(self, parent: gvsoc.systree.Component, name: str, nb_ports: int=2, remap_batch_size: int=1, shuffle: bool=False):
 
         super().__init__(parent, name)
 
         self.add_sources(['pulp/teranoc/l1_interconnect/l1_noc_router_remapper.cpp'])
 
         self.add_property("nb_ports", nb_ports)
-        self.add_property("remap_group_size", remap_group_size)
-        self.add_property("interleaved", interleaved)
+        self.add_property("remap_batch_size", remap_batch_size)
+        self.add_property("shuffle", shuffle)

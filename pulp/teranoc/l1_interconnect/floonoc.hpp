@@ -61,9 +61,6 @@ public:
     vp::IoMaster *get_target(int x, int y);
     // Return the network interface at specified position
     NetworkInterface *get_network_interface(int x, int y);
-    // Can be called to notify that an asynchronous response to a request was received. The noc
-    // will then call the initiating network interface so that it is handled by the burst.
-    void handle_request_end(vp::IoReq *req);
 
     // Internal router information is stored inside the requests.
     // These constants give the indices where the information is stored in the requests data.

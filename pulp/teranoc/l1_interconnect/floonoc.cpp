@@ -74,19 +74,6 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
 }
 
 
-// This notifies the end of an internal requests, which is part of an external burst
-// This gets called in 2 different ways:
-// - When a router gets a synchronous response
-// - When an interface receives a call to the response callback
-// In both cases, the requests is accounted on the initiator burst, in the network interface
-void FlooNoc::handle_request_end(vp::IoReq *req)
-{
-    // NetworkInterface *ni = *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);
-    // ni->handle_response(req);
-}
-
-
-
 Router *FlooNoc::get_req_router(int x, int y)
 {
     return this->req_routers[y * this->dim_x + x];
@@ -108,12 +95,10 @@ vp::IoMaster *FlooNoc::get_target(int x, int y)
 
 
 
-// This gets called when a request was pending and the response is received
+// Empty: target responses are handled by the endpoint routers, not by the noc itself.
+// Kept because the master ports above have it registered as resp_meth.
 void FlooNoc::response(vp::Block *__this, vp::IoReq *req)
 {
-    // FlooNoc *_this = (FlooNoc *)__this;
-    // // Just notify the end of request to account it in the network interface
-    // _this->handle_request_end(req);
 }
 
 
