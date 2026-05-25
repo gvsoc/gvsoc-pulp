@@ -21,14 +21,14 @@ class SoftHierArch:
     def __init__(self):
 
         #Cluster
-        self.num_cluster             = 25
+        self.num_cluster             = 36
         self.num_core_per_cluster    = 1
 
         #Topology
         self.topology                = 'HierRing'
 
-        self.num_global_clusters     = 5
-        self.num_local_clusters      = 5
+        self.num_global_clusters     = 6
+        self.num_local_clusters      = 6
 
         self.cluster_tcdm_bank_width = 4
         self.cluster_tcdm_bank_nb    = 128
