@@ -44,12 +44,7 @@ class L1_noc(FlooNoc2dMeshNarrow):
     """
     def __init__(self, parent: gvsoc.systree.Component, name, width: int, nb_x_groups: int,
             nb_y_groups: int, router_input_queue_size: int=2, router_output_queue_size: int=2):
-        
+
         super(L1_noc, self).__init__(parent, name, width, dim_x=nb_x_groups, dim_y=nb_y_groups,
                                         router_input_queue_size=router_input_queue_size,
                                         router_output_queue_size=router_output_queue_size)
-
-        for tile_x in range(0, nb_x_groups):
-            for tile_y in range(0, nb_y_groups):
-                self.add_router(tile_x, tile_y)
-                self.add_network_interface(tile_x, tile_y)

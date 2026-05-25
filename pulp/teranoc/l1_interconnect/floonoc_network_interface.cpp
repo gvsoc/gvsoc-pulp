@@ -28,7 +28,7 @@
 
 NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y)
     : vp::Block(noc, "ni_" + std::to_string(x) + "_" + std::to_string(y)),
-      fsm_event(this, &NetworkInterface::fsm_handler), signal_narrow_req(*this, "narrow_req", 64)
+      signal_narrow_req(*this, "narrow_req", 64)
 {
     this->noc = noc;
     this->x = x;
@@ -49,15 +49,8 @@ void NetworkInterface::reset(bool active)
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Resetting network interface\n");
     if (active)
     {
-        this->stalled = false;
-        this->pending_burst_size = 0;
-        this->denied_req = NULL;
+        this->router_stalled = false;
         this->target_stalled = false;
-        this->routers_stalled = false;
-        // while (this->pending_bursts.size() > 0)
-        // {
-        //     this->remove_pending_burst();
-        // }
     }
 }
 
@@ -73,11 +66,9 @@ int NetworkInterface::get_y()
 
 void NetworkInterface::unstall_queue(int from_x, int from_y)
 {
-    // The request which was previously denied has been granted. Unstall the output queue
-    // and schedule the FSM handler to check if something has to be done
+    // The request which was previously denied has been granted. Unstall the output queue.
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Unstalling queue (position: (%d, %d), queue: %d)\n", from_x, from_y);
-    this->stalled = false;
-    this->fsm_event.enqueue();
+    this->router_stalled = false;
 }
 
 vp::IoReqStatus NetworkInterface::narrow_req(vp::Block *__this, vp::IoReq *req)
@@ -88,67 +79,38 @@ vp::IoReqStatus NetworkInterface::narrow_req(vp::Block *__this, vp::IoReq *req)
     return result;
 }
 
-// This, respectively the narrow and wide versions, should be called by the cluster (or initator of the axi burst)
+// Called by the local initiator to inject a request into the noc.
 vp::IoReqStatus NetworkInterface::req(vp::Block *__this, vp::IoReq *req)
 {
-    // This gets called when a burst is received
     NetworkInterface *_this = (NetworkInterface *)__this;
 
     _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received request from initiator (req: %p)\n", req);
 
-    // We also need to push at which timestamp the burst can start being processed.
-    // Since we handle it asynchronously, we need to start it only once its latency has been
-    // reached
-    // req->set_latency(0); // Actually dont do that because the cluster sent them with some latency that doesnt make sense
-
-    if (_this->stalled)
+    if (_this->router_stalled)
     {
-        // _this->fsm_event.enqueue();
-
-        // if (_this->denied_req)
-        // {
-        //     _this->trace.fatal("A request is already pending in the network interface while it is stalled (req: %p, denied_req: %p)\n",
-        //                      req, _this->denied_req);
-        //     return vp::IO_REQ_DENIED;
-        // }
-        // _this->denied_req = req;
         return vp::IO_REQ_DENIED;
     }
-    else
-    {
-        _this->handle_req(req);
-        return vp::IO_REQ_PENDING;
-    }
+
+    _this->handle_req(req);
+    return vp::IO_REQ_PENDING;
 }
 
 void NetworkInterface::handle_req(vp::IoReq *req)
 {
-    // Get the current burst to be processed
     this->trace.msg(vp::Trace::LEVEL_DEBUG, "Handling request (req: %p)\n", req);
 
     // Fill in the information needed by the target network interface to send back the response
     *req->arg_get(FlooNoc::REQ_SRC_NI) = (void *)this;
 
-    // int to_x, to_y;
-    // to_x = (int)*req->arg_get(FlooNoc::REQ_DEST_X);
-    // to_y = (int)*req->arg_get(FlooNoc::REQ_DEST_Y);
-
-    // this->trace.msg(vp::Trace::LEVEL_TRACE, "Sending request to router (req: %p, destination: (%d, %d))\n",
-    //                 req, to_x, to_y);
-
-    // Note that the router may not grant the request if its input queue is full.
-    // In this case we must stall the network interface
+    // The router may refuse the request if its input queue is full.
+    // In this case we must stall the network interface.
     Router *router = this->noc->get_req_router(this->x, this->y);
 
-    this->stalled = router->handle_request(req, this->x, this->y);
-    if (this->stalled)
+    this->router_stalled = router->handle_request(req, this->x, this->y);
+    if (this->router_stalled)
     {
         this->trace.msg(vp::Trace::LEVEL_TRACE, "Stalling network interface (position: (%d, %d))\n", this->x, this->y);
     }
-
-    // Since we processed a burst, we need to check again in the next cycle if there is
-    // anything to do.
-    this->fsm_event.enqueue();
 }
 
 
@@ -176,20 +138,6 @@ void NetworkInterface::req_from_router(vp::IoReq *req, int from_x, int from_y)
         // In case the access is denied, we need to stall all routers going this NI to prevent
         // any other request from arriving.
         this->noc->get_req_router(from_x, from_y)->stall_queue(this->x, this->y);
-        this->routers_stalled = true;
-    }
-}
-
-
-void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
-{
-    NetworkInterface *_this = (NetworkInterface *)__this;
-    if (_this->denied_req && !_this->stalled)
-    {
-        vp::IoReq *req = _this->denied_req;
-        _this->denied_req = NULL;
-        _this->handle_req(req);
-        req->get_resp_port()->grant(req);
     }
 }
 
@@ -197,10 +145,5 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 void NetworkInterface::grant(vp::IoReq *req)
 {
     this->target_stalled = false;
-    if (this->routers_stalled)
-    {
-        this->noc->get_req_router(this->x, this->y)->unstall_queue(this->x, this->y);
-        this->routers_stalled = false;
-    }
-    this->fsm_event.enqueue();
+    this->noc->get_req_router(this->x, this->y)->unstall_queue(this->x, this->y);
 }

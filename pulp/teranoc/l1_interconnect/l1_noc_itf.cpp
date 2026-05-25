@@ -25,40 +25,11 @@
 #include <math.h>
 #include <vp/mapping_tree.hpp>
 #include "floonoc.hpp"
+#include "pulp/mempool/common/interco_utils.hpp"
 
-#define GET_BITS(x, start, end) \
-    (((x) >> (start)) & ((1U << ((end) - (start) + 1)) - 1))
-
-class BandwidthLimiter;
 class L1_NocItf;
 class InputPort;
 class OutputPort;
-
-class BandwidthLimiter
-{
-public:
-    // Overall bandwidth to be respected, and global latency to be applied to each request
-    BandwidthLimiter(OutputPort *top, int64_t bandwidth, int64_t latency, bool shared_rw_bandwidth);
-    // Can be called on any request going through the limiter to add the fixed latency and impact
-    // the latency and duration with the current utilization of the limiter with respect to the
-    // bandwidth
-    void apply_bandwidth(int64_t cycles, vp::IoReq *req);
-
-private:
-    OutputPort *top;
-    // Bandwidth in bytes per cycle to be respected
-    int64_t bandwidth;
-    // Fixed latency to be added to each request
-    int64_t latency;
-    // Cyclestamp at which the next read burst can go through the limiter. Used to delay a request
-    // which arrives before this cyclestamp.
-    int64_t next_read_burst_cycle = 0;
-    // Cyclestamp at which the write read burst can go through the limiter. Used to delay a request
-    // which arrives before this cyclestamp.
-    int64_t next_write_burst_cycle = 0;
-    // Indicates whether the read and write share the bandwidth
-    bool shared_rw_bandwidth = false;
-};
 
 /**
  * @brief OutputPort
@@ -158,8 +129,6 @@ private:
 
     unsigned int constant_bits_lsb;
     unsigned int group_id_bits;
-
-    unsigned int clog2(int value);
 
     // This component trace
     vp::Trace trace;
@@ -562,17 +531,6 @@ void L1_NocItf::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     }
 }
 
-unsigned int L1_NocItf::clog2(int value)
-{
-    unsigned int result = 0;
-    value--;
-    while (value > 0) {
-        value >>= 1;
-        result++;
-    }
-    return result;
-}
-
 // vp::IoReqStatus L1_NocItf::handle_req(vp::IoReq *req, int port)
 // {
 //     uint64_t offset = req->get_addr();
@@ -597,61 +555,13 @@ unsigned int L1_NocItf::clog2(int value)
 // }
 
 OutputPort::OutputPort(L1_NocItf *top, std::string name, int64_t bandwidth, int64_t latency)
-: vp::Block(top, name), out_queue(this, "out_queue"), limiter(this, bandwidth, latency, true)
+: vp::Block(top, name), out_queue(this, "out_queue"), limiter(bandwidth, latency, true)
 {
 }
 
 InputPort::InputPort(int id, std::string name, L1_NocItf *top, int64_t bandwidth, int64_t latency)
 : vp::Block(top, name), id(id), pending_size(*top, name + "/pending_size", 32, vp::SignalCommon::ResetKind::Value, 0)
 {
-}
-
-BandwidthLimiter::BandwidthLimiter(OutputPort *top, int64_t bandwidth, int64_t latency, bool shared_rw_bandwidth)
-{
-    this->top = top;
-    this->latency = latency;
-    this->bandwidth = bandwidth;
-    this->shared_rw_bandwidth = shared_rw_bandwidth;
-}
-
-void BandwidthLimiter::apply_bandwidth(int64_t cycles, vp::IoReq *req)
-{
-    uint64_t size = req->get_size();
-
-    if (this->bandwidth != 0)
-    {
-        // Bandwidth was specified
-
-        // Duration in cycles of this burst in this router according to router bandwidth
-        int64_t burst_duration = (size + this->bandwidth - 1) / this->bandwidth;
-
-        // Update burst duration
-        // This will update it only if it is bigger than the current duration, in case there is a
-        // slower router on the path
-        req->set_duration(burst_duration);
-
-        // Now we need to compute the start cycle of the burst, which is its latency.
-        // First get the cyclestamp where the router becomes available, due to previous requests
-        int64_t *next_burst_cycle = (req->get_is_write() || this->shared_rw_bandwidth) ?
-            &this->next_write_burst_cycle : &this->next_read_burst_cycle;
-        int64_t router_latency = *next_burst_cycle - cycles;
-
-        // Then compare that to the request latency and take the highest to properly delay the
-        // request in case the bandwidth is reached.
-        int64_t latency = std::max((int64_t)req->get_latency(), router_latency);
-
-        // Apply the computed latency and add the fixed one
-        req->set_latency(latency + this->latency);
-
-        // Update the bandwidth information by appending the new burst right after the previous one.
-        *next_burst_cycle = std::max(cycles, *next_burst_cycle) + burst_duration;
-
-    }
-    else
-    {
-        // No bandwidth was specified, just add the specified latency
-        req->inc_latency(this->latency);
-    }
 }
 
 extern "C" vp::Component *gv_new(vp::ComponentConf &config)

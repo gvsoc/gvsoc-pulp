@@ -23,9 +23,6 @@
 #include <vp/itf/wire.hpp>
 #include "floonoc.hpp"
 
-#define GET_BITS(x, start, end) \
-    (((x) >> (start)) & ((1U << ((end) - (start) + 1)) - 1))
-
 class L1NocRouterRemapper : public vp::Component
 {
 
@@ -49,9 +46,9 @@ private:
     int get_mapped_port(int port);
 
     int nb_ports;
-    int remap_group_size;
+    int remap_batch_size;
     int nb_groups;
-    bool interleaved;
+    bool shuffle;
     int remap_pos;
     uint64_t remap_timestamp;
 };
@@ -64,9 +61,9 @@ L1NocRouterRemapper::L1NocRouterRemapper(vp::ComponentConf &config)
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
     this->nb_ports = get_js_config()->get_int("nb_ports");
-    this->remap_group_size = get_js_config()->get_int("remap_group_size");
-    this->nb_groups = this->nb_ports / this->remap_group_size;
-    this->interleaved = get_js_config()->get_child_bool("interleaved");
+    this->remap_batch_size = get_js_config()->get_int("remap_batch_size");
+    this->nb_groups = this->nb_ports / this->remap_batch_size;
+    this->shuffle = get_js_config()->get_child_bool("shuffle");
     this->remap_pos = 0;
     this->remap_timestamp = 0;
 
@@ -149,22 +146,22 @@ void L1NocRouterRemapper::response(vp::Block *__this, vp::IoReq *req, int id)
 
 int L1NocRouterRemapper::get_mapped_port(int port)
 {
-    if (this->remap_group_size <= 1 || this->nb_ports < this->remap_group_size) {
+    if (this->remap_batch_size <= 1 || this->nb_ports < this->remap_batch_size) {
         return port;
     }
-    this->remap_pos = (this->remap_pos + this->clock.get_cycles() - this->remap_timestamp) % this->remap_group_size;
+    this->remap_pos = (this->remap_pos + this->clock.get_cycles() - this->remap_timestamp) % this->remap_batch_size;
     this->remap_timestamp = this->clock.get_cycles();
     int offset_in_group, group_start;
-    if (this->interleaved) {
+    if (this->shuffle) {
         offset_in_group = port / this->nb_groups;
-        group_start = (port % this->nb_groups) * this->remap_group_size;
+        group_start = (port % this->nb_groups) * this->remap_batch_size;
     }
     else {
-        offset_in_group = port % this->remap_group_size;
+        offset_in_group = port % this->remap_batch_size;
         group_start = port - offset_in_group;
     }
-    int adjusted_offset = (offset_in_group + this->remap_pos) % this->remap_group_size;
-    int mapped_offset = (adjusted_offset % (this->remap_group_size / 2)) * 2 + adjusted_offset / (this->remap_group_size / 2);
+    int adjusted_offset = (offset_in_group + this->remap_pos) % this->remap_batch_size;
+    int mapped_offset = (adjusted_offset % (this->remap_batch_size / 2)) * 2 + adjusted_offset / (this->remap_batch_size / 2);
     int mapped_port = group_start + mapped_offset;
     if (mapped_port < 0 || mapped_port >= this->nb_ports) {
         this->trace.fatal("Mapped port %d is out of range\n", mapped_port);

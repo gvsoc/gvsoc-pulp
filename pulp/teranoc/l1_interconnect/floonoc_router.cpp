@@ -92,12 +92,6 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     // Get the currently active queue and update it to implement the round-robin
     int in_queue_index = _this->current_queue;
 
-    // Update the current queue so that another one is checked first during the next cycle
-    // _this->current_queue += 1;
-    // if (_this->current_queue == 5)
-    // {
-    //     _this->current_queue = 0;
-    // }
     bool output_full[5] = {false}; // Used to make sure we only send a single request per cycle to each direction
     // Then go through the 5 input queues until we find a request which can be propagated
     for (int i = 0; i < 5; i++)

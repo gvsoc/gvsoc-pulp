@@ -23,7 +23,6 @@
 #pragma once
 
 #include <vp/vp.hpp>
-#include <list>
 
 class FlooNoc;
 
@@ -42,8 +41,6 @@ public:
 
     void reset(bool active);
 
-    // This gets called by the top when an asynchronous response is received from a target.
-    // void handle_response(vp::IoReq *req);
     // This gets called by a router to unstall the output queue of the network interface after
     // a request was denied because the input queue of the router was full
     void unstall_queue(int from_x, int from_y);
@@ -61,18 +58,7 @@ private:
     static vp::IoReqStatus narrow_req(vp::Block *__this, vp::IoReq *req);
     // This gets called internally by the wide_req and narrow_req when a burst is received
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
-    // FSM event handler called when something happened and queues need to be checked to see
-    // if a request should be handled.
-    static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
-    // This gets called to handle a addr request
-    // void handle_addr_req(void);
-    // This gets called to handle a data request
-    // void handle_data_req(void);
     void handle_req(vp::IoReq *burst);
-    // This gets called to remove the current pending burst and also remove all related information from the other queues
-    // void remove_pending_burst(void);
-    // This gets called to add a new pending burst to the queue
-    // void add_pending_burst(vp::IoReq *burst, bool isaddr, int64_t timestamp, std::tuple<int, int> origin_pos);
     // Pointer to top
     FlooNoc *noc;
     // X position of this network interface in the grid
@@ -85,35 +71,10 @@ private:
     vp::IoSlave narrow_input_itf;
     // This block trace
     vp::Trace trace;
-    // Queue of pending incoming bursts. Any received burst is pushed there and they are processed
-    // one by one sequentially by the network interface.
-    std::queue<vp::IoReq *> pending_bursts;
-    // Also store if the burst is an address burst or a data burst. This is used to know if the
-    // burst must be processed by the address handler or the data handler
-    std::queue<bool> pending_burst_isaddr;
-    // Also a maintain a queue of timestamps at which the corresponding burst can start to take
-    // into account the burst latency.
-    std::queue<int64_t> pending_bursts_timestamp;
-    // Also store the origin position of the burst to know where to send the response requests
-    std::queue<std::tuple<int, int>> pending_bursts_origin_pos;
-    // Current base address of the burst currently being processed. It is used to update the address
-    // of the internal requests send to the routers to process the burst
-    uint64_t pending_burst_base;
-    // Remaining size of the burst currently being processed. Used to track when all requests
-    // for the current burst have been sent.
-    uint64_t pending_burst_size;
-    // Current data of the burst currently being processed.
-    uint8_t *pending_burst_data;
-    // Clock event used to schedule FSM handler. This is scheduled eveytime something may need to
-    // be done
-    vp::ClockEvent fsm_event;
 
     // True when the output queue is stalled because a router denied a request. The network
     // interface can not send any request until it gets unstalled
     bool stalled;
-    // When initiator is stalled because max number of input pending req has been reached,
-    // this give the input request which has been stalled and must be granted.
-    vp::IoReq *denied_req;
     // Signal used for tracing narrow reqs
     vp::Signal<uint64_t> signal_narrow_req;
     // True when the associated target has reported a stall. No request must be sent until
@@ -121,5 +82,5 @@ private:
     bool target_stalled;
     // True when the routers has been stalled because either the target reported a stall
     // or there is not enough requests anymore
-    bool routers_stalled;
+    bool router_stalled;
 };

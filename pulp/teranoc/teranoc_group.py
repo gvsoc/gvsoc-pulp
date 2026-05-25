@@ -22,61 +22,51 @@ import gvsoc.systree as st
 import interco.router as router
 from interco.interleaver import Interleaver
 import math
-from pulp.teranoc.teranoc_tile import Tile
+from pulp.teranoc.teranoc_tile import TeranocTile
 from pulp.teranoc.l1_interconnect.l1_noc_endpoint_router import L1NocEndpointRouter
 from pulp.mempool.l2_interconnect.hierarchical_interco import Hierarchical_Interco
 from pulp.teranoc.l1_interconnect.l1_noc_router_remapper import L1NocRouterRemapper
 
-class Group(st.Component):
+class TeranocGroup(st.Component):
 
-    def __init__(self, parent, name, parser, group_id_x: int=0, group_id_y: int=0, nb_cores_per_tile: int=4, nb_x_groups: int=4, nb_y_groups: int=4, total_cores: int=1024, nb_remote_ports_per_tile: int=2, bank_factor: int=4, axi_data_width: int=64):
+    def __init__(self, parent, name, parser, arch, group_id_x: int=0, group_id_y: int=0):
         super().__init__(parent, name)
 
-        ################################################################
-        ##########               Design Variables             ##########
-        ################################################################
-        # Hardware parameters
-        group_id = group_id_x * nb_y_groups + group_id_y
-        nb_groups = nb_x_groups * nb_y_groups
-        nb_tiles_per_group = int((total_cores/(nb_x_groups*nb_y_groups))/nb_cores_per_tile)
-        nb_banks_per_tile = nb_cores_per_tile * bank_factor
-        nb_remote_ports = nb_remote_ports_per_tile * nb_tiles_per_group
-        req_remap_group_size = 4
-        resp_remap_group_size = 4
+        # Local convenience aliases (one-shot constants for this group only).
+        group_id = group_id_x * arch.nb_y_groups + group_id_y
 
         ################################################################
         ##########              Design Components             ##########
         ################################################################
-        # TIles
+        # Tiles
         self.tile_list = []
-        for i in range(0, nb_tiles_per_group):
-            self.tile_list.append(Tile(self,f'tile_{i}',parser=parser, tile_id=i, group_id_x=group_id_x, group_id_y=group_id_y, \
-                nb_cores_per_tile=nb_cores_per_tile, nb_tiles_per_group=nb_tiles_per_group, nb_x_groups=nb_x_groups, nb_y_groups=nb_y_groups, \
-                total_cores=total_cores, bank_factor=bank_factor, nb_remote_ports_per_tile=nb_remote_ports_per_tile, axi_data_width=axi_data_width))
+        for i in range(0, arch.nb_tiles_per_group):
+            self.tile_list.append(TeranocTile(self, f'tile_{i}', parser=parser, arch=arch,
+                tile_id=i, group_id_x=group_id_x, group_id_y=group_id_y))
 
         #Group local interconnect
-        group_local_interleaver = Interleaver(self, 'group_local_interleaver', nb_slaves=nb_tiles_per_group, nb_masters=nb_tiles_per_group, 
-            interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor)), offset_translation=False)
+        group_local_interleaver = Interleaver(self, 'group_local_interleaver', nb_slaves=arch.nb_tiles_per_group, nb_masters=arch.nb_tiles_per_group,
+            interleaving_bits=int(math.log2(arch.l1_bank_width*arch.nb_banks_per_tile)), offset_translation=False)
 
         # L1 NoC Request Router
         l1_noc_req_routers = []
-        for i in range(0, nb_remote_ports_per_tile):
-            l1_noc_req_routers.append(L1NocEndpointRouter(self, f'l1_noc_req_router_{i}', req_mode=True, nb_tiles_per_group=nb_tiles_per_group, num_banks_per_tile=nb_banks_per_tile, byte_offset=2))
+        for i in range(0, arch.nb_remote_ports_per_tile):
+            l1_noc_req_routers.append(L1NocEndpointRouter(self, f'l1_noc_req_router_{i}', req_mode=True, nb_tiles_per_group=arch.nb_tiles_per_group, num_banks_per_tile=arch.nb_banks_per_tile, byte_offset=2))
 
         # L1 NoC Response Router
         l1_noc_resp_routers = []
-        for i in range(0, nb_remote_ports_per_tile):
-            l1_noc_resp_routers.append(L1NocEndpointRouter(self, f'l1_noc_resp_router_{i}', req_mode=False, nb_tiles_per_group=nb_tiles_per_group, num_banks_per_tile=nb_banks_per_tile, byte_offset=2))
+        for i in range(0, arch.nb_remote_ports_per_tile):
+            l1_noc_resp_routers.append(L1NocEndpointRouter(self, f'l1_noc_resp_router_{i}', req_mode=False, nb_tiles_per_group=arch.nb_tiles_per_group, num_banks_per_tile=arch.nb_banks_per_tile, byte_offset=2))
 
         # L1 NoC Request Router Remapper
-        l1_noc_req_remapper = L1NocRouterRemapper(self, 'l1_noc_req_remapper', nb_ports=nb_remote_ports, remap_group_size=req_remap_group_size, interleaved=True)
+        l1_noc_req_remapper = L1NocRouterRemapper(self, 'l1_noc_req_remapper', nb_ports=arch.nb_remote_ports_per_group, remap_batch_size=arch.l1_noc_remap_batch_size, shuffle=arch.l1_noc_remap_shuffle)
 
         # L1 NoC Response Router Remapper
-        l1_noc_resp_remapper = L1NocRouterRemapper(self, 'l1_noc_resp_remapper', nb_ports=nb_remote_ports, remap_group_size=resp_remap_group_size, interleaved=True)
+        l1_noc_resp_remapper = L1NocRouterRemapper(self, 'l1_noc_resp_remapper', nb_ports=arch.nb_remote_ports_per_group, remap_batch_size=arch.l1_noc_remap_batch_size, shuffle=arch.l1_noc_remap_shuffle)
 
         # DMA network(virtual, to emulate multiple backends)
         # DMA TCDM Interleaver
-        dma_tcdm_interleaver = Interleaver(self, 'dma_tcdm_interleaver', nb_slaves=nb_tiles_per_group, nb_masters=1, interleaving_bits=int(math.log2(nb_banks_per_tile*4)), offset_translation=False)
+        dma_tcdm_interleaver = Interleaver(self, 'dma_tcdm_interleaver', nb_slaves=arch.nb_tiles_per_group, nb_masters=1, interleaving_bits=int(math.log2(arch.nb_banks_per_tile*arch.l1_bank_width)), offset_translation=False)
 
         # Group-level AXI Interconnect
         # L2 cache rules
@@ -86,91 +76,83 @@ class Group(st.Component):
         l2_cache_rules.append((0x00000008, 0x0000000C))
         l2_cache_rules.append((0x0000000C, 0x00000010))
         # AXI Interconnect
-        axi_ico = Hierarchical_Interco(self, 'axi_ico', synchronous=False, nb_slaves=nb_tiles_per_group+1, enable_cache=True, cache_rules=l2_cache_rules, bandwidth=axi_data_width)
+        axi_ico = Hierarchical_Interco(self, 'axi_ico', synchronous=False, nb_slaves=arch.nb_tiles_per_group+1, enable_cache=True, cache_rules=l2_cache_rules, bandwidth=arch.axi_data_width)
 
         # AXI Interface
-        axi_itf = router.Router(self, 'axi_itf', bandwidth=axi_data_width, latency=2)
+        axi_itf = router.Router(self, 'axi_itf', bandwidth=arch.axi_data_width, latency=2)
         axi_itf.add_mapping('output')
 
         ################################################################
         ##########               Design Bindings              ##########
         ################################################################
         #Tile local master -> Group local interconnect
-        for i in range(0, nb_tiles_per_group):
+        for i in range(0, arch.nb_tiles_per_group):
             self.bind(self.tile_list[i], 'loc_remt_master_out', group_local_interleaver, 'in_%d' % i)
 
         #Group local interconnect -> Tile local slave
-        for i in range(0, nb_tiles_per_group):
+        for i in range(0, arch.nb_tiles_per_group):
             self.bind(group_local_interleaver, 'out_%d' % i, self.tile_list[i], 'loc_remt_slave_in')
 
-        for i in range(0, nb_tiles_per_group):
-            for port in range(0, nb_remote_ports_per_tile):
-                self.bind(self.tile_list[i], f'l1_noc_req_mst_{port}', l1_noc_req_remapper, f'input_{i*nb_remote_ports_per_tile+port}')
+        for i in range(0, arch.nb_tiles_per_group):
+            for port in range(0, arch.nb_remote_ports_per_tile):
+                self.bind(self.tile_list[i], f'l1_noc_req_mst_{port}', l1_noc_req_remapper, f'input_{i*arch.nb_remote_ports_per_tile+port}')
 
-        for i in range(0, nb_tiles_per_group):
-            for port in range(0, nb_remote_ports_per_tile):
-                self.bind(self.tile_list[i], f'l1_noc_resp_slv_{port}', l1_noc_resp_remapper, f'input_{i*nb_remote_ports_per_tile+port}')
+        for i in range(0, arch.nb_tiles_per_group):
+            for port in range(0, arch.nb_remote_ports_per_tile):
+                self.bind(self.tile_list[i], f'l1_noc_resp_slv_{port}', l1_noc_resp_remapper, f'input_{i*arch.nb_remote_ports_per_tile+port}')
 
         # L1 noc request router -> Tile l1 noc request slave
-        for i in range(0, nb_tiles_per_group):
-            for j in range(0, nb_remote_ports_per_tile):
+        for i in range(0, arch.nb_tiles_per_group):
+            for j in range(0, arch.nb_remote_ports_per_tile):
                 self.bind(l1_noc_req_routers[j], f'output_{i}', self.tile_list[i], f'l1_noc_req_slv_{j}')
 
         # L1 noc response router -> Tile l1 noc response master
-        for i in range(0, nb_tiles_per_group):
-            for j in range(0, nb_remote_ports_per_tile):
+        for i in range(0, arch.nb_tiles_per_group):
+            for j in range(0, arch.nb_remote_ports_per_tile):
                 self.bind(l1_noc_resp_routers[j], f'output_{i}', self.tile_list[i], f'l1_noc_resp_mst_{j}')
 
         # AXI Interconnect
         # Tile axi port -> axi interconnect
-        for i in range(0, nb_tiles_per_group):
+        for i in range(0, arch.nb_tiles_per_group):
             self.bind(self.tile_list[i], 'axi_out', axi_ico, f'input_{i}')
 
         # AXI Interface
         self.bind(axi_ico, 'output', axi_itf, 'input')
 
         # DMA network(virtual, to emulate multiple backends)
-        for i in range(0, nb_tiles_per_group):
+        for i in range(0, arch.nb_tiles_per_group):
             self.bind(dma_tcdm_interleaver, f'out_{i}', self.tile_list[i], 'dma_tcdm')
 
         # Loader
         #Group loader -> Tile loader
-        for i in range(0, nb_tiles_per_group):
+        for i in range(0, arch.nb_tiles_per_group):
             self.bind(self, 'loader_start', self.tile_list[i], 'loader_start')
             self.bind(self, 'loader_entry', self.tile_list[i], 'loader_entry')
 
         ################################################################
         ##########               Group Interfaces             ##########
         ################################################################
-        # Tile l1 noc request master -> Group l1 noc request master
-        # for i in range(0, nb_tiles_per_group):
-        #     for port in range(0, nb_remote_ports_per_tile):
-        #         self.bind(self.tile_list[i], f'l1_noc_req_mst_{port}', self, f'l1_noc_req_mst_{i*nb_remote_ports_per_tile+port}')
-        for i in range(0, nb_remote_ports):
+        for i in range(0, arch.nb_remote_ports_per_group):
             self.bind(l1_noc_req_remapper, f'output_{i}', self, f'l1_noc_req_mst_{i}')
 
-        # Tile l1 noc response slave -> Group l1 noc response slave
-        # for i in range(0, nb_tiles_per_group):
-        #     for port in range(0, nb_remote_ports_per_tile):
-        #         self.bind(self.tile_list[i], f'l1_noc_resp_slv_{port}', self, f'l1_noc_resp_slv_{i*nb_remote_ports_per_tile+port}')
-        for i in range(0, nb_remote_ports):
+        for i in range(0, arch.nb_remote_ports_per_group):
             self.bind(l1_noc_resp_remapper, f'output_{i}', self, f'l1_noc_resp_slv_{i}')
 
         # Group l1 noc request slave -> l1 noc request router
-        for i in range(0, nb_tiles_per_group):
-            for port in range(0, nb_remote_ports_per_tile):
-                    self.bind(self, f'l1_noc_req_slv_{i*nb_remote_ports_per_tile+port}', l1_noc_req_routers[port], f'input_{i}')
+        for i in range(0, arch.nb_tiles_per_group):
+            for port in range(0, arch.nb_remote_ports_per_tile):
+                    self.bind(self, f'l1_noc_req_slv_{i*arch.nb_remote_ports_per_tile+port}', l1_noc_req_routers[port], f'input_{i}')
 
         # Group l1 noc response master -> l1 noc response router
-        for i in range(0, nb_tiles_per_group):
-            for port in range(0, nb_remote_ports_per_tile):
-                    self.bind(self, f'l1_noc_resp_mst_{i*nb_remote_ports_per_tile+port}', l1_noc_resp_routers[port], f'input_{i}')
+        for i in range(0, arch.nb_tiles_per_group):
+            for port in range(0, arch.nb_remote_ports_per_tile):
+                    self.bind(self, f'l1_noc_resp_mst_{i*arch.nb_remote_ports_per_tile+port}', l1_noc_resp_routers[port], f'input_{i}')
 
         # Barrier
         # Propagate the barrier signals from the tiles to the group boundary
-        for i in range(0, nb_tiles_per_group):
-            for j in range(0, nb_cores_per_tile):
-                self.bind(self, f'barrier_ack_{i*nb_cores_per_tile+j}', self.tile_list[i], f'barrier_ack_{j}')
+        for i in range(0, arch.nb_tiles_per_group):
+            for j in range(0, arch.nb_snitch_per_tile):
+                self.bind(self, f'barrier_ack_{i*arch.nb_snitch_per_tile+j}', self.tile_list[i], f'barrier_ack_{j}')
 
         # L2 ro-cache configuration
         self.bind(self, 'rocache_cfg', axi_ico, 'rocache_cfg')
@@ -180,7 +162,7 @@ class Group(st.Component):
 
         # DMA
         self.bind(self, 'dma_tcdm', dma_tcdm_interleaver, 'in_0')
-        self.bind(self, 'dma_axi', axi_ico, f'input_{nb_tiles_per_group}')
+        self.bind(self, 'dma_axi', axi_ico, f'input_{arch.nb_tiles_per_group}')
 
     def i_GROUP_INPUT(self, port: int) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'grp_remt{port}_slave_in', signature='io')

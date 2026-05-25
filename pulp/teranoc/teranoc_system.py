@@ -26,61 +26,50 @@ import gvsoc.systree as st
 from pulp.mempool.dma.mempool_dma_top import MemPoolDmaTop
 from elftools.elf.elffile import *
 from interco.converter import Converter
-from pulp.teranoc.teranoc_cluster import Cluster
+from pulp.teranoc.teranoc_cluster import TeranocCluster
 from pulp.teranoc.ctrl_registers import CtrlRegisters
 from pulp.teranoc.l2_subsystem import L2_subsystem
-from pulp.teranoc.l2_interconnect.l2_address_scrambler import L2_AddressScrambler
+from pulp.teranoc.l2_interconnect.l2_address_scrambler import L2AddressScrambler
 from pulp.teranoc.l2_interconnect.l2_noc import L2_noc
+from pulp.teranoc.arch import CONFIGS, DEFAULT_CONFIG
 
-class System(st.Component):
 
-    def __init__(self, parent, name, parser, terapool: bool=True, nb_cores_per_tile: int=4, nb_x_groups: int=4, nb_y_groups: int=4, total_cores: int=1024, nb_remote_ports_per_tile: int=2, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1, l2_size: int=0x1000000, nb_l2_banks: int=16):
+class TeranocSystem(st.Component):
+
+    def __init__(self, parent, name, parser, arch, binary=None):
         super().__init__(parent, name)
 
-        ################################################################
-        ##########               Design Variables             ##########
-        ################################################################
-
-        [args, __] = parser.parse_known_args()
-
-        binary = None
-        if parser is not None:
-            [args, otherArgs] = parser.parse_known_args()
-            binary = args.binary
-
-        nb_groups = nb_x_groups * nb_y_groups
-        nb_axi_masters = nb_axi_masters_per_group * nb_groups
-        nb_banks_per_group = (total_cores // nb_groups) * bank_factor
-        l2_bank_size = l2_size // nb_l2_banks
+        # Convenience locals for the bits we use heavily below; everything
+        # else is read straight from `arch`.
+        axi_data_width     = arch.axi_data_width
+        nb_banks_per_group = arch.nb_banks_per_group
+        l2_bank_size       = arch.l2_bank_size
 
         ################################################################
         ##########              Design Components             ##########
-        ################################################################ 
+        ################################################################
 
-        #Mempool cluster
-        mempool_cluster=Cluster(self, 'mempool_cluster', parser=parser, nb_cores_per_tile=nb_cores_per_tile, \
-            nb_x_groups=nb_x_groups, nb_y_groups=nb_y_groups, total_cores=total_cores, nb_remote_ports_per_tile=nb_remote_ports_per_tile, \
-            bank_factor=bank_factor, axi_data_width=axi_data_width, nb_axi_masters_per_group=nb_axi_masters_per_group, \
-            l2_size=l2_size, nb_l2_banks=nb_l2_banks)
+        # TeraNoC cluster
+        teranoc_cluster = TeranocCluster(self, 'teranoc_cluster', parser=parser, arch=arch)
 
         # Boot Rom
         rom = memory.Memory(self, 'rom', size=0x1000, width_log2=(axi_data_width - 1).bit_length(), stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
 
         # L2 NoC
-        l2_noc = L2_noc(self, 'l2_noc', width=axi_data_width, nb_x_groups=nb_x_groups, nb_y_groups=nb_y_groups, ni_outstanding_reqs=32, router_input_queue_size=2)
+        l2_noc = L2_noc(self, 'l2_noc', width=axi_data_width, nb_x_groups=arch.nb_x_groups, nb_y_groups=arch.nb_y_groups, ni_outstanding_reqs=32, router_input_queue_size=2)
 
         # L2 Memory
-        l2_mem = L2_subsystem(self, 'l2_mem', nb_banks=nb_l2_banks, bank_width=axi_data_width, size=l2_size, port_bandwidth=axi_data_width)
+        l2_mem = L2_subsystem(self, 'l2_mem', nb_banks=arch.nb_l2_banks, bank_width=axi_data_width, size=arch.l2_size, port_bandwidth=axi_data_width)
 
         # CSR
         csr = CtrlRegisters(self, 'ctrl_registers', wakeup_latency=5)
 
-        # UART        
+        # UART
         uart = ns16550.Ns16550(self, 'uart')
 
         # DMA
         dma = MemPoolDmaTop(self, 'dma', loc_base=0x0, loc_size=0x400000, burst_size=4*nb_banks_per_group, tcdm_width=4*nb_banks_per_group,
-                            nb_groups=nb_groups, nb_dmas_per_group=1, be_width=4*nb_banks_per_group)
+                            nb_groups=arch.nb_groups, nb_dmas_per_group=1, be_width=4*nb_banks_per_group)
 
         # Binary Loader
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x80000000)
@@ -89,17 +78,10 @@ class System(st.Component):
         l2_loader_converter = Converter(self, 'l2_loader_converter', output_width=axi_data_width*16, output_align=axi_data_width*16)
 
         # L2 loader address scrambler
-        l2_loader_scrambler = L2_AddressScrambler(self, 'l2_loader_scrambler', bypass=False, l2_base_addr=0x0, l2_size=l2_size, nb_banks=nb_l2_banks, bank_width=axi_data_width, interleave=16)
+        l2_loader_scrambler = L2AddressScrambler(self, 'l2_loader_scrambler', bypass=False, l2_base_addr=0x0, l2_size=arch.l2_size, nb_banks=arch.nb_l2_banks, bank_width=axi_data_width, interleave=16)
 
         #Dummy Memory
         dummy_mem = memory.Memory(self, 'dummy_mem', atomics=True, size=0x400000)
-
-        # AXI Interconnect
-        # axi_ico = []
-        # for i in range(0, nb_axi_masters):
-        #     axi_ico.append(router.Router(self, f'axi_ico_{i}', latency=0))
-        #     axi_ico[i].add_mapping('l2', base=0x80000000, remove_offset=0x80000000, size=0x1000000)
-        #     axi_ico[i].add_mapping('soc')       
 
         soc_ico = router.Router(self, 'soc_ico')    # TODO: output bandwidth only
         soc_ico.add_mapping('bootrom', base=0xa0000000, remove_offset=0xa0000000, size=0x10000, latency=1)
@@ -122,12 +104,31 @@ class System(st.Component):
         ################################################################
 
         # Group axi port -> L2 NoC
-        for i in range(0, nb_x_groups):
-            for j in range(0, nb_y_groups):
-                self.bind(mempool_cluster, f'axi_{i}_{j}_0', l2_noc, f'wide_input_{i+1}_{j+1}')
+        for i in range(0, arch.nb_x_groups):
+            for j in range(0, arch.nb_y_groups):
+                self.bind(teranoc_cluster, f'axi_{i}_{j}_0', l2_noc, f'wide_input_{i+1}_{j+1}')
 
         # L2 NoC -> HBM and peripherals
-        if terapool:
+        if arch.nb_x_groups == 2 and arch.nb_y_groups == 2:
+            soc_demux = router.Router(self, 'soc_demux', bandwidth=axi_data_width, latency=4)
+            soc_demux.add_mapping('soc')
+
+            l2_noc.o_WIDE_BIND(l2_mem.i_BANK_INPUT(0), x=0, y=1)  # HBM bank 0
+            l2_noc.o_WIDE_BIND(l2_mem.i_BANK_INPUT(1), x=0, y=2)  # HBM bank 1
+            l2_noc.o_WIDE_BIND(l2_mem.i_BANK_INPUT(2), x=3, y=2)  # HBM bank 2
+            l2_noc.o_WIDE_BIND(l2_mem.i_BANK_INPUT(3), x=3, y=1)  # HBM bank 3
+            l2_noc.o_WIDE_BIND(soc_demux.i_INPUT(0),   x=1, y=0)  # soc
+
+            l2_noc.o_MAP(base=0x80000000+l2_bank_size*0, size=l2_bank_size, x=0, y=1, name='hbm0', rm_base=True)
+            l2_noc.o_MAP(base=0x80000000+l2_bank_size*1, size=l2_bank_size, x=0, y=2, name='hbm1', rm_base=True)
+            l2_noc.o_MAP(base=0x80000000+l2_bank_size*2, size=l2_bank_size, x=3, y=2, name='hbm2', rm_base=True)
+            l2_noc.o_MAP(base=0x80000000+l2_bank_size*3, size=l2_bank_size, x=3, y=1, name='hbm3', rm_base=True)
+            l2_noc.o_MAP(base=0x00000000,                size=0x80000000,   x=1, y=0, name='soc1', rm_base=False)
+            l2_noc.o_MAP(base=0xA0000000,                size=0x30000000,   x=1, y=0, name='soc2', rm_base=False)
+
+            self.bind(soc_demux, 'soc', soc_ico, 'input')
+
+        elif arch.nb_x_groups == 4 and arch.nb_y_groups == 4:
             hbm5_soc_demux = router.Router(self, 'hbm5_soc_demux', bandwidth=axi_data_width, latency=4)
             hbm5_soc_demux.add_mapping('hbm5', base=0x80000000+l2_bank_size*5, size=l2_bank_size, remove_offset=0x80000000+l2_bank_size*5)
             hbm5_soc_demux.add_mapping('soc')
@@ -171,29 +172,6 @@ class System(st.Component):
             self.bind(hbm5_soc_demux, 'hbm5', l2_mem, 'input_5')
             self.bind(hbm5_soc_demux, 'soc', soc_ico, 'input')
 
-        else:
-            soc_demux = router.Router(self, 'soc_demux', bandwidth=axi_data_width, latency=4)
-            soc_demux.add_mapping('soc')
-
-            l2_noc.o_WIDE_BIND(l2_mem.i_BANK_INPUT(0), x=0, y=1)  # HBM bank 0
-            l2_noc.o_WIDE_BIND(l2_mem.i_BANK_INPUT(1), x=0, y=2)  # HBM bank 1
-            l2_noc.o_WIDE_BIND(l2_mem.i_BANK_INPUT(2), x=3, y=2)  # HBM bank 2
-            l2_noc.o_WIDE_BIND(l2_mem.i_BANK_INPUT(3), x=3, y=1)  # HBM bank 3
-            l2_noc.o_WIDE_BIND(soc_demux.i_INPUT(0),   x=1, y=0)  # soc
-
-            l2_noc.o_MAP(base=0x80000000+l2_bank_size*0, size=l2_bank_size, x=0, y=1, name='hbm0', rm_base=True)
-            l2_noc.o_MAP(base=0x80000000+l2_bank_size*1, size=l2_bank_size, x=0, y=2, name='hbm1', rm_base=True)
-            l2_noc.o_MAP(base=0x80000000+l2_bank_size*2, size=l2_bank_size, x=3, y=2, name='hbm2', rm_base=True)
-            l2_noc.o_MAP(base=0x80000000+l2_bank_size*3, size=l2_bank_size, x=3, y=1, name='hbm3', rm_base=True)
-            l2_noc.o_MAP(base=0x00000000,                size=0x80000000,   x=1, y=0, name='soc1', rm_base=False)
-            l2_noc.o_MAP(base=0xA0000000,                size=0x30000000,   x=1, y=0, name='soc2', rm_base=False)
-
-            self.bind(soc_demux, 'soc', soc_ico, 'input')
-
-        # SoC interconnect
-        # for i in range(0, nb_axi_masters):
-        #     self.bind(axi_ico[i], 'soc', soc_ico, 'input')
-
         # Peripheral interconnect
         self.bind(soc_ico, 'peripheral', periph_ico, 'input')
 
@@ -202,10 +180,6 @@ class System(st.Component):
 
         # Bootrom
         self.bind(soc_ico, 'bootrom', rom, 'input')
-
-        # L2
-        # for i in range(0, nb_axi_masters):
-        #     self.bind(axi_ico[i], 'l2', l2_mem, 'input_%d' % i)
 
         # CSR
         self.bind(periph_ico, 'csr', csr, 'input')
@@ -217,67 +191,48 @@ class System(st.Component):
         self.bind(ext_ico, 'uart', uart, 'input')
 
         #loader router
-        self.bind(loader, 'start', mempool_cluster, 'loader_start')
-        self.bind(loader, 'entry', mempool_cluster, 'loader_entry')
+        self.bind(loader, 'start', teranoc_cluster, 'loader_start')
+        self.bind(loader, 'entry', teranoc_cluster, 'loader_entry')
         self.bind(loader, 'out', loader_router, 'input')
         loader_router.add_mapping('dummy', base=0x00000000, remove_offset=0x00000000, size=0x400000)
-        loader_router.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=l2_size)
+        loader_router.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=arch.l2_size)
         loader_router.add_mapping('rom', base=0xa0000000, remove_offset=0xa0000000, size=0x1000)
         loader_router.add_mapping('csr', base=0x40000000, remove_offset=0x40000000, size=0x10000)
         self.bind(loader_router, 'mem', l2_loader_converter, 'input')
-        self.bind(l2_loader_converter, 'out', l2_loader_scrambler, 'input') 
+        self.bind(l2_loader_converter, 'out', l2_loader_scrambler, 'input')
         self.bind(l2_loader_scrambler, 'output', l2_mem, 'input_loader')
         self.bind(loader_router, 'rom', rom, 'input')
         self.bind(loader_router, 'csr', csr, 'input')
         self.bind(loader_router, 'dummy', dummy_mem, 'input')
 
         #Cluster Registers for synchronization barrier
-        for i in range(0, total_cores):
-            self.bind(csr, f'barrier_ack', mempool_cluster, f'barrier_ack_{i}')
+        for i in range(0, arch.total_snitch):
+            self.bind(csr, f'barrier_ack', teranoc_cluster, f'barrier_ack_{i}')
 
         #L2 ro-cache configuration
-        self.bind(csr, 'rocache_cfg', mempool_cluster, 'rocache_cfg')
+        self.bind(csr, 'rocache_cfg', teranoc_cluster, 'rocache_cfg')
 
         #DMA data
         #To emulate distributed backends in groups
-        for i in range(nb_groups):
-            self.bind(dma, f'axi_read_{i}_0', mempool_cluster, f'dma_axi_{i}')
-            self.bind(dma, f'axi_write_{i}_0', mempool_cluster, f'dma_axi_{i}')
-            self.bind(dma, f'tcdm_read_{i}_0', mempool_cluster, f'dma_tcdm_{i}')
-            self.bind(dma, f'tcdm_write_{i}_0', mempool_cluster, f'dma_tcdm_{i}')
+        for i in range(arch.nb_groups):
+            self.bind(dma, f'axi_read_{i}_0', teranoc_cluster, f'dma_axi_{i}')
+            self.bind(dma, f'axi_write_{i}_0', teranoc_cluster, f'dma_axi_{i}')
+            self.bind(dma, f'tcdm_read_{i}_0', teranoc_cluster, f'dma_tcdm_{i}')
+            self.bind(dma, f'tcdm_write_{i}_0', teranoc_cluster, f'dma_tcdm_{i}')
 
-class TeranocSystem(st.Component):
 
-    def __init__(self, parent, name, parser, options):
-
-        super(TeranocSystem, self).__init__(parent, name, options=options)
-
-        clock = Clock_domain(self, 'clock', frequency=500000000)
-
-        soc = System(self, 'teranoc_soc', parser, terapool=True, nb_cores_per_tile=4, nb_x_groups=4, nb_y_groups=4, total_cores=1024, nb_remote_ports_per_tile=2, bank_factor=4, axi_data_width=64, nb_axi_masters_per_group=1, l2_size=0x1000000, nb_l2_banks=16)
-
-        self.bind(clock, 'out', soc, 'clock')
-
-class MempoolNocSystem(st.Component):
+class TeranocSoc(st.Component):
 
     def __init__(self, parent, name, parser, options):
+        super().__init__(parent, name, options=options)
 
-        super(MempoolNocSystem, self).__init__(parent, name, options=options)
-
-        clock = Clock_domain(self, 'clock', frequency=500000000)
-
-        soc = System(self, 'teranoc_soc', parser, terapool=False, nb_cores_per_tile=4, nb_x_groups=2, nb_y_groups=2, total_cores=256, nb_remote_ports_per_tile=2, bank_factor=4, axi_data_width=64, nb_axi_masters_per_group=1, l2_size=0x400000, nb_l2_banks=4)
-
-        self.bind(clock, 'out', soc, 'clock')
-
-class MinpoolNocSystem(st.Component):
-    
-    def __init__(self, parent, name, parser, options):
-
-        super(MinpoolNocSystem, self).__init__(parent, name, options=options)
+        parser.add_argument('--config', dest='config',
+            choices=list(CONFIGS.keys()), default=DEFAULT_CONFIG,
+            help='Select Teranoc arch profile (default: %(default)s)')
+        [args, __] = parser.parse_known_args()
+        arch = CONFIGS[args.config]
 
         clock = Clock_domain(self, 'clock', frequency=500000000)
-
-        soc = System(self, 'teranoc_soc', parser, terapool=False, nb_cores_per_tile=4, nb_x_groups=2, nb_y_groups=2, total_cores=16, nb_remote_ports_per_tile=2, bank_factor=4, axi_data_width=32, nb_axi_masters_per_group=1, l2_size=0x400000, nb_l2_banks=4)
-
-        self.bind(clock, 'out', soc, 'clock')
+        system = TeranocSystem(self, 'teranoc_system', parser,
+            arch=arch, binary=args.binary)
+        self.bind(clock, 'out', system, 'clock')
