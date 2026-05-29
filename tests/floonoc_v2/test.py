@@ -14,8 +14,6 @@
 # limitations under the License.
 #
 
-import math
-
 import gvsoc.systree
 import gvsoc.runner
 
@@ -25,6 +23,7 @@ from pulp.floonoc_v2.floonoc_v2 import FlooNocV2Direction
 from interco.traffic.generator_v2 import GeneratorV2
 from interco.traffic.receiver_v2 import ReceiverV2
 from interco.log_ico_v2 import LogIco, LogIcoConfig
+from interco.limiter_v2 import Limiter, LimiterConfig
 from memory.memory_v3 import Memory as MemoryV3, MemoryV3Config
 from gvrun.parameter import TargetParameter
 
@@ -62,6 +61,20 @@ class FloonocV2Test(gvsoc.systree.Component):
 
 class Testbench(gvsoc.systree.Component):
 
+    def _bandwidth_target(self, name, mem, mem_bw):
+        """Return the front of a bandwidth-shaped memory target.
+
+        memory_v3 no longer models bandwidth itself, so when a per-cycle
+        cap is requested we put an io_v2 limiter in front of the memory and
+        return the limiter (whose i_INPUT() is the new bind point). With
+        mem_bw == 0 there is no cap and the memory is returned directly.
+        """
+        if mem_bw == 0:
+            return mem
+        limiter = Limiter(self, f'{name}_lim', config=LimiterConfig(bandwidth=mem_bw))
+        limiter.o_OUTPUT(mem.i_INPUT())
+        return limiter
+
     def __init__(self, parent, name, use_memory=False, target_bw=0, mem_bw=0):
         super().__init__(parent, name)
 
@@ -85,11 +98,16 @@ class Testbench(gvsoc.systree.Component):
                 generator_n.o_OUTPUT(noc.i_CLUSTER_NARROW_INPUT(x, y))
 
                 if use_memory:
-                    width_log2 = -1 if mem_bw == 0 else int(math.log2(mem_bw))
-                    receiver_w = MemoryV3(self, f'mem_{x}_{y}_w',
-                        config=MemoryV3Config(size=mem_size, width_log2=width_log2))
-                    receiver_n = MemoryV3(self, f'mem_{x}_{y}_n',
-                        config=MemoryV3Config(size=mem_size, width_log2=width_log2))
+                    mem_w = MemoryV3(self, f'mem_{x}_{y}_w',
+                        config=MemoryV3Config(size=mem_size))
+                    mem_n = MemoryV3(self, f'mem_{x}_{y}_n',
+                        config=MemoryV3Config(size=mem_size))
+                    # memory_v3 no longer models bandwidth; throttle each
+                    # target with an upstream limiter when a cap is asked for.
+                    receiver_w = self._bandwidth_target(
+                        f'mem_{x}_{y}_w', mem_w, mem_bw)
+                    receiver_n = self._bandwidth_target(
+                        f'mem_{x}_{y}_n', mem_n, mem_bw)
                 else:
                     receiver_w = ReceiverV2(self, f'receiver_{x}_{y}_w', mem_size=1 << 20)
                     receiver_n = ReceiverV2(self, f'receiver_{x}_{y}_n', mem_size=1 << 20)
@@ -118,11 +136,14 @@ class Testbench(gvsoc.systree.Component):
                     coord = [(x+1, nb_cluster_y+1), (x+1, 0), (0, x+1), (nb_cluster_x+1, x+1)][i]
 
                     if use_memory:
-                        width_log2 = -1 if mem_bw == 0 else int(math.log2(mem_bw))
-                        mem_w = MemoryV3(self, f'mem_{bound_name}_{x}_w',
-                            config=MemoryV3Config(size=mem_size, width_log2=width_log2))
-                        mem_n = MemoryV3(self, f'mem_{bound_name}_{x}_n',
-                            config=MemoryV3Config(size=mem_size, width_log2=width_log2))
+                        mem_w_dev = MemoryV3(self, f'mem_{bound_name}_{x}_w',
+                            config=MemoryV3Config(size=mem_size))
+                        mem_n_dev = MemoryV3(self, f'mem_{bound_name}_{x}_n',
+                            config=MemoryV3Config(size=mem_size))
+                        mem_w = self._bandwidth_target(
+                            f'mem_{bound_name}_{x}_w', mem_w_dev, mem_bw)
+                        mem_n = self._bandwidth_target(
+                            f'mem_{bound_name}_{x}_n', mem_n_dev, mem_bw)
                     else:
                         mem_w = ReceiverV2(self, f'rcv_{bound_name}_{x}_w', mem_size=1 << 20)
                         mem_n = ReceiverV2(self, f'rcv_{bound_name}_{x}_n', mem_size=1 << 20)
@@ -135,11 +156,14 @@ class Testbench(gvsoc.systree.Component):
 
             else:
                 if use_memory:
-                    width_log2 = -1 if mem_bw == 0 else int(math.log2(mem_bw))
-                    mem_w = MemoryV3(self, f'mem_{bound_name}_w',
-                        config=MemoryV3Config(size=mem_size, width_log2=width_log2))
-                    mem_n = MemoryV3(self, f'mem_{bound_name}__n',
-                        config=MemoryV3Config(size=mem_size, width_log2=width_log2))
+                    mem_w_dev = MemoryV3(self, f'mem_{bound_name}_w',
+                        config=MemoryV3Config(size=mem_size))
+                    mem_n_dev = MemoryV3(self, f'mem_{bound_name}__n',
+                        config=MemoryV3Config(size=mem_size))
+                    mem_w = self._bandwidth_target(
+                        f'mem_{bound_name}_w', mem_w_dev, mem_bw)
+                    mem_n = self._bandwidth_target(
+                        f'mem_{bound_name}__n', mem_n_dev, mem_bw)
                 else:
                     mem_w = ReceiverV2(self, f'rcv_{bound_name}_w', mem_size=1 << 20)
                     mem_n = ReceiverV2(self, f'rcv_{bound_name}_n', mem_size=1 << 20)
