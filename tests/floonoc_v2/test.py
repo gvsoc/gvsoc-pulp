@@ -22,8 +22,8 @@ import pulp.floonoc_v2.floonoc_v2
 from pulp.floonoc_v2.floonoc_v2 import FlooNocV2Direction
 from interco.traffic.generator_v2 import GeneratorV2
 from interco.traffic.receiver_v2 import ReceiverV2
-from interco.log_ico_v2 import LogIco, LogIcoConfig
 from interco.limiter_v2 import Limiter, LimiterConfig
+from interco.router_v2 import Router, RouterConfig, KIND_BANDWIDTH
 from memory.memory_v3 import Memory as MemoryV3, MemoryV3Config
 from gvrun.parameter import TargetParameter
 
@@ -173,17 +173,19 @@ class Testbench(gvsoc.systree.Component):
                         test.o_RECEIVER_CONTROL(coord[0], coord[1], False, mem_n.i_CONTROL())
 
                 # v2 forbids multiple masters binding to a single slave port.
-                # The shared UP receiver therefore sits behind a 3->1 LogIco
-                # arbiter so each border NI gets its own muxed master port and
-                # the retry handshake is tracked per master.
-                arb_w = LogIco(self, 'arb_up_w', LogIcoConfig(
-                    nb_masters=nb_targets, nb_slaves=1,
-                    interleaving_width=0, remove_offset=0))
-                arb_n = LogIco(self, 'arb_up_n', LogIcoConfig(
-                    nb_masters=nb_targets, nb_slaves=1,
-                    interleaving_width=0, remove_offset=0))
-                arb_w.o_OUTPUT(0, mem_w.i_INPUT())
-                arb_n.o_OUTPUT(0, mem_n.i_INPUT())
+                # The shared UP receiver therefore sits behind an arbiter
+                # router so each border NI gets its own muxed master port and
+                # the retry handshake is tracked per master. router_v2 is
+                # used here (rather than log_ico_v2) because the downstream
+                # ReceiverV2 is async by design (returns DENIED on queue
+                # full + drives retry()), which IoV2Sync-bound crossbars
+                # cannot honor.
+                arb_w = Router(self, 'arb_up_w',
+                    config=RouterConfig(kind=KIND_BANDWIDTH))
+                arb_n = Router(self, 'arb_up_n',
+                    config=RouterConfig(kind=KIND_BANDWIDTH))
+                arb_w.o_MAP_DEFAULT(mem_w.i_INPUT(), name='mem')
+                arb_n.o_MAP_DEFAULT(mem_n.i_INPUT(), name='mem')
                 for x in range(0, nb_targets):
                     coord = [(x+1, nb_cluster_y+1), (x+1, 0), (0, x+1), (nb_cluster_x+1, x+1)][i]
                     noc.o_WIDE_BIND(arb_w.i_INPUT(x), coord[0], coord[1])
