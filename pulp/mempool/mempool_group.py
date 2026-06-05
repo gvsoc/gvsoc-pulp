@@ -28,7 +28,7 @@ from pulp.mempool.redmule_configurations import RedmuleParam
 
 class Group(st.Component):
 
-    def __init__(self, parent, name, parser, redmule_config: RedmuleParam=None, tensorpool: bool=False, terapool: bool=False, nb_redmule_tiles_per_group: int=0, async_l1_interco: bool=False, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_dmas_per_group: int=1, terapool_group_latency: int=7, nb_fus_per_core: int=1):
+    def __init__(self, parent, name, parser, redmule_config: RedmuleParam=None, tensorpool: bool=False, terapool: bool=False, nb_redmule_tiles_per_group: int=0, async_l1_interco: bool=False, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, bank_size: int=1024, axi_data_width: int=64, nb_dmas_per_group: int=1, terapool_group_latency: int=7, nb_fus_per_core: int=1):
         super().__init__(parent, name)
 
         ################################################################
@@ -57,14 +57,14 @@ class Group(st.Component):
             self.sub_group_list = []
             for i in range(0, nb_sub_groups_per_group):
                 self.sub_group_list.append(Sub_group(self, f'sub_group_{i}', parser=parser, redmule_config=redmule_config, terapool=terapool, nb_redmule_tiles_per_sub_group=nb_redmule_tiles_per_sub_group, async_l1_interco=async_l1_interco, sub_group_id=i, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
-                    nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width, terapool_group_latency=terapool_group_latency,
+                    nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, bank_size=bank_size, axi_data_width=axi_data_width, terapool_group_latency=terapool_group_latency,
                     nb_fus_per_core=nb_fus_per_core))
         else:
             # Tiles
             self.tile_list = []
             for i in range(0, nb_tiles_per_group):
                 self.tile_list.append(Tile(self, f'tile_{i}', parser=parser, redmule_config=redmule_config, terapool=terapool, has_redmule=(i< nb_redmule_tiles_per_group), async_l1_interco=async_l1_interco, tile_id=i, sub_group_id=0, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
-                    nb_sub_groups_per_group=1, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width, nb_fus_per_core=nb_fus_per_core))
+                    nb_sub_groups_per_group=1, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, bank_size=bank_size, axi_data_width=axi_data_width, nb_fus_per_core=nb_fus_per_core))
 
         # TCDM Interconnect
         if (nb_sub_groups_per_group > 1):
@@ -125,7 +125,7 @@ class Group(st.Component):
         if (nb_sub_groups_per_group == 1):
             # DMA Traffic Demux
             dma_mux = router.Router(self, 'dma_mux', latency=4, bandwidth=axi_data_width)
-            dma_mux.add_mapping('tcdm', base=0x0, size=total_cores * bank_factor * 1024)
+            dma_mux.add_mapping('tcdm', base=0x0, size=total_cores * bank_factor * bank_size)
             dma_mux.add_mapping('axi')
             # DMA TCDM Interleaver
             dma_tcdm_interleaver = Interleaver(self, 'dma_tcdm_interleaver', nb_slaves=nb_tiles_per_group, nb_masters=1, interleaving_bits=int(math.log2(nb_banks_per_tile*4)), offset_translation=False)
