@@ -36,10 +36,11 @@ from elftools.elf.elffile import *
 from pulp.mempool.mempool_cluster import Cluster
 from pulp.mempool.ctrl_registers import CtrlRegisters
 from pulp.mempool.l2_subsystem import L2_subsystem
+from pulp.mempool.redmule_configurations import RedmuleParam
 
 class System(st.Component):
 
-    def __init__(self, parent, name, parser, terapool: bool=False, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1, nb_dmas_per_group: int=1, l2_size: int=0x1000000, nb_l2_banks: int=4, terapool_group_latency: int=7, nb_fus_per_core: int=1):
+    def __init__(self, parent, name, parser, async_l1_interco: bool=True, redmule_config: RedmuleParam=None, tensorpool: bool=False, terapool: bool=False, nb_redmule_tiles: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1, nb_dmas_per_group: int=1, l2_size: int=0x1000000, nb_l2_banks: int=4, terapool_group_latency: int=7, nb_fus_per_core: int=1):
         super().__init__(parent, name)
 
         ################################################################
@@ -62,14 +63,12 @@ class System(st.Component):
 
         nb_axi_masters = nb_axi_masters_per_group * nb_groups
         nb_banks_per_group = (total_cores // nb_groups) * bank_factor
-        async_l1_interco = True
 
         ################################################################
         ##########              Design Components             ##########
         ################################################################ 
-
         #Mempool cluster
-        mempool_cluster=Cluster(self, 'mempool_cluster', async_l1_interco=async_l1_interco, terapool=terapool, parser=parser, nb_cores_per_tile=nb_cores_per_tile,
+        mempool_cluster=Cluster(self, 'mempool_cluster', async_l1_interco=async_l1_interco, redmule_config=redmule_config, tensorpool=tensorpool, terapool=terapool, nb_redmule_tiles=nb_redmule_tiles, parser=parser, nb_cores_per_tile=nb_cores_per_tile,
                             nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor,
                             axi_data_width=axi_data_width, nb_axi_masters_per_group=nb_axi_masters_per_group, nb_dmas_per_group=nb_dmas_per_group, terapool_group_latency=terapool_group_latency, 
                             nb_fus_per_core=nb_fus_per_core)
@@ -82,7 +81,8 @@ class System(st.Component):
         l2_mem = L2_subsystem(self, 'l2_mem', nb_banks=nb_l2_banks, bank_width=axi_data_width, size=l2_size, nb_masters=nb_axi_masters, port_bandwidth=axi_data_width)
 
         # CSR
-        csr = CtrlRegisters(self, 'ctrl_registers', wakeup_latency=18 if terapool else 15)
+        csr = CtrlRegisters(self, 'ctrl_registers', wakeup_latency=18 if (nb_sub_groups_per_group > 1) else 15) 
+        #that if statement was terapool before.
 
         # UART        
         uart = ns16550.Ns16550(self, 'uart')
@@ -269,5 +269,19 @@ class TerapoolSpatzSystem(st.Component):
         clock = Clock_domain(self, 'clock', frequency=500000000)
 
         soc = System(self, 'mempool_soc', parser, terapool=True, nb_cores_per_tile=1, nb_sub_groups_per_group=4, nb_groups=4, total_cores=128, bank_factor=4, axi_data_width=64, nb_axi_masters_per_group=4, nb_dmas_per_group=4, l2_size=0x1000000, nb_l2_banks=16, terapool_group_latency=9, nb_fus_per_core=8)
+
+        self.bind(clock, 'out', soc, 'clock')
+
+class TensorpoolSystem(st.Component):
+    
+    def __init__(self, parent, name, parser, options):
+
+        super(TensorpoolSystem, self).__init__(parent, name, options=options)
+
+        clock = Clock_domain(self, 'clock', frequency=500000000)
+
+        redmule_config = RedmuleParam(redmule_height = 8, redmule_width = 32, redmule_regs = 3)
+        #synchronous for now, since async has problems with the burst tcdm messaging system.
+        soc = System(self, 'mempool_soc', parser, async_l1_interco=False, redmule_config=redmule_config, tensorpool=True, terapool=False, nb_redmule_tiles=16, nb_cores_per_tile=4, nb_sub_groups_per_group=4, nb_groups=4, total_cores=256, bank_factor=16, axi_data_width=64, nb_axi_masters_per_group=4, nb_dmas_per_group=4, l2_size=0x400000, nb_l2_banks=4)
 
         self.bind(clock, 'out', soc, 'clock')

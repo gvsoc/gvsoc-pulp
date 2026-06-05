@@ -21,10 +21,11 @@ import interco.router as router
 import gvsoc.systree as st
 import math
 from pulp.mempool.mempool_group import Group
+from pulp.mempool.redmule_configurations import RedmuleParam
 
 class Cluster(st.Component):
 
-    def __init__(self, parent, name, parser, async_l1_interco: bool=False, terapool: bool=False, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1, nb_dmas_per_group: int=1, terapool_group_latency: int=7, nb_fus_per_core: int=1):
+    def __init__(self, parent, name, parser, async_l1_interco: bool=False, redmule_config: RedmuleParam=None, tensorpool: bool=False, terapool: bool=False, nb_redmule_tiles: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1, nb_dmas_per_group: int=1, terapool_group_latency: int=7, nb_fus_per_core: int=1):
         super().__init__(parent, name)
 
         ################################################################
@@ -34,18 +35,21 @@ class Cluster(st.Component):
         nb_tiles_per_group = int((total_cores/nb_groups)/nb_cores_per_tile)
         nb_banks_per_group = int(total_cores/nb_groups) * bank_factor * nb_fus_per_core
 
+        #Assume that nb_redmule_tiles is divisable by nb_groups here. Needs rework otherwise
+        nb_redmule_tiles_per_group = int(nb_redmule_tiles / nb_groups)
+
         ################################################################
         ##########              Design Components             ##########
         ################################################################
-        # TIles
+        # Tiles
         self.group_list = []
         for i in range(0, nb_groups):
-            self.group_list.append(Group(self, f'group_{i}', parser=parser, async_l1_interco=async_l1_interco, terapool=terapool, group_id=i, nb_cores_per_tile=nb_cores_per_tile, 
+            self.group_list.append(Group(self, f'group_{i}', parser=parser, redmule_config=redmule_config, async_l1_interco=async_l1_interco, tensorpool=tensorpool, terapool=terapool, group_id=i, nb_redmule_tiles_per_group=nb_redmule_tiles_per_group, nb_cores_per_tile=nb_cores_per_tile, 
                 nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width,
                 nb_dmas_per_group=nb_dmas_per_group, terapool_group_latency=terapool_group_latency, nb_fus_per_core=nb_fus_per_core))
 
         # AXI Interface
-        if terapool:
+        if (nb_sub_groups_per_group > 1): #changed from; terapool or tensorpool:
             axi_itf = []
             for i in range(0, nb_groups * nb_axi_masters_per_group):
                 itf = router.Router(self, f'axi_itf_{i}', bandwidth=axi_data_width, latency=2)
@@ -57,7 +61,7 @@ class Cluster(st.Component):
         ################################################################
 
         #Group master output -> Group slave input
-        if terapool:
+        if (nb_sub_groups_per_group > 1):
             for ini in range(0, nb_groups):
                 for tgt in range(0, nb_groups):
                     if (ini != tgt):
@@ -87,7 +91,7 @@ class Cluster(st.Component):
             self.bind(self, 'loader_start', self.group_list[i], 'loader_start')
             self.bind(self, 'loader_entry', self.group_list[i], 'loader_entry')
 
-        if terapool:
+        if (nb_sub_groups_per_group > 1): #changed from; terapool or tensorpool:
             for i in range(0, nb_groups):
                 for j in range(0, nb_axi_masters_per_group):
                     self.bind(self.group_list[i], f'axi_out_{j}', axi_itf[i * nb_axi_masters_per_group + j], 'input')
