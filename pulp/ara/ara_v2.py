@@ -59,20 +59,6 @@ def extend_isa(isa_instance: Isa):
         # Vector instructions can be given latencies like that
         # if insn.label.find('vfmac') == 0:
         #     insn.set_latency(1)
-        if insn.label.startswith('vadd'):
-            insn.set_latency(4)
-        elif insn.label.startswith('vsub'):
-            insn.set_latency(4)
-        elif insn.label.startswith('vfadd'):
-            insn.set_latency(4)
-        elif insn.label.startswith('vfsub'):
-            insn.set_latency(4)
-        elif insn.label.startswith('vfmul'):
-            insn.set_latency(4)
-        elif insn.label.startswith('vfnmsac'):
-            insn.set_latency(4)
-        elif insn.label.startswith('vfmacc'):
-            insn.set_latency(4)
 
 
 
