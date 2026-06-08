@@ -391,6 +391,16 @@ void IDmaBeTcdm::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 IdmaTransfer *transfer = _this->burst_queue_transfer.front();
                 _this->remove_chunk_from_current_burst(size);
                 _this->be->write_data(transfer, _this->read_pending_line_data, size);
+
+                // Pipeline the next read in the same FSM cycle, mirroring how write_line() is
+                // re-issued immediately after write_ack processing. Without this, each TCDM
+                // read takes 2 cycles (issue + process-in-next-cycle) instead of 1.
+                if (_this->current_burst_size > 0 &&
+                    _this->burst_queue_is_write.size() > 0 &&
+                    !_this->burst_queue_is_write.front())
+                {
+                    _this->read_line();
+                }
             }
             else
             {
