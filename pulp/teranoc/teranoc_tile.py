@@ -17,7 +17,7 @@
 # Author: Yinrong Li (ETH Zurich) (yinrli@student.ethz.ch)
 #         Yichao Zhang (ETH Zurich) (yiczhang@iis.ee.ethz.ch)
 
-import pulp.snitch.snitch_core as iss
+from pulp.cpu.iss.snitch_mempool import SnitchMempool, SnitchMempoolConfig
 from pulp.mempool.hierarchical_cache import Hierarchical_cache
 from pulp.mempool.xbar.mempool_xbar import MempoolXbar
 from pulp.mempool.l1_interconnect.l1_remote_itf import L1_RemoteItf
@@ -86,10 +86,14 @@ class TeranocTile(st.Component):
 
         # Snitch core complex
         for core_id in range(0, arch.nb_snitch_per_tile):
-            self.int_cores.append(iss.SnitchFast(self, f'pe{core_id}', isa="rv32imaf",
-                core_id=group_id*arch.nb_tiles_per_group*arch.nb_snitch_per_tile+tile_id*arch.nb_snitch_per_tile+core_id,
-                htif=False, pulp_v2=True, wakeup_counter=True, nb_outstanding=8, single_regfile=True, ssr=False, sequencer=False
-            ))
+            hart_id = (group_id * arch.nb_tiles_per_group * arch.nb_snitch_per_tile
+                       + tile_id * arch.nb_snitch_per_tile + core_id)
+            # SnitchMempool: barrier CSR + wake counter, no vector unit.
+            core = SnitchMempool(self, f'pe{core_id}',
+                config=SnitchMempoolConfig(isa="rv32imaf", hart_id=hart_id,
+                    htif=False, fetch_enable=False, boot_addr=0,
+                    nb_outstanding=8))
+            self.int_cores.append(core)
 
         ################################################################
         ##########               Design Bindings              ##########
