@@ -17,12 +17,18 @@
 # Author: Yinrong Li (ETH Zurich) (yinrli@student.ethz.ch)
 #         Yichao Zhang (ETH Zurich) (yiczhang@iis.ee.ethz.ch)
 
+try:
+    from typing import override  # Python 3.12+
+except ImportError:
+    from typing_extensions import override  # Python 3.10-3.11
+
 import memory.memory as memory
 from vp.clock_domain import Clock_domain
 import interco.router as router
-import devices.uart.ns16550 as ns16550
+from pulp.stdout.stdout_v3 import Stdout
 import utils.loader.loader
 import gvsoc.systree as st
+from gvrun.parameter import TargetParameter
 from pulp.mempool.dma.mempool_dma_top import MemPoolDmaTop
 from elftools.elf.elffile import *
 from interco.converter import Converter
@@ -32,6 +38,27 @@ from pulp.teranoc.l2_subsystem import L2_subsystem
 from pulp.teranoc.l2_interconnect.l2_address_scrambler import L2AddressScrambler
 from pulp.teranoc.l2_interconnect.l2_noc import L2_noc
 from pulp.teranoc.arch import CONFIGS, DEFAULT_CONFIG
+
+
+def _add_config_arg(parser):
+    if parser is None:
+        return
+
+    for action in parser._actions:
+        if '--config' in action.option_strings:
+            return
+
+    parser.add_argument('--config', dest='config',
+        choices=list(CONFIGS.keys()), default=None,
+        help='Select Teranoc arch profile (legacy alias for system_config)')
+
+
+def _get_option(options, *names):
+    for opt in options or []:
+        key, sep, val = opt.partition('=')
+        if sep and key.strip() in names:
+            return val.strip()
+    return None
 
 
 class TeranocSystem(st.Component):
@@ -65,7 +92,7 @@ class TeranocSystem(st.Component):
         csr = CtrlRegisters(self, 'ctrl_registers', wakeup_latency=5)
 
         # UART
-        uart = ns16550.Ns16550(self, 'uart')
+        uart = Stdout(self, 'uart', max_cluster=1, max_core_per_cluster=1, user_set_core_id=0, user_set_cluster_id=0)
 
         # DMA
         dma = MemPoolDmaTop(self, 'dma', loc_base=0x0, loc_size=0x400000, burst_size=4*nb_banks_per_group, tcdm_width=4*nb_banks_per_group,
@@ -73,6 +100,7 @@ class TeranocSystem(st.Component):
 
         # Binary Loader
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x80000000)
+        self.loader = loader
 
         # L2 loader converter
         l2_loader_converter = Converter(self, 'l2_loader_converter', output_width=axi_data_width*16, output_align=axi_data_width*16)
@@ -222,17 +250,49 @@ class TeranocSystem(st.Component):
 
 
 class TeranocSoc(st.Component):
+    # Override in subclasses to change the default profile.
+    SYSTEM_CONFIG_DEFAULT = DEFAULT_CONFIG
 
     def __init__(self, parent, name, parser, options):
         super().__init__(parent, name, options=options)
 
-        parser.add_argument('--config', dest='config',
-            choices=list(CONFIGS.keys()), default=DEFAULT_CONFIG,
-            help='Select Teranoc arch profile (default: %(default)s)')
+        _add_config_arg(parser)
         [args, __] = parser.parse_known_args()
-        arch = CONFIGS[args.config]
+
+        config_name = self.SYSTEM_CONFIG_DEFAULT
+        option_config = _get_option(options, 'system_config', 'config')
+        if option_config is not None:
+            config_name = option_config
+        legacy_config = getattr(args, 'config', None)
+        if legacy_config is not None:
+            config_name = legacy_config
+
+        TargetParameter(self, name='system_config', value=config_name,
+                        allowed_values=list(CONFIGS.keys()), cast=str,
+                        description='Teranoc arch profile')
+        config_name = self.get_parameter('system_config')
+        if config_name not in CONFIGS:
+            raise ValueError(f"Invalid system_config '{config_name}'; "
+                             f"choose from {list(CONFIGS.keys())}")
+        arch = CONFIGS[config_name]
+
+        binary = getattr(args, 'binary', None)
+
+        TargetParameter(self, name='binary', value=None,
+                        description='ELF binary to load and start', cast=str)
 
         clock = Clock_domain(self, 'clock', frequency=500000000)
         system = TeranocSystem(self, 'teranoc_system', parser,
-            arch=arch, binary=args.binary)
+            arch=arch, binary=binary)
         self.bind(clock, 'out', system, 'clock')
+        self.loader = system.loader
+        self.register_binary_handler(self.handle_binary)
+
+    @override
+    def configure(self):
+        binary = self.get_parameter('binary')
+        if binary is not None:
+            self.loader.set_binary(binary)
+
+    def handle_binary(self, binary: str):
+        self.set_parameter('binary', binary)
