@@ -67,9 +67,9 @@ private:
     };
 
     static void regs_resp(vp::Block *__this, vp::IoReq *req);
-    static void regs_retry(vp::Block *__this);
+    static void regs_retry(vp::Block *__this, vp::IoRetryChannel);
     static void mem_resp(vp::Block *__this, vp::IoReq *req);
-    static void mem_retry(vp::Block *__this);
+    static void mem_retry(vp::Block *__this, vp::IoRetryChannel);
     static void irq_sync(vp::Block *__this, bool value);
     static void step_handler(vp::Block *__this, vp::ClockEvent *event);
     static void timeout_handler(vp::Block *__this, vp::ClockEvent *event);
@@ -438,7 +438,7 @@ void IDmaTesterV2::regs_resp(vp::Block *__this, vp::IoReq *req)
 }
 
 
-void IDmaTesterV2::regs_retry(vp::Block *__this)
+void IDmaTesterV2::regs_retry(vp::Block *__this, vp::IoRetryChannel)
 {
     IDmaTesterV2 *_this = (IDmaTesterV2 *)__this;
     // Retry the in-flight reg request. Since regs are sync DONE in our setup we
@@ -479,7 +479,7 @@ void IDmaTesterV2::mem_resp(vp::Block *__this, vp::IoReq *req)
 }
 
 
-void IDmaTesterV2::mem_retry(vp::Block *__this)
+void IDmaTesterV2::mem_retry(vp::Block *__this, vp::IoRetryChannel)
 {
     IDmaTesterV2 *_this = (IDmaTesterV2 *)__this;
     if (_this->waiting_for_resp)

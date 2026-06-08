@@ -281,7 +281,7 @@ void NetworkInterfaceV2::wide_response(vp::Block *__this, vp::IoReq *req)
     _this->handle_response((FloonocReqV2 *)req);
 }
 
-void NetworkInterfaceV2::wide_retry(vp::Block *__this)
+void NetworkInterfaceV2::wide_retry(vp::Block *__this, vp::IoRetryChannel)
 {
     NetworkInterfaceV2 *_this = (NetworkInterfaceV2 *)__this;
     // The downstream target is ready again. Re-send the req we were holding
@@ -328,7 +328,7 @@ void NetworkInterfaceV2::narrow_response(vp::Block *__this, vp::IoReq *req)
     _this->handle_response((FloonocReqV2 *)req);
 }
 
-void NetworkInterfaceV2::narrow_retry(vp::Block *__this)
+void NetworkInterfaceV2::narrow_retry(vp::Block *__this, vp::IoRetryChannel)
 {
     NetworkInterfaceV2 *_this = (NetworkInterfaceV2 *)__this;
     if (_this->narrow_target_stalled_req)

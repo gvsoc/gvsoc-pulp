@@ -114,7 +114,7 @@ private:
     // downstream IoV2BigPacket slave (after the auto-inserted adapter has
     // normalised) or by a directly-bound IoV2Beat slave.
     static void resp_meth(vp::Block *__this, vp::IoReq *req);
-    static void retry_meth(vp::Block *__this);
+    static void retry_meth(vp::Block *__this, vp::IoRetryChannel);
 
     // Allocate the next free slot, initialise it for a new burst, and queue it
     // for issue (and, for writes, for filling).
