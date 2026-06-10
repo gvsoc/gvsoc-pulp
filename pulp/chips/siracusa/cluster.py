@@ -15,7 +15,7 @@
 #
 
 import gvsoc.systree as st
-import pulp.cpu.iss.pulp_cores as iss
+import pulp.chips.siracusa.pulp_cores as iss
 from cache.hierarchical_cache import Hierarchical_cache
 from pulp.chips.siracusa.l1_subsystem import L1_subsystem
 from pulp.chips.siracusa.wmem_subsystem import Wmem_subsystem
