@@ -17,12 +17,20 @@
 # Author: Yichao Zhang (ETH Zurich) (yiczhang@iis.ee.ethz.ch)
 #         Yinrong Li (ETH Zurich) (yinrli@student.ethz.ch)
 
+try:
+    from typing import override  # Python 3.12+
+except ImportError:
+    from typing_extensions import override  # Python 3.10–3.11
+
+import os
+
 import memory.memory as memory
 from vp.clock_domain import Clock_domain
 import interco.router as router
 import devices.uart.ns16550 as ns16550
 import utils.loader.loader
 import gvsoc.systree as st
+from gvrun.parameter import TargetParameter
 from pulp.mempool.dma.mempool_dma import MemPoolDma
 from elftools.elf.elffile import *
 from pulp.mempool.mempool_cluster import Cluster
@@ -38,11 +46,18 @@ class System(st.Component):
         ##########               Design Variables             ##########
         ################################################################
 
-        [args, __] = parser.parse_known_args()
+        _ = TargetParameter(
+            self, name='binary', value=None, description='Binary to be loaded and started',
+            cast=str
+        )
 
+        # With the legacy gvsoc launcher, configure() is never called and the binary comes
+        # from the command line, so it must be resolved now. With gvrun, it comes from a
+        # parameter and is handled in configure() since it can also be set from the build
+        # process.
         binary = None
-        if parser is not None:
-            [args, otherArgs] = parser.parse_known_args()
+        if os.environ.get('USE_GVRUN') is None and parser is not None:
+            [args, __] = parser.parse_known_args()
             binary = args.binary
 
         nb_axi_masters = nb_axi_masters_per_group * nb_groups
@@ -162,6 +177,23 @@ class System(st.Component):
         self.bind(dma, 'axi_write', mempool_cluster, 'dma_axi')
         self.bind(dma, 'tcdm_read', mempool_cluster, 'dma_tcdm')
         self.bind(dma, 'tcdm_write', mempool_cluster, 'dma_tcdm')
+
+        self.loader = loader
+        self.register_binary_handler(self.handle_binary)
+
+    @override
+    def configure(self) -> None:
+        # We configure the loader binary now in the configure step since it is coming from
+        # a parameter which can be set either from command line or from the build process
+        binary = self.get_parameter('binary')
+        if binary is not None:
+            self.loader.set_binary(binary)
+
+    def handle_binary(self, binary: str):
+        # This gets called when an executable is attached to a hierarchy of components containing
+        # this one
+        self.set_parameter('binary', binary)
+
 
 class MempoolSystem(st.Component):
 

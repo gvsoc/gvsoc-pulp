@@ -14,6 +14,13 @@
 # limitations under the License.
 #
 
+try:
+    from typing import override  # Python 3.12+
+except ImportError:
+    from typing_extensions import override  # Python 3.10–3.11
+
+import os
+
 import gvsoc.runner
 import cpu.iss.riscv as iss
 import memory.memory
@@ -34,6 +41,7 @@ from pulp.chips.occamy.quadrant import Quadrant
 import pulp.chips.occamy.occamy_arch
 from pulp.snitch.zero_mem import ZeroMem
 import memory.dramsys
+from gvrun.parameter import TargetParameter
 
 
 
@@ -42,6 +50,11 @@ class Soc(gvsoc.systree.Component):
 
     def __init__(self, parent, name, arch, binary, debug_binaries):
         super().__init__(parent, name)
+
+        _ = TargetParameter(
+            self, name='binary', value=None, description='Binary to be loaded and started',
+            cast=str
+        )
 
         #
         # Components
@@ -170,6 +183,25 @@ class Soc(gvsoc.systree.Component):
         loader.o_START(host.i_FETCHEN())
         loader.o_ENTRY(host.i_ENTRY())
 
+        self.loader = loader
+        self.host = host
+        self.register_binary_handler(self.handle_binary)
+
+    @override
+    def configure(self) -> None:
+        # We configure the loader binary now in the configure step since it is coming from
+        # a parameter which can be set either from command line or from the build process.
+        # The host core also gets it for its HTIF handling and debug symbols.
+        binary = self.get_parameter('binary')
+        if binary is not None:
+            self.loader.set_binary(binary)
+            self.host.handle_executable(binary)
+
+    def handle_binary(self, binary: str):
+        # This gets called when an executable is attached to a hierarchy of components containing
+        # this one
+        self.set_parameter('binary', binary)
+
     def i_HBM(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'hbm', signature='io')
 
@@ -197,16 +229,23 @@ class OccamyBoard(gvsoc.systree.Component):
     def __init__(self, parent, name, parser, options):
         super(OccamyBoard, self).__init__(parent, name, options=options)
 
-        [args, otherArgs] = parser.parse_known_args()
+        # With the legacy gvsoc launcher, configure() is never called and the binary comes
+        # from the command line, so it must be resolved now. With gvrun, it comes from a
+        # parameter and is handled in configure() since it can also be set from the build
+        # process.
+        binary = None
         debug_binaries = []
-        if args.binary is not None:
-            debug_binaries.append(args.binary)
+        if os.environ.get('USE_GVRUN') is None and parser is not None:
+            [args, otherArgs] = parser.parse_known_args()
+            binary = args.binary
+            if binary is not None:
+                debug_binaries.append(binary)
 
         clock = Clock_domain(self, 'clock', frequency=10000000)
 
         arch = pulp.chips.occamy.occamy_arch.OccamyArch(self)
 
-        chip = Occamy(self, 'chip', arch.chip, args.binary, debug_binaries)
+        chip = Occamy(self, 'chip', arch.chip, binary, debug_binaries)
 
         if arch.hbm.type == 'dramsys':
             mem = memory.dramsys.Dramsys(self, 'ddr')
@@ -222,7 +261,9 @@ class OccamyBoard(gvsoc.systree.Component):
 class Target(gvsoc.runner.Target):
 
     gapy_description="Occamy virtual board"
+    model = OccamyBoard
+    name = "occamy"
 
-    def __init__(self, parser, options):
+    def __init__(self, parser, options=None, name=None):
         super(Target, self).__init__(parser, options,
-            model=OccamyBoard)
+            model=OccamyBoard, name=name)

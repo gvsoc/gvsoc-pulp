@@ -14,6 +14,13 @@
 # limitations under the License.
 #
 
+try:
+    from typing import override  # Python 3.12+
+except ImportError:
+    from typing_extensions import override  # Python 3.10–3.11
+
+import os
+
 import gvsoc.runner
 import cpu.iss.riscv as iss
 import memory.memory as memory
@@ -27,6 +34,7 @@ import gvsoc.systree as st
 from interco.bus_watchpoint import Bus_watchpoint
 from elftools.elf.elffile import *
 import gvsoc.runner as gvsoc
+from gvrun.parameter import TargetParameter
 
 
 class Soc(st.Component):
@@ -34,18 +42,32 @@ class Soc(st.Component):
     def __init__(self, parent, name, parser):
         super().__init__(parent, name)
 
-        parser.add_argument("--isa", dest="isa", type=str, default="rv64imafdc",
-            help="RISCV-V ISA string (default: %(default)s)")
+        _ = TargetParameter(
+            self, name='binary', value=None, description='Binary to be loaded and started',
+            cast=str
+        )
+        _ = TargetParameter(
+            self, name='isa', value='rv64imafdc', description='RISC-V ISA string',
+            cast=str
+        )
 
-        parser.add_argument("--arg", dest="args", action="append",
-            help="Specify application argument (passed to main)")
-
-        [args, __] = parser.parse_known_args()
-
+        # With the legacy gvsoc launcher, configure() is never called and options come
+        # from the command line, so they must be resolved now. With gvrun, they come
+        # from parameters, the binary being handled in configure() since it can also
+        # be set from the build process.
         binary = None
-        if parser is not None:
-            [args, otherArgs] = parser.parse_known_args()
+        if os.environ.get('USE_GVRUN') is None and parser is not None:
+            parser.add_argument("--isa", dest="isa", type=str, default="rv64imafdc",
+                help="RISCV-V ISA string (default: %(default)s)")
+
+            parser.add_argument("--arg", dest="args", action="append",
+                help="Specify application argument (passed to main)")
+
+            [args, __] = parser.parse_known_args()
             binary = args.binary
+            isa = args.isa
+        else:
+            isa = self.get_parameter('isa')
 
         mem = memory.Memory(self, 'mem', size=0x80000000, atomics=True)
         rom = memory.Memory(self, 'rom', size=0x10000, stim_file=self.get_file_path('pulp/chips/rv64/rom.bin'))
@@ -71,7 +93,7 @@ class Soc(st.Component):
         self.bind(ico, 'plic', plic, 'input')
         self.bind(uart, 'irq', plic, 'irq1')
 
-        host = iss.Riscv(self, 'host', isa=args.isa, boot_addr=0x1000, timed=False,
+        host = iss.Riscv(self, 'host', isa=isa, boot_addr=0x1000, timed=False,
             memory_start=0x80000000, memory_size=0x80000000)
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
@@ -90,6 +112,22 @@ class Soc(st.Component):
         self.bind(plic, 's_irq_0', host, 'sei')
         self.bind(plic, 'm_irq_0', host, 'mei')
 
+        self.loader = loader
+        self.register_binary_handler(self.handle_binary)
+
+    @override
+    def configure(self) -> None:
+        # We configure the loader binary now in the configure step since it is coming from
+        # a parameter which can be set either from command line or from the build process
+        binary = self.get_parameter('binary')
+        if binary is not None:
+            self.loader.set_binary(binary)
+
+    def handle_binary(self, binary: str):
+        # This gets called when an executable is attached to a hierarchy of components containing
+        # this one
+        self.set_parameter('binary', binary)
+
 
 class Rv64(st.Component):
 
@@ -107,8 +145,9 @@ class Rv64(st.Component):
 class Target(gvsoc.Target):
 
     gapy_description="RV64 virtual board"
+    model = Rv64
+    name = "rv64_untimed"
 
-    def __init__(self, parser, options):
+    def __init__(self, parser, options=None, name=None):
         super(Target, self).__init__(parser, options,
-            model=Rv64)
-
+            model=Rv64, name=name)

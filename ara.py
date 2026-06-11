@@ -14,6 +14,13 @@
 # limitations under the License.
 #
 
+try:
+    from typing import override  # Python 3.12+
+except ImportError:
+    from typing_extensions import override  # Python 3.10–3.11
+
+import os
+
 import gvsoc.runner
 import pulp.cva6.cva6
 import memory.memory as memory
@@ -25,6 +32,7 @@ import gvsoc.systree as st
 from elftools.elf.elffile import *
 import gvsoc.runner as gvsoc
 from pulp.stdout.stdout_v3 import Stdout
+from gvrun.parameter import TargetParameter
 
 
 class Soc(st.Component):
@@ -32,11 +40,18 @@ class Soc(st.Component):
     def __init__(self, parent, name, parser):
         super().__init__(parent, name)
 
-        [args, __] = parser.parse_known_args()
+        _ = TargetParameter(
+            self, name='binary', value=None, description='Binary to be loaded and started',
+            cast=str
+        )
 
+        # With the legacy gvsoc launcher, configure() is never called and the binary comes
+        # from the command line, so it must be resolved now. With gvrun, it comes from a
+        # parameter and is handled in configure() since it can also be set from the build
+        # process.
         binary = None
-        if parser is not None:
-            [args, otherArgs] = parser.parse_known_args()
+        if os.environ.get('USE_GVRUN') is None and parser is not None:
+            [args, __] = parser.parse_known_args()
             binary = args.binary
 
         dram = memory.Memory(self, 'dram', size=0x10000000, atomics=True, width_log2=-1)
@@ -67,6 +82,22 @@ class Soc(st.Component):
 
         host.o_VLSU(ico.i_INPUT())
 
+        self.loader = loader
+        self.register_binary_handler(self.handle_binary)
+
+    @override
+    def configure(self) -> None:
+        # We configure the loader binary now in the configure step since it is coming from
+        # a parameter which can be set either from command line or from the build process
+        binary = self.get_parameter('binary')
+        if binary is not None:
+            self.loader.set_binary(binary)
+
+    def handle_binary(self, binary: str):
+        # This gets called when an executable is attached to a hierarchy of components containing
+        # this one
+        self.set_parameter('binary', binary)
+
 
 class AraChip(st.Component):
 
@@ -84,7 +115,9 @@ class AraChip(st.Component):
 class Target(gvsoc.Target):
 
     gapy_description="Ara virtual board"
+    model = AraChip
+    name = "ara"
 
-    def __init__(self, parser, options):
+    def __init__(self, parser, options=None, name=None):
         super(Target, self).__init__(parser, options,
-            model=AraChip)
+            model=AraChip, name=name)
