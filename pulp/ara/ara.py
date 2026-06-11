@@ -18,7 +18,6 @@ import re
 
 def extend_isa(isa_instance):
     # Assign tags to instructions so that we can handle them with different blocks
-
     # For now only load/stores are assigned to vlsu
     vle_pattern = re.compile(r'^(vle\d+\.v)$')
     vse_pattern = re.compile(r'^(vse\d+\.v)$')
@@ -30,6 +29,8 @@ def extend_isa(isa_instance):
     vsox_pattern = re.compile(r'^(vsoxei\d+\.v)$')
     vslide_pattern = re.compile(r'.*slide.*|.*vmv.*')
     vsetvli_pattern = re.compile(r'.*vset.*')
+    vtle_pattern = re.compile(r'^vtle\d+$')
+    vtse_pattern = re.compile(r'^vtse\d+$')
     for insn in isa_instance.get_isa('v').get_insns():
         if vle_pattern.match(insn.label) is not None or vlse_pattern.match(insn.label) is not None or \
                 vlux_pattern.match(insn.label) is not None or vlox_pattern.match(insn.label) is not None:
@@ -49,6 +50,10 @@ def extend_isa(isa_instance):
             insn.add_tag('vslide')
         elif vsetvli_pattern.match(insn.label) is not None:
             insn.add_tag('vsetvli')
+        elif vtle_pattern.match(insn.label) is not None:
+            insn.add_tag('vtload')
+        elif vtse_pattern.match(insn.label) is not None:
+            insn.add_tag('vtsoad')
         else:
             insn.add_tag('vothers')
 
@@ -56,11 +61,10 @@ def extend_isa(isa_instance):
         # if insn.label.find('vfmac') == 0:
         #     insn.set_latency(1)
 
-def attach(component, vlen, nb_lanes, use_spatz=False, spatz_nb_ports=None, lane_width=8):
+def attach(component, nb_lanes, use_spatz=False, spatz_nb_ports=None, lane_width=None, tile_lane_width=None):
     component.add_sources([
         "cpu/iss/src/ara/ara.cpp",
         "cpu/iss/src/ara/ara_vcompute.cpp",
-        "cpu/iss/src/vector.cpp",
     ])
 
     if use_spatz:
@@ -72,16 +76,10 @@ def attach(component, vlen, nb_lanes, use_spatz=False, spatz_nb_ports=None, lane
             "cpu/iss/src/ara/ara_vlsu.cpp",
         ])
 
-    component.add_c_flags([
-        "-DCONFIG_ISS_HAS_VECTOR=1", f'-DCONFIG_ISS_VLEN={int(vlen)}'
-    ])
-    component.add_sources([
-        "cpu/iss/src/vector.cpp",
-    ])
-
     component.add_property('vu/nb_lanes', nb_lanes)
     component.add_property('vu/lsu_width', lane_width)
     component.add_property('vu/compute_width', lane_width)
     if use_spatz:
         component.add_property('vu/nb_ports', nb_lanes if spatz_nb_ports is None else spatz_nb_ports)
         component.add_property('vu/nb_outstanding_reqs', 8)
+        component.add_property('vu/tile_lsu_width', tile_lane_width if tile_lane_width is not None else lane_width)

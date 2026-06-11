@@ -191,6 +191,7 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             boot_addr: int=0,
             inc_spatz: bool=False,
             core_id: int=0,
+            te: int=16, kmax: int=4,
             htif: bool=False, vlen: int=512, spatz_nb_lanes=4,
             spatz_lane_width=8,
             pulp_v2: bool=False,
@@ -213,12 +214,15 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             if pulp_v2:
                 extensions = [ PulpV2(hwloop=False, elw=False), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ]
             else:
-                extensions = [ Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ]
-
-                if not inc_spatz:
-                    extensions += [Rv32frep()]
+                extensions = [ Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux()]
+                
+                if inc_spatz:
+                    extensions += [Rv32vme()]
+                else:
                     if ssr:
                         extensions += [Rv32ssr()]
+                    if sequencer:
+                        extensions += [Rv32frep()]
 
 
             isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("snitch_" + isa, isa,
@@ -226,8 +230,8 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             add_latencies(isa_instance, is_fast=True, use_spatz=inc_spatz)
             isa_instances[isa] = isa_instance
 
-            if inc_spatz:
-                pulp.ara.ara.extend_isa(isa_instance)
+        if inc_spatz:
+            pulp.ara.ara.extend_isa(isa_instance)
 
         if misa is None:
             misa = isa_instance.misa
@@ -261,16 +265,23 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
         ])
 
         if inc_spatz:
-            pulp.ara.ara.attach(self, vlen, nb_lanes=spatz_nb_lanes, use_spatz=True, lane_width=spatz_lane_width)
-
-            self.add_c_flags([
-                "-DCONFIG_GVSOC_ISS_USE_SPATZ",
-            ])
+            pulp.ara.ara.attach(self, nb_lanes=spatz_nb_lanes, use_spatz=True, lane_width=spatz_lane_width)
 
             # Temporary add sequencer to keep fpu_sequencer working, need to check why it is needed
             self.add_c_flags([f'-DCONFIG_GVSOC_ISS_SEQUENCER=1'])
             self.add_sources([
                 "cpu/iss/src/spatz/fpu_sequencer.cpp",
+                "cpu/iss/src/vector.cpp",
+                "cpu/iss/src/tile.cpp",
+            ])
+            self.add_c_flags([
+                "-DCONFIG_GVSOC_ISS_USE_SPATZ=1",
+            ])
+            self.add_c_flags([
+                "-DCONFIG_ISS_HAS_TILE=1", f'-DCONFIG_ISS_TE={int(te)}', f'-DCONFIG_ISS_KMAX={int(kmax)}'
+            ])
+            self.add_c_flags([
+                "-DCONFIG_ISS_HAS_VECTOR=1", f'-DCONFIG_ISS_VLEN={int(vlen)}'
             ])
         else:
             if sequencer:
