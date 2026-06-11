@@ -31,6 +31,19 @@ class Ri5kyExec(ExecInOrder):
         iss.isa.add_include('<cpu/iss_v2/include/cores/ri5ky/exec.hpp>')
         iss.isa.add_implem_include('<cpu/iss_v2/include/cores/ri5ky/exec_implem.hpp>')
 
+class Ri5kyLsu(LsuV2):
+    """io_v2 LSU extended with the p.elw event load (park puts the core to
+    sleep; an interrupt replays the instruction after the handler)."""
+    def __init__(self, nb_outstanding: int=1):
+        super().__init__(nb_outstanding=nb_outstanding, class_name='Ri5kyLsu')
+
+    @override
+    def gen(self, iss: RiscvCommon):
+        super().gen(iss)
+        iss.isa.add_define('CONFIG_GVSOC_ISS_ELW', '1')
+        iss.isa.add_include('<cpu/iss_v2/include/cores/ri5ky/lsu.hpp>')
+        iss.add_sources(['cpu/iss_v2/src/cores/ri5ky/lsu.cpp'])
+
 class Ri5kyEvent(IssModule):
     @override
     def gen(self, iss: RiscvCommon):
@@ -99,7 +112,7 @@ class Ri5ky(RiscvCommon):
             # inorder_commit=True path absorbs the back-to-back-load case
             # (same-cycle re-dispatch in insn_terminate) so a stalled
             # second load doesn't see a spurious stall cycle.
-            'lsu': LsuV2(nb_outstanding=1),
+            'lsu': Ri5kyLsu(nb_outstanding=1),
             'regfile': Regfile(scoreboard=True),
             'hwloop': Hwloop(),
         }
