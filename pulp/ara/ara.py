@@ -53,7 +53,7 @@ def extend_isa(isa_instance):
         elif vtle_pattern.match(insn.label) is not None:
             insn.add_tag('vtload')
         elif vtse_pattern.match(insn.label) is not None:
-            insn.add_tag('vtsoad')
+            insn.add_tag('vtstore')
         else:
             insn.add_tag('vothers')
 
@@ -61,15 +61,22 @@ def extend_isa(isa_instance):
         # if insn.label.find('vfmac') == 0:
         #     insn.set_latency(1)
 
-def attach(component, nb_lanes, use_spatz=False, spatz_nb_ports=None, lane_width=None, tile_lane_width=None):
+def attach(component, vlen, nb_lanes, use_spatz=False, spatz_nb_ports=None, lane_width=None, tile_lane_width=None):
     component.add_sources([
         "cpu/iss/src/ara/ara.cpp",
         "cpu/iss/src/ara/ara_vcompute.cpp",
+        "cpu/iss/src/vector.cpp",
     ])
 
     if use_spatz:
         component.add_sources([
             "cpu/iss/src/ara/spatz_vlsu.cpp",
+        ])
+        component.add_c_flags([
+            "-DCONFIG_GVSOC_ISS_USE_SPATZ=1",
+        ])
+        component.add_c_flags([
+            "-DCONFIG_ISS_HAS_VECTOR=1", f'-DCONFIG_ISS_VLEN={int(vlen)}'
         ])
     else:
         component.add_sources([

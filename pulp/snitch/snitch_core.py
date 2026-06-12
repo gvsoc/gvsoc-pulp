@@ -265,23 +265,16 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
         ])
 
         if inc_spatz:
-            pulp.ara.ara.attach(self, nb_lanes=spatz_nb_lanes, use_spatz=True, lane_width=spatz_lane_width)
+            pulp.ara.ara.attach(self, vlen, nb_lanes=spatz_nb_lanes, use_spatz=True, lane_width=spatz_lane_width)
 
             # Temporary add sequencer to keep fpu_sequencer working, need to check why it is needed
             self.add_c_flags([f'-DCONFIG_GVSOC_ISS_SEQUENCER=1'])
             self.add_sources([
                 "cpu/iss/src/spatz/fpu_sequencer.cpp",
-                "cpu/iss/src/vector.cpp",
                 "cpu/iss/src/tile.cpp",
             ])
             self.add_c_flags([
-                "-DCONFIG_GVSOC_ISS_USE_SPATZ=1",
-            ])
-            self.add_c_flags([
                 "-DCONFIG_ISS_HAS_TILE=1", f'-DCONFIG_ISS_TE={int(te)}', f'-DCONFIG_ISS_KMAX={int(kmax)}'
-            ])
-            self.add_c_flags([
-                "-DCONFIG_ISS_HAS_VECTOR=1", f'-DCONFIG_ISS_VLEN={int(vlen)}'
             ])
         else:
             if sequencer:
