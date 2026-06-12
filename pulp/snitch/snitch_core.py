@@ -274,6 +274,9 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
                 "cpu/iss/src/tile.cpp",
             ])
             self.add_c_flags([
+                "-DCONFIG_GVSOC_ISS_USE_SPATZ=1",
+            ])
+            self.add_c_flags([
                 "-DCONFIG_ISS_HAS_TILE=1", f'-DCONFIG_ISS_TE={int(te)}', f'-DCONFIG_ISS_KMAX={int(kmax)}'
             ])
         else:
