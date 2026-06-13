@@ -21,10 +21,12 @@
 
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
+#include <vp/debug_mem.hpp>
 #include <stdio.h>
 #include <math.h>
+#include <vector>
 
-class interleaver : public vp::Component
+class interleaver : public vp::Component, public vp::DebugMemIf
 {
 
 public:
@@ -33,6 +35,14 @@ public:
 
   static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
   static vp::IoReqStatus req_ts(vp::Block *__this, vp::IoReq *req);
+
+  // Backdoor debug access (vp/debug_mem.hpp). Like the io_v2 log_ico, a flat
+  // region cannot express the bank interleaving, so the interleaver keeps the
+  // default debug_mem_regions() (advertising itself as one terminal region)
+  // and redoes the bank math per interleaving granule in debug_mem_access().
+  vp::DebugMemIf *debug_mem_if() override { return this; }
+  int debug_mem_access(uint64_t addr, uint8_t *data, uint64_t size,
+    bool is_write) override;
 
 
 private:
@@ -51,6 +61,8 @@ private:
   vp::IoReq ts_req;
   int interleaving_bits;
   uint64_t offset_mask;
+  std::vector<vp::DebugMemIf *> bank_debug_mem;
+  bool bank_debug_mem_resolved = false;
 };
 
 interleaver::interleaver(vp::ComponentConf &config)
@@ -100,6 +112,53 @@ interleaver::interleaver(vp::ComponentConf &config)
   }
 
 
+}
+
+int interleaver::debug_mem_access(uint64_t addr, uint8_t *data, uint64_t size,
+  bool is_write)
+{
+  if (!this->bank_debug_mem_resolved)
+  {
+    this->bank_debug_mem_resolved = true;
+    this->bank_debug_mem.assign(this->nb_slaves, nullptr);
+    for (int i = 0; i < this->nb_slaves; i++)
+    {
+      std::vector<vp::SlavePort *> finals = this->out[i]->get_final_ports();
+      if (!finals.empty() && finals[0]->get_owner() != nullptr)
+      {
+        this->bank_debug_mem[i] = finals[0]->get_owner()->debug_mem_if();
+      }
+    }
+  }
+
+  // Walk the access one interleaving granule at a time, each chunk going to
+  // its bank at the bank-local offset (same math as the timed req() path).
+  uint64_t granule = 1ULL << this->interleaving_bits;
+  while (size > 0)
+  {
+    int bank_id = (addr >> this->interleaving_bits) & this->bank_mask;
+    uint64_t bank_offset =
+      ((addr >> (this->stage_bits + this->interleaving_bits)) << this->interleaving_bits)
+      + (addr & (granule - 1));
+
+    uint64_t chunk = granule - (addr & (granule - 1));
+    if (chunk > size)
+    {
+      chunk = size;
+    }
+
+    if (this->bank_debug_mem[bank_id] == nullptr ||
+        this->bank_debug_mem[bank_id]->debug_mem_access(bank_offset, data, chunk, is_write))
+    {
+      return -1;
+    }
+
+    addr += chunk;
+    data += chunk;
+    size -= chunk;
+  }
+
+  return 0;
 }
 
 vp::IoReqStatus interleaver::req(vp::Block *__this, vp::IoReq *req)
