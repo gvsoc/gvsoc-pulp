@@ -57,4 +57,8 @@ private:
     // PC of the in-flight p.elw, restored as the current instruction at
     // unstall time so the elw is replayed after the interrupt handler.
     iss_reg_t elw_insn;
+    // Cycle at which the core was clock-gated by the parked p.elw. The
+    // gated span (wake - park) is the "wasted" wait that RTL charges to
+    // PCCR[11] (CSR_PCER_ELW) via perf_pipeline_stall_o.
+    int64_t elw_park_cyclestamp;
 };

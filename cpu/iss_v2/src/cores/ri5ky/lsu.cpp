@@ -38,6 +38,7 @@ bool Ri5kyLsu::elw(iss_insn_t *insn, iss_addr_t addr, int size, int reg)
     {
         this->elw_entry = this->granted_entry;
         this->elw_insn = insn->addr;
+        this->elw_park_cyclestamp = this->iss.clock.get_cycles();
         this->iss.exec.busy_exit();
         this->iss.exec.retain_inc();
     }
@@ -47,6 +48,20 @@ bool Ri5kyLsu::elw(iss_insn_t *insn, iss_addr_t addr, int size, int reg)
 
 void Ri5kyLsu::elw_wake()
 {
+    // The core was clock-gated `park` cycles waiting for the event response.
+    // RTL stays in ELW_EXE for that wait and then refills the pipeline (IF
+    // refetch) before the next instruction issues; perf_pipeline_stall_o is
+    // high for the whole span, feeding PCCR[11]. Reproduce both the wasted
+    // cycles charged to CSR_PCER_ELW and the refill bubble:
+    //   counter = max(park + 1, 3)   (RTL: max(L+1, 3))
+    //   the elw's own issue cycle is already counted, so the extra timing to
+    //   inject beyond the gated span is `counter - park`.
+    int64_t park = this->iss.clock.get_cycles() - this->elw_park_cyclestamp;
+    int64_t counter = park + 1;
+    if (counter < 3) counter = 3;
+    this->iss.exec.stall_cycles_inc((int)(counter - park));
+    this->iss.timing.event_elw_account((int)counter, (int)park);
+
     this->elw_entry = NULL;
     this->elw_insn = 0;
     this->iss.exec.retain_dec();

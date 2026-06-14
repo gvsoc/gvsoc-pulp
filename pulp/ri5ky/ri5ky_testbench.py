@@ -25,6 +25,7 @@ from utils.loader.loader_v2 import ElfLoader
 from ips.gap.cpu.ri5ky import Ri5ky
 from memory.memory_v3 import Memory
 from interco.router_v2 import Router
+from pulp.ri5ky.ri5ky_async_mem import Ri5kyAsyncMem
 
 
 class Ri5kyTestbench(Component):
@@ -42,12 +43,16 @@ class Ri5kyTestbench(Component):
             cast=str
         )
 
-        mem      = Memory    ( self, 'mem'     , config=config.mem      )
-        slow_mem = Memory    ( self, 'slow_mem', config=config.slow_mem )
-        mmio     = Ri5kyMmio ( self, 'mmio'                              )
-        ico      = Router    ( self, 'ico'     , config=config.router   )
-        core     = Ri5ky     ( self, 'core'    , config=config.core     )
-        loader   = ElfLoader ( self, 'loader'                            )
+        mem      = Memory       ( self, 'mem'     , config=config.mem      )
+        # Asynchronous slow memory: answers IO_REQ_GRANTED and replies
+        # `latency` cycles later, mirroring RTL slow_mem's rvalid-after-L and
+        # engaging p.elw's clock-gated park/wake path (a real event unit is
+        # always an asynchronous responder).
+        slow_mem = Ri5kyAsyncMem ( self, 'slow_mem', config=config.slow_mem )
+        mmio     = Ri5kyMmio    ( self, 'mmio'                              )
+        ico      = Router       ( self, 'ico'     , config=config.router   )
+        core     = Ri5ky        ( self, 'core'    , config=config.core     )
+        loader   = ElfLoader    ( self, 'loader'                            )
 
         ico.o_MAP        ( mem.i_INPUT()      , mapping=config.mem_mapping      )
         ico.o_MAP        ( slow_mem.i_INPUT() , mapping=config.slow_mem_mapping )
