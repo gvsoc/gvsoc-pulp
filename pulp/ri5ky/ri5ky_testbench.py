@@ -43,20 +43,25 @@ class Ri5kyTestbench(Component):
             cast=str
         )
 
-        mem      = Memory       ( self, 'mem'     , config=config.mem      )
+        mem       = Memory       ( self, 'mem'      , config=config.mem       )
+        # Synchronous slow memory (memory_v3): completes with IO_REQ_DONE and
+        # an annotated latency. Exercises the sync response path of the LSU.
+        slow_mem  = Memory       ( self, 'slow_mem' , config=config.slow_mem  )
         # Asynchronous slow memory: answers IO_REQ_GRANTED and replies
-        # `latency` cycles later, mirroring RTL slow_mem's rvalid-after-L and
-        # engaging p.elw's clock-gated park/wake path (a real event unit is
-        # always an asynchronous responder).
-        slow_mem = Ri5kyAsyncMem ( self, 'slow_mem', config=config.slow_mem )
-        mmio     = Ri5kyMmio    ( self, 'mmio'                              )
-        ico      = Router       ( self, 'ico'     , config=config.router   )
-        core     = Ri5ky        ( self, 'core'    , config=config.core     )
-        loader   = ElfLoader    ( self, 'loader'                            )
+        # `latency` cycles later, mirroring RTL slow_mem.sv's rvalid-after-L.
+        # Engages p.elw's clock-gated park/wake path (a real event unit is
+        # always an asynchronous responder) and the registered misaligned
+        # second-beat handoff.
+        async_mem = Ri5kyAsyncMem ( self, 'async_mem', config=config.async_mem )
+        mmio      = Ri5kyMmio    ( self, 'mmio'                                )
+        ico       = Router       ( self, 'ico'      , config=config.router    )
+        core      = Ri5ky        ( self, 'core'     , config=config.core      )
+        loader    = ElfLoader    ( self, 'loader'                             )
 
-        ico.o_MAP        ( mem.i_INPUT()      , mapping=config.mem_mapping      )
-        ico.o_MAP        ( slow_mem.i_INPUT() , mapping=config.slow_mem_mapping )
-        ico.o_MAP        ( mmio.i_INPUT()     , mapping=config.mmio_mapping     )
+        ico.o_MAP        ( mem.i_INPUT()       , mapping=config.mem_mapping       )
+        ico.o_MAP        ( slow_mem.i_INPUT()  , mapping=config.slow_mem_mapping  )
+        ico.o_MAP        ( async_mem.i_INPUT() , mapping=config.async_mem_mapping )
+        ico.o_MAP        ( mmio.i_INPUT()      , mapping=config.mmio_mapping      )
 
         # Three independent masters, one router input port each.
         loader.o_OUT     ( ico.i_INPUT(0)   )

@@ -26,7 +26,11 @@
 
 #define N_ELW 64
 
-#define SLOW_MEM_BASE ((volatile uint32_t *)0x40000000u)
+// Event-unit accesses must hit the ASYNCHRONOUS region (0x5000_0000):
+// p.elw's clock-gated park/wake path only engages against an async
+// responder (grants, then replies later). The 0x4000_0000 region is the
+// synchronous slow memory and would not exercise the park path.
+#define SLOW_MEM_BASE ((volatile uint32_t *)0x50000000u)
 
 #define EIGHT_ELW \
     ".insn i 0x03, 0x6, t0,  0(a0)\n" \
