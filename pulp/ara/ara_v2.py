@@ -39,16 +39,20 @@ def extend_isa(isa_instance: Isa):
             insn.set_latency(1)
             if vlse_pattern.match(insn.label) is not None:
                 insn.add_tag('vload_strided')
+                insn.add_field('chaining_factor', '0.0f')
             if vlux_pattern.match(insn.label) is not None or vlox_pattern.match(insn.label) is not None:
                 insn.add_tag('vload_indexed')
+                insn.add_field('chaining_factor', '0.0f')
         elif vse_pattern.match(insn.label) is not None or vsse_pattern.match(insn.label) is not None or \
                 vsux_pattern.match(insn.label) is not None or vsox_pattern.match(insn.label) is not None:
             insn.add_tag('vstore')
             insn.set_latency(3)
             if vsse_pattern.match(insn.label) is not None:
                 insn.add_tag('vstore_strided')
+                insn.add_field('chaining_factor', '0.0f')
             if vsux_pattern.match(insn.label) is not None or vsox_pattern.match(insn.label) is not None:
                 insn.add_tag('vstore_indexed')
+                insn.add_field('chaining_factor', '0.0f')
         elif vslide_pattern.match(insn.label) is not None:
             insn.add_tag('vslide')
         elif vsetvli_pattern.match(insn.label) is not None:
