@@ -24,7 +24,7 @@ from pulp.mempool.mempool_group import Group
 
 class Cluster(st.Component):
 
-    def __init__(self, parent, name, parser, async_l1_interco: bool=False, terapool: bool=False, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1, nb_dmas_per_group: int=1, terapool_group_latency: int=7):
+    def __init__(self, parent, name, parser, async_l1_interco: bool=False, terapool: bool=False, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1, nb_dmas_per_group: int=1, terapool_group_latency: int=7, nb_fus_per_core: int=1):
         super().__init__(parent, name)
 
         ################################################################
@@ -32,7 +32,7 @@ class Cluster(st.Component):
         ################################################################
         # Hardware parameters 
         nb_tiles_per_group = int((total_cores/nb_groups)/nb_cores_per_tile)
-        nb_banks_per_group = int(total_cores/nb_groups) * bank_factor
+        nb_banks_per_group = int(total_cores/nb_groups) * bank_factor * nb_fus_per_core
 
         ################################################################
         ##########              Design Components             ##########
@@ -42,7 +42,7 @@ class Cluster(st.Component):
         for i in range(0, nb_groups):
             self.group_list.append(Group(self, f'group_{i}', parser=parser, async_l1_interco=async_l1_interco, terapool=terapool, group_id=i, nb_cores_per_tile=nb_cores_per_tile, 
                 nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width,
-                nb_dmas_per_group=nb_dmas_per_group, terapool_group_latency=terapool_group_latency))
+                nb_dmas_per_group=nb_dmas_per_group, terapool_group_latency=terapool_group_latency, nb_fus_per_core=nb_fus_per_core))
 
         # AXI Interface
         if terapool:

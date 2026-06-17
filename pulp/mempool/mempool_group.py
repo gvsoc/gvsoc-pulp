@@ -27,7 +27,7 @@ from pulp.mempool.l2_interconnect.hierarchical_interco import Hierarchical_Inter
 
 class Group(st.Component):
 
-    def __init__(self, parent, name, parser, terapool: bool=False, async_l1_interco: bool=False, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_dmas_per_group: int=1, terapool_group_latency: int=7):
+    def __init__(self, parent, name, parser, terapool: bool=False, async_l1_interco: bool=False, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_dmas_per_group: int=1, terapool_group_latency: int=7, nb_fus_per_core: int=1):
         super().__init__(parent, name)
 
         ################################################################
@@ -38,12 +38,12 @@ class Group(st.Component):
             assert nb_dmas_per_group == nb_sub_groups_per_group
             nb_remote_group_ports = nb_groups - 1
             nb_tiles_per_sub_group = int((total_cores/nb_groups/nb_sub_groups_per_group)/nb_cores_per_tile)
-            nb_banks_per_sub_group = int((total_cores/nb_groups/nb_sub_groups_per_group)) * bank_factor
+            nb_banks_per_sub_group = int((total_cores/nb_groups/nb_sub_groups_per_group)) * bank_factor *nb_fus_per_core
         else:
             assert nb_dmas_per_group == 1
             nb_remote_ports = nb_groups - 1
             nb_tiles_per_group = int((total_cores/nb_groups)/nb_cores_per_tile)
-            nb_banks_per_tile = nb_cores_per_tile * bank_factor
+            nb_banks_per_tile = nb_cores_per_tile * bank_factor *nb_fus_per_core
 
         ################################################################
         ##########              Design Components             ##########
@@ -54,13 +54,14 @@ class Group(st.Component):
             self.sub_group_list = []
             for i in range(0, nb_sub_groups_per_group):
                 self.sub_group_list.append(Sub_group(self, f'sub_group_{i}', parser=parser, terapool=terapool, async_l1_interco=async_l1_interco, sub_group_id=i, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
-                    nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width, terapool_group_latency=terapool_group_latency))
+                    nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width, terapool_group_latency=terapool_group_latency,
+                    nb_fus_per_core=nb_fus_per_core))
         else:
             # TIles
             self.tile_list = []
             for i in range(0, nb_tiles_per_group):
                 self.tile_list.append(Tile(self, f'tile_{i}', parser=parser, terapool=terapool, async_l1_interco=async_l1_interco, tile_id=i, sub_group_id=0, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
-                    nb_sub_groups_per_group=1, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width))
+                    nb_sub_groups_per_group=1, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, axi_data_width=axi_data_width, nb_fus_per_core=nb_fus_per_core))
 
         # TCDM Interconnect
         if terapool:
@@ -68,7 +69,7 @@ class Group(st.Component):
             group_remote_master_interleavers = []
             for i in range(0, nb_remote_group_ports):
                 group_remote_master_interleavers.append(Interleaver(self, f'group_remote_slave_interleaver_{i}', nb_slaves=nb_sub_groups_per_group*nb_tiles_per_sub_group,
-                    nb_masters=nb_sub_groups_per_group*nb_tiles_per_sub_group, interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor)), offset_translation=False))
+                    nb_masters=nb_sub_groups_per_group*nb_tiles_per_sub_group, interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor*nb_fus_per_core)), offset_translation=False))
 
             group_remote_out_interfaces = []
             for port in range(0, nb_remote_group_ports):
@@ -98,12 +99,12 @@ class Group(st.Component):
         else:
             #Group local interconnect
             group_local_interleaver = Interleaver(self, 'group_local_interleaver', nb_slaves=nb_tiles_per_group, nb_masters=nb_tiles_per_group,
-                interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor)), offset_translation=False)
+                interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor*nb_fus_per_core)), offset_translation=False)
 
             #Group Remote Slave Interconnect
             group_remote_master_interleavers = []
             for i in range(0, nb_remote_ports):
-                group_remote_master_interleavers.append(Interleaver(self, f'group_remote_slave_interleaver_{i}', nb_slaves=nb_tiles_per_group, nb_masters=nb_tiles_per_group, interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor)), offset_translation=False))
+                group_remote_master_interleavers.append(Interleaver(self, f'group_remote_slave_interleaver_{i}', nb_slaves=nb_tiles_per_group, nb_masters=nb_tiles_per_group, interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor*nb_fus_per_core)), offset_translation=False))
 
             group_remote_out_interfaces = []
             for port in range(0, nb_remote_ports):

@@ -22,7 +22,7 @@ import math
 
 class Hierarchical_cache(gvsoc.systree.Component):
 
-    def __init__(self, parent: gvsoc.systree.Component, name: str, nb_cores: int=0, synchronous: bool=True):
+    def __init__(self, parent: gvsoc.systree.Component, name: str, nb_cores: int=0, synchronous: bool=True, , nb_fus_per_core: int=1):
 
         super(Hierarchical_cache, self).__init__(parent, name)
 
@@ -30,10 +30,10 @@ class Hierarchical_cache(gvsoc.systree.Component):
         # Properties
         #
 
-        line_width = nb_cores * 8
-        cache_size = nb_cores * 512
+        line_width = nb_fus_per_core * nb_cores * 8
+        cache_size = nb_fus_per_core * nb_cores * 512
         nb_l0_sets = 1
-        nb_l1_sets = nb_cores / 2
+        nb_l1_sets = nb_fus_per_core * nb_cores / 2
         nb_l0_lines = 4
         nb_l1_lines = cache_size / (line_width * nb_l1_sets)
         
