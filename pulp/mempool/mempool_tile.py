@@ -35,6 +35,10 @@ class Tile(st.Component):
 
         [args, __] = parser.parse_known_args()
 
+        # Set it to true to swtich to snitch new fast model
+        fast_model = True
+        use_spatz = nb_fus_per_core > 1
+
         ################################################################
         ##########               Design Variables             ##########
         ################################################################
@@ -49,7 +53,10 @@ class Tile(st.Component):
 
         # Snitch core complex
         self.int_cores = []
+        self.fp_cores = []
         bus_watchpoints = []
+        if Xfrep and not use_spatz:
+            fpu_sequencers = []
 
         ################################################################
         ##########              Design Components             ##########
@@ -57,7 +64,7 @@ class Tile(st.Component):
 
         # Snitch TCDM (L1 subsystem)
         # nb_pe is the number of local master ports within the tile
-        nb_pe = nb_cores_per_tile * (nb_fus_per_core + 1)
+        nb_pe = nb_cores_per_tile * (nb_fus_per_core + 1) if use_spatz else nb_cores_per_tile
         l1 = l1_subsystem.L1_subsystem(self, 'l1', terapool=terapool, \
                                         async_l1_interco=async_l1_interco, tile_id=tile_id, sub_group_id=sub_group_id, group_id=group_id, \
                                         nb_tiles_per_sub_group=nb_tiles_per_sub_group, nb_sub_groups_per_group=nb_sub_groups_per_group, \
@@ -85,10 +92,26 @@ class Tile(st.Component):
 
         # Core Complex
         for core_id in range(0, nb_cores_per_tile):
-            config = SpatzConfig(isa="rv32imafv", fetch_enable=False,
-                boot_addr=0, hart_id=group_id*nb_sub_groups_per_group*nb_tiles_per_sub_group*nb_cores_per_tile+sub_group_id*nb_tiles_per_sub_group*nb_cores_per_tile+tile_id*nb_cores_per_tile+core_id,
-                htif=False, nb_lanes=nb_fus_per_core, lane_width=4)
-            self.int_cores.append(SpatzMempool(self, f'pe{core_id}', config=config))
+            core_global_id = group_id*nb_sub_groups_per_group*nb_tiles_per_sub_group*nb_cores_per_tile+sub_group_id*nb_tiles_per_sub_group*nb_cores_per_tile+tile_id*nb_cores_per_tile+core_id
+
+            if use_spatz:
+                config = SpatzConfig(isa="rv32imafv", fetch_enable=False,
+                    boot_addr=0, hart_id=core_global_id,
+                    htif=False, nb_lanes=nb_fus_per_core, lane_width=4)
+                self.int_cores.append(SpatzMempool(self, f'pe{core_id}', config=config))
+
+            elif fast_model:
+                self.int_cores.append(iss.SnitchFast(self, f'pe{core_id}', isa="rv32imaf",
+                    core_id=core_global_id, htif=False, pulp_v2=True, wakeup_counter=True, nb_outstanding=8
+                ))
+
+            else:
+                self.int_cores.append(iss.Snitch(self, f'pe{core_id}', isa="rv32imaf", htif=False, \
+                    core_id=core_global_id, pulp_v2=True))
+                self.fp_cores.append(iss.Snitch_fp_ss(self, f'fp_ss{core_id}', isa="rv32imaf", htif=False, \
+                    core_id=core_global_id, pulp_v2=True))
+                if Xfrep:
+                    fpu_sequencers.append(Sequencer(self, f'fpu_sequencer{core_id}', latency=0))
 
         ################################################################
         ##########               Design Bindings              ##########
@@ -102,7 +125,7 @@ class Tile(st.Component):
 
         # ICO --> L1 TCDM
         for i in range(0, nb_pe):
-            ico_list[i].add_mapping('l1', base=0x00000000, remove_offset=0x00000000, size=total_cores * nb_fus_per_core *bank_factor * 1024)
+            ico_list[i].add_mapping('l1', base=0x00000000, remove_offset=0x00000000, size=total_cores * nb_fus_per_core * bank_factor * 1024)
             self.bind(ico_list[i], 'l1', l1, f'pe_in{i}')
 
         # L1 TCDM --> Remote TCDM interfaces
@@ -122,7 +145,7 @@ class Tile(st.Component):
         # ICO -> AXI -> L2 Memory
         for i in range(0, nb_cores_per_tile):
             # Add default mapping for the others
-            core_id = i * (1 + nb_fus_per_core)
+            core_id = i * (1 + nb_fus_per_core) if use_spatz else i
             ico_list[core_id].add_mapping('axi', latency=4)
             self.bind(ico_list[core_id], 'axi', axi_ico, 'input')
 
@@ -155,13 +178,35 @@ class Tile(st.Component):
             self.bind(self.int_cores[core_id], 'fetch', icache, 'input_%d' % core_id)
             self.bind(self, 'loader_start', self.int_cores[core_id], 'fetchen')
             self.bind(self, 'loader_entry', self.int_cores[core_id], 'bootaddr')
+
+            if not use_spatz and not fast_model:
+                # Snitch fp subsystems
+                # Pay attention to interactions and bandwidth between subsystem and tohost.
+                self.bind(self.fp_cores[core_id], 'data', l1_addr_scrambler_list[pe_id], 'input')
+                # FP subsystem doesn't fetch instructions from core->ico->memory, but from integer cores acc_req.
+                self.bind(self, 'loader_start', self.fp_cores[core_id], 'fetchen')
+                self.bind(self, 'loader_entry', self.fp_cores[core_id], 'bootaddr')
             
             # Scrambler
             self.bind(l1_addr_scrambler_list[pe_id], 'output', ico_list[pe_id], 'input')
             pe_id += 1
 
-            # Spatz
-            for port in range(0, nb_fus_per_core):
-                self.bind(self.int_cores[core_id], f'vlsu_{port}', l1_addr_scrambler_list[pe_id], 'input')
-                self.bind(l1_addr_scrambler_list[pe_id], 'output', ico_list[pe_id], 'input')
-                pe_id += 1
+            if use_spatz:
+                for port in range(0, nb_fus_per_core):
+                    self.bind(self.int_cores[core_id], f'vlsu_{port}', l1_addr_scrambler_list[pe_id], 'input')
+                    self.bind(l1_addr_scrambler_list[pe_id], 'output', ico_list[pe_id], 'input')
+                    pe_id += 1
+            elif not fast_model:
+                # Use WireMaster & WireSlave
+                # Add fpu sequence buffer in between int core and fp core to issue instructions
+                if Xfrep:
+                    self.bind(self.int_cores[core_id], 'acc_req', fpu_sequencers[core_id], 'input')
+                    self.bind(fpu_sequencers[core_id], 'output', self.fp_cores[core_id], 'acc_req')
+                    self.bind(self.int_cores[core_id], 'acc_req_ready', fpu_sequencers[core_id], 'acc_req_ready')
+                    self.bind(fpu_sequencers[core_id], 'acc_req_ready_o', self.fp_cores[core_id], 'acc_req_ready')
+                else:
+                    # Comment out if we want to add sequencer
+                    self.bind(self.int_cores[core_id], 'acc_req', self.fp_cores[core_id], 'acc_req')
+                    self.bind(self.int_cores[core_id], 'acc_req_ready', self.fp_cores[core_id], 'acc_req_ready')
+
+                self.bind(self.fp_cores[core_id], 'acc_rsp', self.int_cores[core_id], 'acc_rsp')
