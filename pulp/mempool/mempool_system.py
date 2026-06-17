@@ -39,7 +39,7 @@ from pulp.mempool.l2_subsystem import L2_subsystem
 
 class System(st.Component):
 
-    def __init__(self, parent, name, parser, terapool: bool=False, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1, nb_dmas_per_group: int=1, l2_size: int=0x1000000, nb_l2_banks: int=4, terapool_group_latency: int=7):
+    def __init__(self, parent, name, parser, terapool: bool=False, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1, nb_dmas_per_group: int=1, l2_size: int=0x1000000, nb_l2_banks: int=4, terapool_group_latency: int=7, nb_fus_per_core: int=1):
         super().__init__(parent, name)
 
         ################################################################
@@ -71,7 +71,8 @@ class System(st.Component):
         #Mempool cluster
         mempool_cluster=Cluster(self, 'mempool_cluster', async_l1_interco=async_l1_interco, terapool=terapool, parser=parser, nb_cores_per_tile=nb_cores_per_tile,
                             nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor,
-                            axi_data_width=axi_data_width, nb_axi_masters_per_group=nb_axi_masters_per_group, nb_dmas_per_group=nb_dmas_per_group, terapool_group_latency=terapool_group_latency)
+                            axi_data_width=axi_data_width, nb_axi_masters_per_group=nb_axi_masters_per_group, nb_dmas_per_group=nb_dmas_per_group, terapool_group_latency=terapool_group_latency, 
+                            nb_fus_per_core=nb_fus_per_core)
 
         # Boot Rom
         rom = memory.Memory(self, 'rom', size=0x1000, width_log2=(axi_data_width - 1).bit_length(), stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
@@ -207,7 +208,19 @@ class MempoolSystem(st.Component):
 
         clock = Clock_domain(self, 'clock', frequency=500000000)
 
-        soc = System(self, 'mempool_soc', parser, terapool=False, nb_cores_per_tile=4, nb_sub_groups_per_group=1, nb_groups=4, total_cores=256, bank_factor=4, axi_data_width=64, nb_axi_masters_per_group=1, nb_dmas_per_group=1, l2_size=0x400000, nb_l2_banks=4)
+        soc = System(self, 'mempool_soc', parser, terapool=False, nb_cores_per_tile=4, nb_sub_groups_per_group=1, nb_groups=4, total_cores=256, bank_factor=4, axi_data_width=64, nb_axi_masters_per_group=1, nb_dmas_per_group=1, l2_size=0x400000, nb_l2_banks=4, nb_fus_per_core=1)
+
+        self.bind(clock, 'out', soc, 'clock')
+
+class MempoolSpatzSystem(st.Component):
+
+    def __init__(self, parent, name, parser, options):
+
+        super(MempoolSpatzSystem, self).__init__(parent, name, options=options)
+
+        clock = Clock_domain(self, 'clock', frequency=500000000)
+
+        soc = System(self, 'mempool_soc', parser, terapool=False, nb_cores_per_tile=1, nb_sub_groups_per_group=1, nb_groups=4, total_cores=64, bank_factor=4, axi_data_width=64, nb_axi_masters_per_group=1, nb_dmas_per_group=1, l2_size=0x400000, nb_l2_banks=4, nb_fus_per_core=4)
 
         self.bind(clock, 'out', soc, 'clock')
 
@@ -219,7 +232,19 @@ class MinpoolSystem(st.Component):
 
         clock = Clock_domain(self, 'clock', frequency=500000000)
 
-        soc = System(self, 'mempool_soc', parser, terapool=False, nb_cores_per_tile=4, nb_sub_groups_per_group=1, nb_groups=4, total_cores=16, bank_factor=4, axi_data_width=32, nb_axi_masters_per_group=1, nb_dmas_per_group=1, l2_size=0x400000, nb_l2_banks=4)
+        soc = System(self, 'mempool_soc', parser, terapool=False, nb_cores_per_tile=4, nb_sub_groups_per_group=1, nb_groups=4, total_cores=16, bank_factor=4, axi_data_width=32, nb_axi_masters_per_group=1, nb_dmas_per_group=1, l2_size=0x400000, nb_l2_banks=4, nb_fus_per_core=1)
+
+        self.bind(clock, 'out', soc, 'clock')
+
+class MinpoolSpatzSystem(st.Component):
+
+    def __init__(self, parent, name, parser, options):
+
+        super(MinpoolSpatzSystem, self).__init__(parent, name, options=options)
+
+        clock = Clock_domain(self, 'clock', frequency=500000000)
+
+        soc = System(self, 'mempool_soc', parser, terapool=False, nb_cores_per_tile=1, nb_sub_groups_per_group=1, nb_groups=4, total_cores=4, bank_factor=4, axi_data_width=32, nb_axi_masters_per_group=1, nb_dmas_per_group=1, l2_size=0x400000, nb_l2_banks=4, nb_fus_per_core=4)
 
         self.bind(clock, 'out', soc, 'clock')
 
@@ -231,6 +256,18 @@ class TerapoolSystem(st.Component):
 
         clock = Clock_domain(self, 'clock', frequency=500000000)
 
-        soc = System(self, 'mempool_soc', parser, terapool=True, nb_cores_per_tile=8, nb_sub_groups_per_group=4, nb_groups=4, total_cores=1024, bank_factor=4, axi_data_width=64, nb_axi_masters_per_group=4, nb_dmas_per_group=4, l2_size=0x1000000, nb_l2_banks=16, terapool_group_latency=9)
+        soc = System(self, 'mempool_soc', parser, terapool=True, nb_cores_per_tile=8, nb_sub_groups_per_group=4, nb_groups=4, total_cores=1024, bank_factor=4, axi_data_width=64, nb_axi_masters_per_group=4, nb_dmas_per_group=4, l2_size=0x1000000, nb_l2_banks=16, terapool_group_latency=9, nb_fus_per_core=1)
+
+        self.bind(clock, 'out', soc, 'clock')
+
+class TerapoolSpatzSystem(st.Component):
+    
+    def __init__(self, parent, name, parser, options):
+
+        super(TerapoolSpatzSystem, self).__init__(parent, name, options=options)
+
+        clock = Clock_domain(self, 'clock', frequency=500000000)
+
+        soc = System(self, 'mempool_soc', parser, terapool=True, nb_cores_per_tile=1, nb_sub_groups_per_group=4, nb_groups=4, total_cores=128, bank_factor=4, axi_data_width=64, nb_axi_masters_per_group=4, nb_dmas_per_group=4, l2_size=0x1000000, nb_l2_banks=16, terapool_group_latency=9, nb_fus_per_core=8)
 
         self.bind(clock, 'out', soc, 'clock')
