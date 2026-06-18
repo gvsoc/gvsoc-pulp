@@ -37,7 +37,6 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
         get_js_config()->get_int("router_input_queue_size");
 
     // Reserve the array for the target. We may have one target at each node.
-    //
     this->itf_names.resize(this->nb_nodes);
 
     this->nb_nodes = get_js_config()->get_int("nb_nodes");
@@ -104,7 +103,7 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
         }
     }
 
-    // Create the array of networks interfaces (initialize empty slots to NULL)
+    // Create the array of network interfaces (initialize empty slots to NULL)
     this->network_interfaces.resize(this->nb_nodes, NULL);
     js::Config *network_interfaces = get_js_config()->get("network_interfaces");
     if (network_interfaces != NULL)
@@ -134,7 +133,6 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
         {
             int node_id = router->get_elem(0)->get_int();
             int num_queues = router->get_elem(1)->get_int();
-            // int ... for other variables
 
             this->trace.msg(
                 vp::Trace::LEVEL_DEBUG,
@@ -212,8 +210,7 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
     {
         int node_a = this->links[i][0];
         int node_b = this->links[i][1];
-        int latency =
-            this->links[i][2]; // Latency is guaranteed to be the third element
+        int latency = this->links[i][2];
 
         // If Node A is an NI and Node B is a Router
         if (this->network_interfaces[node_a] != NULL &&
@@ -264,13 +261,14 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
 
 FlooNoc::~FlooNoc()
 {
-    // === PRINT PERFORMANCE REPORT ===
+    // FlooNoC-Flex Performance Report
+    /*
     printf(
         "\n===============================================================\n");
-    printf("                  FlooNoC Performance Report                   \n");
+    printf("                  FlooNoC-Flex Performance Report \n");
     printf("===============================================================\n");
 
-    printf("\n--- Network Interfaces (Traffic Load) ---\n");
+    printf("\n--- Network Interfaces ---\n");
     printf(" Node ID | Injected Packets | Received Responses\n");
     printf("---------------------------------------------------------------\n");
     for (NetworkInterface *ni : this->network_interfaces)
@@ -283,13 +281,16 @@ FlooNoc::~FlooNoc()
     }
 
     printf("\n--- WIDE Routers (Data Routing & Congestion) ---\n");
-    printf(" Node ID | Routed Packets | Stalled Cycles | Congestion Rate \n");
+    printf(
+        " Node ID | Routed Packets | Stalled Cycles | Congestion Rate | Peak
+    Queue Depth \n");
     printf("---------------------------------------------------------------\n");
 
     for (Router *router : this->wide_routers)
     {
         if (router)
         {
+            // Very simplistic congestion indicator
             double congestion = 0.0;
             if (router->stat_routed_packets + router->stat_stall_cycles > 0)
             {
@@ -313,20 +314,45 @@ FlooNoc::~FlooNoc()
     {
         if (ni)
         {
-            global_latency_cycles += ni->stat_total_packet_latency;
+            global_latency_ps += ni->stat_total_packet_latency;
             global_arrived_pkts += ni->stat_arrived_packets;
         }
     }
 
-    double global_avg_lat_cycles =
+    double global_avg_lat_ps =
         global_arrived_pkts > 0
-            ? ((double)global_latency_cycles / global_arrived_pkts)
+            ? ((double)global_latency_ps / global_arrived_pkts)
             : 0.0;
 
-    printf("\nGlobal Average Packet Latency: %.2f cycles\n",
-           global_avg_lat_cycles);
+    double global_avg_lat_cycles = global_avg_lat_ps / 1000.0;
+
+    int64_t total_time_ps = this->time.get_engine()->get_time();
+    uint64_t total_sim_cycles = total_time_ps / 1000;
+
+    double throughput_pkts_per_cycle =
+        total_sim_cycles > 0 ? ((double)global_arrived_pkts / total_sim_cycles)
+                             : 0.0;
+
+    int num_routers = 0;
+    for (Router *router : this->wide_routers)
+    {
+        if (router)
+            num_routers++;
+    }
+    double throughput_per_node =
+        num_routers > 0 ? throughput_pkts_per_cycle / num_routers : 0.0;
+
+    printf("\n--- Global Network Metrics ---\n");
+    printf("Total Arrived Packets     : %lu\n", global_arrived_pkts);
+    printf("Total Simulation Cycles   : %lu\n", total_sim_cycles);
+    printf("Global Avg Packet Latency : %.2f cycles\n", global_avg_lat_cycles);
+    printf("Global Network Throughput : %.6f flits/cycle\n",
+           throughput_pkts_per_cycle);
+    printf("Throughput per Node       : %.6f flits/cycle/node\n",
+           throughput_per_node);
     printf(
         "===============================================================\n\n");
+    */
 
     for (Router *router : this->req_routers)
     {
@@ -368,15 +394,12 @@ void FlooNoc::router_init_neighbours(Router *router,
 
         if (neighbor_id != -1)
         {
-            int latency =
-                this->links[i]
-                           [2]; // Latency is guaranteed to be the third element
+            int latency = this->links[i][2];
 
             // The neighbor is a Network Interface
             if (this->network_interfaces[neighbor_id] != NULL)
             {
-                // RIGHT NOW THIS CONDITION IS SAME AS OTHER ONE but could add
-                // different behaviour later on
+                // Connect NI to next available port
                 router->set_neighbour(current_port,
                                       this->network_interfaces[neighbor_id],
                                       neighbor_id, latency);
@@ -385,8 +408,7 @@ void FlooNoc::router_init_neighbours(Router *router,
             // The neighbor is another Router
             else if (routers[neighbor_id] != NULL)
             {
-                // Plug the Router into the next available routing port and
-                // register its ID
+                // Connect Router to next available port
                 router->set_neighbour(current_port, routers[neighbor_id],
                                       neighbor_id, latency);
                 current_port++;
