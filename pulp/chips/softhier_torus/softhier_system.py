@@ -152,7 +152,7 @@ class SoftHierSystem(gvsoc.systree.Component):
             # Wrap-around horizontal link (Right-most to Left-most)
             r_rightmost = routers_map[(arch.num_cluster_x, y)]
             r_leftmost = routers_map[(1, y)]
-            noc.add_link(r_rightmost, r_leftmost, latency=1)
+            noc.add_link(r_rightmost, r_leftmost, latency=5)
 
         # Add Vertical Links (Torus Rings on Y-axis)
         for x in range(1, arch.num_cluster_x + 1):
@@ -165,7 +165,7 @@ class SoftHierSystem(gvsoc.systree.Component):
             # Wrap-around vertical link (Bottom-most to Top-most)
             r_bottom = routers_map[(x, arch.num_cluster_y)]
             r_top = routers_map[(x, 1)]
-            noc.add_link(r_bottom, r_top, latency=1)
+            noc.add_link(r_bottom, r_top, latency=5)
 
         # Add the NI <-> Router links
         for y in range(1, arch.num_cluster_y + 1):
@@ -175,8 +175,10 @@ class SoftHierSystem(gvsoc.systree.Component):
                 noc.add_link(ni_id, r_id, latency=1)
 
         #Generate routing tables
-        #noc.generate_routing_tables_torus_2d(dim_x, dim_y)
+        # noc.generate_routing_tables_torus_2d(dim_x, dim_y)
         noc.generate_routing_tables_shortest_path()
+        # noc.generate_routing_tables_deadlock_free()
+        # noc.generate_routing_tables_mesh_2d(dim_x=dim_x, dim_y=dim_y)
 
         ############
         # Bindings #

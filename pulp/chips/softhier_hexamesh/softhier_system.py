@@ -169,8 +169,8 @@ class SoftHierSystem(gvsoc.systree.Component):
             noc.add_link(ni_id, r_id, latency=1)
         
         # Generate routing tables
-        # noc.generate_routing_tables_deadlock_free() is slightly slower
-        #noc.generate_routing_tables_hexamesh()
+        # noc.generate_routing_tables_deadlock_free() # is slightly slower
+        # noc.generate_routing_tables_hexamesh()
         noc.generate_routing_tables_shortest_path()
 
         ############
