@@ -112,16 +112,6 @@ class FlooNoc : public vp::Component
     static constexpr int REQ_NB_ARGS =
         6; // Number of request data required by this model
 
-    // The following constants gives the index in the queue array of the queue
-    // associated to each direction
-    static constexpr int DIR_LOCAL = 1;
-    static constexpr int DIR_1 = 2;
-    static constexpr int DIR_2 = 3;
-    static constexpr int DIR_3 = 4;
-    static constexpr int DIR_4 = 5;
-    static constexpr int DIR_5 = 6;
-    static constexpr int DIR_6 = 7;
-
     // Width in bytes of the noc. This is used to split incoming bursts into
     // internal requests of this width so that the bandwidth corresponds to the
     // width.

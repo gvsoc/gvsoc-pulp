@@ -85,6 +85,7 @@ class NetworkInterface : public FloonocNode
 
     static constexpr int REQ_REM_SIZE = 0;
     static constexpr int REQ_WIDE = 1;
+    static constexpr int REQ_ARRIVAL_TIME = 2;
 
     NetworkInterface(FlooNoc *noc, int node_id, std::string itf_name);
 
