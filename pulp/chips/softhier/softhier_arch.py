@@ -21,13 +21,13 @@ class SoftHierArch:
     def __init__(self):
 
         #Cluster
-        self.num_cluster             = 121
+        self.num_cluster             = 64
         self.num_core_per_cluster    = 1
 
         #Topology
         self.topology                = '2DMesh'
-        self.num_cluster_x           = 11
-        self.num_cluster_y           = 11
+        self.num_cluster_x           = 8
+        self.num_cluster_y           = 8
 
         self.cluster_tcdm_bank_width = 4
         self.cluster_tcdm_bank_nb    = 128
@@ -49,7 +49,7 @@ class SoftHierArch:
         self.instruction_mem_size    = 0x00010000
 
         #IDMA
-        self.idma_outstand_txn       = 16
+        self.idma_outstand_txn       = 128
         self.idma_outstand_burst     = 256
 
         #Spatz Vector Unit
