@@ -51,7 +51,6 @@ class SoftHierSystem(gvsoc.systree.Component):
         #############
         # Assertion #
         #############
-        assert(arch.topology == '3DMesh', f'NoC Topology testing 3DMesh')
         assert(arch.num_cluster_x * arch.num_cluster_y * arch.num_cluster_z == arch.num_cluster, f"Topology dimesion not match total number of clusters")
 
         ##############
@@ -180,12 +179,11 @@ class SoftHierSystem(gvsoc.systree.Component):
         
         # Clusters
         for cluster_id in range(arch.num_cluster):
-            # 3D Coordinate Extraction
+            
             x_id = int(cluster_id % arch.num_cluster_x)
             y_id = int((cluster_id // arch.num_cluster_x) % arch.num_cluster_y)
             z_id = int(cluster_id // (arch.num_cluster_x * arch.num_cluster_y))
             
-            # Retrieve the UNIQUE Network Interface ID for this 3D cluster
             ni_node_id = nis_map[(x_id + 1, y_id + 1, z_id + 1)]
             
             narrow_arbiter = router.Router(self, f'narrow_arbiter_{cluster_id}', bandwidth=8)
@@ -205,16 +203,14 @@ class SoftHierSystem(gvsoc.systree.Component):
             cluster_list[cluster_id].o_NARROW_SOC(narrow_arbiter.i_INPUT())
             cluster_list[cluster_id].o_WIDE_SOC(wide_arbiter.i_INPUT())
             
-            # For Narrow Mapping
             narrow_base = arch.cluster_tcdm_remote + cluster_id * arch.cluster_tcdm_size
             noc.o_NARROW_MAP(cluster_list[cluster_id].i_NARROW_INPUT(),
                             base=narrow_base,
                             size=arch.cluster_tcdm_size,
                             node_id=ni_node_id,
-                            rm_base=False, # Disable automatic base removal
-                            remove_offset=narrow_base - arch.cluster_tcdm_base) # Shift to TCDM base
+                            rm_base=False, 
+                            remove_offset=narrow_base - arch.cluster_tcdm_base) 
 
-            # For Wide Mapping
             wide_base = arch.cluster_tcdm_remote + cluster_id * arch.cluster_tcdm_size
             wide_name = cluster_list[cluster_id].i_WIDE_INPUT().component.name
 
@@ -222,7 +218,7 @@ class SoftHierSystem(gvsoc.systree.Component):
                 'base': wide_base, 
                 'size': arch.cluster_tcdm_size, 
                 'node_id': ni_node_id, 
-                'remove_offset': wide_base - arch.cluster_tcdm_base # Shift to TCDM base
+                'remove_offset': wide_base - arch.cluster_tcdm_base
             }
             noc.o_WIDE_BIND(cluster_list[cluster_id].i_WIDE_INPUT(), ni_node_id)
         

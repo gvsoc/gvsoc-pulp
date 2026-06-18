@@ -28,9 +28,7 @@ from pulp.chips.softhier.cluster_unit import ClusterUnit, ClusterArch
 from pulp.chips.softhier.softhier_ctrl import SoftHierCtrl
 from pulp.chips.softhier.softhier_arch import SoftHierArch
 from pulp.chips.softhier.error_detector import ErrorDetector
-# from pulp.floonoc.floonoc import FlooNocClusterGridNarrowWide
 from pulp.floonoc_flex.floonoc_flex import FlooNocFlex
-import math
 
 class SoftHierSystem(gvsoc.systree.Component):
 
@@ -52,7 +50,6 @@ class SoftHierSystem(gvsoc.systree.Component):
         #############
         # Assertion #
         #############
-        assert(arch.topology == '2DMesh', f'NoC Topology currectly only support 2DMesh')
         assert(arch.num_cluster_x * arch.num_cluster_y == arch.num_cluster, f"Topology dimesion not match total number of clusters")
 
         ##############
@@ -183,7 +180,6 @@ class SoftHierSystem(gvsoc.systree.Component):
             x_id = int(cluster_id % arch.num_cluster_x)
             y_id = int(cluster_id / arch.num_cluster_x)
             
-            # Retrieve the UNIQUE Network Interface ID for this cluster
             ni_node_id = nis_map[(x_id + 1, y_id + 1)]
             
             narrow_arbiter = router.Router(self, f'narrow_arbiter_{cluster_id}', bandwidth=8)
