@@ -21,17 +21,6 @@ import yaml
 from floogen.config_parser import parse_config
 from floogen.model.network import Network
 
-class FlooNocDirection(IntEnum): #Deprecated, not in use
-    DIR_LOCAL = 1
-    DIR_1 = 2
-    DIR_2 = 3
-    DIR_3 = 4
-    DIR_4 = 5
-    DIR_5 = 6
-    DIR_6 = 7
-    DIR_7 = 8
-    DIR_8 = 9
-#Can add more as required
 
 class FlooNocFlex(gvsoc.systree.Component):
     """FlooNoc instance for a flexible topology
@@ -77,7 +66,6 @@ class FlooNocFlex(gvsoc.systree.Component):
         self.add_property('wide_width', wide_width)
         self.add_property('router_input_queue_size', router_input_queue_size)
         
-        # Support for flexible topologies
         self.add_property('nb_nodes', nb_nodes)
         self.add_property('links', [])
         self.add_property('router_degrees', router_degrees)       
@@ -161,52 +149,6 @@ class FlooNocFlex(gvsoc.systree.Component):
     def o_NARROW_BIND(self, itf: gvsoc.systree.SlaveItf, node_id: int):
         self.itf_bind(f"ni_narrow_{node_id}", itf, signature='io')
 
-    def o_MAP_DIR(self, base: int, size: int, dir: FlooNocDirection, name: str,
-            rm_base: bool=False, remove_offset:int =0):
-        if rm_base and remove_offset == 0:
-            remove_offset =base
-        self.__add_mapping(f"ni_{name}", base=base, size=size, node_id=0, remove_offset=remove_offset) #Placeholder node id rn
-        print("o_MAP_DIR not implemented")
-
-    def o_MAP(self, base: int, size: int,
-            x: int, y: int,
-            rm_base: bool=False, remove_offset:int =0):
-        """Binds the output of a node to a target, associated to a memory-mapped region.
-
-        Parameters
-        ----------
-        base: int
-            Base address of the memory-mapped region.
-        size: int
-            Size of the memory-mapped region.
-        x: int
-            X position of the target in the grid
-        y: int
-            Y position of the target in the grid
-        name: str
-            name of the mapping. Should be different for each mapping. Taken from itf component if
-            it is None
-        rm_base: bool
-            if True, the base address is substracted to the address of any request going through
-        remove_offset: int
-            Offset to remove from the address before applying the mapping
-        """
-        if rm_base and remove_offset == 0:
-            remove_offset =base
-        self.__add_mapping(f"ni_{x}_{y}", base=base, size=size, node_id=0, remove_offset=remove_offset) #Placeholder node id rn
-        print("o_MAP not implemented")
-
-    def o_WIDE_MAP(self, itf: gvsoc.systree.SlaveItf | None, base: int, size: int,
-            x: int | FlooNocDirection, y: int | FlooNocDirection, name: str | None=None,
-            rm_base: bool=False, remove_offset:int =0):
-        """This methods is deprecated
-        """
-        if name is None:
-            name = itf.component.name
-        if rm_base and remove_offset == 0:
-            remove_offset =base
-        self.__add_mapping(f"wide_{name}", base=base, size=size, node_id=0, remove_offset=remove_offset) #Placeholder node id rn
-        self.itf_bind(f"ni_wide_{x}_{y}", itf, signature='io')
 
     def i_NARROW_INPUT(self, node_id: int) -> gvsoc.systree.SlaveItf:
         """Returns the input port of a node.
@@ -359,8 +301,8 @@ class FlooNocFlex(gvsoc.systree.Component):
 
     def generate_routing_tables_shortest_path(self):
         """
-        Generates routing tables based on the shortest path (minimum hops) between 
-        all nodes using a Breadth-First Search (BFS) algorithm.
+        Generates routing tables based on the shortest path between 
+        all nodes using BFS.
         """
         nb_nodes = self.get_property('nb_nodes')
         links = self.get_property('links')
@@ -368,10 +310,8 @@ class FlooNocFlex(gvsoc.systree.Component):
         routers = [r[0] for r in self.get_property('routers')]
         nis = [n[0] for n in self.get_property('network_interfaces')]
 
-        # Initialize routing tables
         routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
 
-        # Build an adjacency list for the routers and map Network Interfaces to their attached routers
         adj = {r: [] for r in routers}
         ni_to_router = {}
         
@@ -385,11 +325,9 @@ class FlooNocFlex(gvsoc.systree.Component):
                 adj[node_a].append(node_b)
                 adj[node_b].append(node_a)
 
-        # Remove any duplicates
         for r in routers:
             adj[r] = list(set(adj[r]))
 
-        # Calculate shortest paths
         for src in routers:
             best_first_hop = {}
             visited = set([src])
@@ -400,19 +338,16 @@ class FlooNocFlex(gvsoc.systree.Component):
                 queue.append((neighbor, neighbor))
                 visited.add(neighbor)
                 best_first_hop[neighbor] = neighbor
-                
-            # Traverse the topology
+
             while queue:
                 curr, first_hop = queue.pop(0)
                 
                 for neighbor in adj[curr]:
                     if neighbor not in visited:
                         visited.add(neighbor)
-                        # Inherit the first hop
                         best_first_hop[neighbor] = first_hop
                         queue.append((neighbor, first_hop))
 
-            # Populate the routing table for this source router
             for dst in range(nb_nodes):
                 target_router = dst if dst in routers else ni_to_router.get(dst, -1)
                 
@@ -430,7 +365,7 @@ class FlooNocFlex(gvsoc.systree.Component):
 
     def generate_routing_tables_mesh_2d(self, dim_x: int, dim_y: int):
         """
-        Generates routing tables for the routers based on grid dimensions.
+        Generates routing tables imitating FlooNoC behaviour.
         """
         nb_nodes = self.get_property('nb_nodes')
         links = self.get_property('links')
@@ -514,157 +449,9 @@ class FlooNocFlex(gvsoc.systree.Component):
 
         self.add_property('routing_tables', routing_tables)
 
-    def generate_routing_tables_torus_2d(self, dim_x: int, dim_y: int): #Deadlocks, to be removed
-        """
-        Generates routing tables for the routers based on grid dimensions for a 2D Torus.
-        Calculates the shortest path accounting for wrap-around edges on the active grid.
-        """
-        nb_nodes = self.get_property('nb_nodes')
-        links = self.get_property('links')
-
-        routers = [r[0] for r in self.get_property('routers')]
-        nis = [n[0] for n in self.get_property('network_interfaces')]
-
-        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
-
-        ni_to_router = {}
-        for link in links:
-            node_a, node_b = link[0], link[1]
-            if node_a in nis and node_b in routers:
-                ni_to_router[node_a] = node_b
-            elif node_b in nis and node_a in routers:
-                ni_to_router[node_b] = node_a
-
-        size_x = dim_x - 2
-        size_y = dim_y - 2
-
-        for src in routers:
-            for dst in range(nb_nodes):
-                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
-
-                if target_router == -1:
-                    continue
-                if src == target_router:
-                    routing_tables[str(src)][str(dst)] = dst
-                    continue
-
-                src_x, src_y = src % dim_x, src // dim_x
-                dst_x, dst_y = target_router % dim_x, target_router // dim_x
-
-                if src_x != dst_x:
-                    sx = src_x - 1
-                    dx = dst_x - 1
-                    
-                    dist_right = (dx - sx) % size_x
-                    dist_left = (sx - dx) % size_x
-                    
-                    if dist_right <= dist_left:
-                        next_sx = (sx + 1) % size_x
-                    else:
-                        next_sx = (sx - 1) % size_x
-                        
-                    next_x = next_sx + 1
-                    next_hop = src_y * dim_x + next_x
-
-                else:
-                    sy = src_y - 1
-                    dy = dst_y - 1
-                    
-                    dist_down = (dy - sy) % size_y
-                    dist_up = (sy - dy) % size_y
-                    
-                    if dist_down <= dist_up:
-                        next_sy = (sy + 1) % size_y
-                    else:
-                        next_sy = (sy - 1) % size_y
-                        
-                    next_y = next_sy + 1
-                    next_hop = next_y * dim_x + src_x
-
-                routing_tables[str(src)][str(dst)] = next_hop
-
-        self.add_property('routing_tables', routing_tables)
-
-    def generate_routing_tables_torus_3d(self, dim_x: int, dim_y: int, dim_z: int): #Deadlocks, to be removed
-        """
-        Generates routing tables for a 3D Torus.
-        Calculates the shortest path using XYZ-Routing (X first, then Y, then Z).
-        """
-        nb_nodes = self.get_property('nb_nodes')
-        links = self.get_property('links')
-
-        routers = [r[0] for r in self.get_property('routers')]
-        nis = [n[0] for n in self.get_property('network_interfaces')]
-
-        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
-
-        ni_to_router = {}
-        for link in links:
-            node_a, node_b = link[0], link[1]
-            if node_a in nis and node_b in routers:
-                ni_to_router[node_a] = node_b
-            elif node_b in nis and node_a in routers:
-                ni_to_router[node_b] = node_a
-
-        for src in routers:
-            for dst in range(nb_nodes):
-                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
-
-                if target_router == -1:
-                    continue
-                if src == target_router:
-                    routing_tables[str(src)][str(dst)] = dst
-                    continue
-
-                src_x = src % dim_x
-                src_y = (src // dim_x) % dim_y
-                src_z = src // (dim_x * dim_y)
-
-                dst_x = target_router % dim_x
-                dst_y = (target_router // dim_x) % dim_y
-                dst_z = target_router // (dim_x * dim_y)
-
-                if src_x != dst_x:
-                    dist_right = (dst_x - src_x) % dim_x
-                    dist_left = (src_x - dst_x) % dim_x
-                    
-                    if dist_right <= dist_left:
-                        next_x = (src_x + 1) % dim_x
-                    else:
-                        next_x = (src_x - 1) % dim_x
-                        
-                    next_hop = src_z * (dim_x * dim_y) + src_y * dim_x + next_x
-
-                elif src_y != dst_y:
-                    dist_down = (dst_y - src_y) % dim_y
-                    dist_up = (src_y - dst_y) % dim_y
-                    
-                    if dist_down <= dist_up:
-                        next_y = (src_y + 1) % dim_y
-                    else:
-                        next_y = (src_y - 1) % dim_y
-                        
-                    next_hop = src_z * (dim_x * dim_y) + next_y * dim_x + src_x
-
-                else:
-                    dist_in = (dst_z - src_z) % dim_z
-                    dist_out = (src_z - dst_z) % dim_z
-                    
-                    if dist_in <= dist_out:
-                        next_z = (src_z + 1) % dim_z
-                    else:
-                        next_z = (src_z - 1) % dim_z
-                        
-                    next_hop = next_z * (dim_x * dim_y) + src_y * dim_x + src_x
-
-                routing_tables[str(src)][str(dst)] = next_hop
-
-        self.add_property('routing_tables', routing_tables)
-
     def generate_routing_tables_ring(self):
         """
         Generates routing tables for a Ring topology.
-        Calculates the path linearly to avoid wrap-around cyclic dependencies.
         """
         nb_nodes = self.get_property('nb_nodes')
         links = self.get_property('links')
@@ -711,7 +498,6 @@ class FlooNocFlex(gvsoc.systree.Component):
     def generate_routing_tables_hier_ring(self, dim_g: int, dim_l: int):
         """
         Generates routing tables for a Hierarchical Ring topology.
-        Implements deadlock-free linear (dateline) routing on both local and global rings.
         """
         nb_nodes = self.get_property('nb_nodes')
         links = self.get_property('links')
@@ -719,12 +505,10 @@ class FlooNocFlex(gvsoc.systree.Component):
         routers = sorted([r[0] for r in self.get_property('routers')])
         nis = [n[0] for n in self.get_property('network_interfaces')]
         
-        # N is the total number of local clusters/routers
         N = dim_g * dim_l
 
         routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
 
-        # Build NI to Router mapping
         ni_to_router = {}
         for link in links:
             node_a, node_b = link[0], link[1]
@@ -745,7 +529,6 @@ class FlooNocFlex(gvsoc.systree.Component):
                     routing_tables[str(src)][str(dst)] = dst
                     continue
 
-                # Determine target's global group 
                 if target_router >= N: 
                     target_g = target_router - N 
                 else:
@@ -755,10 +538,8 @@ class FlooNocFlex(gvsoc.systree.Component):
                     src_g = src - N
                     
                     if src_g == target_g:
-                        # Reached the correct global group. Route DOWN to the local bridge.
                         next_hop = target_g * dim_l
                     else:
-                        # Route along the global ring (deadlock-free linear routing)
                         if target_g > src_g:
                             next_hop = N + src_g + 1
                         else:
@@ -769,13 +550,11 @@ class FlooNocFlex(gvsoc.systree.Component):
                     bridge_id = src_g * dim_l
                     
                     if src_g == target_g:
-                        # Intra-ring traffic. Route along the local ring (deadlock-free).
                         if target_router > src:
                             next_hop = src + 1
                         else:
                             next_hop = src - 1
                     else:
-                        # Inter-ring traffic. Need to route towards the local bridge.
                         if src == bridge_id:
                             next_hop = N + src_g
                         else:
@@ -789,7 +568,7 @@ class FlooNocFlex(gvsoc.systree.Component):
         """
         Generates deadlock-free routing tables for any topology using the Up/Down Spanning Tree Routing Algorithm.
         It is however not minimal in terms of hops and therefore sacrifices BW/Latency.
-        To be used in topologies with deadlocks, currently used in 3D Torus
+        To be used in topologies with deadlocks.
         """
         nb_nodes = self.get_property('nb_nodes')
         links = self.get_property('links')
@@ -878,8 +657,7 @@ class FlooNocFlex(gvsoc.systree.Component):
 
     def generate_routing_tables_hexamesh(self):
         """
-        Generates routing tables for a HexaMesh topology using Axial Dimension Order Routing
-
+        Generates routing tables for a HexaMesh topology using Axial Dimension Order Routing.
         """
         nb_nodes = self.get_property('nb_nodes')
         links = self.get_property('links')
@@ -890,7 +668,6 @@ class FlooNocFlex(gvsoc.systree.Component):
 
         routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
 
-        # Map NIs to routers
         ni_to_router = {}
         for link in links:
             node_a, node_b = link[0], link[1]
@@ -899,9 +676,8 @@ class FlooNocFlex(gvsoc.systree.Component):
             elif node_b in nis and node_a in routers:
                 ni_to_router[node_b] = node_a
 
-        # Unfurl the HexaMesh coordinates
         ring_walk_dirs = [(-1, 1), (-1, 0), (0, -1), (1, -1), (1, 0), (0, 1)]
-        coords = [(0, 0)] # Center router
+        coords = [(0, 0)]
         ring = 1
         
         while len(coords) < num_routers:
@@ -917,7 +693,6 @@ class FlooNocFlex(gvsoc.systree.Component):
         id_to_coord = {r_id: coord for r_id, coord in zip(routers, coords)}
         coord_to_id = {coord: r_id for r_id, coord in zip(routers, coords)}
 
-        # Apply ADOR with Boundary Sliding
         for src in routers:
             src_q, src_r = id_to_coord[src]
 
@@ -933,7 +708,6 @@ class FlooNocFlex(gvsoc.systree.Component):
 
                 dst_q, dst_r = id_to_coord[target_router]
 
-                # Q-THEN-R ROUTING
                 if src_q != dst_q:
                     next_q = src_q + 1 if dst_q > src_q else src_q - 1
                     next_r = src_r
@@ -941,11 +715,9 @@ class FlooNocFlex(gvsoc.systree.Component):
                     next_q = src_q
                     next_r = src_r + 1 if dst_r > src_r else src_r - 1
 
-                # If the strict path is inside the instantiated grid, take it.
                 if (next_q, next_r) in coord_to_id:
                     next_hop_router = coord_to_id[(next_q, next_r)]
                 else:
-                    # Boundary Sliding: Glide along valid physical neighbors
                     best_dist = float('inf')
                     best_neighbor = src
                     
@@ -966,15 +738,13 @@ class FlooNocFlex(gvsoc.systree.Component):
     
     def generate_routing_tables_fht(self):
         """
-        Generates routing tables using Multiple Spanning Trees without Virtual Channels.
-        Attempts to minimize cyclic dependencies by geographically grouping destinations 
-        to their closest tree root.
+        Generates routing tables using Multiple Spanning Trees.
+        Can be faster than simple Up/Down.
         """
         nb_nodes = self.get_property('nb_nodes')
         links = self.get_property('links')
         num_trees = 4
 
-        # Sorting ensures determinism
         routers = sorted([r[0] for r in self.get_property('routers')])
         nis = [n[0] for n in self.get_property('network_interfaces')]
 
@@ -996,11 +766,9 @@ class FlooNocFlex(gvsoc.systree.Component):
         for r in routers:
             adj[r] = sorted(list(set(adj[r])))
 
-        # 1. Select distributed roots across the topology
         step = max(1, len(routers) // num_trees)
         roots = [routers[(i * step) % len(routers)] for i in range(num_trees)]
         
-        # 2. Compute BFS Levels (Altitude) for EACH tree
         tree_levels = []
         for root in roots:
             levels = {r: -1 for r in routers}
@@ -1014,8 +782,6 @@ class FlooNocFlex(gvsoc.systree.Component):
                         queue.append(neighbor)
             tree_levels.append(levels)
 
-        # 3. Assign each destination router to its CLOSEST root
-        # This geographic partitioning minimizes overlapping turn conflicts
         router_to_tree_idx = {}
         for r in routers:
             closest_tree_idx = 0
@@ -1026,7 +792,6 @@ class FlooNocFlex(gvsoc.systree.Component):
                     closest_tree_idx = t_idx
             router_to_tree_idx[r] = closest_tree_idx
 
-        # 4. Compute best next hops for EACH tree independently
         best_next_hops = {i: {r: {} for r in routers} for i in range(num_trees)}
 
         for t_idx, levels in enumerate(tree_levels):
@@ -1067,7 +832,6 @@ class FlooNocFlex(gvsoc.systree.Component):
                             
                 best_next_hops[t_idx][src] = best_first_hop
 
-        # 5. Populate routing tables based on the DESTINATION'S assigned tree
         for src in routers:
             for dst in range(nb_nodes):
                 target_router = dst if dst in routers else ni_to_router.get(dst, -1)
@@ -1078,7 +842,6 @@ class FlooNocFlex(gvsoc.systree.Component):
                     routing_tables[str(src)][str(dst)] = dst
                     continue
                 
-                # Fetch which tree "owns" this destination
                 assigned_tree = router_to_tree_idx[target_router]
                 
                 if target_router in best_next_hops[assigned_tree][src]:
