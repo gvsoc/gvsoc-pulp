@@ -29,7 +29,6 @@ from pulp.chips.softhier_ring.softhier_ctrl import SoftHierCtrl
 from pulp.chips.softhier_ring.softhier_arch import SoftHierArch
 from pulp.chips.softhier_ring.error_detector import ErrorDetector
 from pulp.floonoc_flex.floonoc_flex import FlooNocFlex
-import math
 
 class SoftHierSystem(gvsoc.systree.Component):
 
@@ -51,10 +50,6 @@ class SoftHierSystem(gvsoc.systree.Component):
         #############
         # Assertion #
         #############
-        assert(arch.topology in ['2DMesh', '3DMesh', '2DTorus', '3DTorus', 'Ring'], f'NoC Topology currently only supports 2DMesh, 3DMesh, 2DTorus, 3DTorus, or Ring')
-        # Bypassing the cluster x/y dimension check for a 1D Ring topology
-        if arch.topology != 'Ring':
-            assert(arch.num_cluster_x * arch.num_cluster_y == arch.num_cluster, f"Topology dimesion not match total number of clusters")
 
         ##############
         # Components #
@@ -118,7 +113,6 @@ class SoftHierSystem(gvsoc.systree.Component):
             routers_map[i] = r_id
             nis_map[i] = ni_id
             
-            # 3 ports: 1 for local NI, 1 for Left neighbor, 1 for Right neighbor
             noc.add_router(r_id, num_queues=3) 
             noc.add_network_interface(ni_id)
 
@@ -128,15 +122,14 @@ class SoftHierSystem(gvsoc.systree.Component):
             ni_id = nis_map[i]
             noc.add_link(ni_id, r_id, latency=1)
 
-        # Add links (Router <-> Router Ring Network)
+        # Add links (Router <-> Router)
         for i in range(arch.num_cluster):
             r_id = routers_map[i]
             next_r_id = routers_map[(i + 1) % arch.num_cluster]
             noc.add_link(r_id, next_r_id, latency=1)
 
         # Generate routing tables
-        noc.generate_routing_tables_ring()
-        # noc.generate_routing_tables_shortest_path()
+        noc.generate_routing_tables_shortest_path()
 
         ############
         # Bindings #
@@ -151,7 +144,6 @@ class SoftHierSystem(gvsoc.systree.Component):
         # Clusters
         for cluster_id in range(arch.num_cluster):
             
-            # Retrieve the UNIQUE Network Interface ID for this cluster
             ni_node_id = nis_map[cluster_id]
             
             narrow_arbiter = router.Router(self, f'narrow_arbiter_{cluster_id}', bandwidth=8)
