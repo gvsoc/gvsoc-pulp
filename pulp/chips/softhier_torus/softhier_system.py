@@ -51,8 +51,6 @@ class SoftHierSystem(gvsoc.systree.Component):
         #############
         # Assertion #
         #############
-        # Note: Bypassing the strict '2DMesh' assertion so our Torus works seamlessly.
-        assert(arch.topology in ['2DMesh', '2DTorus'], f'NoC Topology currectly only supports 2DMesh or 2DTorus')
         assert(arch.num_cluster_x * arch.num_cluster_y == arch.num_cluster, f"Topology dimesion not match total number of clusters")
 
         ##############
@@ -175,10 +173,7 @@ class SoftHierSystem(gvsoc.systree.Component):
                 noc.add_link(ni_id, r_id, latency=1)
 
         #Generate routing tables
-        # noc.generate_routing_tables_torus_2d(dim_x, dim_y)
         noc.generate_routing_tables_shortest_path()
-        # noc.generate_routing_tables_deadlock_free()
-        # noc.generate_routing_tables_mesh_2d(dim_x=dim_x, dim_y=dim_y)
 
         ############
         # Bindings #
@@ -195,7 +190,6 @@ class SoftHierSystem(gvsoc.systree.Component):
             x_id = int(cluster_id % arch.num_cluster_x)
             y_id = int(cluster_id / arch.num_cluster_x)
             
-            # Retrieve the UNIQUE Network Interface ID for this cluster
             ni_node_id = nis_map[(x_id + 1, y_id + 1)]
             
             narrow_arbiter = router.Router(self, f'narrow_arbiter_{cluster_id}', bandwidth=8)

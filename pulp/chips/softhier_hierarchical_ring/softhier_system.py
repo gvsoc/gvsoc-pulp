@@ -29,7 +29,6 @@ from pulp.chips.softhier_hierarchical_ring.softhier_ctrl import SoftHierCtrl
 from pulp.chips.softhier_hierarchical_ring.softhier_arch import SoftHierArch
 from pulp.chips.softhier_hierarchical_ring.error_detector import ErrorDetector
 from pulp.floonoc_flex.floonoc_flex import FlooNocFlex
-import math
 
 class SoftHierSystem(gvsoc.systree.Component):
 
@@ -51,7 +50,7 @@ class SoftHierSystem(gvsoc.systree.Component):
         #############
         # Assertion #
         #############
-        assert(arch.topology in ['2DMesh', '3DMesh', '2DTorus', '3DTorus', 'Ring', 'HierRing'], f'NoC Topology currently only supports 2DMesh, 3DMesh, 2DTorus, 3DTorus, Ring or HierRing')
+
 
         ##############
         # Components #
@@ -96,7 +95,6 @@ class SoftHierSystem(gvsoc.systree.Component):
         G = arch.num_global_clusters
         L = arch.num_local_clusters
         
-        # Total nodes: N (Local Routers) + G (Global Routers) + N (NIs)
         nb_nodes = (N * 2) + G
 
         router_degrees = 4
@@ -113,28 +111,27 @@ class SoftHierSystem(gvsoc.systree.Component):
         nis_map = {}     
         global_routers_map = {}
 
-        # 1. Instantiate Routers, NIs, and Link them hierarchically
+        # Instantiate Routers, NIs, and Link them hierarchically
         for g in range(G):
             # Instantiate the Global Router for this Local Ring
             gr_id = N + g
             global_routers_map[g] = gr_id
-            noc.add_router(gr_id, num_queues=3) # Global Left, Global Right, Local Down
+            noc.add_router(gr_id, num_queues=3)
             
             # Loop through the clusters within this Local Ring
             for l in range(L):
                 cluster_id = (g * L) + l
-                lr_id = cluster_id             # Local Routers take IDs 0 to N-1
-                ni_id = N + G + cluster_id     # NIs take IDs N+G to 2N+G-1
+                lr_id = cluster_id
+                ni_id = N + G + cluster_id
                 
                 routers_map[cluster_id] = lr_id
                 nis_map[cluster_id] = ni_id
                 
-                # The first cluster in the local ring acts as the Bridge to the Global Ring
                 if l == 0:
-                    noc.add_router(lr_id, num_queues=4) # Local Left, Local Right, NI, Global Up
-                    noc.add_link(lr_id, gr_id, latency=1) # Connect Bridge UP to Global Router
+                    noc.add_router(lr_id, num_queues=4)
+                    noc.add_link(lr_id, gr_id, latency=1)
                 else:
-                    noc.add_router(lr_id, num_queues=3) # Local Left, Local Right, NI
+                    noc.add_router(lr_id, num_queues=3)
                 
                 noc.add_network_interface(ni_id)
                 
@@ -151,9 +148,8 @@ class SoftHierSystem(gvsoc.systree.Component):
             next_gr_id = N + next_g
             noc.add_link(gr_id, next_gr_id, latency=1)
 
-        # Generate routing tables using the new hierarchical logic (to be implemented in floonoc_flex.py)
-        noc.generate_routing_tables_hier_ring(dim_g=G, dim_l=L)
-        # noc.generate_routing_tables_shortest_path()
+        # Generate routing tables
+        noc.generate_routing_tables_shortest_path()
 
 
         ############
@@ -168,8 +164,6 @@ class SoftHierSystem(gvsoc.systree.Component):
 
         # Clusters
         for cluster_id in range(arch.num_cluster):
-            
-            # Retrieve the UNIQUE Network Interface ID for this cluster
             ni_node_id = nis_map[cluster_id]
             
             narrow_arbiter = router.Router(self, f'narrow_arbiter_{cluster_id}', bandwidth=8)
