@@ -75,6 +75,7 @@ class Router : public FloonocNode
     // Pass the routing table during initialization
     void set_routing_table(std::vector<int> table);
 
+    // For performance evaluation
     int get_max_peak_queue_depth();
 
     // Performance Counters

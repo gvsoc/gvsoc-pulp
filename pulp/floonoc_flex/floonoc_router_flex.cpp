@@ -74,7 +74,7 @@ void Router::set_neighbour(int dir, FloonocNode *node, int neighbor_id,
 {
     if (dir >= this->num_queues)
     {
-        printf("\n[FATAL] Memory Corruption! Router %d tried to map neighbor "
+        printf("\n[FATAL] Router %d tried to map neighbor "
                "%d to port %d, but num_queues is %d.\n",
                this->node_id, neighbor_id, dir, this->num_queues);
         printf("Check your Python script for duplicate add_link() calls!\n");
@@ -84,12 +84,6 @@ void Router::set_neighbour(int dir, FloonocNode *node, int neighbor_id,
     this->neighbor_to_queue[neighbor_id] = dir;
     this->queue_to_neighbor[dir] = neighbor_id;
     this->input_latencies[dir] = latency;
-
-    /*
-    printf(
-        "[INIT] Router %d mapped neighbor %d to queue index %d (latency %d)\n",
-        this->node_id, neighbor_id, dir, latency);
-    */
 }
 
 void Router::set_routing_table(std::vector<int> table)
@@ -99,11 +93,6 @@ void Router::set_routing_table(std::vector<int> table)
 
 bool Router::handle_request(FloonocNode *node, vp::IoReq *req, int from_node)
 {
-    /*
-    printf("[Trace] Router %d received packet from node %d. Target node: %d\n",
-           this->node_id, from_node, req->get_int(FlooNoc::REQ_DEST_ID));
-    */
-
     this->trace.msg(
         vp::Trace::LEVEL_DEBUG,
         "Handle request (req: %p, base: 0x%x, size: 0x%x, from: %d)\n", req,
@@ -159,11 +148,6 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     // Get the currently active queue and update it to implement the round-robin
     int in_queue_index = _this->current_queue;
 
-    // Update the current queue so that another one is checked first during the
-    // next cycle _this->current_queue += 1; if (_this->current_queue == 5)
-    // {
-    //     _this->current_queue = 0;
-    // }
     std::vector<bool> output_full(_this->num_queues,
                                   false); // Used to make sure we only send a
                                           // single request per cycle to each
@@ -212,11 +196,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             {
                 // Performance Counter
                 _this->stat_stall_cycles++;
-                /*
-                printf(
-                    "STALL_COLLISION | Router %d | Output %d full this cycle\n",
-                    _this->node_id, out_queue_id);
-                */
+
                 _this->trace.msg(
                     vp::Trace::LEVEL_TRACE,
                     "Output queue is full, skipping (out queue: %d)\n",
@@ -238,11 +218,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             {
                 // Performance Counter
                 _this->stat_stall_cycles++;
-                /*
-                printf("STALL_BACKPRESSURE | Router %d | Output %d downstream "
-                       "full\n",
-                       _this->node_id, out_queue_id);
-                */
+
                 _this->trace.msg(
                     vp::Trace::LEVEL_TRACE,
                     "Output queue is stalled, skipping (out queue: %d)\n",
@@ -260,12 +236,6 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             // Since we now know, that the request will be propagated, remove it
             // from the queue
             queue->queue.pop();
-
-            /*
-            printf("ROUTED | Router %d | InQueue: %d | OutQueue: %d | RR_Next: "
-                   "%d\n",
-                   _this->node_id, in_queue_index, out_queue_id,
-                   _this->current_queue); */
 
             // Performance Counter
             _this->stat_routed_packets++;
@@ -345,11 +315,6 @@ void Router::get_next_router_pos(int to_node, int &next_node)
     else
     {
         next_node = this->node_id;
-        /*
-        printf("PATH | Router %d | DestNode: %d | NextHopNode: %d\n",
-               this->node_id, to_node, next_node);
-        */
-        return;
     }
 }
 
