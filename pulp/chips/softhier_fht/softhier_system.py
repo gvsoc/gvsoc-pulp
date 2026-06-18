@@ -29,7 +29,6 @@ from pulp.chips.softhier_fht.softhier_ctrl import SoftHierCtrl
 from pulp.chips.softhier_fht.softhier_arch import SoftHierArch
 from pulp.chips.softhier_fht.error_detector import ErrorDetector
 from pulp.floonoc_flex.floonoc_flex import FlooNocFlex
-import math
 
 class SoftHierSystem(gvsoc.systree.Component):
 
@@ -51,7 +50,6 @@ class SoftHierSystem(gvsoc.systree.Component):
         #############
         # Assertion #
         #############
-        assert(arch.topology == 'FHT', f'NoC topology should be FHT (FoldedHexaTorus)')
         assert(1 + 3 * arch.num_rings * (arch.num_rings + 1) == arch.num_cluster, f"Topology dimensions are mismatched")
 
         ##############
@@ -91,11 +89,9 @@ class SoftHierSystem(gvsoc.systree.Component):
         #Control register
         softhier_ctrl = SoftHierCtrl(self, 'softhier_ctrl', num_cluster=arch.num_cluster, num_core_per_cluster=arch.num_core_per_cluster)
 
-        # --- FlooNoC Flex Initialization & FoldedHexaTorus Topology Building ---
-        
-        # A HexaTorus router has exactly 6 neighbors + 1 NI connection
+        # --- FlooNoC Flex Initialization & FoldedHexaTorus Topology Building ---        
         router_degrees = 7
-        nb_nodes = arch.num_cluster * 2 # N Routers + N NIs
+        nb_nodes = arch.num_cluster * 2
 
         noc = FlooNocFlex(self, 'noc',  
                 narrow_width=8,    
@@ -105,7 +101,7 @@ class SoftHierSystem(gvsoc.systree.Component):
                 router_input_queue_size=16,
                 ni_outstanding_reqs=arch.noc_outstanding)
 
-        # --- Coordinate Generation (Axial Coordinates) ---
+        # Axial coordinate generation
         ring_walk_dirs = [(-1, 1), (-1, 0), (0, -1), (1, -1), (1, 0), (0, 1)]
         
         coords = [(0, 0)]
@@ -135,12 +131,9 @@ class SoftHierSystem(gvsoc.systree.Component):
             noc.add_router(r_id, num_queues=router_degrees) 
             noc.add_network_interface(ni_id)
         
-        # ==========================================
-        # TORUS WRAP-AROUND LOGIC (THE FOLDING MATH)
-        # ==========================================
         R = arch.num_rings
-        # The 6 periodic lattice translation vectors that map the boundary edges 
-        # of a Hexagon to its opposite sides to create the Torus
+
+        # Lattice translation vectors
         C_vectors = [
             (R + 1, R),
             (-R, 2 * R + 1),
@@ -162,13 +155,11 @@ class SoftHierSystem(gvsoc.systree.Component):
                 if (wq, wr) in coord_to_id:
                     return coord_to_id[(wq, wr)] # Wrap-around link
             return -1
-
-        # --- Add Inter-Router Links (Prioritized Sweeping) ---
         
         # Axis 1: East (1, 0) / West (-1, 0) priority
         coords_q_desc = sorted(coords, key=lambda c: c[0], reverse=True)
         for q, r in coords_q_desc:
-            east_id = get_torus_neighbor(q, r, 1, 0)
+            east_id = get_torus_neighbor(q, r, 2, 0)
             if east_id != -1:
                 r_id = routers_map[coord_to_id[(q, r)]]
                 noc.add_link(r_id, routers_map[east_id], latency=1)
@@ -176,7 +167,7 @@ class SoftHierSystem(gvsoc.systree.Component):
         # Axis 2: SouthEast (0, 1) / NorthWest (0, -1) priority
         coords_r_desc = sorted(coords, key=lambda c: c[1], reverse=True)
         for q, r in coords_r_desc:
-            se_id = get_torus_neighbor(q, r, 0, 1)
+            se_id = get_torus_neighbor(q, r, 0, 2)
             if se_id != -1:
                 r_id = routers_map[coord_to_id[(q, r)]]
                 noc.add_link(r_id, routers_map[se_id], latency=1)
@@ -184,7 +175,7 @@ class SoftHierSystem(gvsoc.systree.Component):
         # Axis 3: SouthWest (-1, 1) / NorthEast (1, -1) priority
         coords_sw_desc = sorted(coords, key=lambda c: -c[0] + c[1], reverse=True)
         for q, r in coords_sw_desc:
-            sw_id = get_torus_neighbor(q, r, -1, 1)
+            sw_id = get_torus_neighbor(q, r, -2, 2)
             if sw_id != -1:
                 r_id = routers_map[coord_to_id[(q, r)]]
                 noc.add_link(r_id, routers_map[sw_id], latency=1)
@@ -196,9 +187,7 @@ class SoftHierSystem(gvsoc.systree.Component):
             noc.add_link(ni_id, r_id, latency=1)
         
         # Generate routing tables
-        # noc.generate_routing_tables_deadlock_free() # works up to 40 000 Gbps at 127 nodes
         noc.generate_routing_tables_shortest_path()
-        # noc.generate_routing_tables_fht()
 
         ############
         # Bindings #

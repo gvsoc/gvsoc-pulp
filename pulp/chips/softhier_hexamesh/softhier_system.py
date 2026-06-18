@@ -29,7 +29,6 @@ from pulp.chips.softhier_hexamesh.softhier_ctrl import SoftHierCtrl
 from pulp.chips.softhier_hexamesh.softhier_arch import SoftHierArch
 from pulp.chips.softhier_hexamesh.error_detector import ErrorDetector
 from pulp.floonoc_flex.floonoc_flex import FlooNocFlex
-import math
 
 class SoftHierSystem(gvsoc.systree.Component):
 
@@ -51,7 +50,6 @@ class SoftHierSystem(gvsoc.systree.Component):
         #############
         # Assertion #
         #############
-        assert(arch.topology == 'HexaMesh', f'NoC topology should be HexaMesh')
         assert(1 + 3 * arch.num_rings * (arch.num_rings + 1) == arch.num_cluster, f"Topology dimensions are mismatched")
 
         ##############
@@ -93,9 +91,8 @@ class SoftHierSystem(gvsoc.systree.Component):
 
         # --- FlooNoC Flex Initialization & HexaMesh Topology Building ---
         
-        # A HexaMesh router has up to 6 neighbors + 1 NI connection
         router_degrees = 7
-        nb_nodes = arch.num_cluster * 2 # N Routers + N NIs
+        nb_nodes = arch.num_cluster * 2
 
         noc = FlooNocFlex(self, 'noc',  
                 narrow_width=8,    
@@ -169,8 +166,6 @@ class SoftHierSystem(gvsoc.systree.Component):
             noc.add_link(ni_id, r_id, latency=1)
         
         # Generate routing tables
-        # noc.generate_routing_tables_deadlock_free() # is slightly slower
-        # noc.generate_routing_tables_hexamesh()
         noc.generate_routing_tables_shortest_path()
 
         ############
