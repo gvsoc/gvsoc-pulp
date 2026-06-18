@@ -21,14 +21,14 @@ class SoftHierArch:
     def __init__(self):
 
         #Cluster
-        self.num_cluster             = 125
+        self.num_cluster             = 64
         self.num_core_per_cluster    = 1
 
         #Topology
         self.topology                = '3DMesh'
-        self.num_cluster_x           = 5
-        self.num_cluster_y           = 5
-        self.num_cluster_z           = 5
+        self.num_cluster_x           = 4
+        self.num_cluster_y           = 4
+        self.num_cluster_z           = 4
 
         self.cluster_tcdm_bank_width = 4
         self.cluster_tcdm_bank_nb    = 128
@@ -50,8 +50,8 @@ class SoftHierArch:
         self.instruction_mem_size    = 0x00010000
 
         #IDMA
-        self.idma_outstand_txn       = 16
-        self.idma_outstand_burst     = 256
+        self.idma_outstand_txn       = 256
+        self.idma_outstand_burst     = 1024
 
         #Spatz Vector Unit
         self.spatz_num_lane          = 32
@@ -63,5 +63,5 @@ class SoftHierArch:
         self.soc_register_eoc        = 0x70000000
 
         #NoC
-        self.noc_outstanding         = 64
+        self.noc_outstanding         = 256
         self.noc_link_width          = 512

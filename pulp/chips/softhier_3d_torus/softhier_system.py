@@ -194,8 +194,9 @@ class SoftHierSystem(gvsoc.systree.Component):
             noc.add_link(ni_id, r_id, latency=1)
 
         # Generate routing tables
-        #noc.generate_routing_tables_deadlock_free()
+        # noc.generate_routing_tables_deadlock_free()
         noc.generate_routing_tables_shortest_path()
+        # noc.generate_routing_tables_mesh_3d(dim_x=dim_x, dim_y=dim_y, dim_z=dim_z)
 
         ############
         # Bindings #
