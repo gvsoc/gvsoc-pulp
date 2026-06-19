@@ -17,6 +17,7 @@
 from enum import IntEnum
 import gvsoc.systree
 import yaml
+from pathlib import Path
 
 from floogen.config_parser import parse_config
 from floogen.model.network import Network
@@ -49,7 +50,7 @@ class FlooNocFlex(gvsoc.systree.Component):
     """
     def __init__(self, parent: gvsoc.systree.Component, name, narrow_width: int, wide_width:int,
             router_degrees: int=0, nb_nodes: int=0, ni_outstanding_reqs: int=8, router_input_queue_size: int=2,
-            network_path: str | None = None, routing_path: str | None = None, routing_mode: int = 3, dim_x: int = 1, dim_y: int = 1):
+            network_path: str | None = None, routing_path: str | None = None):
         super().__init__(parent, name)
 
         self.add_sources([
@@ -71,7 +72,7 @@ class FlooNocFlex(gvsoc.systree.Component):
         self.add_property('router_degrees', router_degrees)       
         self.id_map = {}
         if network_path is not None:
-            self.id_map = self.load_from_floogen(network_path, routing_path, routing_mode, dim_x, dim_y) 
+            self.id_map = self.load_from_floogen(network_path, routing_path)
 
     def __add_mapping(self, name: str, base: int, size: int, node_id: int, remove_offset:int =0):
         self.get_property('mappings')[name] =  {'base': base, 'size': size, 'node_id': node_id, 'remove_offset':remove_offset}
@@ -189,115 +190,6 @@ class FlooNocFlex(gvsoc.systree.Component):
             The slave interface
         """
         return gvsoc.systree.SlaveItf(self, f'wide_input_{node_id}', signature='io')
-
-    def generate_routing_tables(self, routing_mode: int, dim_x: int, dim_y: int, routing_path: str): #Deprecate this too complex method
-            """
-            Generates routing tables for the routers based on grid dimensions.
-            Safely handles sparse Network Interface (NI) IDs.
-            """
-            # 1 = 2D_MESH (XY Routing)
-            # 2 = 3D_MESH (Z-XY Routing)
-            # 3 = CUSTOM
-            routing_mode = 1 #Hardcoded here for now
-            print(f"Generating routing tables for {routing_mode}")
-
-            nb_nodes = self.get_property('nb_nodes')
-            links = self.get_property('links')
-
-            routing_tables = [[-1 for _ in range(nb_nodes)] for _ in range(nb_nodes)]
-            
-            # Extract the IDs of our components
-            routers = [r[0] for r in self.get_property('routers')]
-            nis = [n[0] for n in self.get_property('network_interfaces')]
-
-            # Build the NI-to-Router physical mapping from the links array
-            ni_to_router = {}
-            for link in links:
-                node_a, node_b = link[0], link[1]
-                if node_a in nis and node_b in routers:
-                    ni_to_router[node_a] = node_b
-                elif node_b in nis and node_a in routers:
-                    ni_to_router[node_b] = node_a
-
-            for src in routers:
-                for dst in range(nb_nodes):
-                    
-                    # Resolve the target router for this destination
-                    if dst in routers:
-                        target_router = dst
-                    elif dst in nis:
-                        target_router = ni_to_router.get(dst, -1)
-                    else:
-                        target_router = -1 # Unmapped or empty node ID
-
-                    # Base Cases
-                    if target_router == -1:
-                        routing_tables[src][dst] = -1
-                        continue
-                    if src == target_router:
-                        # We are at the router physically attached to the destination
-                        # The next hop is the destination itself!
-                        routing_tables[src][dst] = dst
-                        continue
-
-                    # Apply Routing Math (from src router to target_router)
-                    # Note: We assume Router IDs are sequentially numbered 0 to (W*H - 1)
-                    if routing_mode == 1: # 2D_MESH
-                        src_x, src_y = src % dim_x, src // dim_x
-                        dst_x, dst_y = target_router % dim_x, target_router // dim_x
-
-                        if src_x != dst_x:
-                            next_hop = src + 1 if dst_x > src_x else src - 1
-                        else:
-                            next_hop = src + dim_x if dst_y > src_y else src - dim_x
-                            
-                        routing_tables[src][dst] = next_hop
-
-                    elif routing_mode == 2: # 3D_MESH
-                        layer_size = dim_x * dim_y
-                        src_z, rem_src = src // layer_size, src % layer_size
-                        src_y, src_x = rem_src // dim_x, rem_src % dim_x
-                        
-                        dst_z, rem_dst = target_router // layer_size, target_router % layer_size
-                        dst_y, dst_x = rem_dst // dim_x, rem_dst % dim_x
-
-                        if src_z != dst_z:
-                            next_hop = src + layer_size if dst_z > src_z else src - layer_size
-                        elif src_x != dst_x:
-                            next_hop = src + 1 if dst_x > src_x else src - 1
-                        else:
-                            next_hop = src + dim_x if dst_y > src_y else src - dim_x
-                            
-                        routing_tables[src][dst] = next_hop
-
-                    elif routing_mode == 3: # CUSTOM
-                        if not routing_path:
-                            raise ValueError("CUSTOM routing mode selected but no custom_routing_path provided!")
-                            
-                        # Parse the routing YAML
-                        with open(routing_path, 'r') as f:
-                            custom_routes = yaml.safe_load(f)
-                            
-                        # Translate names to internal IDs
-                        for src_name, routes in custom_routes.items():
-                            if src_name not in self.id_map:
-                                raise ValueError(f"Unknown source router '{src_name}' in custom routing file.")
-                            
-                            src_id = self.id_map[src_name]
-                            
-                            for dst_name, next_hop_name in routes.items():
-                                if dst_name not in self.id_map or next_hop_name not in self.id_map:
-                                    raise ValueError(f"Unknown destination or next hop in custom routing file for {src_name}.")
-                                if next_hop_name not in self.id_map:
-                                    raise ValueError(f"Unknown next hop '{next_hop_name}' in custom routing file.")
-                                
-                                dst_id = self.id_map[dst_name]
-                                next_hop_id = self.id_map[next_hop_name]
-                                
-                                # Populate the final integer table for C++
-                                routing_tables[src_id][dst_id] = next_hop_id
-            
-            self.add_property('routing_tables', routing_tables)
 
     def generate_routing_tables_shortest_path(self):
         """
@@ -942,13 +834,13 @@ class FlooNocFlex(gvsoc.systree.Component):
         self.add_property('routing_tables', routing_tables)
 
 
-    def load_from_floogen(self, network_path: str, routing_path: str, routing_mode: int, dim_x: int, dim_y: int):
+    def load_from_floogen(self, network_path: str, routing_path: str = None):
             """
             Parses a FlooGen YAML file and populates the GVSoC NoC topology.
             """
 
             # Parse the YAML into FlooGen's Network object
-            floo_net = parse_config(Network, network_path)
+            floo_net = parse_config(Network, Path(network_path))
             floo_net.create_network()
             floo_net.compile_network()
 
@@ -957,9 +849,10 @@ class FlooNocFlex(gvsoc.systree.Component):
             current_id = 0
 
             # Extract Routers
-            for rt_name, _ in floo_net.graph.get_rt_nodes(with_name=True):
+            for rt_name, rt_node in floo_net.graph.get_rt_nodes(with_name=True):
                 node_to_id[rt_name] = current_id
-                self.add_router(current_id)
+                num_queues = getattr(rt_node, 'degree', 5)
+                self.add_router(current_id, num_queues=num_queues)
                 current_id += 1
 
             # Extract Network Interfaces (NIs)
@@ -971,6 +864,8 @@ class FlooNocFlex(gvsoc.systree.Component):
             self.add_property('nb_nodes', current_id)
             self.id_map = node_to_id
 
+            added_links = set()
+            
             # Extract Links
             for src_name, dst_name in floo_net.graph.get_link_edges(with_obj=False, with_name=True):
                 # Ensure both sides of the link exist in our ID map
@@ -978,16 +873,15 @@ class FlooNocFlex(gvsoc.systree.Component):
                     src_id = node_to_id[src_name]
                     dst_id = node_to_id[dst_name]
                     
-                    # Add links , latency defaults to 1 rn, TODO: add latency support
-                    self.add_link(src_id, dst_id, 1)
+                    link_pair = tuple(sorted((src_id, dst_id)))
+                    
+                    # Only add bidirectional link if not already added
+                    if link_pair not in added_links:
+                        self.add_link(src_id, dst_id, latency=1)
+                        added_links.add(link_pair)
 
             # Generate Routing Tables
-            self.generate_routing_tables( #This method is to be deprecated
-                routing_mode=routing_mode, 
-                dim_x=dim_x, 
-                dim_y=dim_y, 
-                routing_path=routing_path
-            )
+            self.generate_routing_tables_shortest_path()
             
             # Return the dictionary, just in case
             return node_to_id
