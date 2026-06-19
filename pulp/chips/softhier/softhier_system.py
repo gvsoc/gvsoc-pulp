@@ -16,6 +16,7 @@
 
 # Author: Chi Zhang <chizhang@ethz.ch>
 
+import os
 import gvsoc.runner
 import cpu.iss.riscv as iss
 import memory.memory
@@ -46,6 +47,13 @@ class SoftHierSystem(gvsoc.systree.Component):
         if parser is not None:
             [args, otherArgs] = parser.parse_known_args()
             binary = args.binary
+
+        workspace_dir = os.getcwd()
+        floogen_path = os.path.join(workspace_dir,'pulp', 'pulp', 'chips', 'softhier', 'floogen.yml') 
+        
+        # Comment out if using manual instantiation
+        if not os.path.exists(floogen_path):
+            raise FileNotFoundError(f"FlooGen config not found at expected path: {floogen_path}")
 
         #############
         # Assertion #
@@ -90,6 +98,10 @@ class SoftHierSystem(gvsoc.systree.Component):
         softhier_ctrl = SoftHierCtrl(self, 'softhier_ctrl', num_cluster=arch.num_cluster, num_core_per_cluster=arch.num_core_per_cluster)
 
         # --- FlooNoC Flex Initialization & Topology Building ---
+        # 1. Manual approach
+        # Parameters and links added manually
+        # Links generated in a specific order to imitate FlooNoC round-robin
+        '''
         router_degrees = 5
         
         # Calculate Dimensions
@@ -133,11 +145,6 @@ class SoftHierSystem(gvsoc.systree.Component):
                 nis_map[(x, y)] = ni_id
                 noc.add_network_interface(ni_id)
 
-        '''
-        Due to how the original SoftHier implements the round robin with certain directions prioritized,
-        this behaviour is emulated by generating the links in a specific order.
-        '''
-
         # Add Horizontal Links (Right / Left priority)
         # We iterate X backwards (max to 1). 
         # For any router (X), the link to (X+1) is created before the link from (X-1).
@@ -161,9 +168,23 @@ class SoftHierSystem(gvsoc.systree.Component):
                 ni_id = get_ni_id(x, y)
                 r_id = routers_map[(x, y)]
                 noc.add_link(ni_id, r_id, latency=1)
-        
+
         # Generate routing tables
         noc.generate_routing_tables_mesh_2d(dim_x=dim_x, dim_y=dim_y)
+        # Or
+        # noc.generat_routing_tables_shortest_path()
+        '''
+        
+        # 2. FlooGen approach
+
+        noc = FlooNocFlex(self, 'noc',  
+                narrow_width=8,    
+                wide_width=arch.noc_link_width,
+                router_input_queue_size=16,
+                ni_outstanding_reqs=arch.noc_outstanding,
+                network_path=floogen_path)
+
+
 
         ############
         # Bindings #
@@ -180,7 +201,15 @@ class SoftHierSystem(gvsoc.systree.Component):
             x_id = int(cluster_id % arch.num_cluster_x)
             y_id = int(cluster_id / arch.num_cluster_x)
             
-            ni_node_id = nis_map[(x_id + 1, y_id + 1)]
+            # For manual instantiation
+            # ni_node_id = nis_map[(x_id + 1, y_id + 1)]
+
+            # For FlooGen instantiation
+            ni_yaml_name = f"cluster_ni_{x_id}_{y_id}"
+            if ni_yaml_name not in noc.id_map:
+                raise KeyError(f"Network Interface '{ni_yaml_name}' not found in FlooGen layout. "
+                               f"Available FlooGen nodes: {list(noc.id_map.keys())}")
+            ni_node_id = noc.id_map[ni_yaml_name]
             
             narrow_arbiter = router.Router(self, f'narrow_arbiter_{cluster_id}', bandwidth=8)
             narrow_arbiter.o_MAP(virtual_interco.i_INPUT())
