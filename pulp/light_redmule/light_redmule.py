@@ -34,7 +34,8 @@ class LightRedmule(gvsoc.systree.Component):
                 queue_depth: int=128,
                 fold_tiles_mapping: int=0,
                 loc_base=0, #here we might add also local size to check that tcdm requests do not overflow...
-                outstanding: bool=False): # outstanding-request model (TensorPool)
+                outstanding: bool=False, # outstanding-request model (TensorPool)
+                ic_latency: int=0):    # modeled interconnect round-trip (cycles), outstanding model
 
         super().__init__(parent, name)
 
@@ -60,6 +61,11 @@ class LightRedmule(gvsoc.systree.Component):
             'fold_tiles_mapping': fold_tiles_mapping,
             'loc_base'          : loc_base,
         })
+
+        if outstanding:
+            self.add_properties({
+                'ic_latency'        : ic_latency,
+            })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')
