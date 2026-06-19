@@ -49,7 +49,8 @@ class SoftHierSystem(gvsoc.systree.Component):
             binary = args.binary
 
         workspace_dir = os.getcwd()
-        floogen_path = os.path.join(workspace_dir,'pulp', 'pulp', 'chips', 'softhier', 'floogen.yml') 
+        floogen_path = os.path.join(workspace_dir,'pulp', 'pulp', 'chips', 'softhier', 'floogen.yml')
+        routing_path = os.path.join(workspace_dir,'pulp', 'pulp', 'chips', 'softhier', 'routing.yml')
         
         # Comment out if using manual instantiation
         if not os.path.exists(floogen_path):
@@ -182,7 +183,8 @@ class SoftHierSystem(gvsoc.systree.Component):
                 wide_width=arch.noc_link_width,
                 router_input_queue_size=16,
                 ni_outstanding_reqs=arch.noc_outstanding,
-                network_path=floogen_path)
+                network_path=floogen_path,
+                routing_path=routing_path)
 
 
 

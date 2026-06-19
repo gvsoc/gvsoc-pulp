@@ -7,7 +7,7 @@ description: "FlooGen topology configuration mirroring the SoftHier System mesh"
 network_type: "narrow-wide"
 
 routing:
-  route_algo: "XY"
+  route_algo: "SRC"
   use_id_table: true
 
 protocols:

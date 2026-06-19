@@ -844,7 +844,7 @@ class FlooNocFlex(gvsoc.systree.Component):
             floo_net.create_network()
             floo_net.compile_network()
 
-            # Compatibility layer: Maps FlooGen string names to our FloonocFlex IDs
+            # Compatibility layer: Maps FlooGen string names to Floonoc-Flex IDs
             node_to_id = {}
             current_id = 0
 
@@ -880,8 +880,65 @@ class FlooNocFlex(gvsoc.systree.Component):
                         self.add_link(src_id, dst_id, latency=1)
                         added_links.add(link_pair)
 
-            # Generate Routing Tables
-            self.generate_routing_tables_shortest_path()
+            algo_name = floo_net.routing.route_algo.name
             
-            # Return the dictionary, just in case
+            match algo_name:
+                case "XY":
+                    dim_x, dim_y = None, None
+                    if floo_net.routers and hasattr(floo_net.routers[0], 'array'):
+                        array_dims = floo_net.routers[0].array
+                        if len(array_dims) >= 2:
+                            dim_x, dim_y = array_dims[0], array_dims[1]
+                    self.generate_routing_tables_mesh_2d(dim_x, dim_y)
+                        
+                case "YX":
+                    # YX Routing not implemented
+                    self.generate_routing_tables_shortest_path()
+                    
+                case "ID" | "SRC":
+                    if routing_path is not None and Path(routing_path).exists():
+                        self.load_custom_routing_tables(routing_path, node_to_id)
+                    else:
+                        raise FileNotFoundError(f"Routing path {routing_path} not found.")
+                    
+                case _:
+                    # Shortest path fallback
+                    self.generate_routing_tables_shortest_path()
+            
+            # Return the dictionary
             return node_to_id
+
+    def load_custom_routing_tables(self, routing_path: str, node_to_id: dict):
+            """
+            Parses a custom routing.yml file.
+            Format expected:
+            router_name:
+            destination_name: next_hop_name
+            """
+            with open(routing_path, 'r') as f:
+                custom_yaml = yaml.safe_load(f)
+                
+            nb_nodes = self.get_property('nb_nodes')
+            routers = [r[0] for r in self.get_property('routers')]
+            
+            # Initialize an empty table for all routers
+            routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
+            
+            # Populate the table translating string names to integer IDs
+            for src_str, routes in custom_yaml.items():
+                if src_str not in node_to_id:
+                    print(f"Warning: Router '{src_str}' from routing.yml not found in NoC.")
+                    continue
+                    
+                src_id = node_to_id[src_str]
+                
+                for dst_str, next_hop_str in routes.items():
+                    if dst_str in node_to_id and next_hop_str in node_to_id:
+                        dst_id = node_to_id[dst_str]
+                        next_hop_id = node_to_id[next_hop_str]
+                        
+                        routing_tables[str(src_id)][str(dst_id)] = next_hop_id
+                    else:
+                        print(f"Warning: Unknown destination/hop '{dst_str}' or '{next_hop_str}' in routing.yml")
+                        
+            self.add_property('routing_tables', routing_tables)
