@@ -41,12 +41,13 @@ class Tile(st.Component):
             #NOT FINISHED YET WITH PARAMETERISZING THESE
             redmule = LightRedmule(self, f'tile-{tile_id}-redmule',
                                     tcdm_bank_width     = 4,
-                                    tcdm_bank_number    = 1024,
+                                    tcdm_bank_number    = (redmule_config.redmule_height * (redmule_config.redmule_regs + 1) )// 2 ,
                                     elem_size           = 2,
                                     ce_height           = redmule_config.redmule_height,
                                     ce_width            = redmule_config.redmule_width,
                                     ce_pipe             = redmule_config.redmule_regs,
-                                    queue_depth         = 64,
+                                    queue_depth         = 16,
+                                    ic_latency          = redmule_config.ic_latency,
                                     outstanding         = True
                                     )
 

@@ -152,6 +152,7 @@ public:
     uint32_t            ce_width;
     uint32_t            ce_pipe;
     uint32_t            queue_depth;
+    uint32_t            ic_latency; // modeled interconnect round-trip (cycles)
     uint32_t            bandwidth;
     uint32_t            fold_tiles_mapping;
     uint64_t            loc_base;
@@ -245,6 +246,7 @@ LightRedmule::LightRedmule(vp::ComponentConf &config)
     this->ce_width          = get_js_config()->get("ce_width")->get_int();
     this->ce_pipe           = get_js_config()->get("ce_pipe")->get_int();
     this->queue_depth       = get_js_config()->get("queue_depth")->get_int();
+    this->ic_latency        = get_js_config()->get("ic_latency")->get_int();
     this->fold_tiles_mapping= get_js_config()->get("fold_tiles_mapping")->get_int();
     this->loc_base          = get_js_config()->get("loc_base")->get_double();
     this->compute_able      = 0;
@@ -1088,7 +1090,7 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 }
 
                 //Counte on receiving cycle
-                uint32_t receive_stamp = _this->tcdm_req->get_latency() + _this->fsm_timestamp;
+                uint32_t receive_stamp = ((_this->ic_latency > 0) ? _this->ic_latency : _this->tcdm_req->get_latency()) + _this->fsm_timestamp;
 
                 //Push pending request queue
                 _this->pending_req_queue.push(receive_stamp);
@@ -1164,7 +1166,7 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 }
 
                 //Counte on receiving cycle
-                uint32_t receive_stamp = _this->tcdm_req->get_latency() + _this->fsm_timestamp;
+                uint32_t receive_stamp = ((_this->ic_latency > 0) ? _this->ic_latency : _this->tcdm_req->get_latency()) + _this->fsm_timestamp;
 
                 //Push pending request queue
                 _this->pending_req_queue.push(receive_stamp);
@@ -1258,7 +1260,7 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 }
 
                 //Counte on receiving cycle
-                uint32_t receive_stamp = _this->tcdm_req->get_latency() + _this->fsm_timestamp;
+                uint32_t receive_stamp = ((_this->ic_latency > 0) ? _this->ic_latency : _this->tcdm_req->get_latency()) + _this->fsm_timestamp;
 
                 //Push pending request queue
                 _this->pending_req_queue.push(receive_stamp);
