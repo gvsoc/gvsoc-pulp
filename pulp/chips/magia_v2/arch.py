@@ -96,7 +96,7 @@ class MagiaDSE:
     TILE_AXI_XBAR_SYNC          = False
     TILE_OBI_XBAR_LATENCY       = 2
     TILE_OBI_XBAR_SYNC          = True
-    TILE_IDMA0_BQUEUE_SIZE      = 2
+    TILE_IDMA0_BQUEUE_SIZE      = 4
     TILE_IDMA0_B_SIZE           = 0
-    TILE_IDMA1_BQUEUE_SIZE      = 2
+    TILE_IDMA1_BQUEUE_SIZE      = 4
     TILE_IDMA1_B_SIZE           = 0
