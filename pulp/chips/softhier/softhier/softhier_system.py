@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-# Author: Chi Zhang <chizhang@ethz.ch>
+# Authors: Chi Zhang <chizhang@ethz.ch>, Siim Rausi <srausi@student.ethz.ch>
 
 import os
 import gvsoc.runner
