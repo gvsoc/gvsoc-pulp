@@ -35,6 +35,10 @@ public:
                                   bool is_signed, bool is_rem);
     inline void event_scoreboard_stall(uint8_t reason);
     inline void event_load_load_account(int incr);
+    // p.elw wasted cycles: `elw_cycles` -> PCCR[11] (perf_pipeline_stall_o);
+    // `gated_cycles` (the clock-gated park) -> PCCR[0], which RTL keeps
+    // counting through ELW_EXE but GVSoC's busy_exit gates out.
+    inline void event_elw_account(int elw_cycles, int gated_cycles);
 
     void flush_cycles();
 

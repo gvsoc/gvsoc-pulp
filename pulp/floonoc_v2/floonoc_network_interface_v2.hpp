@@ -82,9 +82,9 @@ public:
     void set_router(int nw, RouterV2 *router);
 private:
     static void wide_response(vp::Block *__this, vp::IoReq *req);
-    static void wide_retry(vp::Block *__this);
+    static void wide_retry(vp::Block *__this, vp::IoRetryChannel);
     static void narrow_response(vp::Block *__this, vp::IoReq *req);
-    static void narrow_retry(vp::Block *__this);
+    static void narrow_retry(vp::Block *__this, vp::IoRetryChannel);
     static vp::IoReqStatus narrow_req(vp::Block *__this, vp::IoReq *req);
     static vp::IoReqStatus wide_req(vp::Block *__this, vp::IoReq *req);
     vp::IoReqStatus handle_req(vp::IoReq *req, bool wide);

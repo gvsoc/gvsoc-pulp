@@ -20,8 +20,10 @@ from pulp.chips.snitch.snitch import SnitchBoard
 class Target(gvsoc.runner.Target):
 
     gapy_description="Snitch virtual board"
+    model = SnitchBoard
+    name = "snitch"
 
-    def __init__(self, parser, options):
+    def __init__(self, parser, options=None, name=None):
         super(Target, self).__init__(parser, options,
-            model=SnitchBoard)
+            model=SnitchBoard, name=name)
 

@@ -91,6 +91,13 @@ void NetworkQueueV2::enqueue_router_req(vp::IoReq *req, bool is_address, bool wi
 
     while(burst_size > 0)
     {
+        // Address phases (read AR and write AW) are metadata-only headers —
+        // one FloonocReqV2 per burst. Data and response phases are paced at
+        // the carrier queue's beat width. Beat-based downstreams may answer
+        // a forwarded read with a multi-beat resp() stream; the NI's
+        // wide_response / narrow_response path is built to absorb that
+        // (each beat forwards as a partial response chunk; the FloonocReqV2
+        // is only released on the last beat).
         uint64_t size = is_address ? burst_size : std::min(this->width, burst_size);
         FloonocReqV2 *router_req = new FloonocReqV2();
 
@@ -274,7 +281,7 @@ void NetworkInterfaceV2::wide_response(vp::Block *__this, vp::IoReq *req)
     _this->handle_response((FloonocReqV2 *)req);
 }
 
-void NetworkInterfaceV2::wide_retry(vp::Block *__this)
+void NetworkInterfaceV2::wide_retry(vp::Block *__this, vp::IoRetryChannel)
 {
     NetworkInterfaceV2 *_this = (NetworkInterfaceV2 *)__this;
     // The downstream target is ready again. Re-send the req we were holding
@@ -321,7 +328,7 @@ void NetworkInterfaceV2::narrow_response(vp::Block *__this, vp::IoReq *req)
     _this->handle_response((FloonocReqV2 *)req);
 }
 
-void NetworkInterfaceV2::narrow_retry(vp::Block *__this)
+void NetworkInterfaceV2::narrow_retry(vp::Block *__this, vp::IoRetryChannel)
 {
     NetworkInterfaceV2 *_this = (NetworkInterfaceV2 *)__this;
     if (_this->narrow_target_stalled_req)
@@ -437,10 +444,10 @@ vp::IoReqStatus NetworkInterfaceV2::handle_req(vp::IoReq *req, bool wide)
     // Use the v2 IoReq remaining_size field to track how many bytes still need
     // to be returned through the mesh before we can ack the burst.
     req->remaining_size = req->get_size();
-    // Remember which external port to use for the response (single field of
-    // vp::IoReq we can repurpose without subclassing the external request).
-    req->initiator = wide ? (void *)&this->wide_input_itf
-                          : (void *)&this->narrow_input_itf;
+    // We do NOT clobber req->initiator here: v2 masters such as the iDMA
+    // backend use that field for their own bookkeeping (BurstInfo*) and
+    // expect it to survive the round-trip through the mesh. The NI instead
+    // picks the response port from the inner FloonocReqV2's `wide` flag.
 
     vp::IoReq **queue;
     if (wide)
@@ -499,14 +506,18 @@ bool NetworkInterfaceV2::handle_request(FloonocNodeV2 *node, FloonocReqV2 *req, 
         vp::IoReq *burst = req->burst;
         bool wide = req->wide;
 
+        // The inner FloonocReqV2's `wide` flag tells us which external slave
+        // port the burst entered through; we use that to dispatch the
+        // response rather than burst->initiator (which belongs to the
+        // master, e.g. the iDMA's BurstInfo*).
+        vp::IoSlave *port = wide ? &this->wide_input_itf : &this->narrow_input_itf;
+
         if (burst->get_is_write())
         {
             this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received write burst response (burst: %p)\n",
                 burst);
             this->nb_pending_bursts[wide]--;
 
-            // Reply through the same external slave port the burst came in on.
-            vp::IoSlave *port = (vp::IoSlave *)burst->initiator;
             burst->set_resp_status(vp::IO_RESP_OK);
             port->resp(burst);
         }
@@ -521,7 +532,6 @@ bool NetworkInterfaceV2::handle_request(FloonocNodeV2 *node, FloonocReqV2 *req, 
             {
                 this->trace.msg(vp::Trace::LEVEL_DEBUG, "Finished burst (burst: %p)\n", burst);
                 this->nb_pending_bursts[wide]--;
-                vp::IoSlave *port = (vp::IoSlave *)burst->initiator;
                 burst->set_resp_status(vp::IO_RESP_OK);
                 port->resp(burst);
             }
@@ -668,9 +678,20 @@ void NetworkInterfaceV2::handle_response(FloonocReqV2 *req)
 {
     if (!req->get_is_write())
     {
-        // Read response: send data back through the rsp/wide network to the
-        // originating NI. handle_rsp allocates a fresh FloonocReqV2 for the
-        // return trip, so the incoming req is safe to delete on the way out.
+        // Read response: forward the data back through the rsp/wide network
+        // to the originating NI. handle_rsp allocates a *fresh* FloonocReqV2
+        // for the return trip and copies the relevant fields, so the
+        // incoming req survives even if we still need it for further beats.
+        //
+        // io_v2 slaves may answer in three forms — sync DONE, async
+        // big-packet (single resp with is_first==is_last==true) or beat
+        // stream (N resps reusing the same IoReq, with is_first/is_last
+        // mutated per beat and cumulative sizes equal to the request size).
+        // For each beat we ship a partial response of req->get_size() bytes;
+        // the source NI accumulates ``remaining_size`` and replies to the
+        // upstream master when it reaches zero. The FloonocReqV2 is only
+        // released once the downstream slave signals is_last — until then
+        // it must stay alive for the next beat to mutate.
         NetworkInterfaceV2 *origin_ni = req->src_ni;
 
         req->dest_x = origin_ni->x;
@@ -705,5 +726,12 @@ void NetworkInterfaceV2::handle_response(FloonocReqV2 *req)
             this->rsp_queue.handle_rsp(req, true);
         }
     }
-    delete req;
+    // Keep the FloonocReqV2 alive across the beats of a multi-beat resp().
+    // Only release it on the last beat — sync DONE and async big-packet
+    // both deliver is_last=true on their single resp, so they release
+    // immediately as before.
+    if (req->is_last)
+    {
+        delete req;
+    }
 }

@@ -1,3 +1,10 @@
+try:
+    from typing import override  # Python 3.12+
+except ImportError:
+    from typing_extensions import override  # Python 3.10–3.11
+
+import os
+
 import gvsoc.runner
 import gvsoc.systree
 
@@ -15,9 +22,13 @@ from utils.clock_generator import Clock_generator
 import pulp.soc_eu.soc_eu_v2 as soc_eu_module
 import pulp.itc.itc_v1 as itc
 import cpu.clint
-from pulp.snitch.snitch_cluster.snitch_cluster import ClusterArch, Area, SnitchCluster
-from pulp.chips.snitch.snitch import SnitchArchProperties
+from pulp.snitch.snitch_cluster.snitch_cluster import ClusterArch, SnitchCluster
+if os.environ.get('USE_GVRUN') is None:
+    from pulp.chips.snitch.snitch import SnitchArchProperties
+else:
+    from gvrun.attribute import Tree
 from pulp.stdout.stdout_v3 import Stdout
+from gvrun.parameter import TargetParameter
 
 
 class SnitchClusterGroup(gvsoc.systree.Component):
@@ -44,14 +55,26 @@ class SnitchClusterGroup(gvsoc.systree.Component):
             0x40800000, 0x40600000, 0x40400000, 0x40200000, 0x40000000
         ]
 
+        # With the legacy gvsoc launcher, the cluster arch comes from the legacy snitch
+        # properties. With gvrun, it is rooted in an attribute tree.
+        if os.environ.get('USE_GVRUN') is not None:
+            attr_parent = Tree(self, 'snitch')
+
         self.clusters = []
         for id in range(0, nb_clusters):
-            properties = SnitchArchProperties()
-            cluster_arch = ClusterArch(properties=properties,
-                                       base=cluster_start_addr[id],
-                                       first_hartid=(id * 9) + 1,
-                                       auto_fetch=True,
-                                       boot_addr=0x30000000)
+            if os.environ.get('USE_GVRUN') is None:
+                properties = SnitchArchProperties()
+                cluster_arch = ClusterArch(properties=properties,
+                                           base=cluster_start_addr[id],
+                                           first_hartid=(id * 9) + 1,
+                                           auto_fetch=True,
+                                           boot_addr=0x30000000)
+            else:
+                cluster_arch = ClusterArch(attr_parent, 'cluster',
+                                           cluster_start_addr[id],
+                                           (id * 9) + 1,
+                                           auto_fetch=True,
+                                           boot_addr=0x30000000)
             self.clusters.append(
                 SnitchCluster(self, f'cluster_{id}', cluster_arch,
                               entry=entry))
@@ -119,9 +142,17 @@ class SafetyIsland(gvsoc.systree.Component):
     def __init__(self, parent, name, parser):
         super().__init__(parent, name)
 
-        [args, otherArgs] = parser.parse_known_args()
+        _ = TargetParameter(
+            self, name='binary', value=None, description='Binary to be loaded and started',
+            cast=str
+        )
+
+        # With the legacy gvsoc launcher, configure() is never called and the binary comes
+        # from the command line, so it must be resolved now. With gvrun, it comes from a
+        # parameter and is handled in configure() since it can also be set from the build
+        # process.
         binary = None
-        if parser is not None:
+        if os.environ.get('USE_GVRUN') is None and parser is not None:
             [args, otherArgs] = parser.parse_known_args()
             binary = args.binary
 
@@ -152,7 +183,10 @@ class SafetyIsland(gvsoc.systree.Component):
 
         # Create loader using the binary provided
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
-        obi_ico = router.Router(self, "obi_ico")
+        # Named differently from the "obi_ico" property subtree coming from the hjson
+        # file: with gvrun, properties and child components share the same config
+        # namespace, so a child named like a property would be masked by it.
+        obi_ico = router.Router(self, "obi_ico_router")
         l2_tcdm_ico = router.Router(self, "l2_tcdm_ico")
 
         # Create the memory and router components based on the configuration
@@ -268,6 +302,22 @@ class SafetyIsland(gvsoc.systree.Component):
                   'in_event_%d' % fc_events['evt_clkref'])
         self.bind(soc_ctrl, 'event', soc_eu, 'event_in')
 
+        self.loader = loader
+        self.register_binary_handler(self.handle_binary)
+
+    @override
+    def configure(self) -> None:
+        # We configure the loader binary now in the configure step since it is coming from
+        # a parameter which can be set either from command line or from the build process
+        binary = self.get_parameter('binary')
+        if binary is not None:
+            self.loader.set_binary(binary)
+
+    def handle_binary(self, binary: str):
+        # This gets called when an executable is attached to a hierarchy of components containing
+        # this one
+        self.set_parameter('binary', binary)
+
 
 class ChimeraBoard(gvsoc.systree.Component):
     def __init__(self, parent, name, parser, options):
@@ -298,6 +348,8 @@ class ChimeraBoard(gvsoc.systree.Component):
 class Target(gvsoc.runner.Target):
 
     gapy_description = "Chimera virtual board"
+    model = ChimeraBoard
+    name = "chimera"
 
-    def __init__(self, parser, options):
-        super(Target, self).__init__(parser, options, model=ChimeraBoard)
+    def __init__(self, parser, options=None, name=None):
+        super(Target, self).__init__(parser, options, model=ChimeraBoard, name=name)

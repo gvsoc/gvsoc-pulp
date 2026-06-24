@@ -364,7 +364,7 @@ void IDmaBeAxi::resp_meth(vp::Block *__this, vp::IoReq *req)
 
 
 
-void IDmaBeAxi::retry_meth(vp::Block *__this)
+void IDmaBeAxi::retry_meth(vp::Block *__this, vp::IoRetryChannel)
 {
     auto *self = (IDmaBeAxi *)__this;
     self->trace.msg(vp::Trace::LEVEL_TRACE, "AXI retry — resuming issue\n");

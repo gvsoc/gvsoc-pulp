@@ -23,7 +23,7 @@
 
 #define CYCLES_ERROR 0.01f
 
-void Testbench::stub_retry(vp::Block *__this) {}
+void Testbench::stub_retry(vp::Block *__this, vp::IoRetryChannel) {}
 void Testbench::stub_response(vp::Block *__this, vp::IoReq *req) {}
 
 Testbench::Testbench(vp::ComponentConf &config)

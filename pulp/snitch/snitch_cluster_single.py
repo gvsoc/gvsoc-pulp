@@ -14,6 +14,13 @@
 # limitations under the License.
 #
 
+try:
+    from typing import override  # Python 3.12+
+except ImportError:
+    from typing_extensions import override  # Python 3.10–3.11
+
+import os
+
 import gvsoc.runner
 import pulp.snitch.snitch_core as iss
 import memory.memory as memory
@@ -29,11 +36,31 @@ from pulp.idma.snitch_dma import SnitchDma
 from pulp.snitch.zero_mem import ZeroMem
 from interco.bus_watchpoint import Bus_watchpoint
 from pulp.snitch.sequencer import Sequencer
-from pulp.spatz.cluster_registers import Cluster_registers
 from elftools.elf.elffile import *
 import gvsoc.runner as gvsoc
+from gvrun.parameter import TargetParameter
 
 import math
+
+
+def _get_elf_info(binary):
+    # The HTIF watchpoints need the addresses of the tohost/fromhost symbols of the
+    # binary to catch accesses to them, and the cluster registers expose its entry
+    # point as boot address.
+    tohost_addr = 0
+    fromhost_addr = 0
+    entry = 0
+    with open(binary, 'rb') as file:
+        elffile = ELFFile(file)
+        entry = elffile['e_entry']
+        for section in elffile.iter_sections():
+            if isinstance(section, SymbolTableSection):
+                for symbol in section.iter_symbols():
+                    if symbol.name == 'tohost':
+                        tohost_addr = symbol.entry['st_value']
+                    if symbol.name == 'fromhost':
+                        fromhost_addr = symbol.entry['st_value']
+    return tohost_addr, fromhost_addr, entry
 
 
 class Soc(st.Component):
@@ -52,14 +79,21 @@ class Soc(st.Component):
         if Xfrep:
             fpu_sequencers = []
 
-        parser.add_argument("--isa", dest="isa", type=str, default="rv32imfdca",
-            help="RISCV-V ISA string (default: %(default)s)")
+        _ = TargetParameter(
+            self, name='binary', value=None, description='Binary to be loaded and started',
+            cast=str
+        )
 
-        [args, __] = parser.parse_known_args()
-
+        # With the legacy gvsoc launcher, configure() is never called and the binary comes
+        # from the command line, so it must be resolved now. With gvrun, it comes from a
+        # parameter and is handled in configure() since it can also be set from the build
+        # process.
         binary = None
-        if parser is not None:
-            [args, otherArgs] = parser.parse_known_args()
+        if os.environ.get('USE_GVRUN') is None and parser is not None:
+            parser.add_argument("--isa", dest="isa", type=str, default="rv32imfdca",
+                help="RISCV-V ISA string (default: %(default)s)")
+
+            [args, __] = parser.parse_known_args()
             binary = args.binary
 
         # Memory Components
@@ -128,16 +162,7 @@ class Soc(st.Component):
         fromhost_addr = 0
         entry = 0
         if binary is not None:
-            with open(binary, 'rb') as file:
-                elffile = ELFFile(file)
-                entry = elffile['e_entry']
-                for section in elffile.iter_sections():
-                    if isinstance(section, SymbolTableSection):
-                        for symbol in section.iter_symbols():
-                            if symbol.name == 'tohost':
-                                tohost_addr = symbol.entry['st_value']
-                            if symbol.name == 'fromhost':
-                                fromhost_addr = symbol.entry['st_value']
+            tohost_addr, fromhost_addr, entry = _get_elf_info(binary)
 
 
         # Cluster peripherals
@@ -213,6 +238,31 @@ class Soc(st.Component):
         # DMA and Wider AXI interconnections
         self.bind(loader, 'out', dma_ico, 'input')
 
+        self.loader = loader
+        self.bus_watchpoints = bus_watchpoints
+        self.cluster_registers = cluster_registers
+        self.register_binary_handler(self.handle_binary)
+
+    @override
+    def configure(self) -> None:
+        # We configure the loader binary now in the configure step since it is coming from
+        # a parameter which can be set either from command line or from the build process
+        binary = self.get_parameter('binary')
+        if binary is not None:
+            self.loader.set_binary(binary)
+
+            tohost_addr, fromhost_addr, entry = _get_elf_info(binary)
+            for watchpoint in self.bus_watchpoints:
+                watchpoint.add_properties({
+                    'riscv_fesvr_tohost_addr': tohost_addr,
+                    'riscv_fesvr_fromhost_addr': fromhost_addr,
+                })
+            self.cluster_registers.add_properties({'boot_addr': entry})
+
+    def handle_binary(self, binary: str):
+        # This gets called when an executable is attached to a hierarchy of components containing
+        # this one
+        self.set_parameter('binary', binary)
 
 
 class SnitchSystem(st.Component):
@@ -231,7 +281,9 @@ class SnitchSystem(st.Component):
 class Target(gvsoc.Target):
 
     gapy_description="Snitch virtual board"
+    model = SnitchSystem
+    name = "snitch_cluster_single"
 
-    def __init__(self, parser, options):
+    def __init__(self, parser, options=None, name=None):
         super(Target, self).__init__(parser, options,
-            model=SnitchSystem)
+            model=SnitchSystem, name=name)

@@ -10,9 +10,15 @@
 // response latency.
 //
 // Two regions × two modes — 4 measurements total:
-//   1. fast mem  (0x0..0x100000, latency=1) → ~2 cyc/lw
-//   2. slow mem  (0x40000000..,  latency=5) → ~10 cyc/lw (5 per beat)
+//   1. fast mem  (0x0..0x100000, latency=1, sync) → ~2 cyc/lw
+//   2. slow mem  (0x40000000..,  latency=5, sync) → ~10 cyc/lw (5 per beat)
 //   × each measured with PCMR off (GVSoC fast exec) and PCMR on (slow exec).
+//
+// NOTE: the asynchronous region (0x5000_0000, Ri5kyAsyncMem) is deliberately
+// NOT exercised here. Its misaligned timing is not yet reconciled between the
+// GVSoC async model and the RTL (the async response delivery vs the core's
+// issue ordering needs more work); see the elw calibration, which is the one
+// async case that is RTL-validated. To be revisited.
 
 #include "calib.h"
 
@@ -22,7 +28,7 @@
 // all straddle a 4-byte boundary.
 static volatile uint8_t fast_buf[64] __attribute__((aligned(64)));
 
-// Buffer in slow mem (0x4000_0000 region). Initialised at runtime.
+// Buffer in the synchronous slow mem (0x4000_0000 region). Runtime-init.
 #define SLOW_BUF ((volatile uint8_t *)0x40000040u)
 
 #define EIGHT_MISALIGNED_LOADS \
@@ -76,7 +82,7 @@ static inline uint32_t time_block_pcer(volatile uint8_t *base,
 int main(void)
 {
     for (int i = 0; i < 64; i++) fast_buf[i] = (uint8_t)i;
-    for (int i = 0; i < 64; i++) SLOW_BUF[i]  = (uint8_t)i;
+    for (int i = 0; i < 64; i++) SLOW_BUF[i] = (uint8_t)i;
 
     calib_disable_pccr();
     uint32_t fastmem_fastmode = time_block(fast_buf);

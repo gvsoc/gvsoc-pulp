@@ -114,7 +114,7 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address, bool wide
         router_req->set_opcode(req->get_opcode());
         router_req->set_second_data(req->get_second_data());
 
-        if (*(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI))
+        if (is_req)
         {
             if (wide)
             {

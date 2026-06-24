@@ -57,7 +57,7 @@ private:
     // Stubs for the v2 IoMaster: this test harness never actually sends through
     // noc_ni_itf — those ports exist only as a structural binding. v2's
     // IoMaster requires retry and response callbacks at construction time.
-    static void stub_retry(vp::Block *__this);
+    static void stub_retry(vp::Block *__this, vp::IoRetryChannel);
     static void stub_response(vp::Block *__this, vp::IoReq *req);
 
     vp::Trace trace;

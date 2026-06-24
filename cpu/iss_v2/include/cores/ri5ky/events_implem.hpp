@@ -41,6 +41,17 @@ inline void Ri5kyEvents::event_load_load_account(int incr)
     this->iss.csr.pccr_account(CSR_PCER_LD_STALL, 1);
 }
 
+inline void Ri5kyEvents::event_elw_account(int elw_cycles, int gated_cycles)
+{
+    // Cycles wasted by a p.elw event load, charged to PCCR[11]
+    // (CSR_PCER_ELW) to mirror RTL's perf_pipeline_stall_o.
+    this->iss.csr.pccr_account(CSR_PCER_ELW, elw_cycles);
+    // The clock-gated park does not advance PCCR[0] (busy_exit disables the
+    // cycle event); RTL keeps the cycle counter running through ELW_EXE, so
+    // add the gated span back to match.
+    this->iss.csr.pccr_account(CSR_PCER_CYCLES, gated_cycles);
+}
+
 inline void Ri5kyEvents::event_instr_account()
 {
     Events::event_instr_account();
