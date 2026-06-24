@@ -1,5 +1,3 @@
-# SoftHier
-
 ## Getting Started
 
 1. Navigate to the root directory of the GVSOC repository and add the following line to your `Makefile`:
@@ -48,9 +46,9 @@
       make sh-run TOPOLOGY=[topology]
    ```
 
-   Where [topology] can be 3d, torus, 3d_torus, ring, hierarchical_ring, hexamesh or fht (FoldedHexatorus)
+   Where [topology] can be 3d, torus, 3d_torus, ring, hierarchical_ring, hexamesh or fht (FoldedHexaTorus)
 
-8. FlooGen works by adding a floogen.yml into a chip's folder. Keep in mind to comment out any manual instantiation.
+8. FlooGen works by adding a `floogen.yml` configuration file into a chip's folder. Keep in mind to comment out any manual instantiation.
 9. Custom routing tables can be imported by adding a routing.yml file into a chip's folder.
    The connections should be defined as:
 
@@ -62,3 +60,5 @@
    router_1_0:
       cluster_ni_1_1: cluster_ni_1_1
    ```
+
+10. When using FlooGen, keep in mind to update the topology dimension in `softhier_arch.py`.
