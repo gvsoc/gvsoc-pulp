@@ -50,7 +50,7 @@ class SoftHierSystem(gvsoc.systree.Component):
         #############
         # Assertion #
         #############
-        assert(1 + 3 * arch.num_rings * (arch.num_rings + 1) == arch.num_cluster, f"Topology dimensions are mismatched")
+        assert 1 + 3 * arch.num_rings * (arch.num_rings + 1) == arch.num_cluster, f"Topology dimensions are mismatched"
 
         ##############
         # Components #
