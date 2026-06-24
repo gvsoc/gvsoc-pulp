@@ -47,10 +47,6 @@ class SoftHierSystem(gvsoc.systree.Component):
             [args, otherArgs] = parser.parse_known_args()
             binary = args.binary
 
-        #############
-        # Assertion #
-        #############
-
         ##############
         # Components #
         ##############

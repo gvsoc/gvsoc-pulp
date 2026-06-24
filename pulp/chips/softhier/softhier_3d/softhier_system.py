@@ -51,7 +51,7 @@ class SoftHierSystem(gvsoc.systree.Component):
         #############
         # Assertion #
         #############
-        assert(arch.num_cluster_x * arch.num_cluster_y * arch.num_cluster_z == arch.num_cluster, f"Topology dimesion not match total number of clusters")
+        assert arch.num_cluster_x * arch.num_cluster_y * arch.num_cluster_z == arch.num_cluster, f"Topology dimesion not match total number of clusters"
 
         ##############
         # Components #
