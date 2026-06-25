@@ -1,0 +1,33 @@
+--- /srv/home/francesco.conti9/Devel/gvsoc/pulp/pulp/chips/pulp_open_hwpe/l1_subsystem.py	2026-06-25 11:35:49.105511729 +0200
++++ /srv/home/francesco.conti9/Devel/gvsoc/pulp/pulp/chips/pulp_open_hwpe_BK/l1_subsystem.py	2026-06-25 10:31:15.968548879 +0200
+@@ -45,9 +45,9 @@
+         nb_l1_banks = 1<<int(math.log(nb_pe * l1_banking_factor, 2.0))
+         l1_bank_size = int(cluster_conf.get_property('l1/mapping/size', int) / nb_l1_banks)
+ 
+-#### TASK-6 -- Add one more port for the hwpe
++#### SOLUTION-6 -- Add one more port for the hwpe
+ 
+-        l1_interleaver_nb_masters = nb_pe + 4 + 1 # 1 port per PE + 4 for DMA + 1 for NE16
++        l1_interleaver_nb_masters = nb_pe + 4 + 1 + 1 # 1 port per PE + 4 for DMA + 1 for NE16 + 1 for SimpleHWPE
+         first_external_pcer = 12
+         power_models = cluster_conf.get_property('l1/power_models')
+ 
+@@ -68,7 +68,7 @@
+             pe_icos.append(Router(self, 'pe%d_ico' % i))
+ 
+         # L1 interleaver
+-        interleaver = L1_interleaver(self, 'interleaver', nb_slaves=nb_l1_banks, nb_masters=l1_interleaver_nb_masters, interleaving_bits=2)
++        interleaver = L1_interleaver(self, 'interleaver', nb_slaves=nb_l1_banks, nb_masters=l1_interleaver_nb_masters, interleaving_bits=2)        
+ 
+         # EXT2LOC
+         ext2loc = Converter(self, 'ext2loc', output_width=4, output_align=4)
+@@ -125,7 +125,8 @@
+         for i in range(0, nb_l1_banks):
+             self.bind(interleaver, 'out_%d' % i, l1_banks[i], 'input')
+ 
+-#### TASK-7 -- Bind it with hwpe port name and attach it with correct index of the L1 subsystem's interleaver. Hint: (nb_pe + 5) connection
++#### SOLUTION-7 -- Bind it with hwpe port name and attach it with correct index of the L1 subsystem's interleaver. Hint: (nb_pe + 5) connection
++        self.bind(self, 'hwpe', interleaver, 'in_%d' % (nb_pe + 5))
+ 
+         self.bind(self, 'ne16_in', interleaver, 'in_%d' % (nb_pe + 4))
+         self.bind(self, 'redmule_in', interleaver, 'in_%d' % (nb_pe + 4)) # TODO: check why it is "nb_pe + 4" and not "nb_pe + 8" -> alternative to NE16!!

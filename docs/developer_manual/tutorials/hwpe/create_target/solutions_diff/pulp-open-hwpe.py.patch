@@ -1,0 +1,23 @@
+--- /srv/home/francesco.conti9/Devel/gvsoc/pulp/pulp-open-hwpe.py	2026-06-24 22:33:18.203053946 +0200
++++ /srv/home/francesco.conti9/Devel/gvsoc/core/docs/developer_manual/tutorials/hwpe/create_target/solutions/task3/pulp-open-hwpe.py	2026-06-24 22:20:46.946462834 +0200
+@@ -14,16 +14,16 @@
+ # limitations under the License.
+ #
+ 
+-#### TASK - Change the path from pulp.chips.pulp_open.pulp_open_board to pulp.chips.pulp_open_hwpe.pulp_open_board
++#### SOLUTION - Change the path from pulp.chips.pulp_open.pulp_open_board to pulp.chips.pulp_open_hwpe.pulp_open_board
+ 
+-from pulp.chips.pulp_open.pulp_open_board import Pulp_open_board
++from pulp.chips.pulp_open_hwpe.pulp_open_board import Pulp_open_board
+ import gvsoc.runner as gvsoc
+ 
+ class Target(gvsoc.Target):
+ 
+-    gapy_description="Pulp-open virtual board"
++    gapy_description = "Pulp-open-hwpe virtual board"
+     model = Pulp_open_board
+-    name = "pulp-open"
++    name = "pulp-open-hwpe"
+ 
+     def __init__(self, parser, options=None, name=None):
+         super(Target, self).__init__(parser, options,

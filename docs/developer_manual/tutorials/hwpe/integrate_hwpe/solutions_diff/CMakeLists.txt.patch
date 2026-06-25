@@ -1,0 +1,38 @@
+--- /srv/home/francesco.conti9/Devel/gvsoc/pulp/pulp/CMakeLists.txt	2026-06-24 23:16:24.688674040 +0200
++++ /srv/home/francesco.conti9/Devel/gvsoc/core/docs/developer_manual/tutorials/hwpe/integrate_hwpe/solutions/CMakeLists.txt	2026-05-23 12:27:38.962261986 +0200
+@@ -1,3 +1,19 @@
++#
++# Copyright (C) 2022-2026 ETH Zurich and University of Bologna
++#
++# Licensed under the Apache License, Version 2.0 (the "License");
++# you may not use this file except in compliance with the License.
++# You may obtain a copy of the License at
++#
++#     http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing, software
++# distributed under the License is distributed on an "AS IS" BASIS,
++# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++# See the License for the specific language governing permissions and
++# limitations under the License.
++#
++
+ add_subdirectory(adv_dbg_unit)
+ add_subdirectory(cluster)
+ add_subdirectory(padframe)
+@@ -14,10 +30,13 @@
+ add_subdirectory(udma)
+ add_subdirectory(soc_eu)
+ add_subdirectory(stdout)
++
++#### SOLUTION INTEGRATE HWPE - Added simple_hwpe subdirectory
++add_subdirectory(simple_hwpe)
++
+ add_subdirectory(neureka)
+ add_subdirectory(datamover)
+ add_subdirectory(spatz)
+ add_subdirectory(snitch)
+ add_subdirectory(redmule)
+ add_subdirectory(pcie_vfio_bridge)
+-add_subdirectory(simple_hwpe)
+\ No newline at end of file
