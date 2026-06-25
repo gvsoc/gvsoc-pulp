@@ -81,6 +81,7 @@ class L2_subsystem(gvsoc.systree.Component):
 
         for i in range(0, nb_banks):
             self.bind(self, 'input_%d' % i, input_itfs[i], 'input')
+            self.bind(self, f'meminfo_{i}', l2_banks[i], 'meminfo')
 
         self.bind(self, 'input_loader', loader_router, 'input')
 

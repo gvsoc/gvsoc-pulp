@@ -35,6 +35,7 @@ from interco.converter import Converter
 from pulp.teranoc.teranoc_cluster import TeranocCluster
 from pulp.teranoc.ctrl_registers import CtrlRegisters
 from pulp.teranoc.l2_subsystem import L2_subsystem
+from pulp.teranoc.mempool_dpi_checker import MempoolDpiChecker
 from pulp.teranoc.l2_interconnect.l2_address_scrambler import L2AddressScrambler
 from pulp.teranoc.l2_interconnect.l2_noc import L2_noc
 from pulp.teranoc.arch import CONFIGS, DEFAULT_CONFIG
@@ -59,6 +60,31 @@ def _get_option(options, *names):
         if sep and key.strip() in names:
             return val.strip()
     return None
+
+
+def _get_dpi_check_symbols(binary):
+    if binary is None:
+        return 0, 0
+
+    check_count_addr = 0
+    check_table_addr = 0
+
+    try:
+        with open(binary, 'rb') as file:
+            elffile = ELFFile(file)
+            for section_name in ('.symtab', '.dynsym'):
+                symtab = elffile.get_section_by_name(section_name)
+                if symtab is None:
+                    continue
+                for symbol in symtab.iter_symbols():
+                    if symbol.name == 'mempool_dpi_check_count':
+                        check_count_addr = symbol.entry['st_value']
+                    elif symbol.name == 'mempool_dpi_checks':
+                        check_table_addr = symbol.entry['st_value']
+    except Exception:
+        return 0, 0
+
+    return check_count_addr, check_table_addr
 
 
 class TeranocSystem(st.Component):
@@ -87,6 +113,15 @@ class TeranocSystem(st.Component):
 
         # L2 Memory
         l2_mem = L2_subsystem(self, 'l2_mem', nb_banks=arch.nb_l2_banks, bank_width=axi_data_width, size=arch.l2_size, port_bandwidth=axi_data_width)
+
+        dpi_check_count, dpi_check_table = _get_dpi_check_symbols(binary)
+        dpi_checker = MempoolDpiChecker(self, 'mempool_dpi_checker',
+            nb_banks=arch.nb_l2_banks, bank_width=axi_data_width,
+            interleave=arch.l2_axi_interleave,
+            l2_base=0x80000000, l2_size=arch.l2_size,
+            check_count_addr=dpi_check_count,
+            check_table_addr=dpi_check_table)
+        self.dpi_checker = dpi_checker
 
         # CSR
         csr = CtrlRegisters(self, 'ctrl_registers', wakeup_latency=5)
@@ -211,6 +246,9 @@ class TeranocSystem(st.Component):
 
         # CSR
         self.bind(periph_ico, 'csr', csr, 'input')
+        self.bind(csr, 'dpi_check', dpi_checker, 'input')
+        for i in range(0, arch.nb_l2_banks):
+            self.bind(dpi_checker, f'meminfo_{i}', l2_mem, f'meminfo_{i}')
 
         # DMA Ctrl
         self.bind(periph_ico, 'dma_ctrl', dma, 'input')
@@ -286,6 +324,7 @@ class TeranocSoc(st.Component):
             arch=arch, binary=binary)
         self.bind(clock, 'out', system, 'clock')
         self.loader = system.loader
+        self.dpi_checker = system.dpi_checker
         self.register_binary_handler(self.handle_binary)
 
     @override
@@ -293,6 +332,8 @@ class TeranocSoc(st.Component):
         binary = self.get_parameter('binary')
         if binary is not None:
             self.loader.set_binary(binary)
+            dpi_check_count, dpi_check_table = _get_dpi_check_symbols(binary)
+            self.dpi_checker.set_symbols(dpi_check_count, dpi_check_table)
 
     def handle_binary(self, binary: str):
         self.set_parameter('binary', binary)
