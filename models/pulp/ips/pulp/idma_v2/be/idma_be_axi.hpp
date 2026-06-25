@@ -103,9 +103,13 @@ private:
         // monotonically as issue_beat() consumes them; reset when the slot is
         // freed.
         int next_beat_idx = 0;
-        // Pre-allocated beat pool. Reads only ever use beats[0] (a single
-        // full-size IoReq per burst); writes use one slot per cycle.
+        // Pre-allocated beat pool used by writes (one slot per cycle).
         std::vector<vp::IoReq> beats;
+        // Read request: a single full-size IoReq per burst, heap-allocated so
+        // the consuming side (slave or auto-inserted beat adapter) owns and
+        // frees it like any other request. Held here only across a DENIED retry;
+        // cleared to nullptr once the bus accepts it (ownership handed off).
+        vp::IoReq *read_req = nullptr;
         bool is_write = false;
     };
 

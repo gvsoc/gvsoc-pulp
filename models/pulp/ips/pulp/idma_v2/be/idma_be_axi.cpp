@@ -83,6 +83,9 @@ IDmaBeAxi::~IDmaBeAxi()
 {
     for (BurstInfo *info : this->burst_info)
     {
+        // Free a read request still held from an un-acked DENIED retry (nullptr
+        // once the bus accepted it and took ownership).
+        delete info->read_req;
         delete info;
     }
     for (uint8_t *buf : this->burst_data)
@@ -115,6 +118,11 @@ void IDmaBeAxi::reset(bool active)
             info->write_pending_acks.clear();
             info->write_bytes_source_acked = 0;
             info->next_beat_idx = 0;
+            if (info->read_req != nullptr)
+            {
+                delete info->read_req;
+                info->read_req = nullptr;
+            }
             info->is_write = false;
             this->free_bursts.push(info);
         }
@@ -262,9 +270,16 @@ bool IDmaBeAxi::issue_beat()
     }
     else
     {
-        // Reads: exactly one full-size req per burst.
+        // Reads: exactly one full-size req per burst, on a heap-allocated
+        // request the consuming side owns and frees (no pooled object handed
+        // out). Reuse the same object across a DENIED retry; clear the handle
+        // once the bus accepts it.
         int slot_idx = (int)info->burst_id;
-        vp::IoReq *beat = &info->beats[0];
+        if (info->read_req == nullptr)
+        {
+            info->read_req = new vp::IoReq();
+        }
+        vp::IoReq *beat = info->read_req;
 
         beat->prepare();
         beat->set_is_write(false);
@@ -274,6 +289,7 @@ bool IDmaBeAxi::issue_beat()
         beat->is_first = true;
         beat->is_last  = true;
         beat->burst_id = info->burst_id;
+        beat->initiator = info;
         beat->set_resp_status(vp::IO_RESP_OK);
 
         this->trace.msg(vp::Trace::LEVEL_TRACE,
@@ -286,9 +302,11 @@ bool IDmaBeAxi::issue_beat()
             this->denied_blocked = true;
             this->trace.msg(vp::Trace::LEVEL_TRACE,
                 "Read burst denied by AXI (slot: %d)\n", slot_idx);
-            return false;
+            return false;   // keep info->read_req for the retry
         }
 
+        // Accepted: the bus side (slave / beat adapter) owns the request now.
+        info->read_req = nullptr;
         info->bytes_issued = info->total_size;
         this->pending_bursts.pop();
         this->be->update();
@@ -360,6 +378,14 @@ void IDmaBeAxi::resp_meth(vp::Block *__this, vp::IoReq *req)
         self->read_push_queue.push(std::make_tuple(info, beat_data, beat_size));
         self->fsm_event.enqueue();
     }
+
+    // Free the read response beat now that its bytes have been forwarded (the
+    // data lives in burst_data, not in the beat). Every read beat is a freeable
+    // object: a multi-beat read delivers adapter-allocated beats, and a
+    // single-beat read round-trips our own heap read_req — both are ours to
+    // delete here. (The write path returns above; its acks ride the pooled
+    // beats[] slots and must not be freed.)
+    delete req;
 }
 
 
