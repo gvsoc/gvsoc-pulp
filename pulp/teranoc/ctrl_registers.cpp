@@ -40,6 +40,7 @@ private:
     vp::Trace trace;
     vp::IoSlave input_itf;
     vp::WireMaster<bool> barrier_ack_itf;
+    vp::WireMaster<int> dpi_check_itf;
     vp::WireMaster<IssOffloadInsn<uint32_t>*> rocache_cfg_itf;
     vp::ClockEvent * wakeup_event;
     int wakeup_latency;
@@ -56,6 +57,7 @@ CtrlRegisters::CtrlRegisters(vp::ComponentConf &config)
 
     this->new_slave_port("input", &this->input_itf);
     this->new_master_port("barrier_ack", &this->barrier_ack_itf);
+    this->new_master_port("dpi_check", &this->dpi_check_itf);
     this->new_master_port("rocache_cfg", &this->rocache_cfg_itf);
     this->wakeup_event = this->event_new(&CtrlRegisters::wakeup_event_handler);
     wakeup_latency = get_js_config()->get_child_int("wakeup_latency");
@@ -87,8 +89,24 @@ vp::IoReqStatus CtrlRegisters::req(vp::Block *__this, vp::IoReq *req)
         if (offset == 0 && (value & 1) && !_this->eoc_reached)
         {
             _this->eoc_reached = true;
-            std::cout << "EOC register return value: 0x" << std::hex << ((value - 1) >> 1) << std::endl;
-            _this->time.get_engine()->quit(value >> 1);
+            uint32_t retval = value >> 1;
+            int dpi_errors = 0;
+            std::cout << "EOC register return value: 0x" << std::hex << ((value - 1) >> 1)
+                << std::dec << std::endl;
+            if (_this->dpi_check_itf.is_bound())
+            {
+                _this->dpi_check_itf.sync_back(&dpi_errors);
+            }
+            if (dpi_errors != 0)
+            {
+                std::cout << "[DPI_CHECK] Result verification failed with " << dpi_errors
+                    << " errors" << std::endl;
+                if (retval == 0)
+                {
+                    retval = 1;
+                }
+            }
+            _this->time.get_engine()->quit(retval);
         }
         if (offset == 4 && value == 0xFFFFFFFF)
         {
