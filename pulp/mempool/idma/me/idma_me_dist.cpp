@@ -150,16 +150,19 @@ void IDmaMeDist::ack_transfer(IdmaTransfer *transfer)
     // And terminate the transfer if all bursts have been sent and no more burst is pending
     if (transfer->parent->bursts_sent && transfer->parent->nb_bursts == 0)
     {
-        this->trace.msg(vp::Trace::LEVEL_TRACE, "Finished transfer (transfer: %p)\n", transfer->parent);
+        // Keep the parent in a local since the loop below frees all the bursts of this
+        // transfer, including the one we received, making transfer->parent a dangling read.
+        IdmaTransfer *parent = transfer->parent;
+        this->trace.msg(vp::Trace::LEVEL_TRACE, "Finished transfer (transfer: %p)\n", parent);
         for (auto &queue: this->transfer_queue) {
-            if (queue.empty() || queue.front()->parent != transfer->parent) {
+            if (queue.empty() || queue.front()->parent != parent) {
                 this->trace.fatal("Transfer completion mismatch\n");
             }
             IdmaTransfer *burst = queue.front();
             queue.pop();
             delete burst;
         }
-        this->fe->ack_transfer(transfer->parent);
+        this->fe->ack_transfer(parent);
         this->fe->update();
     }
 
