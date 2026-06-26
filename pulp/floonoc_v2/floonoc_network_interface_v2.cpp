@@ -275,10 +275,11 @@ void NetworkInterfaceV2::set_router(int nw, RouterV2 *router)
     }
 }
 
-void NetworkInterfaceV2::wide_response(vp::Block *__this, vp::IoReq *req)
+vp::IoRespAck NetworkInterfaceV2::wide_response(vp::Block *__this, vp::IoReq *req)
 {
     NetworkInterfaceV2 *_this = (NetworkInterfaceV2 *)__this;
     _this->handle_response((FloonocReqV2 *)req);
+    return vp::IO_RESP_ACCEPTED;
 }
 
 void NetworkInterfaceV2::wide_retry(vp::Block *__this, vp::IoRetryChannel)
@@ -322,10 +323,11 @@ void NetworkInterfaceV2::wide_retry(vp::Block *__this, vp::IoRetryChannel)
     _this->fsm_event.enqueue();
 }
 
-void NetworkInterfaceV2::narrow_response(vp::Block *__this, vp::IoReq *req)
+vp::IoRespAck NetworkInterfaceV2::narrow_response(vp::Block *__this, vp::IoReq *req)
 {
     NetworkInterfaceV2 *_this = (NetworkInterfaceV2 *)__this;
     _this->handle_response((FloonocReqV2 *)req);
+    return vp::IO_RESP_ACCEPTED;
 }
 
 void NetworkInterfaceV2::narrow_retry(vp::Block *__this, vp::IoRetryChannel)

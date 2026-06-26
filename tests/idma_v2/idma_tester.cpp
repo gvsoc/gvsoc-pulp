@@ -66,9 +66,9 @@ private:
         PHASE_DONE,
     };
 
-    static void regs_resp(vp::Block *__this, vp::IoReq *req);
+    static vp::IoRespAck regs_resp(vp::Block *__this, vp::IoReq *req);
     static void regs_retry(vp::Block *__this, vp::IoRetryChannel);
-    static void mem_resp(vp::Block *__this, vp::IoReq *req);
+    static vp::IoRespAck mem_resp(vp::Block *__this, vp::IoReq *req);
     static void mem_retry(vp::Block *__this, vp::IoRetryChannel);
     static void irq_sync(vp::Block *__this, bool value);
     static void step_handler(vp::Block *__this, vp::ClockEvent *event);
@@ -425,16 +425,17 @@ void IDmaTesterV2::step()
 }
 
 
-void IDmaTesterV2::regs_resp(vp::Block *__this, vp::IoReq *req)
+vp::IoRespAck IDmaTesterV2::regs_resp(vp::Block *__this, vp::IoReq *req)
 {
     IDmaTesterV2 *_this = (IDmaTesterV2 *)__this;
     if (req->get_resp_status() != vp::IO_RESP_OK)
     {
         _this->fail("reg op returned INVALID");
-        return;
+        return vp::IO_RESP_ACCEPTED;
     }
     _this->waiting_for_resp = false;
     _this->schedule_step(1);
+    return vp::IO_RESP_ACCEPTED;
 }
 
 
@@ -455,13 +456,13 @@ void IDmaTesterV2::regs_retry(vp::Block *__this, vp::IoRetryChannel)
 }
 
 
-void IDmaTesterV2::mem_resp(vp::Block *__this, vp::IoReq *req)
+vp::IoRespAck IDmaTesterV2::mem_resp(vp::Block *__this, vp::IoReq *req)
 {
     IDmaTesterV2 *_this = (IDmaTesterV2 *)__this;
     if (req->get_resp_status() != vp::IO_RESP_OK)
     {
         _this->fail("mem op returned INVALID");
-        return;
+        return vp::IO_RESP_ACCEPTED;
     }
     if (_this->phase == PHASE_READBACK)
     {
@@ -471,11 +472,12 @@ void IDmaTesterV2::mem_resp(vp::Block *__this, vp::IoReq *req)
                 _this->mem_expected_offset,
                 _this->mem_data[0], _this->mem_data[1], _this->mem_data[2], _this->mem_data[3],
                 _this->mem_expected[0], _this->mem_expected[1], _this->mem_expected[2], _this->mem_expected[3]);
-            return;
+            return vp::IO_RESP_ACCEPTED;
         }
     }
     _this->waiting_for_resp = false;
     _this->schedule_step(1);
+    return vp::IO_RESP_ACCEPTED;
 }
 
 

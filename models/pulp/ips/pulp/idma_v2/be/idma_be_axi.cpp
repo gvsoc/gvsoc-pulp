@@ -316,7 +316,7 @@ bool IDmaBeAxi::issue_beat()
 
 
 
-void IDmaBeAxi::resp_meth(vp::Block *__this, vp::IoReq *req)
+vp::IoRespAck IDmaBeAxi::resp_meth(vp::Block *__this, vp::IoReq *req)
 {
     auto *self = (IDmaBeAxi *)__this;
     BurstInfo *info = (BurstInfo *)req->initiator;
@@ -359,7 +359,7 @@ void IDmaBeAxi::resp_meth(vp::Block *__this, vp::IoReq *req)
             self->free_bursts.push(info);
             self->be->update();
         }
-        return;
+        return vp::IO_RESP_ACCEPTED;
     }
 
     // Read beat. The downstream has already paced this at the modeled ready
@@ -386,6 +386,8 @@ void IDmaBeAxi::resp_meth(vp::Block *__this, vp::IoReq *req)
     // delete here. (The write path returns above; its acks ride the pooled
     // beats[] slots and must not be freed.)
     delete req;
+
+    return vp::IO_RESP_ACCEPTED;
 }
 
 
