@@ -94,6 +94,12 @@ protected:
     uint32_t reps2_dma0;
     uint32_t reps2_dma1;
 
+    uint64_t dma0_transfer_time_start;
+    uint64_t dma0_transfer_time_stop;
+
+    uint64_t dma1_transfer_time_start;
+    uint64_t dma1_transfer_time_stop;
+
     vp::Trace trace;
 };
 
@@ -135,6 +141,12 @@ Magia_iDMA_Ctrl::Magia_iDMA_Ctrl(vp::ComponentConf &config)
     this->reps2_dma0=0;
     this->reps2_dma1=0;
 
+    this->dma0_transfer_time_start=0;
+    this->dma0_transfer_time_stop=0;
+
+    this->dma1_transfer_time_start=0;
+    this->dma1_transfer_time_stop=0;
+
     this->trace.msg(vp::Trace::LEVEL_TRACE,"[Magia iDMA Ctrl] Instantiated\n");
 
 }
@@ -147,7 +159,8 @@ void Magia_iDMA_Ctrl::fsm_handler_dma0(vp::Block *__this, vp::ClockEvent *event)
     switch (_this->state_dma0.get()) {
         case IDLE:
         {    
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[Magia iDMA Ctrl] DMA0 In IDLE\n");
+            _this->dma0_transfer_time_stop=_this->clock.get_cycles(); 
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[Magia iDMA Ctrl] DMA0 In IDLE. Transfer cycles are %ld\n",_this->dma0_transfer_time_stop-_this->dma0_transfer_time_start);
             // IssOffloadInsnGrant<uint32_t> offload_grant = {
             //     .result=0x0
             // };
@@ -183,7 +196,8 @@ void Magia_iDMA_Ctrl::fsm_handler_dma1(vp::Block *__this, vp::ClockEvent *event)
     switch (_this->state_dma1.get()) {
         case IDLE:
         {    
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[Magia iDMA Ctrl] DMA1 In IDLE\n");
+            _this->dma1_transfer_time_stop=_this->clock.get_cycles();
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[Magia iDMA Ctrl] DMA1 In IDLE. Transfer cycles are %ld\n",_this->dma1_transfer_time_stop-_this->dma1_transfer_time_start);
             // IssOffloadInsnGrant<uint32_t> offload_grant = {
             //     .result=0x0
             // };
@@ -264,6 +278,7 @@ void Magia_iDMA_Ctrl::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t>
                         _this->trace.fatal("[Magia iDMA Ctrl] Received dmstr for IDMA - DIR: %d when not in IDLE state\n",dir);
                     }
                     else {
+                        _this->dma0_transfer_time_start=_this->clock.get_cycles();
                         _this->offload_itf_idma0.sync(&dmrep);
                         _this->offload_itf_idma0.sync(&dmcpyi);
                         _this->state_dma0.set(POLL_STS_REG);
@@ -289,6 +304,7 @@ void Magia_iDMA_Ctrl::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t>
                         _this->trace.fatal("[Magia iDMA Ctrl] Received dmstr for IDMA - DIR: %d when not in IDLE state\n",dir);
                     }
                     else {
+                        _this->dma1_transfer_time_start=_this->clock.get_cycles();
                         _this->offload_itf_idma1.sync(&dmrep);
                         _this->offload_itf_idma1.sync(&dmcpyi);
                         _this->state_dma1.set(POLL_STS_REG);

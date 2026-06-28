@@ -103,7 +103,8 @@ vp::IoReqStatus DmaInterleaver::req(vp::Block *__this, vp::IoReq *req)
         offset += bank_size;
         size -= bank_size;
         data += bank_size;
-        bank_req.set_latency(0); // Reset the latency because we always use the same request object
+        //bank_req.set_latency(0); // Reset the latency because we always use the same request object
+        bank_req.init(); //the new latency model does not allow to set_latency if the requested latency is <= of the current one
     }
     req->inc_latency(max_delay);
     _this->trace.msg(vp::Trace::LEVEL_TRACE, "Increasing latency for req %p by %ld \n", req, max_delay);

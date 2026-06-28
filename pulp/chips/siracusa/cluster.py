@@ -15,7 +15,7 @@
 #
 
 import gvsoc.systree as st
-import pulp.cpu.iss.pulp_cores as iss
+import pulp.chips.siracusa.pulp_cores as iss
 from cache.hierarchical_cache import Hierarchical_cache
 from pulp.chips.siracusa.l1_subsystem import L1_subsystem
 from pulp.chips.siracusa.wmem_subsystem import Wmem_subsystem
@@ -50,6 +50,13 @@ def get_cluster_name(cid: int):
         return 'cluster_%d' % (cid)
 
 
+class ClusterConf(st.Component):
+    def __init__(self, property_file):
+        super(ClusterConf, self).__init__(parent=None, name='')
+
+        self.add_properties(self.load_property_file(property_file))
+
+
 class Cluster(st.Component):
     """
     Cluster subsystem
@@ -68,20 +75,21 @@ class Cluster(st.Component):
         # Properties
         #
 
-        self.add_properties(self.load_property_file(config_file))
+        cluster_conf = ClusterConf(config_file)
+        self.conf = cluster_conf
 
-        nb_pe               = self.get_property('nb_pe', int)
-        cluster_size        = self.get_property('mapping/size', int)
+        nb_pe               = cluster_conf.get_property('nb_pe', int)
+        cluster_size        = cluster_conf.get_property('mapping/size', int)
         self.cluster_offset = cluster_size * cid
-        self.cluster_base   = self.get_property('mapping/base', int)
-        self.cluster_alias  = self.get_property('alias', int)
-        neureka_irq            = self.get_property('pe/irq').index('acc_0')
-        dma_irq_0           = self.get_property('pe/irq').index('dma_0')
-        dma_irq_1           = self.get_property('pe/irq').index('dma_1')
-        dma_irq_ext         = self.get_property('pe/irq').index('dma_ext')
-        timer_irq_0         = self.get_property('pe/irq').index('timer_0')
-        timer_irq_1         = self.get_property('pe/irq').index('timer_1')
-        first_external_pcer = self.get_property('iss_config/first_external_pcer')
+        self.cluster_base   = cluster_conf.get_property('mapping/base', int)
+        self.cluster_alias  = cluster_conf.get_property('alias', int)
+        neureka_irq            = cluster_conf.get_property('pe/irq').index('acc_0')
+        dma_irq_0           = cluster_conf.get_property('pe/irq').index('dma_0')
+        dma_irq_1           = cluster_conf.get_property('pe/irq').index('dma_1')
+        dma_irq_ext         = cluster_conf.get_property('pe/irq').index('dma_ext')
+        timer_irq_0         = cluster_conf.get_property('pe/irq').index('timer_0')
+        timer_irq_1         = cluster_conf.get_property('pe/irq').index('timer_1')
+        first_external_pcer = cluster_conf.get_property('iss_config/first_external_pcer')
 
 
         #
@@ -89,7 +97,7 @@ class Cluster(st.Component):
         #
 
         # L1 subsystem
-        l1 = L1_subsystem(self, 'l1', self)
+        l1 = L1_subsystem(self, 'l1', self, cluster_conf)
 
         # Cores
         pes = []
@@ -97,10 +105,10 @@ class Cluster(st.Component):
             pes.append(iss.ClusterCore(self, 'pe%d' % i, cluster_id=cid, core_id=i))
 
         # Icache
-        icache = Hierarchical_cache(self, 'icache', self.get_property('icache/config'))
+        icache = Hierarchical_cache(self, 'icache', cluster_conf.get_property('icache/config'))
 
         # Event unit
-        event_unit = Event_unit(self, 'event_unit', self.get_property('peripherals/event_unit/config'))
+        event_unit = Event_unit(self, 'event_unit', cluster_conf.get_property('peripherals/event_unit/config'))
 
         # Cluster interconnect
         cluster_ico = Router(self, 'cluster_ico', latency=2)
@@ -127,7 +135,7 @@ class Cluster(st.Component):
         icache_ctrl = Icache_ctrl(self, 'icache_ctrl')
 
         # Wmem
-        wmem = Wmem_subsystem(self, 'wmem', self)
+        wmem = Wmem_subsystem(self, 'wmem', self, cluster_conf)
 
 
         #
@@ -168,49 +176,49 @@ class Cluster(st.Component):
         # Cluster interconnect
         self.bind(self, 'input', cluster_ico, 'input')
 
-        cluster_ico.add_mapping('error', **self._reloc_mapping(self.get_property('mapping')))
+        cluster_ico.add_mapping('error', **self._reloc_mapping(cluster_conf.get_property('mapping')))
 
         cluster_ico.add_mapping('soc')
         self.bind(cluster_ico, 'soc', self, 'soc')
 
-        cluster_ico.add_mapping('l1', **self._reloc_mapping(self.get_property('l1/mapping')))
+        cluster_ico.add_mapping('l1', **self._reloc_mapping(cluster_conf.get_property('l1/mapping')))
         self.bind(cluster_ico, 'l1', l1, 'ext2loc')
 
-        cluster_ico.add_mapping('wmem_soc', base=self.get_property('wmem/base'),
-            size=self.get_property('wmem/size'))
+        cluster_ico.add_mapping('wmem_soc', base=cluster_conf.get_property('wmem/base'),
+            size=cluster_conf.get_property('wmem/size'))
         self.bind(cluster_ico, 'wmem_soc', wmem, 'input')
 
-        cluster_ico.add_mapping('l1_ts', **self._reloc_mapping(self.get_property('l1/ts_mapping')))
+        cluster_ico.add_mapping('l1_ts', **self._reloc_mapping(cluster_conf.get_property('l1/ts_mapping')))
         self.bind(cluster_ico, 'l1_ts', l1, 'ext2loc_ts')
 
-        cluster_ico.add_mapping('periph_ico', **self.get_property('peripherals/mapping'))
+        cluster_ico.add_mapping('periph_ico', **cluster_conf.get_property('peripherals/mapping'))
         self.bind(cluster_ico, 'periph_ico', periph_ico, 'input')
 
-        cluster_ico.add_mapping('periph_ico_alias', **self.get_property('peripherals/alias'), add_offset=int(self.get_property('peripherals/mapping/base'), 0) - int(self.get_property('peripherals/alias/base'), 0))
+        cluster_ico.add_mapping('periph_ico_alias', **cluster_conf.get_property('peripherals/alias'), add_offset=int(cluster_conf.get_property('peripherals/mapping/base'), 0) - int(cluster_conf.get_property('peripherals/alias/base'), 0))
         self.bind(cluster_ico, 'periph_ico_alias', periph_ico, 'input')
 
         # Periph interconnect
-        periph_ico.add_mapping('error', **self._reloc_mapping(self.get_property('mapping')))
+        periph_ico.add_mapping('error', **self._reloc_mapping(cluster_conf.get_property('mapping')))
 
         periph_ico.add_mapping('cluster_ico')
         self.bind(periph_ico, 'cluster_ico', cluster_ico, 'input')
 
-        periph_ico.add_mapping('event_unit', **self._reloc_mapping(self.get_property('peripherals/event_unit/mapping')))
+        periph_ico.add_mapping('event_unit', **self._reloc_mapping(cluster_conf.get_property('peripherals/event_unit/mapping')))
         self.bind(periph_ico, 'event_unit', event_unit, 'input')
 
-        periph_ico.add_mapping('cluster_ctrl', **self._reloc_mapping(self.get_property('peripherals/cluster_ctrl/mapping')))
+        periph_ico.add_mapping('cluster_ctrl', **self._reloc_mapping(cluster_conf.get_property('peripherals/cluster_ctrl/mapping')))
         self.bind(periph_ico, 'cluster_ctrl', cluster_control, 'input')
 
-        periph_ico.add_mapping('icache_ctrl', **self._reloc_mapping(self.get_property('peripherals/icache_ctrl/mapping')))
+        periph_ico.add_mapping('icache_ctrl', **self._reloc_mapping(cluster_conf.get_property('peripherals/icache_ctrl/mapping')))
         self.bind(periph_ico, 'icache_ctrl', icache_ctrl, 'input')
 
-        periph_ico.add_mapping('timer', **self._reloc_mapping(self.get_property('peripherals/timer/mapping')))
+        periph_ico.add_mapping('timer', **self._reloc_mapping(cluster_conf.get_property('peripherals/timer/mapping')))
         self.bind(periph_ico, 'timer', timer, 'input')
 
-        periph_ico.add_mapping('dma', **self._reloc_mapping(self.get_property('peripherals/dma/mapping')))
+        periph_ico.add_mapping('dma', **self._reloc_mapping(cluster_conf.get_property('peripherals/dma/mapping')))
         self.bind(periph_ico, 'dma', mchan, 'in_%d' % nb_pe)
 
-        periph_ico.add_mapping('neureka', **self._reloc_mapping(self.get_property('peripherals/neureka/mapping')))
+        periph_ico.add_mapping('neureka', **self._reloc_mapping(cluster_conf.get_property('peripherals/neureka/mapping')))
         self.bind(periph_ico, 'neureka', neureka, 'input')
 
         # MCHAN

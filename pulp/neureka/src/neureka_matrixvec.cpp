@@ -19,8 +19,9 @@
  *          Arpan Suravi Prasad, ETH Zurich (prasadar@iis.ee.ethz.ch)
  */
 
-// as the internal max precision of NE16 is 32 bits, this is emulated by casting x to 32 bits here
+// as the internal max precision of NEUREKA is 32 bits, this is emulated by casting x to 32 bits here
 #include <neureka.hpp>
+
 xt::xarray<uint8_t> __Weight_transform_1x1(xt::xarray<uint8_t> W)
 {
   xt::xarray<uint8_t> wout_1x1 = xt::zeros<uint8_t>({32});
@@ -264,14 +265,13 @@ void Neureka::matrixvec_setup() {
 }
 
 int Neureka::matrixvec_cycle() {
-  auto& vld_W = this->depthwise ? this->vld_W_dw       : (this->fs == 3) ? this->vld_W_3x3       : this->vld_W_1x1;
+  auto& vld_W = this->depthwise ? this->vld_W_dw : (this->fs == 3) ? this->vld_W_3x3 : this->vld_W_1x1;
 
-  auto read_size = 8;//fixed for differnt layout in pointwise mode
+  const int read_size = 8; // fixed for different layout in pointwise mode
 
   auto k_out = this->depthwise ? this->dw_iter : this->mv_k_out_iter;
   // load and unpack weight bits
   int64_t cycles = 0;
-  bool fetch_weight;
   xt::xarray<uint8_t> weight_ld;
   
   if((this->depthwise && (this->dw_iter==0)) || (!this->depthwise)){
@@ -289,20 +289,17 @@ int Neureka::matrixvec_cycle() {
     weight_ld = xt::view(this->dw_weight_buffer, this->mv_qw_iter, xt::all());
   }
 
-  std::ostringstream stringStream;
-  stringStream << "Weight Read =" << xt::view(weight_ld, xt::all())<<"\n";
-  std::string copyOfStr = stringStream.str();
-  this->trace.msg(vp::Trace::LEVEL_DEBUG, copyOfStr.c_str());
-
-  auto shape = xt::adapt(weight_ld.shape());
+  if (trace_at_least(this->trace_level, NEUREKA_L3_ALL)) {
+    std::ostringstream stream;
+    stream << "MATRIX_VECTOR_COMPUTE WEIGHT READ: " << xt::view(weight_ld, xt::all()) << "\n";
+    const std::string msg = stream.str();
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, msg.c_str());
+  }
 
   xt::xarray<uint8_t> weight_ld_transform = (this->fs == 3) ? __Weight_transform_28(weight_ld) : __Weight_transform_1x1(weight_ld);
 
   auto weight = __WeightUnpack(weight_ld_transform, (this->fs==3) ? 9 : read_size, this->TP_IN);
   auto scale = 1 << this->mv_qw_iter;
-
-  xt::xarray<int32_t> space = xt::logspace(0, 7, 8, 2);
-  space = xt::reshape_view(space, {8, 1});
 
   this->__BinConvArray(weight, scale, k_out, this->row_enable, this->mac_enable, false, false, this->fs==1);
 
@@ -314,12 +311,7 @@ void Neureka::reset_dw_weight_buffer() {
 }
 
 bool Neureka::matrixvec_exit_idx() {
-  if(this->mv_k_out_iter == this->mv_k_out_lim-1 && this->mv_qw_iter == this->mv_qw_lim-1) {
-    return true;
-  }
-  else {
-    return false;
-  }
+  return this->mv_k_out_iter == this->mv_k_out_lim-1 && this->mv_qw_iter == this->mv_qw_lim-1;
 }
 
 void Neureka::matrixvec_update_idx() {
@@ -333,20 +325,10 @@ void Neureka::matrixvec_update_idx() {
 }
 
 bool Neureka::matrixvec_to_matrixvec_idx() {
-  if((this->dw_iter == this->dw_lim-1)) {
-    return true;
-  }
-  else {
-    return false;
-  }
+  return this->dw_iter == this->dw_lim-1;
 }
 
 bool Neureka::matrixvec_to_load_idx() {
   auto k_in_major_lim = this->depthwise ? 1 : this->subtile_nb_ki;
-  if(this->k_in_major_iter == k_in_major_lim-1) {
-    return true;
-  }
-  else {
-    return false;
-  }
+  return this->k_in_major_iter == k_in_major_lim-1;
 }

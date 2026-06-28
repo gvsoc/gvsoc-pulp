@@ -22,6 +22,7 @@ from utils.clock_generator import Clock_generator
 from pulp.padframe.padframe_v1 import Padframe
 import interco.router_proxy as router_proxy
 import memory.dramsys
+import memory.pim_component
 from gvrun.attribute import Tree, Area, Value
 
 class PulpOpenAttr(Tree):
@@ -34,7 +35,7 @@ class Pulp_open(st.Component):
 
     def __init__(self, parent, name, attr: PulpOpenAttr, parser, soc_config_file='pulp/chips/pulp_open/soc.json',
             cluster_config_file='pulp/chips/pulp_open/cluster.json', padframe_config_file='pulp/chips/pulp_open/padframe.json',
-            use_ddr=False, pulpnn=False):
+            use_ddr=False, pim_support=False, pulpnn=False):
         super(Pulp_open, self).__init__(parent, name)
 
         #
@@ -69,7 +70,7 @@ class Pulp_open(st.Component):
             clusters.append(Cluster(self, cluster_name, config_file=cluster_config_file, cid=cid, pulpnn=pulpnn))
 
         # Soc
-        soc = Soc(self, 'soc', attr.soc, parser, config_file=soc_config_file, chip=self, cluster=clusters[0], pulpnn=pulpnn)
+        soc = Soc(self, 'soc', attr.soc, parser, config_file=soc_config_file, chip=self, cluster=clusters[0], pim_support=pim_support,pulpnn=pulpnn)
 
         # Fast clock
         fast_clock = Clock_domain(self, 'fast_clock', frequency=24576063*2)
@@ -84,7 +85,9 @@ class Pulp_open(st.Component):
 
         # DRAMsys
         if use_ddr:
-            ddr = memory.dramsys.Dramsys(self, 'ddr')
+            ddr = memory.dramsys.Dramsys(self, 'ddr', pim_support=pim_support)
+            if pim_support:
+                pim_component = memory.pim_component.PimComponent(self, 'pim_component')
 
 
         #
@@ -135,6 +138,8 @@ class Pulp_open(st.Component):
         self.bind(soc_clock, 'out', axi_proxy, 'clock')
         if use_ddr:
             self.bind(soc_clock, 'out', ddr, 'clock')
+            if pim_support:
+                self.bind(soc_clock, 'out', pim_component, 'clock')
 
         # Clusters
         for cid in range(0, nb_cluster):
@@ -169,7 +174,11 @@ class Pulp_open(st.Component):
         self.bind(soc, 'axi_proxy', axi_proxy, 'input')
         if use_ddr:
             self.bind(soc, 'ddr', ddr, 'input')
-
+            if pim_support:
+                self.bind(ddr, 'send_memspec', pim_component, 'rcv_memspec')
+                self.bind(soc, 'pim_toggle', ddr, 'pim_toggle')
+                self.bind(ddr, 'pim_notify', pim_component, 'pim_notify')
+                self.bind(pim_component, 'pim_data', ddr, 'pim_data')
 
     def gen_gtkw_conf(self, tree, traces):
         if tree.get_view() == 'overview':

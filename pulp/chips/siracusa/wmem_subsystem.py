@@ -23,17 +23,17 @@ import math
 
 class Wmem_subsystem(st.Component):
 
-    def __init__(self, parent, name, cluster):
+    def __init__(self, parent, name, cluster, cluster_conf):
         super(Wmem_subsystem, self).__init__(parent, name)
 
         #
         # Properties
         #
 
-        nb_pe = cluster.get_property('nb_pe', int)
-        l1_banking_factor = cluster.get_property('l1/banking_factor')
+        nb_pe = cluster_conf.get_property('nb_pe', int)
+        l1_banking_factor = cluster_conf.get_property('l1/banking_factor')
         nb_wmem_banks = 1<<int(math.log(nb_pe * l1_banking_factor, 2.0))
-        wmem_bank_size = int(cluster.get_property('wmem/size', int) / nb_wmem_banks)
+        wmem_bank_size = int(cluster_conf.get_property('wmem/size', int) / nb_wmem_banks)
 
         #
         # Components
@@ -41,9 +41,9 @@ class Wmem_subsystem(st.Component):
 
         interleaver = Interleaver(self, 'interleaver',  interleaving_bits=2, nb_masters=2, nb_slaves=nb_wmem_banks, stage_bits=0)
         ico = Router(self, 'ico', latency=2)
-        ico.add_mapping('wmem_cluster', **cluster._reloc_mapping(cluster.get_property('wmem')))
+        ico.add_mapping('wmem_cluster', **cluster._reloc_mapping(cluster_conf.get_property('wmem')))
         self.bind(ico, 'wmem_cluster', interleaver, 'in_0')
-        neureka_mapping = cluster._reloc_mapping(cluster.get_property('wmem'))
+        neureka_mapping = cluster._reloc_mapping(cluster_conf.get_property('wmem'))
         neureka_mapping['base'] = 0x0
         neureka_mapping['remove_offset'] = 0x0
         ico.add_mapping('wmem_neureka', **neureka_mapping)
@@ -57,7 +57,7 @@ class Wmem_subsystem(st.Component):
         # Bindings
         #
 
-        # ico.add_mapping('wmem_translated_address', **cluster._reloc_mapping(cluster.get_property('wmem')))
+        # ico.add_mapping('wmem_translated_address', **cluster._reloc_mapping(cluster_conf.get_property('wmem')))
         # self.bind(ico, 'wmem_translated_address', interleaver, 'in_0')
 
         for i in range(0, nb_wmem_banks):

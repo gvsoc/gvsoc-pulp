@@ -30,4 +30,4 @@ class Target(gvsoc.runner.Target):
     gapy_description: str = "Snitch testbench"
     model: type[Component] = SnitchTestbenchBoard
     name: str = ""
-    config: SnitchTestbenchBoardConfig = SnitchTestbenchBoardConfig()
+    config: SnitchTestbenchBoardConfig = SnitchTestbenchBoardConfig("snitch_testbench")

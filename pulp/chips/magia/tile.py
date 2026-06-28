@@ -22,13 +22,12 @@ import interco.router as router
 import gdbserver.gdbserver
 from pulp.stdout.stdout_v3 import Stdout
 
-import pulp.cpu.iss.pulp_cores as iss
 from pulp.cluster.l1_interleaver import L1_interleaver
 from pulp.light_redmule.hwpe_interleaver import HWPEInterleaver
 from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 from pulp.chips.magia.cv32.hierarchical_cache import Hierarchical_cache
 
-from pulp.chips.magia.arch import MagiaArch
+from pulp.chips.magia.arch import *
 from pulp.chips.magia.cv32.core import CV32CoreTest
 #from pulp.redmule.redmule import RedMule
 from pulp.light_redmule.light_redmule import LightRedmule
@@ -62,7 +61,7 @@ class MagiaTileTcdm(gvsoc.systree.Component):
         banks = []
         for i in range(nb_banks):
             # Instantiate a new memory bank
-            bank = memory.Memory(self, f'bank_{i}', atomics=True, size=bank_size, latency=0)
+            bank = memory.Memory(self, f'bank_{i}', atomics=True, size=bank_size, latency=MagiaDSE.TILE_TCDM_LATENCY)
             banks.append(bank)
 
             # Bind the new bank (slave) to the interleaver (master)
@@ -105,24 +104,24 @@ class MagiaTile(gvsoc.systree.Component):
         l1_tcdm = MagiaTileTcdm(self, f'tile-{tid}-tcdm', parser)
 
         # AXI and OBI x-bars
-        tile_xbar = router.Router(self, f'tile-{tid}-axi-xbar',bandwidth=4,latency=2,synchronous=True)
-        obi_xbar = router.Router(self, f'tile-{tid}-obi-xbar',bandwidth=4,latency=2,synchronous=True)
+        tile_xbar = router.Router(self, f'tile-{tid}-axi-xbar',bandwidth=4,latency=MagiaDSE.TILE_AXI_XBAR_LATENCY,synchronous=MagiaDSE.TILE_AXI_XBAR_SYNC)
+        obi_xbar = router.Router(self, f'tile-{tid}-obi-xbar',bandwidth=4,latency=MagiaDSE.TILE_OBI_XBAR_LATENCY,synchronous=MagiaDSE.TILE_OBI_XBAR_SYNC)
 
         # IDMA Controller
         idma_ctrl= Magia_iDMA_Ctrl(self,f'tile-{tid}-idma-ctrl')
 
         # IDMA
-        idma0 = SnitchDma(self,f'tile-{tid}-idma0',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4,transfer_queue_size=1,burst_queue_size=2,burst_size=4)
-        idma1 = SnitchDma(self,f'tile-{tid}-idma1',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4,transfer_queue_size=1,burst_queue_size=4,burst_size=4)
+        idma0 = SnitchDma(self,f'tile-{tid}-idma0',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4,transfer_queue_size=1,burst_queue_size=MagiaDSE.TILE_IDMA0_BQUEUE_SIZE,burst_size=MagiaDSE.TILE_IDMA0_B_SIZE)
+        idma1 = SnitchDma(self,f'tile-{tid}-idma1',loc_base=tid*MagiaArch.L1_TILE_OFFSET,loc_size=MagiaArch.L1_SIZE,tcdm_width=4,transfer_queue_size=1,burst_queue_size=MagiaDSE.TILE_IDMA1_BQUEUE_SIZE,burst_size=MagiaDSE.TILE_IDMA1_B_SIZE)
 
         # Redmule
         redmule = LightRedmule(self, f'tile-{tid}-redmule',
                                     tcdm_bank_width     = MagiaArch.BYTES_PER_WORD,
-                                    tcdm_bank_number    = MagiaArch.N_MEM_BANKS,
+                                    tcdm_bank_number    = 16, # here we set 16 since tcdm_bank_width x tcdm_bank_number --> 16 x 4 = 64bytes, i.e., 512 bits. Please do not consider tcdm_bank_width and tcdm_bank_number as the boundaries of the TCDM, but rather the size of the port towards it. 
                                     elem_size           = 2, #max number of bytes per element --> if FP16 then elem_size=2. This is the max number to accomodate any supported format which for now are 8bits and 16bits data types 
                                     ce_height           = 8,
-                                    ce_width            = 8,
-                                    ce_pipe             = 1,
+                                    ce_width            = 24,
+                                    ce_pipe             = 3,
                                     queue_depth         = 1,
                                     loc_base            = tid*MagiaArch.L1_TILE_OFFSET)
         

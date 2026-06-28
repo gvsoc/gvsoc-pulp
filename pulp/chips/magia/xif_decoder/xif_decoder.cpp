@@ -81,6 +81,9 @@ protected:
 
     //static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
 
+    uint64_t fsync_time_start;
+    uint64_t fsync_time_stop;
+
     vp::Trace trace;
     //vp::ClockEvent *idma_event;
     //vp::ClockEvent *redmule_event;
@@ -127,6 +130,10 @@ XifDecoder::XifDecoder(vp::ComponentConf &config)
     this->new_master_port("neighbour_fractal_ew_input_port", &this->neighbour_fractal_ew_input_port, this);
     this->new_master_port("neighbour_fractal_ns_input_port", &this->neighbour_fractal_ns_input_port, this);
 
+    //please note that latency calculation works under the assumption that multiple requests to same fsync module are not allowed from the same tile
+    this->fsync_time_start=0; 
+    this->fsync_time_stop=0;
+
 
     this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] Instantiated\n");
 
@@ -159,14 +166,15 @@ void XifDecoder::fractal_output_method(vp::Block *__this, PortResp<uint32_t> *re
     XifDecoder *_this = (XifDecoder *)__this;
 
     if ((req->wake) && (!req->error)) {
+        _this->fsync_time_stop=_this->clock.get_cycles();
         if (id==fractal_directions::EAST_WEST)
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received wake response from EAST-WEST Fractal [id=%d aggr=0x%08x]\n",req->id_rsp,req->lvl);
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received wake response from EAST-WEST Fractal [id=%d aggr=0x%08x latency=%lu]\n",req->id_rsp,req->lvl,_this->fsync_time_stop-_this->fsync_time_start);
         else if (id==fractal_directions::NORD_SUD)
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received wake response from NORD-SUD Fractal [id=%d aggr=0x%08x]\n",req->id_rsp,req->lvl);
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received wake response from NORD-SUD Fractal [id=%d aggr=0x%08x latency=%lu]\n",req->id_rsp,req->lvl,_this->fsync_time_stop-_this->fsync_time_start);
         else if (id==fractal_directions::NEIGHBOUR_EAST_WEST)
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received wake response from NEIGHBOUR-EAST-WEST Fractal [id=%d aggr=0x%08x]\n",req->id_rsp,req->lvl);
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received wake response from NEIGHBOUR-EAST-WEST Fractal [id=%d aggr=0x%08x latency=%lu]\n",req->id_rsp,req->lvl,_this->fsync_time_stop-_this->fsync_time_start);
         else if (id==fractal_directions::NEIGHBOUR_NORD_SUD)
-            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received wake response from NEIGHBOUR-NORD-SUD Fractal [id=%d aggr=0x%08x]\n",req->id_rsp,req->lvl);
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[XifDecoder] received wake response from NEIGHBOUR-NORD-SUD Fractal [id=%d aggr=0x%08x latency=%lu]\n",req->id_rsp,req->lvl,_this->fsync_time_stop-_this->fsync_time_start);
         else
             _this->trace.fatal("[XifDecoder] wrong direction\n");
         IssOffloadInsnGrant<uint32_t> offload_grant = {
@@ -206,6 +214,7 @@ void XifDecoder::offload_sync_m(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
                     .aggr=insn->arg_a,
                     .id_req=insn->arg_b
                 };
+                _this->fsync_time_start=_this->clock.get_cycles();
                 if (req.aggr==0b1) {
                     if (req.id_req == 0)
                         _this->fractal_ew_input_port.sync(&req);

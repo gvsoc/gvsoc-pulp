@@ -88,9 +88,12 @@ class MempoolXbar(gvsoc.systree.Component):
         only when input packet size is smaller or equal to the bandwidth.
     """
     def __init__(self, parent: gvsoc.systree.Component, name: str, latency: int=0, bandwidth: int=0,
-            nb_input_port: int=1, nb_output_port: int=1, shared_rw_bandwidth: bool=False, max_input_pending_size=0):
+            nb_input_port: int=1, nb_output_port: int=1, shared_rw_bandwidth: bool=False, max_input_pending_size=0,
+            use_selector: bool=True):
         super(MempoolXbar, self).__init__(parent, name)
 
+        assert use_selector or (nb_output_port == 1), "If selector is not used, only one output port is allowed."
+        assert latency <= 1, "Currently only latency 0 or 1 is supported."
         # This will store the whole set of mappings and passed to model as a dictionary
         self.add_property('mappings', {})
         self.add_property('latency', latency)
@@ -101,5 +104,6 @@ class MempoolXbar(gvsoc.systree.Component):
         # Set number of input ports to 1 by default because some models do not use i_INPUT yet.
         self.add_property('nb_input_port', nb_input_port)
         self.add_property('nb_output_port', nb_output_port)
+        self.add_property('use_selector', use_selector)
 
         self.add_sources(['pulp/mempool/xbar/mempool_xbar.cpp'])

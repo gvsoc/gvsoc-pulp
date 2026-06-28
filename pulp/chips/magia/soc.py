@@ -20,10 +20,9 @@ import gvsoc.systree
 import memory.memory as memory
 import vp.clock_domain
 import utils.loader.loader
-import interco.router as router
 
 from pulp.chips.magia.tile import MagiaTile
-from pulp.chips.magia.arch import MagiaArch
+from pulp.chips.magia.arch import *
 from pulp.floonoc.floonoc import *
 from pulp.chips.magia.fractal_sync.fractal_sync import *
 from pulp.chips.magia.kill_module.kill_module import *
@@ -71,7 +70,7 @@ class MagiaSoc(gvsoc.systree.Component):
         for id in range(0,tree.NB_CLUSTERS):
             cluster.append(MagiaTile(self, f'magia-tile-{id}', tree, parser, id))
 
-        l2_mem = memory.Memory(self, f'L2-mem', size=MagiaArch.L2_SIZE,latency=1)
+        l2_mem = memory.Memory(self, f'L2-mem', size=MagiaArch.L2_SIZE,latency=MagiaDSE.SOC_L2_LATENCY)
 
         # Create Tile matrix for IDs
         # --------------> X direction

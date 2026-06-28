@@ -16,13 +16,12 @@
 
 from dataclasses import dataclass
 
-from gvrun.config import Config, cfg_field
+from config_tree import Config, cfg_field
 from memory.memory_config import MemoryConfig
 from interco.router_config import RouterMapping, RouterConfig
 from pulp.snitch.snitch_core_config import SnitchCoreConfig
 
 # Disable repr to avoid displaying long name in tree
-@dataclass(repr=False)
 class SnitchTestbenchConfig(Config):
     """Configuration for Snitch testbench.
 
@@ -41,7 +40,7 @@ class SnitchTestbenchConfig(Config):
         "Base address of the module"
     ))
 
-    has_async: bool = cfg_field(default=True, dump=True, desc=(
+    has_async: bool = cfg_field(default=True, desc=(
         "Instantiate asynchronous path"
     ))
 
@@ -121,28 +120,27 @@ class SnitchTestbenchConfig(Config):
         super().__post_init__()
 
         self.core = SnitchCoreConfig(isa='rv32imfdca', nb_outstanding=8)
-        self.mem_l0 = MemoryConfig(self, 'mem_l0', size=0x10_0000, atomics=True, latency=0)
-        self.mem_l1 = MemoryConfig(self, 'mem_l1', size=0x10_0000, atomics=True, latency=10)
-        self.mem_l2 = MemoryConfig(self, 'mem_l2', size=0x10_0000, atomics=True, latency=1000)
+        self.mem_l0 = MemoryConfig('mem_l0', size=0x10_0000, atomics=True, latency=0)
+        self.mem_l1 = MemoryConfig('mem_l1', size=0x10_0000, atomics=True, latency=10)
+        self.mem_l2 = MemoryConfig('mem_l2', size=0x10_0000, atomics=True, latency=1000)
         self.router_sync = RouterConfig(synchronous=True)
-        self.mem_l0_mapping = RouterMapping(self, 'mem_l0_mapping', self.base_addr + 0x0000_0000, 0x10_0000)
-        self.mem_l1_mapping = RouterMapping(self, 'mem_l1_mapping', self.base_addr + 0x0010_0000, 0x10_0000)
-        self.mem_l2_mapping = RouterMapping(self, 'mem_l2_mapping', self.base_addr + 0x0020_0000, 0x10_0000)
+        self.mem_l0_mapping = RouterMapping('mem_l0_mapping', base=self.base_addr + 0x0000_0000, size=0x10_0000)
+        self.mem_l1_mapping = RouterMapping('mem_l1_mapping', self.base_addr + 0x0010_0000, 0x10_0000)
+        self.mem_l2_mapping = RouterMapping('mem_l2_mapping', self.base_addr + 0x0020_0000, 0x10_0000)
 
         if self.has_async:
             self.router_async = RouterConfig(synchronous=False, max_input_pending_size=4)
             self.router_async_2 = RouterConfig(synchronous=True, max_input_pending_size=4, bandwidth=1)
-            self.mem_l0_async_mapping = RouterMapping(self, 'mem_l0_async_mapping', self.base_addr + 0x1000_0000, 0x10_0000, latency=0)
-            self.mem_l1_async_mapping = RouterMapping(self, 'mem_l1_async_mapping', self.base_addr + 0x1010_0000, 0x10_0000, latency=10)
-            self.mem_l2_async_mapping = RouterMapping(self, 'mem_l2_async_mapping', self.base_addr + 0x1020_0000, 0x10_0000, latency=1000)
-            self.async_area_mapping   = RouterMapping(self, 'async_area_mapping', self.base_addr + 0x1000_0000, 0x30_0000, remove_base=False)
-            self.mem_l0_2_async_mapping = RouterMapping(self, 'mem_l0_2_async_mapping', self.base_addr + 0x2000_0000, 0x10_0000, latency=0)
-            self.mem_l1_2_async_mapping = RouterMapping(self, 'mem_l1_2_async_mapping', self.base_addr + 0x2010_0000, 0x10_0000, latency=10)
-            self.mem_l2_2_async_mapping = RouterMapping(self, 'mem_l2_2_async_mapping', self.base_addr + 0x2020_0000, 0x10_0000, latency=1000)
-            self.async_2_area_mapping   = RouterMapping(self, 'async_2_area_mapping', self.base_addr + 0x2000_0000, 0x30_0000, remove_base=False)
+            self.mem_l0_async_mapping = RouterMapping('mem_l0_async_mapping', self.base_addr + 0x1000_0000, 0x10_0000, latency=0)
+            self.mem_l1_async_mapping = RouterMapping('mem_l1_async_mapping', self.base_addr + 0x1010_0000, 0x10_0000, latency=10)
+            self.mem_l2_async_mapping = RouterMapping('mem_l2_async_mapping', self.base_addr + 0x1020_0000, 0x10_0000, latency=1000)
+            self.async_area_mapping   = RouterMapping('async_area_mapping', self.base_addr + 0x1000_0000, 0x30_0000, remove_base=False)
+            self.mem_l0_2_async_mapping = RouterMapping('mem_l0_2_async_mapping', self.base_addr + 0x2000_0000, 0x10_0000, latency=0)
+            self.mem_l1_2_async_mapping = RouterMapping('mem_l1_2_async_mapping', self.base_addr + 0x2010_0000, 0x10_0000, latency=10)
+            self.mem_l2_2_async_mapping = RouterMapping('mem_l2_2_async_mapping', self.base_addr + 0x2020_0000, 0x10_0000, latency=1000)
+            self.async_2_area_mapping   = RouterMapping('async_2_area_mapping', self.base_addr + 0x2000_0000, 0x30_0000, remove_base=False)
 
 
-@dataclass(repr=False)
 class SnitchTestbenchBoardConfig(Config):
 
     frequency: int = cfg_field(default=10000000, dump=True, desc=(
@@ -159,13 +157,12 @@ class SnitchTestbenchBoardConfig(Config):
 
     def __post_init__(self):
         super().__post_init__()
-        self.soc = SnitchTestbenchConfig(self, 'soc', base_addr=self.base_addr)
+        self.soc = SnitchTestbenchConfig('soc', base_addr=self.base_addr)
 
 
-@dataclass(repr=False)
 class SnitchTestbenchMultiBoardConfig(Config):
 
-    nb_boards: int = cfg_field(default=2, dump=True, desc=(
+    nb_boards: int = cfg_field(init=False, dump=True, desc=(
         "Number of boards"
     ))
 
@@ -176,8 +173,9 @@ class SnitchTestbenchMultiBoardConfig(Config):
     def __post_init__(self):
         super().__post_init__()
 
+        self.nb_boards = 2
         self.boards = []
         base_addr = 0x8000_0000
         for id in range(0, self.nb_boards):
-            self.boards.append(SnitchTestbenchBoardConfig(self, f'board_{id}', base_addr=base_addr))
+            self.boards.append(SnitchTestbenchBoardConfig(f'board_{id}', base_addr=base_addr))
             base_addr += 0x3000_0000

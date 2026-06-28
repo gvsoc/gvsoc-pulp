@@ -1,3 +1,4 @@
+# SoftHier
 ## Getting Started
 
 1. Navigate to the root directory of the GVSOC repository and add the following line to your `Makefile`:
@@ -29,7 +30,7 @@
    The default application is located at:
 
    ```
-   pulp/pulp/chips/softhier/sw/app_example
+   pulp/pulp/chips/softhier/softhier/sw/app_example
    ```
 
 6. Run the simulation:

@@ -14,13 +14,17 @@
 # limitations under the License.
 #
 
-from pulp.teranoc.teranoc_system import TeranocSystem
+from pulp.teranoc.teranoc_system import TeranocSoc
 import gvsoc.runner as gvsoc
 
 GAPY_TARGET = True
 
 class Target(gvsoc.Target):
 
-    def __init__(self, parser, options):
+    gapy_description = "TeranocSoc"
+    model = TeranocSoc
+    name = "teranoc"
+
+    def __init__(self, parser, options=None, name=None):
         super(Target, self).__init__(parser, options,
-            model=TeranocSystem, description="TeranocSystem")
+            model=TeranocSoc, description="TeranocSoc", name=name)

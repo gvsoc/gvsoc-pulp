@@ -39,10 +39,10 @@ void Neureka::clear_all() {
   this->dw_lim = 0;
   this->dw_iter = 0;
 
-  // STREAMIN state
+  // ACCUM_STREAMIN state
   this->streamin_ij_out = 0;
 
-  // LOAD state
+  // ACTIVATION_LOAD state
   this->load_fbuf_lim = 0;
   this->load_i_fbuf_lim = 0;
   this->load_j_fbuf_lim = 0;
@@ -51,11 +51,11 @@ void Neureka::clear_all() {
   this->load_i_fbuf = 0;
   this->load_j_fbuf = 0;
 
-  // MATRIXVEC state
+  // MATRIX_VECTOR_COMPUTE state
   this->mv_k_out_iter = 0;
   this->mv_qw_iter = 0; // was simply qw
 
-  // STREAMOUT state
+  // OUTPUT_STREAMOUT state
   this->streamout_i_out_iter = 0;
   this->streamout_i_out_lim = 0;
   this->streamout_j_out_iter = 0;

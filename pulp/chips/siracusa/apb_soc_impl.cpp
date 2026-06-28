@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/* 
+/*
  * Authors: Germain Haugou, GreenWaves Technologies (germain.haugou@greenwaves-technologies.com)
  */
 
@@ -111,8 +111,8 @@ vp::IoReqStatus apb_soc_ctrl::req(vp::Block *__this, vp::IoReq *req)
       // We are writing to the status register, the 31 LSBs are the return value of the platform and the last bit
       // makes the platform exit when set to 1
       _this->core_status = *(uint32_t *)data;
-      
-      if ((_this->core_status >> APB_SOC_STATUS_EOC_BIT) & 1) 
+
+      if ((_this->core_status >> APB_SOC_STATUS_EOC_BIT) & 1)
       {
         _this->time.get_engine()->quit(_this->core_status & 0x7fffffff);
       }
@@ -132,7 +132,7 @@ vp::IoReqStatus apb_soc_ctrl::req(vp::Block *__this, vp::IoReq *req)
       _this->trace.msg("Setting boot address (addr: 0x%x)\n", *(uint32_t *)data);
       if (_this->bootaddr_itf.is_bound())
         _this->bootaddr_itf.sync(*(uint32_t *)data);
-      
+
       _this->bootaddr = *(uint32_t *)data;
     }
     else *(uint32_t *)data = _this->bootaddr;

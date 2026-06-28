@@ -35,7 +35,7 @@ class Pulp_open(st.Component):
         cluster_config_file = self.add_property('cluster_config_file', cluster_config_file)
         nb_cluster = self.add_property('nb_cluster', 1)
 
-    
+
         #
         # Components
         #
@@ -125,7 +125,7 @@ class Pulp_open(st.Component):
             cluster = clusters[cid]
             self.bind(ref_clock_generator, 'clock_sync', cluster, 'ref_clock')
             self.bind(cluster, 'dma_irq', soc, 'dma_irq')
-            for pe in range(0, clusters[0].get_property('nb_pe', int)):
+            for pe in range(0, clusters[0].conf.get_property('nb_pe', int)):
                 self.bind(soc, 'halt_cluster%d_pe%d' % (cid, pe), cluster, 'halt_pe%d' % pe)
 
             self.bind(cluster_clocks[cid], 'out', clusters[cid], 'clock')

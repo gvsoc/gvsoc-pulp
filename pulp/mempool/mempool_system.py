@@ -17,13 +17,21 @@
 # Author: Yichao Zhang (ETH Zurich) (yiczhang@iis.ee.ethz.ch)
 #         Yinrong Li (ETH Zurich) (yinrli@student.ethz.ch)
 
+try:
+    from typing import override  # Python 3.12+
+except ImportError:
+    from typing_extensions import override  # Python 3.10–3.11
+
+import os
+
 import memory.memory as memory
 from vp.clock_domain import Clock_domain
 import interco.router as router
 import devices.uart.ns16550 as ns16550
 import utils.loader.loader
 import gvsoc.systree as st
-from pulp.mempool.dma.mempool_dma import MemPoolDma
+from gvrun.parameter import TargetParameter
+from pulp.mempool.dma.mempool_dma_top import MemPoolDmaTop
 from elftools.elf.elffile import *
 from pulp.mempool.mempool_cluster import Cluster
 from pulp.mempool.ctrl_registers import CtrlRegisters
@@ -31,21 +39,29 @@ from pulp.mempool.l2_subsystem import L2_subsystem
 
 class System(st.Component):
 
-    def __init__(self, parent, name, parser, terapool: bool=False, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1, l2_size: int=0x1000000, nb_l2_banks: int=4):
+    def __init__(self, parent, name, parser, terapool: bool=False, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, axi_data_width: int=64, nb_axi_masters_per_group: int=1, nb_dmas_per_group: int=1, l2_size: int=0x1000000, nb_l2_banks: int=4, terapool_group_latency: int=7, nb_fus_per_core: int=1):
         super().__init__(parent, name)
 
         ################################################################
         ##########               Design Variables             ##########
         ################################################################
 
-        [args, __] = parser.parse_known_args()
+        _ = TargetParameter(
+            self, name='binary', value=None, description='Binary to be loaded and started',
+            cast=str
+        )
 
+        # With the legacy gvsoc launcher, configure() is never called and the binary comes
+        # from the command line, so it must be resolved now. With gvrun, it comes from a
+        # parameter and is handled in configure() since it can also be set from the build
+        # process.
         binary = None
-        if parser is not None:
-            [args, otherArgs] = parser.parse_known_args()
+        if os.environ.get('USE_GVRUN') is None and parser is not None:
+            [args, __] = parser.parse_known_args()
             binary = args.binary
 
         nb_axi_masters = nb_axi_masters_per_group * nb_groups
+        nb_banks_per_group = (total_cores // nb_groups) * bank_factor
         async_l1_interco = True
 
         ################################################################
@@ -55,14 +71,15 @@ class System(st.Component):
         #Mempool cluster
         mempool_cluster=Cluster(self, 'mempool_cluster', async_l1_interco=async_l1_interco, terapool=terapool, parser=parser, nb_cores_per_tile=nb_cores_per_tile,
                             nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor,
-                            axi_data_width=axi_data_width, nb_axi_masters_per_group=nb_axi_masters_per_group)
+                            axi_data_width=axi_data_width, nb_axi_masters_per_group=nb_axi_masters_per_group, nb_dmas_per_group=nb_dmas_per_group, terapool_group_latency=terapool_group_latency, 
+                            nb_fus_per_core=nb_fus_per_core)
 
         # Boot Rom
         rom = memory.Memory(self, 'rom', size=0x1000, width_log2=(axi_data_width - 1).bit_length(), stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
 
         # L2 Memory
         # Efficient bandwidth of each port is only 1/4 of axi_data_width in current design
-        l2_mem = L2_subsystem(self, 'l2_mem', nb_banks=nb_l2_banks, bank_width=axi_data_width, size=l2_size, nb_masters=nb_axi_masters, port_bandwidth=axi_data_width//4)
+        l2_mem = L2_subsystem(self, 'l2_mem', nb_banks=nb_l2_banks, bank_width=axi_data_width, size=l2_size, nb_masters=nb_axi_masters, port_bandwidth=axi_data_width)
 
         # CSR
         csr = CtrlRegisters(self, 'ctrl_registers', wakeup_latency=18 if terapool else 15)
@@ -71,7 +88,8 @@ class System(st.Component):
         uart = ns16550.Ns16550(self, 'uart')
 
         # DMA
-        dma = MemPoolDma(self, 'dma', loc_base=0x0, loc_size=0x400000, tcdm_width=total_cores*bank_factor*4)
+        dma = MemPoolDmaTop(self, 'dma', loc_base=0x0, loc_size=0x400000, burst_size=4*nb_banks_per_group//nb_dmas_per_group, tcdm_width=4*nb_banks_per_group//nb_dmas_per_group,
+                            nb_groups=nb_groups, nb_dmas_per_group=nb_dmas_per_group, be_width=4*nb_banks_per_group//nb_dmas_per_group)
 
         # Binary Loader
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=0x80000000)
@@ -158,10 +176,29 @@ class System(st.Component):
 
         #DMA data
         #To emulate distributed backends in groups
-        self.bind(dma, 'axi_read', mempool_cluster, 'dma_axi')
-        self.bind(dma, 'axi_write', mempool_cluster, 'dma_axi')
-        self.bind(dma, 'tcdm_read', mempool_cluster, 'dma_tcdm')
-        self.bind(dma, 'tcdm_write', mempool_cluster, 'dma_tcdm')
+        for i in range(nb_groups):
+            for j in range(nb_dmas_per_group):
+                self.bind(dma, f'axi_read_{i}_{j}', mempool_cluster, f'dma_axi_{i}_{j}')
+                self.bind(dma, f'axi_write_{i}_{j}', mempool_cluster, f'dma_axi_{i}_{j}')
+                self.bind(dma, f'tcdm_read_{i}_{j}', mempool_cluster, f'dma_tcdm_{i}_{j}')
+                self.bind(dma, f'tcdm_write_{i}_{j}', mempool_cluster, f'dma_tcdm_{i}_{j}')
+
+        self.loader = loader
+        self.register_binary_handler(self.handle_binary)
+
+    @override
+    def configure(self) -> None:
+        # We configure the loader binary now in the configure step since it is coming from
+        # a parameter which can be set either from command line or from the build process
+        binary = self.get_parameter('binary')
+        if binary is not None:
+            self.loader.set_binary(binary)
+
+    def handle_binary(self, binary: str):
+        # This gets called when an executable is attached to a hierarchy of components containing
+        # this one
+        self.set_parameter('binary', binary)
+
 
 class MempoolSystem(st.Component):
 
@@ -171,7 +208,19 @@ class MempoolSystem(st.Component):
 
         clock = Clock_domain(self, 'clock', frequency=500000000)
 
-        soc = System(self, 'mempool_soc', parser, terapool=False, nb_cores_per_tile=4, nb_sub_groups_per_group=1, nb_groups=4, total_cores=256, bank_factor=4, axi_data_width=64, nb_axi_masters_per_group=1, l2_size=0x400000, nb_l2_banks=4)
+        soc = System(self, 'mempool_soc', parser, terapool=False, nb_cores_per_tile=4, nb_sub_groups_per_group=1, nb_groups=4, total_cores=256, bank_factor=4, axi_data_width=64, nb_axi_masters_per_group=1, nb_dmas_per_group=1, l2_size=0x400000, nb_l2_banks=4, nb_fus_per_core=1)
+
+        self.bind(clock, 'out', soc, 'clock')
+
+class MempoolSpatzSystem(st.Component):
+
+    def __init__(self, parent, name, parser, options):
+
+        super(MempoolSpatzSystem, self).__init__(parent, name, options=options)
+
+        clock = Clock_domain(self, 'clock', frequency=500000000)
+
+        soc = System(self, 'mempool_soc', parser, terapool=False, nb_cores_per_tile=1, nb_sub_groups_per_group=1, nb_groups=4, total_cores=64, bank_factor=4, axi_data_width=64, nb_axi_masters_per_group=1, nb_dmas_per_group=1, l2_size=0x400000, nb_l2_banks=4, nb_fus_per_core=4)
 
         self.bind(clock, 'out', soc, 'clock')
 
@@ -183,7 +232,19 @@ class MinpoolSystem(st.Component):
 
         clock = Clock_domain(self, 'clock', frequency=500000000)
 
-        soc = System(self, 'mempool_soc', parser, terapool=False, nb_cores_per_tile=4, nb_sub_groups_per_group=1, nb_groups=4, total_cores=16, bank_factor=4, axi_data_width=32, nb_axi_masters_per_group=1, l2_size=0x400000, nb_l2_banks=4)
+        soc = System(self, 'mempool_soc', parser, terapool=False, nb_cores_per_tile=4, nb_sub_groups_per_group=1, nb_groups=4, total_cores=16, bank_factor=4, axi_data_width=32, nb_axi_masters_per_group=1, nb_dmas_per_group=1, l2_size=0x400000, nb_l2_banks=4, nb_fus_per_core=1)
+
+        self.bind(clock, 'out', soc, 'clock')
+
+class MinpoolSpatzSystem(st.Component):
+
+    def __init__(self, parent, name, parser, options):
+
+        super(MinpoolSpatzSystem, self).__init__(parent, name, options=options)
+
+        clock = Clock_domain(self, 'clock', frequency=500000000)
+
+        soc = System(self, 'mempool_soc', parser, terapool=False, nb_cores_per_tile=1, nb_sub_groups_per_group=1, nb_groups=4, total_cores=4, bank_factor=4, axi_data_width=32, nb_axi_masters_per_group=1, nb_dmas_per_group=1, l2_size=0x400000, nb_l2_banks=4, nb_fus_per_core=4)
 
         self.bind(clock, 'out', soc, 'clock')
 
@@ -195,6 +256,18 @@ class TerapoolSystem(st.Component):
 
         clock = Clock_domain(self, 'clock', frequency=500000000)
 
-        soc = System(self, 'mempool_soc', parser, terapool=True, nb_cores_per_tile=8, nb_sub_groups_per_group=4, nb_groups=4, total_cores=1024, bank_factor=4, axi_data_width=64, nb_axi_masters_per_group=4, l2_size=0x1000000, nb_l2_banks=16)
+        soc = System(self, 'mempool_soc', parser, terapool=True, nb_cores_per_tile=8, nb_sub_groups_per_group=4, nb_groups=4, total_cores=1024, bank_factor=4, axi_data_width=64, nb_axi_masters_per_group=4, nb_dmas_per_group=4, l2_size=0x1000000, nb_l2_banks=16, terapool_group_latency=9, nb_fus_per_core=1)
+
+        self.bind(clock, 'out', soc, 'clock')
+
+class TerapoolSpatzSystem(st.Component):
+    
+    def __init__(self, parent, name, parser, options):
+
+        super(TerapoolSpatzSystem, self).__init__(parent, name, options=options)
+
+        clock = Clock_domain(self, 'clock', frequency=500000000)
+
+        soc = System(self, 'mempool_soc', parser, terapool=True, nb_cores_per_tile=1, nb_sub_groups_per_group=4, nb_groups=4, total_cores=128, bank_factor=4, axi_data_width=64, nb_axi_masters_per_group=4, nb_dmas_per_group=4, l2_size=0x1000000, nb_l2_banks=16, terapool_group_latency=9, nb_fus_per_core=8)
 
         self.bind(clock, 'out', soc, 'clock')

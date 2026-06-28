@@ -14,7 +14,21 @@
 # limitations under the License.
 #
 
-from pulp.snitch.snitch_cluster.snitch_cluster import ClusterArch, Area
+import os
+
+from pulp.snitch.snitch_cluster.snitch_cluster import ClusterArch
+
+if os.environ.get('USE_GVRUN') is None:
+    from pulp.snitch.snitch_cluster.snitch_cluster import Area
+else:
+    from gvrun.attribute import Tree
+
+    class Area:
+        # The occamy address map is pure data, so a plain area is enough under
+        # gvrun too; only the cluster arch is exposed as an attribute tree.
+        def __init__(self, base, size):
+            self.base = base
+            self.size = size
 
 
 class OccamyArchProperties:
@@ -67,9 +81,16 @@ class OccamyArch:
         if properties is None:
             properties = OccamyArchProperties()
 
-        properties.declare_target_properties(target)
+        # With the legacy gvsoc launcher, the architecture can be tuned through user
+        # properties. With gvrun, the defaults are used and the cluster arch is rooted
+        # in an attribute tree.
+        if os.environ.get('USE_GVRUN') is None:
+            properties.declare_target_properties(target)
+            attr_parent = None
+        else:
+            attr_parent = Tree(target, 'occamy')
 
-        self.chip = OccamyArch.Chip(properties)
+        self.chip = OccamyArch.Chip(properties, attr_parent)
         self.hbm = OccamyArch.Hbm(properties)
 
     class Hbm:
@@ -80,13 +101,13 @@ class OccamyArch:
 
     class Chip:
 
-        def __init__(self, properties):
+        def __init__(self, properties, attr_parent=None):
 
-            self.soc = OccamyArch.Chip.Soc(properties)
+            self.soc = OccamyArch.Chip.Soc(properties, attr_parent)
 
         class Soc:
 
-            def __init__(self, properties):
+            def __init__(self, properties, attr_parent=None):
                 self.nb_quadrant = properties.nb_quadrant
                 current_hartid = 0
 
@@ -137,7 +158,8 @@ class OccamyArch:
                 self.quadrants = []
                 for id in range(0, self.nb_quadrant):
                     self.quadrants.append(
-                        OccamyArch.Chip.Quadrant(properties, self.quadrant_base(id), current_hartid)
+                        OccamyArch.Chip.Quadrant(properties, self.quadrant_base(id), current_hartid,
+                            attr_parent)
                     )
                     current_hartid += self.quadrants[id].nb_core
 
@@ -153,7 +175,7 @@ class OccamyArch:
 
 
         class Quadrant:
-            def __init__(self, properties, base, first_hartid):
+            def __init__(self, properties, base, first_hartid, attr_parent=None):
                 self.nb_cluster = properties.nb_cluster_per_quadrant
                 self.base = base
 
@@ -162,8 +184,14 @@ class OccamyArch:
                 self.clusters = []
                 current_hardid = first_hartid
                 for id in range(0, self.nb_cluster):
-                    cluster_arch = ClusterArch(properties, self.get_cluster_base(id),
-                        current_hardid, auto_fetch=True, boot_addr=0x0100_0000)
+                    if attr_parent is None:
+                        cluster_arch = ClusterArch(properties, self.get_cluster_base(id),
+                            current_hardid, auto_fetch=True, boot_addr=0x0100_0000)
+                    else:
+                        cluster_arch = ClusterArch(attr_parent, 'cluster', self.get_cluster_base(id),
+                            current_hardid, auto_fetch=True, boot_addr=0x0100_0000,
+                            nb_core_per_cluster=properties.nb_core_per_cluster,
+                            core_type=properties.core_type)
                     self.clusters.append(cluster_arch)
                     current_hardid += self.clusters[id].nb_core
 

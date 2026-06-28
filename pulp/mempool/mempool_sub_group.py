@@ -19,7 +19,6 @@
 
 import gvsoc.systree as st
 import interco.router as router
-from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 from interco.interleaver import Interleaver
 import math
 from pulp.mempool.mempool_tile import Tile
@@ -27,7 +26,7 @@ from pulp.mempool.l2_interconnect.hierarchical_interco import Hierarchical_Inter
 
 class Sub_group(st.Component):
 
-    def __init__(self, parent, name, parser, terapool: bool=False, async_l1_interco: bool=False, sub_group_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=4, nb_groups: int=4, total_cores: int=1024, bank_factor: int=4, axi_data_width: int=64):
+    def __init__(self, parent, name, parser, terapool: bool=False, async_l1_interco: bool=False, sub_group_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=4, nb_groups: int=4, total_cores: int=1024, bank_factor: int=4, axi_data_width: int=64, terapool_group_latency: int=7, nb_fus_per_core: int=1):
         super().__init__(parent, name)
 
         ################################################################
@@ -37,7 +36,7 @@ class Sub_group(st.Component):
         nb_remote_group_ports = nb_groups - 1
         nb_remote_sub_group_ports = nb_sub_groups_per_group - 1
         nb_tiles_per_sub_group = int((total_cores/nb_groups/nb_sub_groups_per_group)/nb_cores_per_tile)
-        nb_banks_per_tile = nb_cores_per_tile * bank_factor
+        nb_banks_per_tile = nb_cores_per_tile * bank_factor * nb_fus_per_core
 
         ################################################################
         ##########              Design Components             ##########
@@ -46,16 +45,16 @@ class Sub_group(st.Component):
         self.tile_list = []
         for i in range(0, nb_tiles_per_sub_group):
             self.tile_list.append(Tile(self, f'tile_{i}',parser=parser, terapool=terapool, async_l1_interco=async_l1_interco, tile_id=i, sub_group_id=sub_group_id, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
-                nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor))
+                nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, terapool_group_latency=terapool_group_latency, nb_fus_per_core=nb_fus_per_core))
 
         #Sub Group local interconnect
         sub_group_local_interleaver = Interleaver(self, 'sub_group_local_interleaver', nb_slaves=nb_tiles_per_sub_group, nb_masters=nb_tiles_per_sub_group,
-            interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor)), offset_translation=False)
+            interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor*nb_fus_per_core)), offset_translation=False)
 
         #Sub Group Remote Slave Interconnect
         sub_group_remote_master_interleavers = []
         for i in range(0, nb_remote_sub_group_ports):
-            sub_group_remote_master_interleavers.append(Interleaver(self, f'sub_group_remote_slave_interleaver_{i}', nb_slaves=nb_tiles_per_sub_group, nb_masters=nb_tiles_per_sub_group, interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor)), offset_translation=False))
+            sub_group_remote_master_interleavers.append(Interleaver(self, f'sub_group_remote_slave_interleaver_{i}', nb_slaves=nb_tiles_per_sub_group, nb_masters=nb_tiles_per_sub_group, interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor*nb_fus_per_core)), offset_translation=False))
 
         sub_group_out_interfaces = []
         for port in range(0, nb_remote_group_ports):
@@ -67,16 +66,12 @@ class Sub_group(st.Component):
             sub_group_out_interfaces.append(tile_itf_list)
 
         # DMA network(virtual, to emulate multiple backends)
-        # DMA TCDM Interface
-        dma_tcdm_itf = router.Router(self, f'dma_tcdm_itf', bandwidth=axi_data_width)
-        dma_tcdm_itf.add_mapping('output')
-
+        # DMA Traffic Demux
+        dma_mux = router.Router(self, 'dma_mux', latency=4, bandwidth=axi_data_width)
+        dma_mux.add_mapping('tcdm', base=0x0, size=total_cores * bank_factor * 1024)
+        dma_mux.add_mapping('axi')
         # DMA TCDM Interleaver
-        dma_tcdm_interleaver = DmaInterleaver(self, f'dma_tcdm_interleaver', nb_master_ports=1, nb_banks=nb_tiles_per_sub_group, bank_width=nb_banks_per_tile*4)
-
-        # DMA AXI Interface
-        dma_axi_itf = router.Router(self, f'dma_axi_itf', bandwidth=axi_data_width)
-        dma_axi_itf.add_mapping('output')
+        dma_tcdm_interleaver = Interleaver(self, f'dma_tcdm_interleaver', nb_slaves=nb_tiles_per_sub_group, nb_masters=1, interleaving_bits=int(math.log2(nb_banks_per_tile*4)), offset_translation=False)
 
         # SG-level AXI Interconnect
         # L2 cache rules
@@ -87,7 +82,7 @@ class Sub_group(st.Component):
         l2_cache_rules.append((0x0000000C, 0x00000010))
 
         # AXI Interconnect
-        axi_ico = Hierarchical_Interco(self, 'axi_ico', enable_cache=True, cache_rules=l2_cache_rules, bandwidth=axi_data_width)
+        axi_ico = Hierarchical_Interco(self, 'axi_ico', nb_slaves=nb_tiles_per_sub_group+1, enable_cache=True, cache_rules=l2_cache_rules, bandwidth=axi_data_width)
         axi_itf = router.Router(self, 'axi_itf', bandwidth=axi_data_width, latency=2)
         axi_itf.add_mapping('output')
 
@@ -115,16 +110,16 @@ class Sub_group(st.Component):
 
         #Tile axi port -> axi interconnect
         for i in range(0, nb_tiles_per_sub_group):
-           self.bind(self.tile_list[i], 'axi_out', axi_ico, 'input')
+           self.bind(self.tile_list[i], 'axi_out', axi_ico, f'input_{i}')
 
         # axi interconnect -> axi port
         self.bind(axi_ico, 'output', axi_itf, 'input')
 
         # DMA network(virtual, to emulate multiple backends)
-        self.bind(dma_tcdm_itf, 'output', dma_tcdm_interleaver, 'input')
+        self.bind(dma_mux, 'tcdm', dma_tcdm_interleaver, 'in_0')
+        self.bind(dma_mux, 'axi', axi_ico, f'input_{nb_tiles_per_sub_group}')
         for i in range(0, nb_tiles_per_sub_group):
             self.bind(dma_tcdm_interleaver, f'out_{i}', self.tile_list[i], 'dma_tcdm')
-        self.bind(dma_axi_itf, 'output', axi_ico, 'input')
 
         #Group loader -> Tile loader
         for i in range(0, nb_tiles_per_sub_group):
@@ -159,5 +154,5 @@ class Sub_group(st.Component):
         self.bind(axi_itf, 'output', self, 'axi_out')
 
         # DMA
-        self.bind(self, 'dma_tcdm', dma_tcdm_itf, 'input')
-        self.bind(self, 'dma_axi', dma_axi_itf, 'input')
+        self.bind(self, 'dma_tcdm_0', dma_mux, 'input')
+        self.bind(self, 'dma_axi_0', dma_mux, 'input')

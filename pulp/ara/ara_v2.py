@@ -1,0 +1,123 @@
+#
+# Copyright (C) 2020 ETH Zurich and University of Bologna
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+import re
+from gvsoc.systree import Component
+from cpu.iss.isa_gen.isa_gen import Isa
+
+def extend_isa(isa_instance: Isa):
+    # Assign tags to instructions so that we can handle them with different blocks
+
+    # For now only load/stores are assigned to vlsu
+    vle_pattern = re.compile(r'^(vle\d+\.v)$')
+    vse_pattern = re.compile(r'^(vse\d+\.v)$')
+    vlse_pattern = re.compile(r'^(vlse\d+\.v)$')
+    vsse_pattern = re.compile(r'^(vsse\d+\.v)$')
+    vlux_pattern = re.compile(r'^(vluxei\d+\.v)$')
+    vsux_pattern = re.compile(r'^(vsuxei\d+\.v)$')
+    vlox_pattern = re.compile(r'^(vloxei\d+\.v)$')
+    vsox_pattern = re.compile(r'^(vsoxei\d+\.v)$')
+    vslide_pattern = re.compile(r'.*slide.*|.*vmv.*')
+    vsetvli_pattern = re.compile(r'.*vset.*')
+    for insn in isa_instance.get_isa('v').get_insns():
+        if vle_pattern.match(insn.label) is not None or vlse_pattern.match(insn.label) is not None or \
+                vlux_pattern.match(insn.label) is not None or vlox_pattern.match(insn.label) is not None:
+            insn.add_tag('vload')
+            insn.set_latency(1)
+            if vlse_pattern.match(insn.label) is not None:
+                insn.add_tag('vload_strided')
+                insn.add_field('chaining_factor', '0.0f')
+            if vlux_pattern.match(insn.label) is not None or vlox_pattern.match(insn.label) is not None:
+                insn.add_tag('vload_indexed')
+                insn.add_field('chaining_factor', '0.0f')
+        elif vse_pattern.match(insn.label) is not None or vsse_pattern.match(insn.label) is not None or \
+                vsux_pattern.match(insn.label) is not None or vsox_pattern.match(insn.label) is not None:
+            insn.add_tag('vstore')
+            insn.set_latency(3)
+            if vsse_pattern.match(insn.label) is not None:
+                insn.add_tag('vstore_strided')
+                insn.add_field('chaining_factor', '0.0f')
+            if vsux_pattern.match(insn.label) is not None or vsox_pattern.match(insn.label) is not None:
+                insn.add_tag('vstore_indexed')
+                insn.add_field('chaining_factor', '0.0f')
+        elif vslide_pattern.match(insn.label) is not None:
+            insn.add_tag('vslide')
+        elif vsetvli_pattern.match(insn.label) is not None:
+            insn.add_tag('vsetvli')
+        else:
+            insn.add_tag('vothers')
+
+        # Vector instructions can be given latencies like that
+        # if insn.label.find('vfmac') == 0:
+        #     insn.set_latency(1)
+
+
+
+
+    for insn in isa_instance.get_isa('v').get_insns():
+        if insn.label.startswith('vfncvt'):
+            insn.add_field('chaining_factor', '2.0f')
+        elif insn.label.startswith('vw'):
+            insn.add_field('out_chaining_factor', '2.0f')
+        elif insn.label.startswith('vfred'):
+            insn.add_field('out_chaining_factor', '0.0f')
+        elif insn.label.startswith('vred'):
+            insn.add_field('out_chaining_factor', '0.0f')
+
+def attach(component: Component, vlen: int, nb_lanes: int, use_spatz: bool=False,
+        spatz_nb_ports: int|None=None, lane_width=8, vlsu_v2: bool=False):
+    component.add_sources([
+        "cpu/iss_v2/src/vector_unit/vector_unit.cpp",
+        "cpu/iss_v2/src/vector_unit/vector_unit_compute.cpp",
+        "cpu/iss_v2/src/vector.cpp",
+    ])
+
+    if use_spatz:
+        # Pick the v1 or v2 io-protocol implementation of the spatz VLSU. The
+        # v2 variant talks to the TCDM through io_v2.hpp, which forces the
+        # whole ISS translation unit to use the v2 protocol — see types.hpp.
+        if vlsu_v2:
+            component.add_sources([
+                "cpu/iss_v2/src/cores/spatz/spatz_vlsu_v2.cpp",
+            ])
+            component.add_c_flags([
+                "-DCONFIG_GVSOC_ISS_VLSU_V2=1",
+            ])
+        else:
+            component.add_sources([
+                "cpu/iss_v2/src/cores/spatz/spatz_vlsu.cpp",
+            ])
+        component.add_c_flags([
+            "-DCONFIG_GVSOC_ISS_USE_SPATZ",
+        ])
+
+    else:
+        component.add_sources([
+            "cpu/iss_v2/src/cores/ara/ara_vlsu.cpp",
+        ])
+
+    component.add_c_flags([
+        "-DCONFIG_ISS_HAS_VECTOR=1", f'-DCONFIG_ISS_VLEN={int(vlen)}'
+    ])
+    component.add_sources([
+        "cpu/iss_v2/src/vector.cpp",
+    ])
+
+    component.add_property('vu/nb_lanes', nb_lanes)
+    component.add_property('vu/lane_width', lane_width)
+    if use_spatz:
+        component.add_property('vu/nb_ports', nb_lanes if spatz_nb_ports is None else spatz_nb_ports)
+        component.add_property('vu/nb_outstanding_reqs', 8)

@@ -1,0 +1,19 @@
+--- /srv/home/francesco.conti9/Devel/gvsoc/pulp/pulp/chips/pulp_open/pulp_open_board.py	2026-06-24 19:08:00.900659110 +0200
++++ /srv/home/francesco.conti9/Devel/gvsoc/core/docs/developer_manual/tutorials/hwpe/create_target/task_setup/pulp_open/pulp_open_board.py	2026-06-24 21:51:08.538886275 +0200
+@@ -1,5 +1,5 @@
+ #
+-# Copyright (C) 2020 ETH Zurich and University of Bologna
++# Copyright (C) 2020-2026 ETH Zurich and University of Bologna
+ #
+ # Licensed under the Apache License, Version 2.0 (the "License");
+ # you may not use this file except in compliance with the License.
+@@ -16,6 +16,9 @@
+ 
+ import os
+ import gvsoc.systree as st
++
++#### TASK - Change the path from pulp.chips.pulp_open.pulp_open to pulp.chips.pulp_open_hwpe.pulp_open
++
+ from pulp.chips.pulp_open.pulp_open import Pulp_open
+ from devices.hyperbus.hyperflash import Hyperflash
+ from devices.spiflash.spiflash import Spiflash

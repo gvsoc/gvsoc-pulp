@@ -23,7 +23,6 @@ from interco.interleaver import Interleaver
 from pulp.mempool.xbar.mempool_xbar import MempoolXbar
 from pulp.mempool.l1_interconnect.l1_remote_itf import L1_RemoteItf
 from pulp.mempool.xbar.mempool_xbar_selector import MempoolXbarSelector
-from pulp.snitch.snitch_cluster.dma_interleaver import DmaInterleaver
 import math
 
 class L1_subsystem(gvsoc.systree.Component):
@@ -52,7 +51,7 @@ class L1_subsystem(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, terapool: bool=False, async_l1_interco: bool=False, tile_id: int=0, sub_group_id: int=0, group_id: int=0,
                  nb_tiles_per_sub_group: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, nb_remote_local_masters: int=1, nb_remote_group_masters: int=4,
-                 nb_remote_sub_group_masters: int=4, nb_pe: int=0, size: int=0, nb_banks_per_tile: int=0, bandwidth: int=0, axi_data_width: int=512):
+                 nb_remote_sub_group_masters: int=4, nb_pe: int=0, size: int=0, nb_banks_per_tile: int=0, bandwidth: int=0, axi_data_width: int=512, terapool_group_latency: int=7):
         super(L1_subsystem, self).__init__(parent, name)
 
         #
@@ -141,19 +140,19 @@ class L1_subsystem(gvsoc.systree.Component):
             remote_local_out_interfaces = []
             for i in range(0, nb_remote_local_masters):
                 remote_local_out_interfaces.append(Router(self, f'remote_local_out_itf{i}', bandwidth=bandwidth, latency=1, shared_rw_bandwidth=True, \
-                                                synchronous=False, max_input_pending_size=4))
+                                                synchronous=True, max_input_pending_size=4))
                 remote_local_out_interfaces[i].add_mapping('output')
 
             remote_sub_group_out_interfaces = []
             for i in range(0, nb_remote_sub_group_masters):
                 remote_sub_group_out_interfaces.append(Router(self, f'remote_sub_group_out_itf{i}', bandwidth=bandwidth, latency=1, shared_rw_bandwidth=True, \
-                                                synchronous=False, max_input_pending_size=4))
+                                                synchronous=True, max_input_pending_size=4))
                 remote_sub_group_out_interfaces[i].add_mapping('output')
 
             remote_group_out_interfaces = []
             for i in range(0, nb_remote_group_masters):
                 remote_group_out_interfaces.append(Router(self, f'remote_group_out_itf{i}', bandwidth=bandwidth, latency=1, shared_rw_bandwidth=True, \
-                                                synchronous=False, max_input_pending_size=4))
+                                                synchronous=True, max_input_pending_size=4))
                 remote_group_out_interfaces[i].add_mapping('output')
 
         #Remote interfaces
@@ -165,17 +164,25 @@ class L1_subsystem(gvsoc.systree.Component):
         for i in range(0, nb_remote_sub_group_masters):
             remote_sub_group_in_interfaces.append(L1_RemoteItf(self, f'remote_sub_group_in_itf{i}', bandwidth=bandwidth, resp_latency=2, synchronous=not async_l1_interco))
 
+        if terapool:
+            if terapool_group_latency == 9:
+                remote_group_resp_latency = 4
+            else:
+                remote_group_resp_latency = 3
+        elif (nb_sub_groups_per_group * nb_tiles_per_sub_group) > 1:
+            remote_group_resp_latency = 2
+        else:
+            remote_group_resp_latency = 1
         remote_group_in_interfaces = []
         for i in range(0, nb_remote_group_masters):
             remote_group_in_interfaces.append(L1_RemoteItf(self, f'remote_group_in_itf{i}', bandwidth=bandwidth, \
-                                                resp_latency=3 if terapool else 2 if (nb_sub_groups_per_group * nb_tiles_per_sub_group) > 1 else 1, synchronous=not async_l1_interco))
-
+                                                resp_latency=remote_group_resp_latency, synchronous=not async_l1_interco))
         # DMA Interface
         dma_interface = Router(self, 'dma_itf', bandwidth=axi_data_width, latency=0, shared_rw_bandwidth=True)
         dma_interface.add_mapping('output')
 
         # DMA Interleaver
-        dma_interleaver = DmaInterleaver(self, 'dma_interleaver', nb_master_ports=1, nb_banks=nb_banks_per_tile, bank_width=4)
+        dma_interleaver = Interleaver(self, 'dma_interleaver', nb_slaves=nb_banks_per_tile, nb_masters=1, interleaving_bits=2, enable_shift=(total_banks - 1).bit_length(), offset_translation=False)
 
         #
         # Bindings
@@ -227,7 +234,7 @@ class L1_subsystem(gvsoc.systree.Component):
                 self.bind(remote_group_out_interfaces[i], 'output', self, f'remote_group_out{i}')
 
         self.bind(self, 'dma', dma_interface, 'input')
-        self.bind(dma_interface, 'output', dma_interleaver, 'input')
+        self.bind(dma_interface, 'output', dma_interleaver, 'in_0')
 
         for i in range(0, nb_banks_per_tile):
             self.bind(dma_interleaver, f'out_{i}', l1_banks[i], 'input')

@@ -1,0 +1,42 @@
+--- /srv/home/francesco.conti9/Devel/gvsoc/pulp/pulp/chips/pulp_open_hwpe/cluster.py	2026-06-24 22:52:13.275227907 +0200
++++ /srv/home/francesco.conti9/Devel/gvsoc/core/docs/developer_manual/tutorials/hwpe/integrate_hwpe/task_files/cluster.py	2026-06-24 22:51:59.027403460 +0200
+@@ -25,6 +25,9 @@
+ from pulp.mchan.mchan_v7 import Mchan
+ from pulp.timer.timer_v2 import Timer
+ from pulp.cluster.cluster_control_v2 import Cluster_control
++
++#### TASK-2 -- Import the wrapper for hwpe
++
+ from pulp.ne16.ne16 import Ne16
+ from pulp.icache_ctrl.icache_ctrl_v2 import Icache_ctrl
+ 
+@@ -153,6 +156,8 @@
+             # REDMULE
+             redmule = RedMule(self, 'redmule')
+ 
++#### TASK-3 -- Instantiate hwpe here 
++
+         # Icache controller
+         icache_ctrl = Icache_ctrl(self, 'icache_ctrl')
+ 
+@@ -230,6 +235,10 @@
+         periph_ico.add_mapping('dma', **self._reloc_mapping(cluster_conf.get_property('peripherals/dma/mapping')))
+         self.bind(periph_ico, 'dma', mchan, 'in_%d' % nb_pe)
+ 
++#### TASK-4 -- Create an entry for the peripheral interconnect
++        
++#### TASK-5 -- Bind the peripheral interconnect's port to the config port of Hwpe
++        
+         if has_ne16:
+             periph_ico.add_mapping('ne16', **self._reloc_mapping(cluster_conf.get_property('peripherals/ne16/mapping')))
+             self.bind(periph_ico, 'ne16', ne16, 'input')
+@@ -277,6 +286,9 @@
+ 
+             self.bind(redmule, 'out', l1, 'redmule_in')
+ 
++#### TASK-8 --  Connect hwpe's tcdm port to l1's hwpe port just created in the L1_subsystem
++
++#### TASK-9 -- Connect hwpe's interrupt request(irq) to all the cores
+ 
+         # Icache controller
+         self.bind(icache_ctrl, 'enable', icache, 'enable')

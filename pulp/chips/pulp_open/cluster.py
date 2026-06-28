@@ -14,6 +14,7 @@
 # limitations under the License.
 #
 
+import os
 import gvsoc.systree as st
 import pulp.cpu.iss.pulp_cores as iss
 from cache.hierarchical_cache import Hierarchical_cache
@@ -27,6 +28,7 @@ from pulp.ne16.ne16 import Ne16
 from pulp.icache_ctrl.icache_ctrl_v2 import Icache_ctrl
 
 from pulp.redmule.redmule import RedMule
+from config_tree import Config, cfg_field
 
 def get_cluster_name(cid: int):
     """
@@ -57,6 +59,12 @@ class ClusterConf(st.Component):
         self.add_properties(self.load_property_file(property_file))
 
 
+class ClusterConfig(Config):
+    has_redmule: bool = cfg_field(default=False, read=True, write=True, desc=(
+        "Enable Redmule"
+    ))
+
+
 class Cluster(st.Component):
     """
     Cluster subsystem
@@ -69,7 +77,7 @@ class Cluster(st.Component):
     """
 
     def __init__(self, parent, name, config_file, cid: int=0, pulpnn=False):
-        super(Cluster, self).__init__(parent, name)
+        super(Cluster, self).__init__(parent, name, config=ClusterConfig())
 
         #
         # Properties
@@ -93,10 +101,12 @@ class Cluster(st.Component):
         first_external_pcer = 12
         has_ne16 = False       # Because RedMulE is alternative to NE16!!
 
-        has_redmule = self.declare_user_property(
-            name='redmule', value=False, cast=bool, description='Enable Redmule'
-        )
-
+        if os.environ.get('USE_GVRUN') is None:
+            has_redmule = self.declare_user_property(
+                name='redmule', value=False, cast=bool, description='Enable Redmule'
+            )
+        else:
+            has_redmule = self.get_property('has_redmule')
 
         #
         # Components

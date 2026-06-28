@@ -32,12 +32,12 @@ class MagiaArch:
     L1_TILE_OFFSET      = 0x0010_0000
     L2_ADDR_START       = 0x8000_0000
     #L2_SIZE             = 0x4000_0000
-    L2_SIZE             = 0x0C02_FFFF
-    L2_ADDR_END         = L2_ADDR_START + L2_SIZE
-    TEST_END_ADDR_START = L2_ADDR_END + 1
-    TEST_END_SIZE       = 0x100
-    STDOUT_ADDR_START   = 0xFFFF_0004
-    STDOUT_SIZE         = 0x100
+    L2_SIZE                 = 0x0CFE_FFFF # here in RTL we have 0x4000_0000 but the end address (TEST_END_ADDR_START) then will fall in L2... no sense to me
+    L2_ADDR_END             = L2_ADDR_START + L2_SIZE
+    TEST_END_ADDR_START     = L2_ADDR_END + 1
+    TEST_END_SIZE           = 0x400
+    STDOUT_ADDR_START       = 0xFFFF_0004
+    STDOUT_SIZE             = 0x100
 
     # From magia_pkg.sv
     N_MEM_BANKS         = 32        # Number of TCDM banks
@@ -59,4 +59,16 @@ class MagiaTree(Tree):
             description='Number of tiles on Y dimension')
 
         self.NB_CLUSTERS = self.n_tiles_x*self.n_tiles_y
-        
+
+class MagiaDSE:
+    SOC_L2_LATENCY              = 2
+    TILE_ICACHE_REFILL_LATENCY  = 2
+    TILE_TCDM_LATENCY           = 1
+    TILE_AXI_XBAR_LATENCY       = 2
+    TILE_AXI_XBAR_SYNC          = False
+    TILE_OBI_XBAR_LATENCY       = 2
+    TILE_OBI_XBAR_SYNC          = True
+    TILE_IDMA0_BQUEUE_SIZE      = 2
+    TILE_IDMA0_B_SIZE           = 4
+    TILE_IDMA1_BQUEUE_SIZE      = 2
+    TILE_IDMA1_B_SIZE           = 8

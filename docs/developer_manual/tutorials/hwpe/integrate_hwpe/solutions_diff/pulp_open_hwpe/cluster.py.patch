@@ -1,0 +1,61 @@
+--- /srv/home/francesco.conti9/Devel/gvsoc/pulp/pulp/chips/pulp_open_hwpe/cluster.py	2026-06-25 11:23:50.914485594 +0200
++++ /srv/home/francesco.conti9/Devel/gvsoc/pulp/pulp/chips/pulp_open_hwpe_BK/cluster.py	2026-06-25 10:31:15.970548855 +0200
+@@ -18,7 +18,6 @@
+ import gvsoc.systree as st
+ import pulp.cpu.iss.pulp_cores as iss
+ from cache.hierarchical_cache import Hierarchical_cache
+-
+ #### SOLUTION - Change the path from pulp.chips.pulp_open.l1_subsystem to pulp.chips.pulp_open_hwpe.l1_subsystem
+ from pulp.chips.pulp_open_hwpe.l1_subsystem import L1_subsystem
+ from pulp.event_unit.event_unit_v3 import Event_unit
+@@ -27,8 +26,8 @@
+ from pulp.timer.timer_v2 import Timer
+ from pulp.cluster.cluster_control_v2 import Cluster_control
+ 
+-#### TASK-2 -- Import the wrapper for hwpe
+-
++#### SOLUTION-2 -- Import the wrapper for hwpe
++from pulp.simple_hwpe.hwpe import Hwpe
+ from pulp.ne16.ne16 import Ne16
+ from pulp.icache_ctrl.icache_ctrl_v2 import Icache_ctrl
+ 
+@@ -157,7 +156,8 @@
+             # REDMULE
+             redmule = RedMule(self, 'redmule')
+ 
+-#### TASK-3 -- Instantiate hwpe here 
++#### SOLUTION-3 -- Instantiate hwpe here 
++        hwpe = Hwpe(self, 'hwpe')
+ 
+         # Icache controller
+         icache_ctrl = Icache_ctrl(self, 'icache_ctrl')
+@@ -236,9 +236,11 @@
+         periph_ico.add_mapping('dma', **self._reloc_mapping(cluster_conf.get_property('peripherals/dma/mapping')))
+         self.bind(periph_ico, 'dma', mchan, 'in_%d' % nb_pe)
+ 
+-#### TASK-4 -- Create an entry for the peripheral interconnect
++#### SOLUTION-4 -- Create an entry for the peripheral interconnect
++        periph_ico.add_mapping('hwpe', **self._reloc_mapping(cluster_conf.get_property('peripherals/hwpe/mapping')))
+         
+-#### TASK-5 -- Bind the peripheral interconnect's port to the config port of Hwpe
++#### SOLUTION-5 -- Bind the peripheral interconnect's port to the config port of Hwpe
++        self.bind(periph_ico, 'hwpe', hwpe, 'config')
+         
+         if has_ne16:
+             periph_ico.add_mapping('ne16', **self._reloc_mapping(cluster_conf.get_property('peripherals/ne16/mapping')))
+@@ -287,9 +289,13 @@
+ 
+             self.bind(redmule, 'out', l1, 'redmule_in')
+ 
+-#### TASK-8 --  Connect hwpe's tcdm port to l1's hwpe port just created in the L1_subsystem
++#### SOLUTION-8 --  Connect hwpe's tcdm port to l1's hwpe port just created in the L1_subsystem
++        self.bind(hwpe, 'tcdm', l1, 'hwpe')
+ 
+-#### TASK-9 -- Connect hwpe's interrupt request(irq) to all the cores
++#### SOLUTION-9 -- Connect hwpe's interrupt request(irq) to all the cores
++        hwpe_irq = cluster_conf.get_property('pe/irq').index('acc_1')
++        for i in range(0, nb_pe):
++            self.bind(hwpe, 'irq', event_unit, 'in_event_%d_pe_%d' % (hwpe_irq, i))
+ 
+         # Icache controller
+         self.bind(icache_ctrl, 'enable', icache, 'enable')

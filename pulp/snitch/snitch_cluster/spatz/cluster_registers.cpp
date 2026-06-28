@@ -122,6 +122,9 @@ vp::IoReqStatus ClusterRegisters::core_req(vp::Block *__this, vp::IoReq *req, in
 
     _this->regmap.access(offset, size, data, is_write);
 
+    // Barrier insert 10 cycle stall even for last one to wake-up, seem the request go through AXI
+    req->inc_latency(11);
+
     if (_this->stall_core)
     {
         _this->waiting_reqs[id] = req;
@@ -210,6 +213,8 @@ void ClusterRegisters::hw_barrier_req(uint64_t reg_offset, int size, uint8_t *va
                 {
                     this->trace.msg(vp::Trace::LEVEL_DEBUG, "Wakeup core waiting on barrier (core: %d)\n",
                         i);
+                    // Barrier insert 10 cycle stall even for last one to wake-up, seem the request go through AXI
+                    this->waiting_reqs[i]->inc_latency(11);
                     this->waiting_reqs[i]->get_resp_port()->resp(this->waiting_reqs[i]);
                 }
             }
