@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Call the correct Makefile depending on TOPOLOGY variable
 ifeq ($(TOPOLOGY),)
     ACTUAL_TOPO = softhier
