@@ -29,6 +29,8 @@ from pulp.chips.softhier.softhier_ctrl import SoftHierCtrl
 from pulp.chips.softhier.softhier_arch import SoftHierArch
 from pulp.chips.softhier.error_detector import ErrorDetector
 from pulp.floonoc.floonoc import FlooNocClusterGridNarrowWide
+from gvrun.parameter import TargetParameter
+import os
 import math
 
 class SoftHierSystem(gvsoc.systree.Component):
@@ -42,9 +44,18 @@ class SoftHierSystem(gvsoc.systree.Component):
 
         arch = SoftHierArch()
 
-        # Get Binary
+        _ = TargetParameter(
+            self, name='binary', value=None, description='Binary to be loaded and started',
+            cast=str
+        )
+
+        # Get Binary.
+        # With the legacy gvsoc launcher, configure() is never called and the binary comes
+        # from the command line, so it must be resolved now. With gvrun, it comes from a
+        # parameter and is handled in configure() since it can also be set from the build
+        # process.
         binary = None
-        if parser is not None:
+        if os.environ.get('USE_GVRUN') is None and parser is not None:
             [args, otherArgs] = parser.parse_known_args()
             binary = args.binary
 
@@ -81,6 +92,11 @@ class SoftHierSystem(gvsoc.systree.Component):
         								idma_outstand_burst = arch.idma_outstand_burst)
             cluster_list.append(ClusterUnit(self,f'cluster_{cluster_id}', cluster_arch, binary))
             pass
+
+        # Keep the clusters so configure() can push the binary to their loaders when
+        # it is provided through a parameter (gvrun flow).
+        self.clusters = cluster_list
+        self.register_binary_handler(self.handle_binary)
 
         #Virtual router, just for debugging and non-performance-critical jobs
         virtual_interco = router.Router(self, 'virtual_interco', bandwidth=8)
@@ -141,6 +157,18 @@ class SoftHierSystem(gvsoc.systree.Component):
                            y=y_id+1,
                            rm_base=True)
             pass
+
+    def configure(self):
+        # With gvrun the binary is provided through a parameter (set either from the
+        # command line or from the build process), so push it to the cluster loaders here.
+        binary = self.get_parameter('binary')
+        if binary is not None:
+            for cluster in self.clusters:
+                cluster.set_binary(binary)
+
+    def handle_binary(self, binary):
+        # Called when an executable is attached to a hierarchy containing this component.
+        self.set_parameter('binary', binary)
 
 
 class SoftHierPlatform(gvsoc.systree.Component):

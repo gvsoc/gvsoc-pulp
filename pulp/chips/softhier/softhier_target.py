@@ -20,10 +20,12 @@ import gvsoc.runner
 import gvsoc.systree
 from pulp.chips.softhier.softhier_system import SoftHierPlatform
 
-GAPY_TARGET = True
-
 class Target(gvsoc.runner.Target):
 
-    def __init__(self, parser, options):
+    gapy_description = "SoftHier Platform"
+    model = SoftHierPlatform
+    name = "softhier"
+
+    def __init__(self, parser, options=None, name=None):
         super(Target, self).__init__(parser, options,
-            model=SoftHierPlatform, description="SoftHier Platform")
+            model=SoftHierPlatform, name=name)

@@ -143,6 +143,7 @@ class ClusterUnit(gvsoc.systree.Component):
 
         # Loader
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
+        self.loader = loader
 
         # Instruction memory
         instr_mem = memory.Memory(self, 'instr_mem', size=arch.inst_size, atomics=True, width_log2=-1)
@@ -229,6 +230,10 @@ class ClusterUnit(gvsoc.systree.Component):
 
         # Wide Input from SoC
         self.o_WIDE_INPUT(tcdm.i_BUS_INPUT())
+
+    def set_binary(self, binary):
+        # Used by the gvrun flow to provide the binary after construction.
+        self.loader.set_binary(binary)
 
     def i_NARROW_SOC(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'narrow_soc', signature='io')
