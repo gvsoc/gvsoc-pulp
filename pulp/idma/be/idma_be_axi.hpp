@@ -67,8 +67,9 @@ private:
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
     // Called when an asynchronous response is received from AXI
     static void axi_response(vp::Block *__this, vp::IoReq *req);
-    // Called when a previously denied write request is granted by the NoC NI. Used to
-    // honour the NoC write back-pressure: the deferred data ack is released here.
+    // Called when a previously denied write burst is granted by the NoC NI. Now a no-op:
+    // completion and slot release happen on the burst response. Kept because the grant port
+    // is registered on the AXI master interface.
     static void axi_grant(vp::Block *__this, vp::IoReq *req);
     // Once a read burst is finished, it can be enqueued with this function so that it is
     // notified after the latency has elapsed
@@ -108,8 +109,6 @@ private:
     // processed.
     std::queue<vp::IoReq *> pending_bursts;
 
-    std::queue<vp::IoReq *> pending_bursts_ack;
-
     // Current base of the first transfer. This is when a chunk of data to be written is received
     // to know the base where it should be written.
     uint64_t current_burst_base;
@@ -117,13 +116,4 @@ private:
 
     // Width in bytes of AXI burst.
     int burst_size;
-
-    // Write back-pressure state. When the NoC NI denies a write beat (it is congested),
-    // we stop accepting data and defer the ack of that beat's source data until the NI
-    // grants the request. Releasing the deferred ack on grant wakes the source backend
-    // through the regular write_data_ack path, so no polling is needed.
-    bool write_blocked;
-    IdmaTransfer *deferred_transfer;
-    uint8_t *deferred_data;
-    uint64_t deferred_size;
 };

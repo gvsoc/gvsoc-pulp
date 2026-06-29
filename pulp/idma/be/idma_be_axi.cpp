@@ -100,16 +100,6 @@ void IDmaBeAxi::reset(bool active)
         {
             this->pending_bursts.pop();
         }
-        while(this->pending_bursts_ack.size() > 0)
-        {
-            this->pending_bursts_ack.pop();
-        }
-
-        // No write is back-pressured after a reset
-        this->write_blocked = false;
-        this->deferred_transfer = NULL;
-        this->deferred_data = NULL;
-        this->deferred_size = 0;
 
         // And put back them all as free
         for (vp::IoReq &req: this->bursts)
@@ -286,79 +276,80 @@ void IDmaBeAxi::write_burst(IdmaTransfer *transfer, uint64_t base, uint64_t size
 
 void IDmaBeAxi::write_data(IdmaTransfer *transfer, uint8_t *data, uint64_t size)
 {
-    // Coalesce the per-line beats coming from the source backend into a single AXI burst.
+    // Coalesce the per-line beats coming from the source backend into a single AXI burst,
+    // and inject that burst into the NoC AS SOON AS its first beat arrives, streaming the
+    // remaining beats into its buffer while the NoC is already forwarding it.
     //
-    // The source (TCDM) pushes one TCDM line (a "beat") at a time. Instead of sending one
-    // IoReq per beat (which would make the NoC NI deny almost every beat, since it accepts
-    // only one wide-write burst at a time), we accumulate the beats into the static burst
-    // request's data buffer and send the whole burst as a SINGLE IoReq once it is complete.
-    // This mirrors AXI: one AW for the burst, the beats streamed on the W channel. The NoC
-    // NI then streams the beats internally and applies back-pressure at burst granularity,
-    // which is what reproduces the RTL distance/congestion scaling without the per-beat 2x.
+    // Why inject on the first beat instead of waiting for the whole burst:
+    // The transfer is now considered complete only when the NoC reports the write as done
+    // (the burst response, see write_handle_req_end), not when the source has finished
+    // READING. This is required so that the per-beat NoC congestion (which is what makes a
+    // far tile slower than a near one) is actually accounted for, even for a single-burst
+    // transfer: with the previous early-ack-on-read scheme the counter stopped at read time,
+    // which is not congested (each tile reads its own local L1), so small transfers showed no
+    // distance scaling at all.
+    // But the read and the write physically overlap in hardware (a beat is read from L1 and
+    // put on the W channel in the same cycle). If we waited for the full burst before sending
+    // it, we would serialise read-then-stream and count the streaming twice. Injecting on the
+    // first beat overlaps the two: the NoC streams beat i while the source is still filling
+    // beat i+1. The source fills the buffer at one line/cycle starting before the NoC reads
+    // each beat at the destination (after the router traversal latency), so every beat is in
+    // place by the time it is actually written.
     vp::IoReq *burst = this->pending_bursts.front();
     uint64_t offset = this->current_burst_base - burst->get_addr();
+    bool first_beat = (offset == 0);
 
     memcpy(burst->get_data() + offset, data, size);
 
     this->current_burst_base += size;
     this->current_burst_size -= size;
-
     bool burst_done = (this->current_burst_size == 0);
 
-    if (!burst_done)
-    {
-        // Not the last beat of the burst: ack the source line right away so the TCDM read
-        // pipeline keeps streaming. The data has already been copied into the burst buffer,
-        // so the source line buffer can be safely released.
-        this->be->ack_data(transfer, data, size);
-        return;
-    }
+    // Release the source line buffer right away (flow control). The data is already copied
+    // into the burst buffer, so the source can keep streaming. This does NOT account the data
+    // as written: completion is reported later, when the NoC write response arrives.
+    this->be->ack_data_buffer(transfer, data);
 
-    // Last beat received: the burst is fully assembled. Dequeue it and advance to the next
-    // pending burst (its base/size are used to know where the next beats must be written).
-    this->pending_bursts.pop();
-    if (this->pending_bursts.size() > 0)
+    if (first_beat)
     {
-        this->current_burst_base = this->pending_bursts.front()->get_addr();
-        this->current_burst_size = this->pending_bursts.front()->get_size();
-    }
+        this->trace.msg(vp::Trace::LEVEL_TRACE, "Sending write burst to AXI (burst: %p, base: 0x%lx, size: 0x%lx)\n",
+            burst, burst->get_addr(), burst->get_size());
 
-    this->trace.msg(vp::Trace::LEVEL_TRACE, "Sending write burst to AXI (burst: %p, base: 0x%lx, size: 0x%lx)\n",
-        burst, burst->get_addr(), burst->get_size());
+        // Send the whole burst as one request. Its addr/size were set in enqueue_burst and its
+        // data buffer is being filled in place (the NoC only references it, it does not copy it
+        // synchronously, so injecting before the buffer is fully filled is safe).
+        burst->prepare();
+        burst->set_is_write(true);
 
-    // Send the whole burst as one request. Its addr/size/data are already set (data was
-    // filled in above, addr/size were set in enqueue_burst).
-    burst->prepare();
-    burst->set_is_write(true);
-
-    vp::IoReqStatus status = this->ico_itf.req(burst);
-    if (status == vp::IoReqStatus::IO_REQ_DENIED)
-    {
-        // The NoC NI is congested (it is still streaming a previous burst) and queued this
-        // one in its denied list; it will grant it later. Honour the back-pressure: stop
-        // accepting data and defer the ack of this last beat until the grant. Releasing the
-        // deferred ack on grant wakes the TCDM source through write_data_ack, so no polling
-        // is needed. The burst slot is released later, on the burst response.
-        this->write_blocked = true;
-        this->deferred_transfer = transfer;
-        this->deferred_data = data;
-        this->deferred_size = size;
-    }
-    else if (status == vp::IoReqStatus::IO_REQ_INVALID)
-    {
-        trace.force_warning("Invalid access during AXI write burst (base: 0x%lx, size: 0x%lx)\n",
-            burst->get_addr(), burst->get_size());
-    }
-    else
-    {
-        // Accepted. Ack the last beat now so the source can keep streaming the next burst.
-        this->be->ack_data(transfer, data, size);
-        if (status == vp::IoReqStatus::IO_REQ_OK)
+        vp::IoReqStatus status = this->ico_itf.req(burst);
+        if (status == vp::IoReqStatus::IO_REQ_INVALID)
         {
-            // Synchronous completion (no NoC latency): release the burst slot now.
+            trace.force_warning("Invalid access during AXI write burst (base: 0x%lx, size: 0x%lx)\n",
+                burst->get_addr(), burst->get_size());
+        }
+        else if (status == vp::IoReqStatus::IO_REQ_OK)
+        {
+            // Synchronous completion (no NoC latency): account and release the slot now.
             this->write_handle_req_end(burst);
         }
-        // IO_REQ_PENDING: the burst slot is released later through the response callback.
+        // IO_REQ_PENDING / IO_REQ_DENIED: the NoC keeps the burst and will respond later (a
+        // denied burst is queued in the NI and granted when it can be streamed). The slot and
+        // the write accounting are handled on that response. Back-pressure is naturally
+        // applied by the outstanding-burst slots (can_accept_burst): a slot is held until the
+        // real completion, so when the NoC is congested slots free later and the source stalls.
+    }
+
+    if (burst_done)
+    {
+        // The burst is fully assembled. Stop tracking it as the one being filled and advance
+        // to the next pending burst (its base/size tell where the next beats go). The burst
+        // itself stays in flight until its NoC response frees the slot.
+        this->pending_bursts.pop();
+        if (this->pending_bursts.size() > 0)
+        {
+            this->current_burst_base = this->pending_bursts.front()->get_addr();
+            this->current_burst_size = this->pending_bursts.front()->get_size();
+        }
     }
 }
 
@@ -368,11 +359,17 @@ void IDmaBeAxi::write_handle_req_end(vp::IoReq *req)
 {
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Handling end of write burst (req: %p)\n", req);
 
-    // The write burst completed on the NoC. Release its static slot so the middle-end can
-    // push another burst. Holding the slot until the real completion (instead of freeing it
-    // when the last beat was sent) is what lets NoC congestion propagate back to the source:
-    // when the NoC is congested, responses come back later, slots stay busy longer, the
-    // middle-end stalls issuing new bursts and the source reads slow down accordingly.
+    // The write burst has really been committed to the destination by the NoC. This response
+    // time carries the per-beat congestion the burst went through, so this is the point where
+    // we account the burst as written and possibly terminate the transfer. Reporting completion
+    // here (and not at source-read time) is what makes the timing scale with tile distance.
+    IdmaTransfer *transfer = (IdmaTransfer *)*req->arg_get(0);
+    this->be->ack_write_completed(transfer, req->get_size());
+
+    // Release the burst slot so the middle-end can push another burst. Holding the slot until
+    // the real completion is also what back-pressures the source when the NoC is congested:
+    // responses come back later, slots stay busy longer, so new bursts (and the reads feeding
+    // them) are throttled.
     this->free_bursts.push(req);
     this->be->update();
     this->update();
@@ -388,10 +385,10 @@ bool IDmaBeAxi::can_accept_burst()
 
 bool IDmaBeAxi::can_accept_data()
 {
-    // Refuse data while a write is back-pressured by the NoC NI. We resume once the
-    // pending write is granted (see axi_grant). With no congestion this never blocks,
-    // preserving the calibrated single-tile write timing.
-    return !this->write_blocked;
+    // Data for the current burst is always accepted: the burst buffer can hold the whole
+    // burst and the back-pressure is applied at burst granularity through the outstanding
+    // slots (can_accept_burst), not by refusing beats. So a beat is never stalled here.
+    return true;
 }
 
 
@@ -400,21 +397,11 @@ void IDmaBeAxi::axi_grant(vp::Block *__this, vp::IoReq *req)
 {
     IDmaBeAxi *_this = (IDmaBeAxi *)__this;
 
-    // This grant method is registered on both the read and the write AXI backend. Only
-    // the write backend ever defers a data ack; for a granted read burst there is nothing
-    // to release here (the read completes through its response callback), so bail out.
-    if (!_this->write_blocked)
-    {
-        return;
-    }
-
-    _this->trace.msg(vp::Trace::LEVEL_TRACE, "Write granted by NoC, resuming (req: %p)\n", req);
-
-    // The NI accepted the previously denied write. Resume accepting data and release the
-    // deferred ack of that beat's source data: this goes through write_data_ack on the
-    // source backend, which re-triggers its FSM and unblocks the stalled TCDM reads.
-    _this->write_blocked = false;
-    _this->be->ack_data(_this->deferred_transfer, _this->deferred_data, _this->deferred_size);
+    // A previously denied write burst has been granted by the NoC NI: it is now being
+    // streamed and will produce a response when committed. There is nothing to do here
+    // anymore (no deferred ack): completion and slot release happen on that response. The
+    // method is kept because the grant port is registered on the AXI master interface.
+    _this->trace.msg(vp::Trace::LEVEL_TRACE, "Write burst granted by NoC (req: %p)\n", req);
 }
 
 
