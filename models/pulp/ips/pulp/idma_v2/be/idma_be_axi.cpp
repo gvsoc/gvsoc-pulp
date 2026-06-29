@@ -305,8 +305,8 @@ bool IDmaBeAxi::issue_beat()
             return false;   // keep info->read_req for the retry
         }
 
-        // Accepted: the bus side (slave / beat adapter) owns the request now.
-        info->read_req = nullptr;
+        // Accepted. We keep ownership of read_req (initiator-owned convention):
+        // nothing downstream frees it; we free it on the last read response.
         info->bytes_issued = info->total_size;
         this->pending_bursts.pop();
         this->be->update();
@@ -380,12 +380,23 @@ vp::IoRespAck IDmaBeAxi::resp_meth(vp::Block *__this, vp::IoReq *req)
     }
 
     // Free the read response beat now that its bytes have been forwarded (the
-    // data lives in burst_data, not in the beat). Every read beat is a freeable
-    // object: a multi-beat read delivers adapter-allocated beats, and a
-    // single-beat read round-trips our own heap read_req — both are ours to
-    // delete here. (The write path returns above; its acks ride the pooled
-    // beats[] slots and must not be freed.)
-    delete req;
+    // data lives in burst_data, not in the beat). A splitting producer (beat
+    // adapter) delivers DISTINCT beat objects we free here; a plain slave / NoC
+    // round-trips our own read_req as the single response, which we must NOT free
+    // here — it is freed once below as read_req. (The write path returns above;
+    // its acks ride the pooled beats[] slots and must not be freed.)
+    if (req != info->read_req)
+    {
+        delete req;
+    }
+
+    // Last read response received: we own read_req and free it here (nothing
+    // downstream frees it). Null it so the recycled slot reallocates next time.
+    if (info->bytes_responded == info->total_size)
+    {
+        delete info->read_req;
+        info->read_req = nullptr;
+    }
 
     return vp::IO_RESP_ACCEPTED;
 }

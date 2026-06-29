@@ -278,8 +278,30 @@ void NetworkInterfaceV2::set_router(int nw, RouterV2 *router)
 vp::IoRespAck NetworkInterfaceV2::wide_response(vp::Block *__this, vp::IoReq *req)
 {
     NetworkInterfaceV2 *_this = (NetworkInterfaceV2 *)__this;
-    _this->handle_response((FloonocReqV2 *)req);
+    _this->handle_response(_this->unwrap_response(req));
     return vp::IO_RESP_ACCEPTED;
+}
+
+// Recover our own FloonocReqV2 from a downstream response. A beat target answers
+// with DISTINCT per-beat objects (initiator-owned convention) carrying our request
+// as req->initiator; we fold this beat's per-beat payload (addr/size/data/framing/
+// status) onto our own request — reused per beat, exactly as the legacy same-object
+// beat-stream model expects — and free the beat. A write ack round-trips our own
+// object (req == initiator), so there is nothing to fold or free.
+FloonocReqV2 *NetworkInterfaceV2::unwrap_response(vp::IoReq *req)
+{
+    FloonocReqV2 *self_req = (FloonocReqV2 *)req->initiator;
+    if (req != self_req)
+    {
+        self_req->set_addr(req->get_addr());
+        self_req->set_size(req->get_size());
+        self_req->set_data(req->get_data());
+        self_req->is_first = req->is_first;
+        self_req->is_last  = req->is_last;
+        self_req->set_resp_status(req->get_resp_status());
+        delete req;
+    }
+    return self_req;
 }
 
 void NetworkInterfaceV2::wide_retry(vp::Block *__this, vp::IoRetryChannel)
@@ -326,7 +348,7 @@ void NetworkInterfaceV2::wide_retry(vp::Block *__this, vp::IoRetryChannel)
 vp::IoRespAck NetworkInterfaceV2::narrow_response(vp::Block *__this, vp::IoReq *req)
 {
     NetworkInterfaceV2 *_this = (NetworkInterfaceV2 *)__this;
-    _this->handle_response((FloonocReqV2 *)req);
+    _this->handle_response(_this->unwrap_response(req));
     return vp::IO_RESP_ACCEPTED;
 }
 
@@ -564,6 +586,12 @@ bool NetworkInterfaceV2::handle_request(FloonocNodeV2 *node, FloonocReqV2 *req, 
                 req, req->get_addr(), req->get_size());
 
             req->prepare();
+            // Initiator-owned request convention: a beat target answers an async
+            // read with DISTINCT response beat objects (not this request reused).
+            // Point initiator at ourselves so each response beat carries a back-ref
+            // to this FloonocReqV2; the response callbacks recover it via
+            // req->initiator instead of assuming the response IS this object.
+            req->initiator = req;
             vp::IoReqStatus result = target->req(req);
 
             if (result == vp::IO_REQ_DONE)
