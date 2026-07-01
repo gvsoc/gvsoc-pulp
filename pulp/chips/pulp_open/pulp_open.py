@@ -24,12 +24,17 @@ import interco.router_proxy as router_proxy
 import memory.dramsys
 import memory.pim_component
 from gvrun.attribute import Tree, Area, Value
+from config_tree import Config, cfg_field
 
 class PulpOpenAttr(Tree):
     def __init__(self, parent):
         super().__init__(parent)
         self.soc = SocAttr(self, 'soc')
 
+class PulpOpenConfig(Config):
+    fic: bool = cfg_field(default=False, read=True, write=True, desc=(
+        "Enable Fic"
+    ))
 
 class Pulp_open(st.Component):
 
@@ -46,6 +51,12 @@ class Pulp_open(st.Component):
         cluster_config_file = self.add_property('cluster_config_file', cluster_config_file)
         nb_cluster = self.add_property('nb_cluster', 1)
 
+        if os.environ.get('USE_GVRUN') is None:
+            fic = self.declare_user_property(
+                name='fic', value=False, cast=bool, description='Enable Fic'
+            )
+        else:
+            fic = self.get_property('fic')
 
         #
         # Components
@@ -67,10 +78,10 @@ class Pulp_open(st.Component):
         clusters = []
         for cid in range(0, nb_cluster):
             cluster_name = get_cluster_name(cid)
-            clusters.append(Cluster(self, cluster_name, config_file=cluster_config_file, cid=cid, pulpnn=pulpnn))
+            clusters.append(Cluster(self, cluster_name, config_file=cluster_config_file, cid=cid, pulpnn=pulpnn, fic=fic))
 
         # Soc
-        soc = Soc(self, 'soc', attr.soc, parser, config_file=soc_config_file, chip=self, cluster=clusters[0], pim_support=pim_support,pulpnn=pulpnn)
+        soc = Soc(self, 'soc', attr.soc, parser, config_file=soc_config_file, chip=self, cluster=clusters[0], pim_support=pim_support,pulpnn=pulpnn, fic=fic)
 
         # Fast clock
         fast_clock = Clock_domain(self, 'fast_clock', frequency=24576063*2)

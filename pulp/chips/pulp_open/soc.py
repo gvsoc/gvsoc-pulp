@@ -41,8 +41,7 @@ from gdbserver.gdbserver import Gdbserver
 import utils.loader.loader
 from gvrun.parameter import TargetParameter
 from gvrun.attribute import Tree
-from config_tree import Config, cfg_field
-
+from fault_injection.fic import FIC
 
 class SocAttr(Tree):
     def __init__(self, parent, name):
@@ -55,16 +54,9 @@ class SocConf(st.Component):
 
         self.add_properties(self.load_property_file(property_file))
 
-
-class SocConfig(Config):
-    fic: bool = cfg_field(default=False, read=True, write=True, desc=(
-        "Enable Fic"
-    ))
-
-
 class Soc(st.Component):
 
-    def __init__(self, parent, name, attr: SocAttr, parser, config_file, chip, cluster, pim_support=False, pulpnn=False):
+    def __init__(self, parent, name, attr: SocAttr, parser, config_file, chip, cluster, pim_support=False, pulpnn=False, fic=False):
         super(Soc, self).__init__(parent, name, config=SocConfig())
 
         #
@@ -80,13 +72,6 @@ class Soc(st.Component):
         udma_conf_path = 'pulp/chips/pulp_open/udma.json'
         udma_conf = self.load_property_file(udma_conf_path)
         fc_events = soc_conf.get_property('peripherals/fc_itc/irq')
-
-        if os.environ.get('USE_GVRUN') is None:
-            fic = self.declare_user_property(
-                name='fic', value=False, cast=bool, description='Enable Fic'
-            )
-        else:
-            fic = self.get_property('fic')
 
         TargetParameter(
             self, name='binary', value=None, description='Binary to be loaded and started',
@@ -140,6 +125,11 @@ class Soc(st.Component):
 
         # AXI
         axi_ico = router.Router(self, 'axi_ico', latency=12)
+
+        # FIC
+        if fic:
+            fic_instance = FIC(self, 'fic')
+            fic.o_GLOBAL_AS(axi_ico.i_INPUT())
 
         # GPIO
         gpio = gpio_module.Gpio(self, 'gpio', nb_gpio=soc_conf.get_property('peripherals/gpio/nb_gpio'), soc_event=soc_events['soc_evt_gpio'])
