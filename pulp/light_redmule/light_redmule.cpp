@@ -36,6 +36,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <math.h>
+#include <vp/register.hpp>
 
 #include <cpu/iss/include/offload.hpp>
 #include <cpu/iss/flexfloat/flexfloat.h>
@@ -136,7 +137,8 @@ public:
     vp::IoReq *         redmule_query;
     vp::IoReq*          tcdm_req;
     vp::ClockEvent *    fsm_event;
-    vp::reg_32          state;
+    vp::Register<uint32_t>  reg_fsm_state;
+    vp::Register<uint32_t>  reg_busy;
     uint32_t            tcdm_block_total;
     uint32_t            fsm_counter;
     uint32_t            fsm_timestamp;
@@ -220,7 +222,9 @@ extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 }
 
 LightRedmule::LightRedmule(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config),
+    reg_fsm_state(*this, "fsm_state", 32, true, IDLE),
+    reg_busy(*this, "busy", 1, true, 0)
 {
     //Initialize interface
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
@@ -308,7 +312,8 @@ LightRedmule::LightRedmule(vp::ComponentConf &config)
     this->z_buffer_previos  = new uint8_t [this->LOCAL_BUFFER_H * this->LOCAL_BUFFER_W * this->elem_size];
 
     //Initialize FSM
-    this->state.set(IDLE);
+    this->reg_fsm_state.set(IDLE);
+    this->reg_busy.set(0);
     this->redmule_query     = NULL;
     this->tcdm_req          = this->tcdm_itf.req_new(0, 0, 0, 0);
     this->fsm_event         = this->event_new(&LightRedmule::fsm_handler);
@@ -563,7 +568,7 @@ void LightRedmule::process_iter_instruction(){
     uint32_t buffer_w_byte = this->ce_width * (this->ce_pipe + 1) * this->elem_size;
 
     uint32_t _k = this->iter_k + 1;
-    if ((_k == this->x_row_tiles) || this->state.get() == PRELOAD)
+    if ((_k == this->x_row_tiles) || this->reg_fsm_state.get() == PRELOAD)
     {
         _k = 0;
     }
@@ -574,7 +579,7 @@ void LightRedmule::process_iter_instruction(){
     uint32_t w_cutoff = w_leftover_byte < buffer_w_byte ? w_leftover_byte : buffer_w_byte;
 
     uint32_t _j = this->iter_j + 1;
-    if ((_j == this->z_row_tiles) || this->state.get() == PRELOAD)
+    if ((_j == this->z_row_tiles) || this->reg_fsm_state.get() == PRELOAD)
     {
         _j = 0;
     }
@@ -828,7 +833,7 @@ void LightRedmule::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
     {
         case 0b0001011:
         {
-            if (_this->state.get() == IDLE) {
+            if (_this->reg_fsm_state.get() == IDLE) {
                 insn->granted = true; //here we always grant the core as it is just a configuration
                 _this->m_size = insn->arg_a & 0xFFFF;
                 _this->n_size = insn->arg_b;
@@ -839,7 +844,7 @@ void LightRedmule::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
         }
         case 0b0101011:
         {
-            if (_this->state.get() == IDLE)
+            if (_this->reg_fsm_state.get() == IDLE)
             {
                 insn->granted = true; //as soon as the operations is triggered we deassert the core
                 _this->x_addr = insn->arg_a;
@@ -864,7 +869,8 @@ void LightRedmule::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
                 _this->init_redmule_meta_data();
 
                 //Trigger FSM
-                _this->state.set(PRELOAD);
+                _this->reg_fsm_state.set(PRELOAD);
+                _this->reg_busy.set(1);
                 _this->tcdm_block_total = _this->get_preload_access_block_number();
                 _this->fsm_counter      = 0;
                 _this->fsm_timestamp    = 0;
@@ -894,7 +900,7 @@ vp::IoReqStatus LightRedmule::req(vp::Block *__this, vp::IoReq *req)
         uint32_t value = *(uint32_t *)data;
         switch (offset) {
             case 0x00: {
-                if ((_this->redmule_query == NULL) && (_this->state.get() == IDLE)) {
+                if ((_this->redmule_query == NULL) && (_this->reg_fsm_state.get() == IDLE)) {
                     /************************
                     *  Synchronize Trigger  *
                     ************************/
@@ -912,7 +918,8 @@ vp::IoReqStatus LightRedmule::req(vp::Block *__this, vp::IoReq *req)
                     
 
                     //Trigger FSM
-                    _this->state.set(PRELOAD);
+                    _this->reg_fsm_state.set(PRELOAD);
+                    _this->reg_busy.set(1);
                     _this->tcdm_block_total = _this->get_preload_access_block_number();
                     _this->fsm_counter      = 0;
                     _this->fsm_timestamp    = 0;
@@ -969,7 +976,7 @@ vp::IoReqStatus LightRedmule::req(vp::Block *__this, vp::IoReq *req)
                 break;
             case 0x0C: {
                 int32_t done_id_r;
-                if ((_this->redmule_query == NULL) && (_this->state.get() == IDLE)) {
+                if ((_this->redmule_query == NULL) && (_this->reg_fsm_state.get() == IDLE)) {
                     done_id_r =  0x00;
                     memcpy((void *)data, (void *)&done_id_r, size);
                 }
@@ -1002,7 +1009,7 @@ vp::IoReqStatus LightRedmule::req_v2(vp::Block *__this, vp::IoReq *req)
         uint32_t value = *(uint32_t *)data;
         switch (offset) {
             case 0x00: {
-                if ((_this->redmule_query == NULL) && (_this->state.get() == IDLE)) {
+                if ((_this->redmule_query == NULL) && (_this->reg_fsm_state.get() == IDLE)) {
                     /************************
                     *  Synchronize Trigger  *
                     ************************/
@@ -1020,7 +1027,8 @@ vp::IoReqStatus LightRedmule::req_v2(vp::Block *__this, vp::IoReq *req)
                     
 
                     //Trigger FSM
-                    _this->state.set(PRELOAD);
+                    _this->reg_fsm_state.set(PRELOAD);
+                    _this->reg_busy.set(1);
                     _this->tcdm_block_total = _this->get_preload_access_block_number();
                     _this->fsm_counter      = 0;
                     _this->fsm_timestamp    = 0;
@@ -1081,7 +1089,7 @@ vp::IoReqStatus LightRedmule::req_v2(vp::Block *__this, vp::IoReq *req)
                 break;
             case 0x0C: {
                 int32_t done_id_r;
-                if ((_this->redmule_query == NULL) && (_this->state.get() == IDLE)) {
+                if ((_this->redmule_query == NULL) && (_this->reg_fsm_state.get() == IDLE)) {
                     done_id_r =  0x00;
                     memcpy((void *)data, (void *)&done_id_r, size);
                 }
@@ -1099,7 +1107,7 @@ vp::IoReqStatus LightRedmule::req_v2(vp::Block *__this, vp::IoReq *req)
     return vp::IO_REQ_OK;
 }
 
-    // if ((is_write == 0) && (offset == 32) && (_this->redmule_query == NULL) && (_this->state.get() == IDLE))
+    // if ((is_write == 0) && (offset == 32) && (_this->redmule_query == NULL) && (_this->reg_fsm_state.get() == IDLE))
     // {
     //     /************************
     //     *  Synchronize Trigger  *
@@ -1129,7 +1137,7 @@ vp::IoReqStatus LightRedmule::req_v2(vp::Block *__this, vp::IoReq *req)
     //     _this->redmule_query = req;
     //     return vp::IO_REQ_PENDING;
 
-    // } else if ((is_write == 0) && (offset == 36) && (_this->state.get() == IDLE)){
+    // } else if ((is_write == 0) && (offset == 36) && (_this->reg_fsm_state.get() == IDLE)){
     //     /*************************
     //     *  Asynchronize Trigger  *
     //     *************************/
@@ -1154,7 +1162,7 @@ vp::IoReqStatus LightRedmule::req_v2(vp::Block *__this, vp::IoReq *req)
     //     _this->compute_able     = 0;
     //     _this->event_enqueue(_this->fsm_event, 1);
 
-    // } else if ((is_write == 0) && (offset == 40) && (_this->redmule_query == NULL) && (_this->state.get() != IDLE)){
+    // } else if ((is_write == 0) && (offset == 40) && (_this->redmule_query == NULL) && (_this->reg_fsm_state.get() != IDLE)){
     //     /*************************
     //     *  Asynchronize Waiting  *
     //     *************************/
@@ -1172,7 +1180,7 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
     _this->fsm_timestamp += 1;
 
-    switch (_this->state.get()) {
+    switch (_this->reg_fsm_state.get()) {
         case IDLE:
             _this->done.sync(false); //clear irq
             break;
@@ -1232,7 +1240,8 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 _this->tcdm_block_total = _this->get_routine_access_block_number();
                 _this->fsm_counter      = 0;
                 _this->fsm_timestamp    = 0;
-                _this->state.set(ROUTINE);
+                _this->reg_fsm_state.set(ROUTINE);
+                _this->reg_busy.set(1);
 
                 //Forward YZ at Preload->Routine if Compute Enabled
                 if (_this->compute_able != 0)
@@ -1241,7 +1250,8 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                     _this->process_iter_instruction();
                 }
             } else {
-                _this->state.set(PRELOAD);
+                _this->reg_fsm_state.set(PRELOAD);
+                _this->reg_busy.set(1);
             }
 
             _this->event_enqueue(_this->fsm_event, 1);
@@ -1332,16 +1342,19 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 if (_this->next_iteration() == 0)
                 {
                     _this->tcdm_block_total = _this->get_routine_access_block_number();
-                    _this->state.set(ROUTINE);
+                    _this->reg_fsm_state.set(ROUTINE);
+                    _this->reg_busy.set(1);
                 } else {
                     _this->tcdm_block_total = _this->get_storing_access_block_number();
-                    _this->state.set(STORING);
+                    _this->reg_fsm_state.set(STORING);
+                    _this->reg_busy.set(1);
                     latency += _this->get_routine_to_storing_latency();
                 }
 
                 _this->event_enqueue(_this->fsm_event, latency);
             } else {
-                _this->state.set(ROUTINE);
+                _this->reg_fsm_state.set(ROUTINE);
+                _this->reg_busy.set(1);
                 _this->event_enqueue(_this->fsm_event, 1);
             }
 
@@ -1402,7 +1415,8 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 _this->tcdm_block_total = 0;
                 _this->fsm_counter      = 0;
                 _this->fsm_timestamp    = 0;
-                _this->state.set(FINISHED);
+                _this->reg_fsm_state.set(FINISHED);
+                _this->reg_busy.set(1);
                 _this->event_enqueue(_this->fsm_event, 1);
 
                 //report
@@ -1418,7 +1432,8 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 _this->trace.msg("[LightRedmule] Finished : %0d ns ---> %0d ns | period = %0d ns (%0d cyc) | uti = %0.3f | runtime = %0d ns | GEMM id = %0d | FMT = %0d | M-N-K = %0d-%0d-%0d | X-W-Y = 0x%5x-0x%5x-0x%5x\n",
                     start_time_ns, end_time_ns, period_ns, period_clk, period_uti, _this->total_runtime, _this->num_matmul, _this->compute_able, _this->m_size, _this->n_size, _this->k_size, _this->x_addr, _this->w_addr, _this->y_addr);
             } else {
-                _this->state.set(STORING);
+                _this->reg_fsm_state.set(STORING);
+                _this->reg_busy.set(1);
                 _this->event_enqueue(_this->fsm_event, 1);
             }
             break;
@@ -1428,14 +1443,16 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             if (_this->redmule_query == NULL)
             {
                 _this->done.sync(true); //send interrupt
-                _this->state.set(IDLE);
+                _this->reg_fsm_state.set(IDLE);
+                _this->reg_busy.set(0);
                 // IssOffloadInsnGrant<uint32_t> offload_grant = {
                 //     .result=0x0
                 // };
                 // _this->offload_grant_itf.sync(&offload_grant);
                 _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][FINISHED] GRANT core and Wait for query!\n");
             } else {
-                _this->state.set(ACKNOWLEDGE);
+                _this->reg_fsm_state.set(ACKNOWLEDGE);
+                _this->reg_busy.set(1);
             }
             _this->event_enqueue(_this->fsm_event, 1);
             break;
@@ -1444,7 +1461,8 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             _this->redmule_query->get_resp_port()->resp(_this->redmule_query);
             _this->redmule_query = NULL;
             _this->done.sync(true); //send interrupt
-            _this->state.set(IDLE);
+            _this->reg_fsm_state.set(IDLE);
+            _this->reg_busy.set(0);
             // IssOffloadInsnGrant<uint32_t> offload_grant = {
             //     .result=0x0
             // };
@@ -1454,7 +1472,7 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             break;
         }
         default:
-            _this->trace.fatal("[LightRedmule] INVALID RedMule Status: %d\n", _this->state);
+            _this->trace.fatal("[LightRedmule] INVALID RedMule Status: %d\n", _this->reg_fsm_state.get());
     }
 }
 

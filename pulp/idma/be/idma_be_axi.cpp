@@ -19,6 +19,7 @@
  */
 
 #include <algorithm>
+#include <cstring>
 #include <vp/vp.hpp>
 #include "idma_be_axi.hpp"
 
@@ -96,6 +97,10 @@ void IDmaBeAxi::reset(bool active)
         {
             this->pending_bursts.pop();
         }
+        while(this->pending_bursts_ack.size() > 0)
+        {
+            this->pending_bursts_ack.pop();
+        }
 
         // And put back them all as free
         for (vp::IoReq &req: this->bursts)
@@ -119,7 +124,7 @@ uint64_t IDmaBeAxi::get_burst_size(uint64_t base, uint64_t size)
 {
     // First check maximum burst size
     size = std::min(size, (uint64_t)AXI_PAGE_SIZE);
-    
+
     if (this->burst_size>0) {
         //Constraint AXI burst size
         size = std::min(size, (uint64_t)this->burst_size);
@@ -154,7 +159,12 @@ void IDmaBeAxi::enqueue_burst(uint64_t base, uint64_t size, bool is_write, IdmaT
     *req->arg_get(0) = (void *)transfer;
 
     this->pending_bursts.push(req);
-    this->pending_bursts_ack.push(req);
+
+    // pending_bursts_ack is only used for write burst slot tracking
+    if (is_write)
+    {
+        this->pending_bursts_ack.push(req);
+    }
 
     // It case it is the first burst, set the pending base, this is used for writing bursts to know next
     // req address
@@ -273,36 +283,49 @@ void IDmaBeAxi::write_burst(IdmaTransfer *transfer, uint64_t base, uint64_t size
 
 void IDmaBeAxi::write_data(IdmaTransfer *transfer, uint8_t *data, uint64_t size)
 {
-    // Each chunk is directly sent to AXI to avoid sending whole burst at the end.
-    // Allocate a request and send it. The burst limitation is modeled with another request
-    vp::IoReq *req = new vp::IoReq();
+    // Copy beat data so we can ack the TCDM buffer immediately without waiting for AXI
+    uint8_t *buf = new uint8_t[size];
+    memcpy(buf, data, size);
 
     uint64_t base = this->current_burst_base;
     this->current_burst_base += size;
-
     this->current_burst_size -= size;
-    if (this->current_burst_size == 0)
-    {
-        vp::IoReq *burst = this->pending_bursts.front();
-        this->pending_bursts.pop();
 
+    bool burst_done = (this->current_burst_size == 0);
+    if (burst_done)
+    {
+        this->pending_bursts.pop();
         if (this->pending_bursts.size() > 0)
         {
             this->current_burst_base = this->pending_bursts.front()->get_addr();
             this->current_burst_size = this->pending_bursts.front()->get_size();
         }
+
+        // Free the burst slot as soon as the last beat is sent, mirroring RTL behaviour
+        // where the DMA does not wait for the AXI B-channel before starting the next burst.
+        vp::IoReq *burst = this->pending_bursts_ack.front();
+        this->pending_bursts_ack.pop();
+        this->free_bursts.push(burst);
+        this->be->update();
+        this->update();
     }
 
-    this->trace.msg(vp::Trace::LEVEL_TRACE, "Write data (req: %p, base: 0x%lx, size: 0x%lx)\n",
-        req, base, size);
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Write data (buf: %p, base: 0x%lx, size: 0x%lx)\n",
+        buf, base, size);
 
+    // Ack TCDM immediately so TCDM reads are not blocked by AXI write latency
+    this->be->ack_data(transfer, data, size);
+
+    // Send this beat to AXI straight away — streaming, beat by beat
+    vp::IoReq *req = new vp::IoReq();
     req->prepare();
     req->set_is_write(true);
     req->set_addr(base);
     req->set_size(size);
-    req->set_data(data);
-    req->arg_alloc();
-    *req->arg_get(0) = (void *)transfer;
+    req->set_data(buf);
+    // req->arg_alloc(); — removed: ack_data() is now called early in write_data() before
+    // *req->arg_get(0) = transfer;  the IoReq is created, so write_handle_req_end() no
+    //                               longer needs the transfer pointer.
 
     vp::IoReqStatus status = this->ico_itf.req(req);
     if (status == vp::IoReqStatus::IO_REQ_OK)
@@ -327,32 +350,10 @@ void IDmaBeAxi::write_handle_req_end(vp::IoReq *req)
 {
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Handling end of request (req: %p)\n", req);
 
-    // Acknowledge now the data since they are gone, to let the other backend protocol sending the
-    // rest of the burst immediately
-    this->be->ack_data((IdmaTransfer *)*req->arg_get(0), req->get_data(), req->get_size());
-
-    // Account this chunk on the first pending burst
-    vp::IoReq *burst = this->pending_bursts_ack.front();
-    burst->set_size(burst->get_size() - req->get_size());
-
-    this->trace.msg(vp::Trace::LEVEL_TRACE, "Updating burst remaining size (burst: %p, req_size: %d, burst_size: %d)\n",
-        burst, req->get_size(), burst->get_size());
-
-    // And release it in case it is done
-    if (burst->get_size() == 0)
-    {
-        this->pending_bursts_ack.pop();
-        this->free_bursts.push(burst);
-        // Notify the backend since it may schedule another burst
-        this->be->update();
-        // Update FSM since we updated current burst, we have have something to do
-        this->update();
-    }
-
+    // Burst slot was already freed in write_data() when the last beat was sent.
+    // Just release the per-beat IoReq and its data buffer.
+    delete[] req->get_data();
     delete req;
-
-    // For now we ignore the latency for write requests.
-    // This will be better modeled when we switch to the new AXI router
 }
 
 

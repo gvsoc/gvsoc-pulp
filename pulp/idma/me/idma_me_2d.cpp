@@ -24,7 +24,8 @@
 
 IDmaMe2D::IDmaMe2D(vp::Component *idma, IdmaTransferProducer *fe, IdmaTransferConsumer *be)
 :   Block(idma, "me"),
-    fsm_event(this, &IDmaMe2D::fsm_handler)
+    fsm_event(this, &IDmaMe2D::fsm_handler),
+    me_state(*this, "me_state", 32, true, ME_IDLE)
 {
     // Frontend and backend will be used later for interaction
     this->fe = fe;
@@ -120,6 +121,8 @@ void IDmaMe2D::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         {
             _this->current_reps = 1;
         }
+
+        _this->me_state.set(ME_DECOMPOSING);
     }
 
     // Check if we can extract a burst from the current transfer
@@ -144,6 +147,7 @@ void IDmaMe2D::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             // And remove it
             _this->current_transfer = NULL;
             _this->transfer_queue.pop();
+            _this->me_state.set(ME_IDLE);
 
             // Update frontend in case it has a transfer to queue
             _this->fe->update();
