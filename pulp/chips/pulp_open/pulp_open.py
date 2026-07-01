@@ -25,23 +25,17 @@ import interco.router_proxy as router_proxy
 import memory.dramsys
 import memory.pim_component
 from gvrun.attribute import Tree, Area, Value
-from config_tree import Config, cfg_field
 
 class PulpOpenAttr(Tree):
     def __init__(self, parent):
         super().__init__(parent)
         self.soc = SocAttr(self, 'soc')
 
-class PulpOpenConfig(Config):
-    fic: bool = cfg_field(default=False, read=True, write=True, desc=(
-        "Enable Fic"
-    ))
-
 class Pulp_open(st.Component):
 
     def __init__(self, parent, name, attr: PulpOpenAttr, parser, soc_config_file='pulp/chips/pulp_open/soc.json',
             cluster_config_file='pulp/chips/pulp_open/cluster.json', padframe_config_file='pulp/chips/pulp_open/padframe.json',
-            use_ddr=False, pim_support=False, pulpnn=False, config=PulpOpenConfig()):
+            use_ddr=False, pim_support=False, pulpnn=False):
         super(Pulp_open, self).__init__(parent, name)
 
         #
@@ -51,13 +45,6 @@ class Pulp_open(st.Component):
         soc_config_file = self.add_property('soc_config_file', soc_config_file)
         cluster_config_file = self.add_property('cluster_config_file', cluster_config_file)
         nb_cluster = self.add_property('nb_cluster', 1)
-
-        if os.environ.get('USE_GVRUN') is None:
-            fic = self.declare_user_property(
-                name='fic', value=False, cast=bool, description='Enable Fic'
-            )
-        else:
-            fic = self.get_property('fic')
 
         #
         # Components
@@ -79,10 +66,10 @@ class Pulp_open(st.Component):
         clusters = []
         for cid in range(0, nb_cluster):
             cluster_name = get_cluster_name(cid)
-            clusters.append(Cluster(self, cluster_name, config_file=cluster_config_file, cid=cid, pulpnn=pulpnn, fic=fic))
+            clusters.append(Cluster(self, cluster_name, config_file=cluster_config_file, cid=cid, pulpnn=pulpnn))
 
         # Soc
-        soc = Soc(self, 'soc', attr.soc, parser, config_file=soc_config_file, chip=self, cluster=clusters[0], pim_support=pim_support,pulpnn=pulpnn, fic=fic)
+        soc = Soc(self, 'soc', attr.soc, parser, config_file=soc_config_file, chip=self, cluster=clusters[0], pim_support=pim_support,pulpnn=pulpnn)
 
         # Fast clock
         fast_clock = Clock_domain(self, 'fast_clock', frequency=24576063*2)

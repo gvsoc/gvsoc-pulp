@@ -76,7 +76,7 @@ class Cluster(st.Component):
 
     """
 
-    def __init__(self, parent, name, config_file, cid: int=0, pulpnn=False, fic=False):
+    def __init__(self, parent, name, config_file, cid: int=0, pulpnn=False):
         super(Cluster, self).__init__(parent, name, config=ClusterConfig())
 
         #
@@ -113,7 +113,7 @@ class Cluster(st.Component):
         #
 
         # L1 subsystem
-        l1 = L1_subsystem(self, 'l1', self, cluster_conf, fic=fic)
+        l1 = L1_subsystem(self, 'l1', self, cluster_conf)
 
         # Cores
         pes = []
