@@ -30,7 +30,6 @@ class PulpOpenAttr(Tree):
         super().__init__(parent)
         self.soc = SocAttr(self, 'soc')
 
-
 class Pulp_open(st.Component):
 
     def __init__(self, parent, name, attr: PulpOpenAttr, parser, soc_config_file='pulp/chips/pulp_open/soc.json',
@@ -45,7 +44,6 @@ class Pulp_open(st.Component):
         soc_config_file = self.add_property('soc_config_file', soc_config_file)
         cluster_config_file = self.add_property('cluster_config_file', cluster_config_file)
         nb_cluster = self.add_property('nb_cluster', 1)
-
 
         #
         # Components

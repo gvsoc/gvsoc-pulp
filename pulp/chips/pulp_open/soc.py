@@ -42,7 +42,7 @@ import utils.loader.loader
 from gvrun.parameter import TargetParameter
 from gvrun.attribute import Tree
 from config_tree import Config, cfg_field
-
+from fault_injection.fic import FIC
 
 class SocAttr(Tree):
     def __init__(self, parent, name):
@@ -55,12 +55,10 @@ class SocConf(st.Component):
 
         self.add_properties(self.load_property_file(property_file))
 
-
 class SocConfig(Config):
     fic: bool = cfg_field(default=False, read=True, write=True, desc=(
         "Enable Fic"
     ))
-
 
 class Soc(st.Component):
 
@@ -87,6 +85,7 @@ class Soc(st.Component):
             )
         else:
             fic = self.get_property('fic')
+
 
         TargetParameter(
             self, name='binary', value=None, description='Binary to be loaded and started',
@@ -141,6 +140,11 @@ class Soc(st.Component):
         # AXI
         axi_ico = router.Router(self, 'axi_ico', latency=12)
 
+        # FIC
+        if fic:
+            fic_instance = FIC(self, 'fic')
+            fic_instance.o_GLOBAL_AS(axi_ico.i_INPUT())
+
         # GPIO
         gpio = gpio_module.Gpio(self, 'gpio', nb_gpio=soc_conf.get_property('peripherals/gpio/nb_gpio'), soc_event=soc_events['soc_evt_gpio'])
 
@@ -153,7 +157,7 @@ class Soc(st.Component):
             bus_watchpoint = Bus_watchpoint(self, 'bus_watchpoint', fc_tohost)
 
         # L2
-        self.l2 = L2Subsystem(self, 'l2', attr.l2)
+        self.l2 = L2Subsystem(self, 'l2', attr.l2, fic=fic)
 
         # SOC EU
         soc_eu = soc_eu_module.Soc_eu(self, 'soc_eu', ref_clock_event=soc_events['soc_evt_ref_clock'], **soc_conf.get_property('peripherals/soc_eu/config'))
