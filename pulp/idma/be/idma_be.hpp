@@ -21,10 +21,19 @@
 #pragma once
 
 #include <vp/vp.hpp>
+#include <vp/register.hpp>
 #include "../idma.hpp"
 #include "vp/itf/io.hpp"
 
 class IdmaTransferProducer;
+
+
+// Backend FSM state, exposed as a trace event ("be_state") for profiling.
+enum IDmaBeState
+{
+    BE_IDLE,    // no transfer being processed (current_transfer_size == 0)
+    BE_ACTIVE,  // a transfer is being split into bursts and delegated to backend protocols
+};
 
 
 
@@ -244,6 +253,8 @@ private:
     vp::Trace trace;
     // Block FSM event, used to trigger all checks after something has been updated
     vp::ClockEvent fsm_event;
+    // FSM state (see IDmaBeState), traced for profiling
+    vp::Register<uint32_t> be_state;
     // Current transfer being processed. This transfer is kept active until all bursts
     // have been delegated to backend protocols.
     IdmaTransfer *current_transfer;

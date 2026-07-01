@@ -21,8 +21,16 @@
 #pragma once
 
 #include <vp/vp.hpp>
+#include <vp/register.hpp>
 #include "../idma.hpp"
 
+
+// Middle-end FSM state, exposed as a trace event ("me_state") for profiling.
+enum IDmaMeState
+{
+    ME_IDLE,         // no current transfer being decomposed
+    ME_DECOMPOSING,  // splitting the current transfer into bursts for the backend
+};
 
 
 /**
@@ -67,6 +75,8 @@ private:
     std::queue<IdmaTransfer *> transfer_queue;
     // Block FSM event, used to trigger all checks after something has been updated
     vp::ClockEvent fsm_event;
+    // FSM state (see IDmaMeState), traced for profiling
+    vp::Register<uint32_t> me_state;
     // Current transfer being processed
     IdmaTransfer *current_transfer;
     // Current source address of the current transfer, updated each time a burst is sent
