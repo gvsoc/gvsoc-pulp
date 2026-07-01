@@ -57,7 +57,7 @@ class SocConf(st.Component):
 class Soc(st.Component):
 
     def __init__(self, parent, name, attr: SocAttr, parser, config_file, chip, cluster, pim_support=False, pulpnn=False, fic=False):
-        super(Soc, self).__init__(parent, name, config=SocConfig())
+        super(Soc, self).__init__(parent, name)
 
         #
         # Properties
@@ -129,7 +129,7 @@ class Soc(st.Component):
         # FIC
         if fic:
             fic_instance = FIC(self, 'fic')
-            fic.o_GLOBAL_AS(axi_ico.i_INPUT())
+            fic_instance.o_GLOBAL_AS(axi_ico.i_INPUT())
 
         # GPIO
         gpio = gpio_module.Gpio(self, 'gpio', nb_gpio=soc_conf.get_property('peripherals/gpio/nb_gpio'), soc_event=soc_events['soc_evt_gpio'])
@@ -143,7 +143,7 @@ class Soc(st.Component):
             bus_watchpoint = Bus_watchpoint(self, 'bus_watchpoint', fc_tohost)
 
         # L2
-        self.l2 = L2Subsystem(self, 'l2', attr.l2)
+        self.l2 = L2Subsystem(self, 'l2', attr.l2, fic=fic)
 
         # SOC EU
         soc_eu = soc_eu_module.Soc_eu(self, 'soc_eu', ref_clock_event=soc_events['soc_evt_ref_clock'], **soc_conf.get_property('peripherals/soc_eu/config'))

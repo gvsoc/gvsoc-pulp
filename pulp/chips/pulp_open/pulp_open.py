@@ -14,6 +14,7 @@
 # limitations under the License.
 #
 
+import os
 import gvsoc.systree as st
 from pulp.chips.pulp_open.soc import Soc, SocAttr
 from pulp.chips.pulp_open.cluster import Cluster, get_cluster_name
@@ -40,7 +41,7 @@ class Pulp_open(st.Component):
 
     def __init__(self, parent, name, attr: PulpOpenAttr, parser, soc_config_file='pulp/chips/pulp_open/soc.json',
             cluster_config_file='pulp/chips/pulp_open/cluster.json', padframe_config_file='pulp/chips/pulp_open/padframe.json',
-            use_ddr=False, pim_support=False, pulpnn=False):
+            use_ddr=False, pim_support=False, pulpnn=False, config=PulpOpenConfig()):
         super(Pulp_open, self).__init__(parent, name)
 
         #
