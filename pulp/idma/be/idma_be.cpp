@@ -27,7 +27,8 @@ IDmaBe::IDmaBe(vp::Component *idma, IdmaTransferProducer *me,
     IdmaBeConsumer *loc_be_read, IdmaBeConsumer *loc_be_write,
     IdmaBeConsumer *ext_be_read, IdmaBeConsumer *ext_be_write)
 :   Block(idma, "be"),
-    fsm_event(this, &IDmaBe::fsm_handler)
+    fsm_event(this, &IDmaBe::fsm_handler),
+    be_state(*this, "be_state", 32, true, BE_IDLE)
 {
     // Middle-end and backend protocols will be used later for interaction
     this->me = me;
@@ -72,6 +73,7 @@ void IDmaBe::enqueue_transfer(IdmaTransfer *transfer)
     this->current_transfer_dst = transfer->dst;
     this->current_transfer_src_be = this->get_be_consumer(transfer->src, transfer->size, true);
     this->current_transfer_dst_be = this->get_be_consumer(transfer->dst, transfer->size, false);
+    this->be_state.set(BE_ACTIVE);
 
     // Trigger FSM
     this->fsm_event.enqueue();
@@ -132,6 +134,8 @@ void IDmaBe::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
         if (_this->current_transfer_size == 0)
         {
+            _this->be_state.set(BE_IDLE);
+
             // In case the transfer is finished, the middle-end may push a new one
             _this->me->update();
         }
