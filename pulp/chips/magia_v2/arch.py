@@ -54,7 +54,7 @@ class MagiaArch:
     STDOUT_SIZE             = 0x100
 
     # Snitch_Spatz
-    SPATZ_ENABLE               = False
+    SPATZ_ENABLE               = True
     SPATZ_BOOTROM_ADDR         = 0x1000_0000
     SPATZ_BOOTROM_SIZE         = 0x100
     SPATZ_ROMFILE              = ''
