@@ -14,7 +14,6 @@
 # limitations under the License.
 #
 
-import os
 import gvsoc.systree as st
 from pulp.chips.pulp_open.soc import Soc, SocAttr
 from pulp.chips.pulp_open.cluster import Cluster, get_cluster_name
