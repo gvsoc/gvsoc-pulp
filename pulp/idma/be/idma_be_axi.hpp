@@ -67,6 +67,10 @@ private:
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
     // Called when an asynchronous response is received from AXI
     static void axi_response(vp::Block *__this, vp::IoReq *req);
+    // Called when a previously denied write burst is granted by the NoC NI. Now a no-op:
+    // completion and slot release happen on the burst response. Kept because the grant port
+    // is registered on the AXI master interface.
+    static void axi_grant(vp::Block *__this, vp::IoReq *req);
     // Once a read burst is finished, it can be enqueued with this function so that it is
     // notified after the latency has elapsed
     void read_handle_req_end(vp::IoReq *req);
@@ -104,8 +108,6 @@ private:
     // to process them in order. The front burst is removed from the queue once it is fully
     // processed.
     std::queue<vp::IoReq *> pending_bursts;
-
-    std::queue<vp::IoReq *> pending_bursts_ack;
 
     // Current base of the first transfer. This is when a chunk of data to be written is received
     // to know the base where it should be written.

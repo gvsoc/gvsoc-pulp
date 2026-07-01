@@ -202,6 +202,34 @@ void IDmaBe::ack_data(IdmaTransfer *transfer, uint8_t *data, int size)
 
 
 
+// Release a source buffer for flow control, without accounting it as written. Used by
+// destination back-ends that report completion later (see ack_write_completed).
+void IDmaBe::ack_data_buffer(IdmaTransfer *transfer, uint8_t *data)
+{
+    IdmaBeConsumer *src_be = this->get_be_consumer(transfer->src, transfer->size, true);
+    src_be->write_data_ack(data);
+}
+
+
+
+// Account data as actually written and terminate the transfer once it is fully committed.
+// Counterpart of ack_data_buffer, it does not touch any source buffer.
+void IDmaBe::ack_write_completed(IdmaTransfer *transfer, int size)
+{
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Acknowledging written (size: 0x%x, remaining_size: 0x%x)\n",
+        size, transfer->ack_size);
+
+    transfer->ack_size -= size;
+
+    if (transfer->ack_size == 0)
+    {
+        this->trace.msg(vp::Trace::LEVEL_TRACE, "Finished burst (transfer: %p)\n", transfer);
+        this->me->ack_transfer(transfer);
+    }
+}
+
+
+
 void IDmaBe::reset(bool active)
 {
     if (active)

@@ -196,6 +196,34 @@ public:
      * @param size Size of the written data being acknowledged
      */
     virtual void ack_data(IdmaTransfer *transfer, uint8_t *data, int size) = 0;
+
+    /**
+     * @brief Release a source data buffer without accounting it as written
+     *
+     * This splits the two roles of ack_data for back-ends that decouple the moment a source
+     * buffer can be freed (flow control) from the moment the data is actually committed to the
+     * destination (transfer completion). It only releases the source buffer so the source can
+     * keep streaming; it does NOT decrement the remaining transfer size. The destination must
+     * later call ack_write_completed when the data has really been written.
+     *
+     * @param transfer Transfer for which the source buffer is released
+     * @param data Source data buffer to release
+     */
+    virtual void ack_data_buffer(IdmaTransfer *transfer, uint8_t *data) = 0;
+
+    /**
+     * @brief Account data as actually written and possibly terminate the transfer
+     *
+     * Counterpart of ack_data_buffer: it accounts the given amount of data as committed to the
+     * destination and terminates the transfer once everything has been written. It does not
+     * touch any source buffer (that is done earlier through ack_data_buffer). This lets a
+     * back-end report completion at the real destination-write time (e.g. a NoC write response)
+     * rather than at source-read time.
+     *
+     * @param transfer Transfer for which written data is accounted
+     * @param size Size of the written data being accounted
+     */
+    virtual void ack_write_completed(IdmaTransfer *transfer, int size) = 0;
 };
 
 
@@ -232,6 +260,8 @@ public:
     bool is_ready_to_accept_data(IdmaTransfer *transfer) override;
     void write_data(IdmaTransfer *transfer, uint8_t *data, uint64_t size) override;
     void ack_data(IdmaTransfer *transfer, uint8_t *data, int size) override;
+    void ack_data_buffer(IdmaTransfer *transfer, uint8_t *data) override;
+    void ack_write_completed(IdmaTransfer *transfer, int size) override;
 
 private:
     // FSM handler, called to check if any action should be taken after something was updated
