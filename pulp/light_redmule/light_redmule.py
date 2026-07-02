@@ -16,6 +16,7 @@
 
 # Author: Chi Zhang <chizhang@iis.ee.ethz.ch>
 #         Lorenzo Zuolo, Chips-IT <lorenzo.zuolo@chips.it>
+#         Yinrong Li <yinrli@student.ethz.ch>
 
 import gvsoc.systree
 
@@ -36,7 +37,7 @@ class LightRedmule(gvsoc.systree.Component):
 
         super().__init__(parent, name)
 
-        self.add_sources(['pulp/light_redmule/light_redmule.cpp'])
+        self.add_sources(['pulp/light_redmule/light_redmule.cpp', 'cpu/iss/flexfloat/flexfloat.c'])
 
         self.add_properties({
             'tcdm_bank_width'   : tcdm_bank_width,
@@ -44,7 +45,7 @@ class LightRedmule(gvsoc.systree.Component):
             'elem_size'         : elem_size,
             # 'ce_height'         : ce_height,
             # 'ce_width'          : ce_width,
-            # WARNING!!! Perform a height width inversion as per Chi's suggestion. Orignal Light_RedMulE model was based on a temp RedMulE architecture. 
+            # WARNING!!! Perform a height width inversion as per Chi's suggestion. Orignal Light_RedMulE model was based on a temp RedMulE architecture.
             'ce_height'         : ce_width,
             'ce_width'          : ce_height,
             'ce_pipe'           : ce_pipe,
@@ -55,7 +56,7 @@ class LightRedmule(gvsoc.systree.Component):
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')
-    
+
     def i_INPUT_V2(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input_v2', signature='io')
 
