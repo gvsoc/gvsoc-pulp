@@ -15,9 +15,10 @@
  */
 
 /*
- * Authors: Chi     Zhang, ETH Zurich (chizhang@iis.ee.ethz.ch)
-            Lorenzo Zuolo, Chips-IT   (lorenzo.zuolo@chips.it)
-            Alex Marchioni, Chips-IT   (alex.marchioni@chips.it)
+ * Authors: Chi Zhang,       ETH Zurich                       chizhang@iis.ee.ethz.ch
+            Lorenzo Zuolo,   Chips-IT                         lorenzo.zuolo@chips.it
+            Alex Marchioni,  Chips-IT                         alex.marchioni@chips.it
+            Francesco Conti, University of Bologna & Chips-IT f.conti@unibo.it
  * Note:
  *      Here we only support (No Compute/ INT16 / UINT16 / FP16 ) for matrix multiply
  */
@@ -106,6 +107,12 @@ public:
 
     uint32_t op_foramt_parser(uint32_t op_format);
 
+    // HWPE control-register protocol (ACQUIRE / COMMIT_TRIGGER / SOFT_CLEAR)
+    int32_t  acquire();
+    void     commit(bool start);
+    void     start_next_job();
+    void     soft_clear(uint32_t value);
+
     vp::IoReqStatus send_tcdm_req();
     void init_redmule_meta_data();
     uint32_t tmp_next_addr();
@@ -147,6 +154,22 @@ public:
     int64_t             cycle_start;
     int64_t             total_runtime;
     int64_t             num_matmul;
+
+    //HWPE job queue (depth 2, double-buffered)
+    uint8_t             job_id_counter;   //wraps at 256
+    int                 job_state;        //0 = free to acquire, -2 = acquired-not-committed
+    int                 job_pending;      //0..2 committed-but-not-finished jobs
+    int                 cxt_cfg_ptr;      //context slot software is configuring
+    int                 cxt_use_ptr;      //context slot the FSM is executing
+    int                 cxt_job_id[2];    //job id per context slot, -1 = empty
+    int                 running_job_id;   //current/last running job id, -1 = none yet
+    uint32_t            cxt_m_size[2];
+    uint32_t            cxt_n_size[2];
+    uint32_t            cxt_k_size[2];
+    uint32_t            cxt_x_addr[2];
+    uint32_t            cxt_w_addr[2];
+    uint32_t            cxt_y_addr[2];
+    uint32_t            cxt_compute_able[2];
 
     //redmule configuration
     uint32_t            tcdm_bank_width;
@@ -324,7 +347,26 @@ LightRedmule::LightRedmule(vp::ComponentConf &config)
     this->cycle_start       = 0;
     this->total_runtime     = 0;
     this->num_matmul        = 0;
-    
+
+    //Initialize HWPE job queue
+    this->job_id_counter    = 0;
+    this->job_state         = 0;
+    this->job_pending       = 0;
+    this->cxt_cfg_ptr       = 0;
+    this->cxt_use_ptr       = 0;
+    this->cxt_job_id[0]     = -1;
+    this->cxt_job_id[1]     = -1;
+    this->running_job_id    = -1;
+    for (int i = 0; i < 2; i++) {
+        this->cxt_m_size[i]       = 0;
+        this->cxt_n_size[i]       = 0;
+        this->cxt_k_size[i]       = 0;
+        this->cxt_x_addr[i]       = 0;
+        this->cxt_w_addr[i]       = 0;
+        this->cxt_y_addr[i]       = 0;
+        this->cxt_compute_able[i] = 0;
+    }
+
     this->trace.msg("[LightRedmule] Model Initialization Done!\n");
 }
 
@@ -883,8 +925,129 @@ void LightRedmule::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
     }
 }
 
-//This is a very basic reg-if tested and suited to work with MAGIA workloads.
-//Job queueing and full register mapping will be added in the future. 
+/************************************************************
+*  HWPE control-register protocol (ACQUIRE / COMMIT_TRIGGER  *
+*  / STATUS / RUNNING_JOB / SOFT_CLEAR), depth-2 job queue    *
+************************************************************/
+
+//ACQUIRE (0x04, read): assign a new job id and lock the controller
+int32_t LightRedmule::acquire()
+{
+    if (this->job_state != 0) {
+        //Already acquired, not yet committed: re-return the pending id
+        //(checked first to match hwpe_ctrl_target.sv ACQUIRE-state priority over queue-full)
+        return this->job_state;
+    } else if (this->job_pending == 2) {
+        //Queue full
+        return -1;
+    } else {
+        //Free to acquire and room in the queue: hand out a new id
+        int32_t id = (int32_t) this->job_id_counter++;
+        this->cxt_job_id[this->cxt_cfg_ptr] = id;
+        this->job_state = -2;
+        return id;
+    }
+}
+
+//COMMIT_TRIGGER write (ct == 0 commit+start, ct == 1 commit-only)
+void LightRedmule::commit(bool start)
+{
+    if (this->job_state == 0) {
+        //For callers that (improerly) write TRIGGER directly without ever
+        //reading ACQUIRE, the real HW behavior is to not advance the job
+        //id counter, but only the running job counter (which counts retired
+        //jobs). We mirror that here.
+        if (this->job_pending < 2) {
+            this->cxt_job_id[this->cxt_cfg_ptr] = (int32_t) this->job_id_counter;
+            this->job_state = -2;
+        }
+    }
+    if (this->job_state != -2) {
+        //Queue full: drop
+        this->trace.msg(vp::Trace::LEVEL_WARNING,"[LightRedmule] COMMIT_TRIGGER dropped: job queue full (job_pending=%d)\n", this->job_pending);
+        return;
+    }
+
+    //Commit: unlock, queue the job, flip the config pointer
+    this->job_pending++;
+    this->job_state = 0;
+    this->cxt_cfg_ptr = 1 - this->cxt_cfg_ptr;
+
+    if (start && (this->reg_fsm_state.get() == IDLE)) {
+        this->start_next_job();
+    }
+}
+
+//Load the queued job in cxt_use_ptr and kick off the FSM (IDLE -> PRELOAD)
+void LightRedmule::start_next_job()
+{
+    //Load context
+    this->m_size         = this->cxt_m_size[this->cxt_use_ptr];
+    this->n_size         = this->cxt_n_size[this->cxt_use_ptr];
+    this->k_size         = this->cxt_k_size[this->cxt_use_ptr];
+    this->x_addr         = this->cxt_x_addr[this->cxt_use_ptr];
+    this->w_addr         = this->cxt_w_addr[this->cxt_use_ptr];
+    this->y_addr         = this->cxt_y_addr[this->cxt_use_ptr];
+    this->z_addr         = this->y_addr;
+    this->compute_able   = this->cxt_compute_able[this->cxt_use_ptr];
+    this->elem_size      = (this->compute_able < 4) ? 2 : 1;
+    this->running_job_id = this->cxt_job_id[this->cxt_use_ptr];
+
+    //Sanity Check
+    this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] redmule configuration (M-N-K): %d, %d, %d. Compute able is %d\n", this->m_size, this->n_size, this->k_size, this->compute_able);
+    if ((this->m_size == 0)||(this->n_size == 0)||(this->k_size == 0))
+    {
+        this->trace.fatal("[LightRedmule] INVALID redmule configuration (M-N-K): %d, %d, %d\n", this->m_size, this->n_size, this->k_size);
+        return;
+    }
+
+    //Initilaize redmule meta data
+    this->init_redmule_meta_data();
+
+    //Trigger FSM
+    this->reg_fsm_state.set(PRELOAD);
+    this->reg_busy.set(1);
+    this->tcdm_block_total = this->get_preload_access_block_number();
+    this->fsm_counter      = 0;
+    this->fsm_timestamp    = 0;
+    this->timer_start      = this->time.get_time();
+    this->cycle_start      = this->clock.get_cycles();
+    this->event_enqueue(this->fsm_event, 1);
+}
+
+//SOFT_CLEAR write: 0 full clear, 1 clear engine state only, 2 clear regfile+queue only
+void LightRedmule::soft_clear(uint32_t value)
+{
+    if ((value == 0) || (value == 2)) {
+        //Clear job-offload state machine, job queue, ID counters, and buffered
+        //job-dependent config (regfile)
+        this->job_state      = 0;
+        this->job_pending     = 0;
+        this->cxt_job_id[0]   = -1;
+        this->cxt_job_id[1]   = -1;
+        this->running_job_id  = -1;
+        this->cxt_cfg_ptr     = 0;
+        this->cxt_use_ptr     = 0;
+        this->job_id_counter  = 0;
+        for (int i = 0; i < 2; i++) {
+            this->cxt_m_size[i]       = 0;
+            this->cxt_n_size[i]       = 0;
+            this->cxt_k_size[i]       = 0;
+            this->cxt_x_addr[i]       = 0;
+            this->cxt_w_addr[i]       = 0;
+            this->cxt_y_addr[i]       = 0;
+            this->cxt_compute_able[i] = 0;
+        }
+    }
+    if ((value == 0) || (value == 1)) {
+        //Clear engine state (compute FSM)
+        this->reg_fsm_state.set(IDLE);
+        this->reg_busy.set(0);
+        this->done.sync(false);
+    }
+}
+
+//LightRedmule register interface
 vp::IoReqStatus LightRedmule::req(vp::Block *__this, vp::IoReq *req)
 {
     LightRedmule *_this = (LightRedmule *)__this;
@@ -912,7 +1075,7 @@ vp::IoReqStatus LightRedmule::req(vp::Block *__this, vp::IoReq *req)
                         return vp::IO_REQ_OK;
                     }
 
-                    //Initilaize redmule meta data
+                    //Initialize redmule meta data
                     _this->init_redmule_meta_data();
 
                     
@@ -1003,53 +1166,33 @@ vp::IoReqStatus LightRedmule::req_v2(vp::Block *__this, vp::IoReq *req)
     uint64_t size = req->get_size();
     bool is_write = req->get_is_write();
 
-    //_this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] access (offset: 0x%x, size: 0x%x, is_write: %d, data:%x)\n", offset, size, is_write, *(uint32_t *)data);
-
     if (is_write == 1) {
         uint32_t value = *(uint32_t *)data;
         switch (offset) {
-            case 0x00: {
-                if ((_this->redmule_query == NULL) && (_this->reg_fsm_state.get() == IDLE)) {
-                    /************************
-                    *  Synchronize Trigger  *
-                    ************************/
-                    //Sanity Check
-                    _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] redmule configuration (M-N-K): %d, %d, %d. Compute able is %d\n", _this->m_size, _this->n_size, _this->k_size,_this->compute_able);
-                    if ((_this->m_size == 0)||(_this->n_size == 0)||(_this->k_size == 0))
-                    {
-                        _this->trace.fatal("[LightRedmule] INVALID redmule configuration (M-N-K): %d, %d, %d\n", _this->m_size, _this->n_size, _this->k_size);
-                        return vp::IO_REQ_OK;
+            case 0x00: { //REDMULE_TRIGGER / hwpe_commit_trigger
+                uint32_t ct = value & 0x3;
+                if (ct == 2) {
+                    //Trigger-only: start whatever is already queued, no new commit
+                    if ((_this->job_pending > 0) && (_this->reg_fsm_state.get() == IDLE)) {
+                        _this->start_next_job();
                     }
-
-                    //Initilaize redmule meta data
-                    _this->init_redmule_meta_data();
-
-                    
-
-                    //Trigger FSM
-                    _this->reg_fsm_state.set(PRELOAD);
-                    _this->reg_busy.set(1);
-                    _this->tcdm_block_total = _this->get_preload_access_block_number();
-                    _this->fsm_counter      = 0;
-                    _this->fsm_timestamp    = 0;
-                    _this->timer_start      = _this->time.get_time();
-                    _this->cycle_start      = _this->clock.get_cycles();
-                    _this->event_enqueue(_this->fsm_event, 1);
-
-                    //Save Query
-                    //_this->redmule_query = req;
+                } else if (ct == 3) {
+                    //Neither bit is 0: no-op
+                } else {
+                    //ct == 0: commit + start; ct == 1: commit only (deferred start)
+                    _this->commit(ct == 0);
                 }
                 break;
             }
             case 0x20: { //REDMULE_MCFG0_PTR
-                _this->m_size=value & 0xFFFF;
-                _this->k_size=value >> 16;
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set mcfg_reg0 -- M size %d, Set K size %d)\n", _this->m_size,_this->k_size);
+                _this->cxt_m_size[_this->cxt_cfg_ptr] = value & 0xFFFF;
+                _this->cxt_k_size[_this->cxt_cfg_ptr] = value >> 16;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set mcfg_reg0 -- M size %d, Set K size %d)\n", _this->cxt_m_size[_this->cxt_cfg_ptr],_this->cxt_k_size[_this->cxt_cfg_ptr]);
                 break;
             }
             case 0x24: { //REDMULE_MCFG1_PTR
-                _this->n_size=value & 0xFFFF;
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set mcfg_reg1 -- N size %d)\n", _this->n_size);
+                _this->cxt_n_size[_this->cxt_cfg_ptr] = value & 0xFFFF;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set mcfg_reg1 -- N size %d)\n", _this->cxt_n_size[_this->cxt_cfg_ptr]);
                 break;
             }
             case 0x28: { //REDMULE_MCFG2_PTR
@@ -1057,25 +1200,28 @@ vp::IoReqStatus LightRedmule::req_v2(vp::Block *__this, vp::IoReq *req)
                 break;
             }
             case 0x2C: {
-                _this->x_addr = value;
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set X addr 0x%x)\n", _this->x_addr);
+                _this->cxt_x_addr[_this->cxt_cfg_ptr] = value;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set X addr 0x%x)\n", _this->cxt_x_addr[_this->cxt_cfg_ptr]);
                 break;
             }
             case 0x30: {
-                _this->w_addr = value;
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set W addr 0x%x)\n", _this->w_addr);
+                _this->cxt_w_addr[_this->cxt_cfg_ptr] = value;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set W addr 0x%x)\n", _this->cxt_w_addr[_this->cxt_cfg_ptr]);
                 break;
             }
             case 0x34: {
-                _this->y_addr = value;
-                _this->z_addr = _this->y_addr;
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set Y addr 0x%x, Set Z addr 0x%x)\n", _this->y_addr,_this->z_addr);
+                _this->cxt_y_addr[_this->cxt_cfg_ptr] = value;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set Y addr 0x%x)\n", _this->cxt_y_addr[_this->cxt_cfg_ptr]);
+                break;
+            }
+            case 0x14: { //REDMULE_SOFT_CLEAR
+                _this->soft_clear(value);
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] SOFT_CLEAR 0x%x\n", value);
                 break;
             }
             case 0x54: {
-                _this->compute_able = _this->op_foramt_parser((value == 0x480)? 9:0); //the marith mapping between reg-if and offload-if is different... WHY?
-                _this->elem_size = (_this->compute_able < 4)? 2:1;
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] marith 0x%x, compute_able 0x%x, elem_size %d)\n", value,_this->compute_able,_this->elem_size);
+                _this->cxt_compute_able[_this->cxt_cfg_ptr] = _this->op_foramt_parser((value == 0x480)? 9:0); //the marith mapping between reg-if and offload-if is different... WHY?
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] marith 0x%x, compute_able 0x%x)\n", value,_this->cxt_compute_able[_this->cxt_cfg_ptr]);
                 break;
             }
             default:
@@ -1084,20 +1230,22 @@ vp::IoReqStatus LightRedmule::req_v2(vp::Block *__this, vp::IoReq *req)
     }
     else {
         switch (offset) {
-            case 0x00:
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] read to INVALID address\n");
+            case 0x04: { //REDMULE_ACQUIRE
+                int32_t id = _this->acquire();
+                memcpy((void *)data, (void *)&id, size);
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] ACQUIRE -> job id %d\n", id);
                 break;
-            case 0x0C: {
-                int32_t done_id_r;
-                if ((_this->redmule_query == NULL) && (_this->reg_fsm_state.get() == IDLE)) {
-                    done_id_r =  0x00;
-                    memcpy((void *)data, (void *)&done_id_r, size);
-                }
-                else {
-                    done_id_r =  0x01;
-                    memcpy((void *)data, (void *)&done_id_r, size);
-                }
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] read status reg 0x%x\n",done_id_r);
+            }
+            case 0x0C: { //REDMULE_STATUS - per-slot busy bitfield (bit0 slot0, bit8 slot1)
+                uint32_t status = (_this->cxt_job_id[0] >= 0 ? 0x1 : 0) | (_this->cxt_job_id[1] >= 0 ? 0x100 : 0);
+                memcpy((void *)data, (void *)&status, size);
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] read status reg 0x%x\n",status);
+                break;
+            }
+            case 0x10: { //REDMULE_RUNNING_JOB
+                uint32_t running_job = (uint32_t) _this->running_job_id;
+                memcpy((void *)data, (void *)&running_job, size);
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] RUNNING_JOB -> %d\n", _this->running_job_id);
                 break;
             }
             default:
@@ -1106,68 +1254,6 @@ vp::IoReqStatus LightRedmule::req_v2(vp::Block *__this, vp::IoReq *req)
     }
     return vp::IO_REQ_OK;
 }
-
-    // if ((is_write == 0) && (offset == 32) && (_this->redmule_query == NULL) && (_this->reg_fsm_state.get() == IDLE))
-    // {
-    //     /************************
-    //     *  Synchronize Trigger  *
-    //     ************************/
-    //     //Sanity Check
-    //     _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] redmule configuration (M-N-K): %d, %d, %d\n", _this->m_size, _this->n_size, _this->k_size);
-    //     if ((_this->m_size == 0)||(_this->n_size == 0)||(_this->k_size == 0))
-    //     {
-    //         _this->trace.fatal("[LightRedmule] INVALID redmule configuration (M-N-K): %d, %d, %d\n", _this->m_size, _this->n_size, _this->k_size);
-    //         return vp::IO_REQ_OK;
-    //     }
-
-    //     //Initilaize redmule meta data
-    //     _this->init_redmule_meta_data();
-
-    //     //Trigger FSM
-    //     _this->state.set(PRELOAD);
-    //     _this->tcdm_block_total = _this->get_preload_access_block_number();
-    //     _this->fsm_counter      = 0;
-    //     _this->fsm_timestamp    = 0;
-    //     _this->timer_start      = _this->time.get_time();
-    //     _this->cycle_start      = _this->clock.get_cycles();
-    //     _this->compute_able     = 0;
-    //     _this->event_enqueue(_this->fsm_event, 1);
-
-    //     //Save Query
-    //     _this->redmule_query = req;
-    //     return vp::IO_REQ_PENDING;
-
-    // } else if ((is_write == 0) && (offset == 36) && (_this->reg_fsm_state.get() == IDLE)){
-    //     /*************************
-    //     *  Asynchronize Trigger  *
-    //     *************************/
-    //     //Sanity Check
-    //     _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] redmule configuration (M-N-K): %d, %d, %d\n", _this->m_size, _this->n_size, _this->k_size);
-    //     if ((_this->m_size == 0)||(_this->n_size == 0)||(_this->k_size == 0))
-    //     {
-    //         _this->trace.fatal("[LightRedmule] INVALID redmule configuration (M-N-K): %d, %d, %d\n", _this->m_size, _this->n_size, _this->k_size);
-    //         return vp::IO_REQ_OK;
-    //     }
-
-    //     //Initilaize redmule meta data
-    //     _this->init_redmule_meta_data();
-
-    //     //Trigger FSM
-    //     _this->state.set(PRELOAD);
-    //     _this->tcdm_block_total = _this->get_preload_access_block_number();
-    //     _this->fsm_counter      = 0;
-    //     _this->fsm_timestamp    = 0;
-    //     _this->timer_start      = _this->time.get_time();
-    //     _this->cycle_start      = _this->clock.get_cycles();
-    //     _this->compute_able     = 0;
-    //     _this->event_enqueue(_this->fsm_event, 1);
-
-    // } else if ((is_write == 0) && (offset == 40) && (_this->redmule_query == NULL) && (_this->reg_fsm_state.get() != IDLE)){
-    //     /*************************
-    //     *  Asynchronize Waiting  *
-    //     *************************/
-    //     _this->redmule_query = req;
-    //     return vp::IO_REQ_PENDING;
 
 vp::IoReqStatus LightRedmule::send_tcdm_req()
 {
@@ -1183,6 +1269,11 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     switch (_this->reg_fsm_state.get()) {
         case IDLE:
             _this->done.sync(false); //clear irq
+            //Auto-continue: start the next queued job, if any (depth-2 pipelining).
+            //Happens after done is deasserted.
+            if (_this->job_pending > 0) {
+                _this->start_next_job();
+            }
             break;
 
         case PRELOAD: {
@@ -1439,6 +1530,14 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             break;
         }
         case FINISHED: {
+            //Retire the job that just finished (no-op for jobs launched via the
+            //offload/custom-instruction path, which never touches job_pending)
+            _this->cxt_job_id[_this->cxt_use_ptr] = -1;
+            _this->cxt_use_ptr = 1 - _this->cxt_use_ptr;
+            if (_this->job_pending > 0) {
+                _this->job_pending--;
+            }
+
             //Reply Stalled Query
             if (_this->redmule_query == NULL)
             {
