@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-# Author: Chi Zhang <chizhang@ethz.ch>
+# Authors: Chi Zhang <chizhang@ethz.ch>, Siim Rausi <srausi@student.ethz.ch>
 
 class SoftHierArch:
 
@@ -25,10 +25,13 @@ class SoftHierArch:
         self.num_core_per_cluster    = 1
 
         #Topology
-        self.topology                = 'HierRing'
+        self.topology                = "HierRing"
 
         self.num_global_clusters     = 6
         self.num_local_clusters      = 6
+
+        #For DMA pattern
+        self.shape_category          = 1
 
         self.cluster_tcdm_bank_width = 4
         self.cluster_tcdm_bank_nb    = 128

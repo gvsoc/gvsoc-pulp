@@ -24,10 +24,10 @@ from vp.clock_domain import Clock_domain
 import interco.router as router
 import utils.loader.loader
 import gvsoc.systree
-from pulp.chips.softhier.softhier_3d_torus.cluster_unit import ClusterUnit, ClusterArch
-from pulp.chips.softhier.softhier_3d_torus.softhier_ctrl import SoftHierCtrl
+from pulp.chips.softhier.common.cluster_unit import ClusterUnit, ClusterArch
+from pulp.chips.softhier.common.softhier_ctrl import SoftHierCtrl
+from pulp.chips.softhier.common.error_detector import ErrorDetector
 from pulp.chips.softhier.softhier_3d_torus.softhier_arch import SoftHierArch
-from pulp.chips.softhier.softhier_3d_torus.error_detector import ErrorDetector
 from pulp.floonoc_flex.floonoc_flex import FlooNocFlex
 
 class SoftHierSystem(gvsoc.systree.Component):
