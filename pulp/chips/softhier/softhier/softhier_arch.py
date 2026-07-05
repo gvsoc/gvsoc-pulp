@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-# Author: Chi Zhang <chizhang@ethz.ch>
+# Authors: Chi Zhang <chizhang@ethz.ch>, Siim Rausi <srausi@student.ethz.ch>
 
 class SoftHierArch:
 
@@ -25,9 +25,12 @@ class SoftHierArch:
         self.num_core_per_cluster    = 1
 
         #Topology
-        self.topology                = '2DMesh'
+        self.topology                = "2DMesh"
         self.num_cluster_x           = 4
         self.num_cluster_y           = 4
+
+        #For DMA pattern
+        self.shape_category          = 2
 
         self.cluster_tcdm_bank_width = 4
         self.cluster_tcdm_bank_nb    = 128
