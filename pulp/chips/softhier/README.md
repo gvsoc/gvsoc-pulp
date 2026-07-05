@@ -29,7 +29,11 @@
    The default application is located at:
 
    ```
+<<<<<<< HEAD
    pulp/pulp/chips/softhier/sw/app_example
+=======
+   pulp/pulp/chips/softhier/common/sw/app_example
+>>>>>>> 0619e0a (Update readme)
    ```
 
 6. Run the simulation:
