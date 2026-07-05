@@ -2,6 +2,8 @@
 ## 				Make Targets for SoftHier Simulator 				##
 ######################################################################
 
+ACTUAL_TOPO ?= softhier
+
 third_party/toolchain:
 	mkdir -p third_party/toolchain
 	cd third_party/toolchain && \
@@ -19,11 +21,11 @@ sh-config:
 	@if [ "$(config_file)" != "pulp/pulp/chips/softhier/softhier/softhier_arch.py" ]; then \
 		cp -f $(config_file) pulp/pulp/chips/softhier/softhier/softhier_arch.py; \
 	fi
-	python3 pulp/pulp/chips/softhier/softhier/utils/config.py $(config_file)
+	python3 pulp/pulp/chips/softhier/common/utils/config.py $(config_file) pulp/pulp/chips/softhier/common/sw/runtime/include
 
 sh-hw:
 	make sh-config
-	make TARGETS=pulp.chips.softhier.softhier.softhier_target all
+	make TARGETS=pulp.chips.softhier.$(ACTUAL_TOPO).softhier_target all
 
 ######################################################################
 ## 				Make Targets for SoftHier Software	 				##
@@ -39,7 +41,7 @@ arch_cmake_arg := "-DRISCV_ARCH=rv32imafdv_zfh"
 
 sh-sw:
 	rm -rf sw_build && mkdir sw_build
-	cd sw_build && $(CMAKE) $(sw_cmake_arg) $(arch_cmake_arg) ../pulp/pulp/chips/softhier/softhier/sw/ && make
+	cd sw_build && $(CMAKE) $(sw_cmake_arg) $(arch_cmake_arg) ../pulp/pulp/chips/softhier/common/sw/ && make
 	@! grep -q "ebreak" sw_build/softhier.dump || (echo "Error: 'ebreak' found in sw_build/softhier.dump" && exit 1)
 
 sh-sw-clean:
@@ -51,4 +53,4 @@ sh-sw-clean:
 ######################################################################
 
 sh-run:
-	./install/bin/gvsoc --target=pulp.chips.softhier.softhier.softhier_target --binary sw_build/softhier.elf run
+	./install/bin/gvsoc --target=pulp.chips.softhier.$(ACTUAL_TOPO).softhier_target --binary sw_build/softhier.elf run
