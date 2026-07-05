@@ -30,7 +30,7 @@
    The default application is located at:
 
    ```
-   pulp/pulp/chips/softhier/softhier/sw/app_example
+   pulp/pulp/chips/softhier/common/sw/app_example
    ```
 
 6. Run the simulation:
