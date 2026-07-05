@@ -16,6 +16,7 @@
 
 from enum import IntEnum
 import gvsoc.systree
+from gvsoc.signature import IoV2Beat
 
 
 class FlooNocV2Direction(IntEnum):
@@ -69,13 +70,13 @@ class FlooNocV22dMeshNarrowWide(gvsoc.systree.Component):
         if rm_base and remove_offset == 0:
             remove_offset = base
         self.__add_mapping(f"narrow_{name}", base=base, size=size, x=x, y=y, remove_offset=remove_offset)
-        self.itf_bind(f"ni_narrow_{x}_{y}", itf, signature='io_v2')
+        self.itf_bind(f"ni_narrow_{x}_{y}", itf, signature=IoV2Beat(self.get_property('narrow_width')))
 
     def o_WIDE_BIND(self, itf: gvsoc.systree.SlaveItf, x: int, y: int):
-        self.itf_bind(f"ni_wide_{x}_{y}", itf, signature='io_v2')
+        self.itf_bind(f"ni_wide_{x}_{y}", itf, signature=IoV2Beat(self.get_property('wide_width')))
 
     def o_NARROW_BIND(self, itf: gvsoc.systree.SlaveItf, x: int, y: int):
-        self.itf_bind(f"ni_narrow_{x}_{y}", itf, signature='io_v2')
+        self.itf_bind(f"ni_narrow_{x}_{y}", itf, signature=IoV2Beat(self.get_property('narrow_width')))
 
     def o_MAP_DIR(self, base: int, size: int, dir: FlooNocV2Direction, name: str,
             rm_base: bool=False, remove_offset:int =0):
@@ -91,10 +92,12 @@ class FlooNocV22dMeshNarrowWide(gvsoc.systree.Component):
         self.__add_mapping(f"ni_{x}_{y}", base=base, size=size, x=x, y=y, remove_offset=remove_offset)
 
     def i_NARROW_INPUT(self, x: int, y: int) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, f'narrow_input_{x}_{y}', signature='io_v2')
+        return gvsoc.systree.SlaveItf(self, f'narrow_input_{x}_{y}',
+            signature=IoV2Beat(self.get_property('narrow_width')))
 
     def i_WIDE_INPUT(self, x: int, y: int) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, f'wide_input_{x}_{y}', signature='io_v2')
+        return gvsoc.systree.SlaveItf(self, f'wide_input_{x}_{y}',
+            signature=IoV2Beat(self.get_property('wide_width')))
 
 
 class FlooNocV2ClusterGridNarrowWide(FlooNocV22dMeshNarrowWide):

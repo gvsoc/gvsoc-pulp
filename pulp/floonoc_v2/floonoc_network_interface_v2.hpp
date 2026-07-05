@@ -74,6 +74,10 @@ public:
     void reset(bool active);
 
     void handle_response(FloonocReqV2 *req);
+    // Recover our own FloonocReqV2 from a downstream response beat (initiator-owned
+    // request convention): folds a distinct beat's payload onto our request and
+    // frees the beat; passes a round-tripped write ack through unchanged.
+    FloonocReqV2 *unwrap_response(vp::IoReq *req);
     void unstall_queue(int from_x, int from_y) override;
 
     bool handle_request(FloonocNodeV2 *node, FloonocReqV2 *req, int from_x, int from_y) override;
@@ -81,9 +85,9 @@ public:
     int get_y();
     void set_router(int nw, RouterV2 *router);
 private:
-    static void wide_response(vp::Block *__this, vp::IoReq *req);
+    static vp::IoRespAck wide_response(vp::Block *__this, vp::IoReq *req);
     static void wide_retry(vp::Block *__this, vp::IoRetryChannel);
-    static void narrow_response(vp::Block *__this, vp::IoReq *req);
+    static vp::IoRespAck narrow_response(vp::Block *__this, vp::IoReq *req);
     static void narrow_retry(vp::Block *__this, vp::IoRetryChannel);
     static vp::IoReqStatus narrow_req(vp::Block *__this, vp::IoReq *req);
     static vp::IoReqStatus wide_req(vp::Block *__this, vp::IoReq *req);

@@ -60,9 +60,11 @@ vp::IoReqStatus Ri5kyMmio::req(vp::Block *__this, vp::IoReq *req)
         switch (offset & 0xc)
         {
             case 0x0:  /* putchar */
-                std::fputc((int)(value & 0xff), stdout);
-                std::fflush(stdout);
+            {
+                char c = (char)(value & 0xff);
+                _this->stdout_write(&c, 1);
                 break;
+            }
             case 0x4:  /* exit */
                 _this->time.get_engine()->quit((int)value);
                 break;
