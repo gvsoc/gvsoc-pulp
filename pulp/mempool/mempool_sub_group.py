@@ -27,7 +27,7 @@ from pulp.mempool.redmule_configurations import RedmuleParam
 
 class Sub_group(st.Component):
 
-    def __init__(self, parent, name, parser, redmule_config: RedmuleParam=None, terapool: bool=False, async_l1_interco: bool=False, nb_redmule_tiles_per_sub_group: int=0, sub_group_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=4, nb_groups: int=4, total_cores: int=1024, bank_factor: int=4, bank_size: int=1024, axi_data_width: int=64, terapool_group_latency: int=7, nb_fus_per_core: int=1):
+    def __init__(self, parent, name, parser, redmule_config: RedmuleParam=None, terapool: bool=False, async_l1_interco: bool=False, nb_redmule_tiles_per_sub_group: int=0, tensorpool: bool=False, sub_group_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=4, nb_groups: int=4, total_cores: int=1024, bank_factor: int=4, bank_size: int=1024, axi_data_width: int=64, terapool_group_latency: int=7, nb_fus_per_core: int=1, redmule_bandwidth: int=64):
         super().__init__(parent, name)
 
         ################################################################
@@ -45,8 +45,8 @@ class Sub_group(st.Component):
         
         self.tile_list = []
         for i in range(0, nb_tiles_per_sub_group):
-            self.tile_list.append(Tile(self, f'tile_{i}',parser=parser, redmule_config=redmule_config, terapool=terapool, has_redmule=(i<nb_redmule_tiles_per_sub_group), async_l1_interco=async_l1_interco, tile_id=i, sub_group_id=sub_group_id, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
-                nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, bank_size=bank_size, terapool_group_latency=terapool_group_latency, nb_fus_per_core=nb_fus_per_core))
+            self.tile_list.append(Tile(self, f'tile_{i}',parser=parser, redmule_config=redmule_config, terapool=terapool, has_redmule=(i<nb_redmule_tiles_per_sub_group), tensorpool=tensorpool, async_l1_interco=async_l1_interco, tile_id=i, sub_group_id=sub_group_id, group_id=group_id, nb_cores_per_tile=nb_cores_per_tile,
+                nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, bank_size=bank_size, terapool_group_latency=terapool_group_latency, nb_fus_per_core=nb_fus_per_core, redmule_bandwidth=redmule_bandwidth))
 
         #Sub Group local interconnect
         sub_group_local_interleaver = Interleaver(self, 'sub_group_local_interleaver', nb_slaves=nb_tiles_per_sub_group, nb_masters=nb_tiles_per_sub_group,
@@ -65,6 +65,24 @@ class Sub_group(st.Component):
                 itf.add_mapping('output')
                 tile_itf_list.append(itf)
             sub_group_out_interfaces.append(tile_itf_list)
+
+        # Dedicated wide RedMulE remote channel (mirrors the interleavers/routers above, wide routers)
+        if tensorpool:
+            redmule_sub_group_local_interleaver = Interleaver(self, 'redmule_sub_group_local_interleaver', nb_slaves=nb_tiles_per_sub_group, nb_masters=nb_tiles_per_sub_group,
+                interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor)), offset_translation=False)
+
+            redmule_sub_group_remote_master_interleavers = []
+            for i in range(0, nb_remote_sub_group_ports):
+                redmule_sub_group_remote_master_interleavers.append(Interleaver(self, f'redmule_sub_group_remote_slave_interleaver_{i}', nb_slaves=nb_tiles_per_sub_group, nb_masters=nb_tiles_per_sub_group, interleaving_bits=int(math.log2(4*nb_cores_per_tile*bank_factor)), offset_translation=False))
+
+            redmule_sub_group_out_interfaces = []
+            for port in range(0, nb_remote_group_ports):
+                tile_itf_list = []
+                for i in range(0, nb_tiles_per_sub_group):
+                    itf = router.Router(self, f'redmule_sub_group_remote_out_itf{port}_tile{i}', latency=1, bandwidth=redmule_bandwidth, shared_rw_bandwidth=True, synchronous=not async_l1_interco, max_input_pending_size=4)
+                    itf.add_mapping('output')
+                    tile_itf_list.append(itf)
+                redmule_sub_group_out_interfaces.append(tile_itf_list)
 
         # DMA network(virtual, to emulate multiple backends)
         # DMA Traffic Demux
@@ -109,6 +127,19 @@ class Sub_group(st.Component):
             for i in range(0, nb_tiles_per_sub_group):
                 self.bind(sub_group_remote_master_interleavers[port], 'out_%d' % i, sub_group_out_interfaces[port][i], 'input')
 
+        #Dedicated RedMulE remote channel bindings (mirror the local + sub-group hops above)
+        if tensorpool:
+            for i in range(0, nb_tiles_per_sub_group):
+                self.bind(self.tile_list[i], 'redmule_loc_remt_master_out', redmule_sub_group_local_interleaver, 'in_%d' % i)
+            for i in range(0, nb_tiles_per_sub_group):
+                self.bind(redmule_sub_group_local_interleaver, 'out_%d' % i, self.tile_list[i], 'redmule_loc_remt_slave_in')
+            for port in range(0, nb_remote_sub_group_ports):
+                for i in range(0, nb_tiles_per_sub_group):
+                    self.bind(self.tile_list[i], f'redmule_sub_grp_remt{port}_master_out', redmule_sub_group_remote_master_interleavers[port], 'in_%d' % i)
+            for port in range(0, nb_remote_sub_group_ports):
+                for i in range(0, nb_tiles_per_sub_group):
+                    self.bind(redmule_sub_group_remote_master_interleavers[port], 'out_%d' % i, redmule_sub_group_out_interfaces[port][i], 'input')
+
         #Tile axi port -> axi interconnect
         for i in range(0, nb_tiles_per_sub_group):
            self.bind(self.tile_list[i], 'axi_out', axi_ico, f'input_{i}')
@@ -142,6 +173,17 @@ class Sub_group(st.Component):
             for i in range(0, nb_tiles_per_sub_group):
                 self.bind(self, f'sub_grp_remt{port+1}_tile{i}_slave_in', self.tile_list[i], f'sub_grp_remt{port}_slave_in')
                 self.bind(sub_group_out_interfaces[port][i], 'output', self, f'sub_grp_remt{port+1}_tile{i}_master_out')
+
+        # Dedicated RedMulE remote channel group-boundary interfaces (mirror the two blocks above)
+        if tensorpool:
+            for port in range(0, nb_remote_group_ports):
+                for i in range(0, nb_tiles_per_sub_group):
+                    self.bind(self, f'redmule_grp_remt{port}_tile{i}_slave_in', self.tile_list[i], f'redmule_grp_remt{port}_slave_in')
+                    self.bind(self.tile_list[i], f'redmule_grp_remt{port}_master_out', self, f'redmule_grp_remt{port}_tile{i}_master_out')
+            for port in range(0, nb_remote_sub_group_ports):
+                for i in range(0, nb_tiles_per_sub_group):
+                    self.bind(self, f'redmule_sub_grp_remt{port+1}_tile{i}_slave_in', self.tile_list[i], f'redmule_sub_grp_remt{port}_slave_in')
+                    self.bind(redmule_sub_group_out_interfaces[port][i], 'output', self, f'redmule_sub_grp_remt{port+1}_tile{i}_master_out')
 
         # Propagate the barrier signals from the tiles to the group boundary
         for i in range(0, nb_tiles_per_sub_group):
