@@ -26,28 +26,31 @@ from pulp.cpu.iss.snitch_mempool import SnitchMempoolConfig, SnitchMempool
 
 from pulp.light_redmule.light_redmule import LightRedmule
 from utils.common_cells import Or
+from pulp.mempool.irq_hold import IrqHold
 from pulp.mempool.redmule_configurations import RedmuleParam
 
 class Tile(st.Component):
 
-    def __init__(self, parent, name, parser, redmule_config: RedmuleParam=None, has_redmule: bool=False, terapool: bool=False, async_l1_interco: bool=False, tile_id: int=0, sub_group_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, bank_size: int=1024, axi_data_width: int=64, terapool_group_latency: int=7, nb_fus_per_core: int=1):
+    def __init__(self, parent, name, parser, redmule_config: RedmuleParam=None, has_redmule: bool=False, tensorpool: bool=False, terapool: bool=False, async_l1_interco: bool=False, tile_id: int=0, sub_group_id: int=0, group_id: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, bank_size: int=1024, axi_data_width: int=64, terapool_group_latency: int=7, nb_fus_per_core: int=1, redmule_bandwidth: int=64):
         super().__init__(parent, name)
 
-    #add new parameter has_redmule: bool=false
-        
-        if has_redmule: 
+        # A RedMulE can only be instantiated on the tensorpool configuration, which is the only
+        # one providing the dedicated wide RedMulE L1 path.
+        assert not has_redmule or tensorpool, "has_redmule requires the tensorpool configuration"
+
+        if has_redmule:
             # REDMULE
             #redmule = LightRedmule(self, 'redmule')
-            #NOT FINISHED YET WITH PARAMETERISZING THESE
             redmule = LightRedmule(self, f'tile-{tile_id}-redmule',
                                     tcdm_bank_width     = 4,
-                                    tcdm_bank_number    = (redmule_config.redmule_height * (redmule_config.redmule_regs + 1) )// 2 ,
+                                    tcdm_bank_number    = redmule_config.tcdm_bank_number,
                                     elem_size           = 2,
                                     ce_height           = redmule_config.redmule_height,
                                     ce_width            = redmule_config.redmule_width,
                                     ce_pipe             = redmule_config.redmule_regs,
-                                    queue_depth         = 16,
-                                    ic_latency          = redmule_config.ic_latency,
+                                    queue_depth         = redmule_config.queue_depth,
+                                    stream_loads        = redmule_config.stream_loads,
+                                    row_refill_cyc      = redmule_config.row_refill_cyc,
                                     outstanding         = True
                                     )
 
@@ -83,7 +86,8 @@ class Tile(st.Component):
                                         nb_groups=nb_groups, nb_remote_local_masters=1, nb_remote_group_masters=nb_remote_group_ports, \
                                         nb_remote_sub_group_masters=nb_remote_sub_group_ports, nb_pe=nb_pe, size=mem_size, \
                                         bandwidth=4, nb_banks_per_tile=nb_cores_per_tile*nb_fus_per_core*bank_factor, axi_data_width=axi_data_width, \
-                                        terapool_group_latency=terapool_group_latency)
+                                        terapool_group_latency=terapool_group_latency, \
+                                        tensorpool=tensorpool, redmule_bandwidth=redmule_bandwidth)
         # Shared icache
         icache = Hierarchical_cache(self, 'shared_icache', nb_cores=nb_cores_per_tile, nb_fus_per_core=nb_fus_per_core)
 
@@ -153,6 +157,19 @@ class Tile(st.Component):
             self.bind(self, f'grp_remt{i}_slave_in', l1, f'remote_group_in{i}')
             self.bind(l1, f'remote_group_out{i}', self, f'grp_remt{i}_master_out')
 
+        # Dedicated wide RedMulE remote channel (mirrors the ports above, redmule_-prefixed)
+        if tensorpool:
+            self.bind(self, 'redmule_loc_remt_slave_in', l1, 'redmule_remote_local_in0')
+            self.bind(l1, 'redmule_remote_local_out0', self, 'redmule_loc_remt_master_out')
+
+            for i in range(0, nb_remote_sub_group_ports):
+                self.bind(self, f'redmule_sub_grp_remt{i}_slave_in', l1, f'redmule_remote_sub_group_in{i}')
+                self.bind(l1, f'redmule_remote_sub_group_out{i}', self, f'redmule_sub_grp_remt{i}_master_out')
+
+            for i in range(0, nb_remote_group_ports):
+                self.bind(self, f'redmule_grp_remt{i}_slave_in', l1, f'redmule_remote_group_in{i}')
+                self.bind(l1, f'redmule_remote_group_out{i}', self, f'redmule_grp_remt{i}_master_out')
+
         self.bind(self, 'dma_tcdm', l1, 'dma')
 
         # ICO -> AXI -> L2 Memory
@@ -183,8 +200,11 @@ class Tile(st.Component):
             redmule_interrupt = Or(self, 'barrier_ack_OR_IRQ', nb_input=2) #only two inputs are either barr_ack or IRQ from redmule
             #sync_barrier --> redmule_interrupt
             self.bind(self, 'barrier_ack_0', redmule_interrupt, 'input_0')
-            #redmules IRQ --> redmule_interrupt
-            self.bind(redmule, 'done_irq', redmule_interrupt, 'input_1')
+            #redmule IRQ --> rising-edge hold (drops the done falling edge that would inject a spurious
+            #wakeup and desync core 0 from the barrier) --> redmule_interrupt
+            redmule_done_hold = IrqHold(self, 'redmule_done_hold')
+            self.bind(redmule, 'done_irq', redmule_done_hold, 'input')
+            self.bind(redmule_done_hold, 'output', redmule_interrupt, 'input_1')
             #redmule_interrupt --> core 0
             self.bind(redmule_interrupt, 'output', self.cores[0], 'barrier_ack')
         else:
