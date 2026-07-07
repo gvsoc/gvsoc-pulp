@@ -139,6 +139,12 @@ public:
     uint32_t            fsm_counter;
     uint32_t            fsm_timestamp;
     std::queue<uint32_t> pending_req_queue;
+    // When set, model the latency-tolerant streamer: a ROUTINE tile-iteration advances as soon as its
+    // loads are *issued* (not fully returned), carrying in-flight requests to the next iteration so the
+    // interconnect round-trip latency is overlapped (paid once at PRELOAD/STORING) not re-exposed per tile.
+    bool                stream_loads = false;
+    // Fixed per-M-block (output-row, iter_i) refill/priming overhead charged in streaming mode
+    uint32_t            row_refill_cyc = 0;
     int64_t             timer_start;
     int64_t             cycle_start;
     int64_t             total_runtime;
@@ -152,7 +158,6 @@ public:
     uint32_t            ce_width;
     uint32_t            ce_pipe;
     uint32_t            queue_depth;
-    uint32_t            ic_latency; // modeled interconnect round-trip (cycles)
     uint32_t            bandwidth;
     uint32_t            fold_tiles_mapping;
     uint64_t            loc_base;
@@ -246,7 +251,8 @@ LightRedmule::LightRedmule(vp::ComponentConf &config)
     this->ce_width          = get_js_config()->get("ce_width")->get_int();
     this->ce_pipe           = get_js_config()->get("ce_pipe")->get_int();
     this->queue_depth       = get_js_config()->get("queue_depth")->get_int();
-    this->ic_latency        = get_js_config()->get("ic_latency")->get_int();
+    this->stream_loads      = get_js_config()->get("stream_loads")->get_int();
+    this->row_refill_cyc    = get_js_config()->get("row_refill_cyc")->get_int();
     this->fold_tiles_mapping= get_js_config()->get("fold_tiles_mapping")->get_int();
     this->loc_base          = get_js_config()->get("loc_base")->get_double();
     this->compute_able      = 0;
@@ -1090,7 +1096,7 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 }
 
                 //Counte on receiving cycle
-                uint32_t receive_stamp = ((_this->ic_latency > 0) ? _this->ic_latency : _this->tcdm_req->get_latency()) + _this->fsm_timestamp;
+                uint32_t receive_stamp = _this->tcdm_req->get_latency() + _this->fsm_timestamp;
 
                 //Push pending request queue
                 _this->pending_req_queue.push(receive_stamp);
@@ -1166,7 +1172,7 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 }
 
                 //Counte on receiving cycle
-                uint32_t receive_stamp = ((_this->ic_latency > 0) ? _this->ic_latency : _this->tcdm_req->get_latency()) + _this->fsm_timestamp;
+                uint32_t receive_stamp = _this->tcdm_req->get_latency() + _this->fsm_timestamp;
 
                 //Push pending request queue
                 _this->pending_req_queue.push(receive_stamp);
@@ -1189,7 +1195,7 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             }
 
             //Jump
-            if ((_this->fsm_counter >= _this->tcdm_block_total) && (_this->pending_req_queue.size() == 0))
+            if ((_this->fsm_counter >= _this->tcdm_block_total) && (_this->stream_loads || (_this->pending_req_queue.size() == 0)))
             {
                 int modeled_runtime = _this->get_redmule_array_runtime();
                 int64_t latency = 1;
@@ -1204,6 +1210,22 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                     latency = modeled_runtime - _this->fsm_timestamp + 1;
                 }
 
+                // Streaming: carry still-in-flight loads into the next iteration (shifted onto its
+                // timebase) so their round-trip latency overlaps the next iteration's issue/compute
+                // instead of being re-exposed. PRELOAD/STORING still fully drain (latency paid once).
+                if (_this->stream_loads)
+                {
+                    int64_t iter_cost = (int64_t)_this->fsm_timestamp + latency;
+                    std::queue<uint32_t> carried;
+                    while (!_this->pending_req_queue.empty())
+                    {
+                        int64_t rs = (int64_t)_this->pending_req_queue.front();
+                        _this->pending_req_queue.pop();
+                        if (rs > iter_cost) carried.push((uint32_t)(rs - iter_cost));
+                    }
+                    _this->pending_req_queue.swap(carried);
+                }
+
                 // Next iteration
                 _this->fsm_counter      = 0;
                 _this->fsm_timestamp    = 0;
@@ -1215,8 +1237,15 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                     _this->process_iter_instruction();
                 }
 
+                uint32_t prev_iter_i = _this->iter_i;
                 if (_this->next_iteration() == 0)
                 {
+                    // Streaming: charge the fixed per-M-block refill/priming overhead when iter_i
+                    // (the output-row / M-block loop) advances. Amortizes over this block's j/k loops.
+                    if (_this->stream_loads && (_this->iter_i != prev_iter_i))
+                    {
+                        latency += _this->row_refill_cyc;
+                    }
                     _this->tcdm_block_total = _this->get_routine_access_block_number();
                     _this->state.set(ROUTINE);
                 } else {
@@ -1260,7 +1289,7 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 }
 
                 //Counte on receiving cycle
-                uint32_t receive_stamp = ((_this->ic_latency > 0) ? _this->ic_latency : _this->tcdm_req->get_latency()) + _this->fsm_timestamp;
+                uint32_t receive_stamp = _this->tcdm_req->get_latency() + _this->fsm_timestamp;
 
                 //Push pending request queue
                 _this->pending_req_queue.push(receive_stamp);

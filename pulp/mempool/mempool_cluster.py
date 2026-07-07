@@ -25,7 +25,7 @@ from pulp.mempool.redmule_configurations import RedmuleParam
 
 class Cluster(st.Component):
 
-    def __init__(self, parent, name, parser, async_l1_interco: bool=False, redmule_config: RedmuleParam=None, tensorpool: bool=False, terapool: bool=False, nb_redmule_tiles: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, bank_size: int=1024, axi_data_width: int=64, nb_axi_masters_per_group: int=1, nb_dmas_per_group: int=1, terapool_group_latency: int=7, nb_fus_per_core: int=1):
+    def __init__(self, parent, name, parser, async_l1_interco: bool=False, redmule_config: RedmuleParam=None, tensorpool: bool=False, terapool: bool=False, nb_redmule_tiles: int=0, nb_cores_per_tile: int=4, nb_sub_groups_per_group: int=1, nb_groups: int=4, total_cores: int= 256, bank_factor: int=4, bank_size: int=1024, axi_data_width: int=64, nb_axi_masters_per_group: int=1, nb_dmas_per_group: int=1, terapool_group_latency: int=7, nb_fus_per_core: int=1, redmule_bandwidth: int=64):
         super().__init__(parent, name)
 
         ################################################################
@@ -46,7 +46,7 @@ class Cluster(st.Component):
         for i in range(0, nb_groups):
             self.group_list.append(Group(self, f'group_{i}', parser=parser, redmule_config=redmule_config, async_l1_interco=async_l1_interco, tensorpool=tensorpool, terapool=terapool, group_id=i, nb_redmule_tiles_per_group=nb_redmule_tiles_per_group, nb_cores_per_tile=nb_cores_per_tile, 
                 nb_sub_groups_per_group=nb_sub_groups_per_group, nb_groups=nb_groups, total_cores=total_cores, bank_factor=bank_factor, bank_size=bank_size, axi_data_width=axi_data_width,
-                nb_dmas_per_group=nb_dmas_per_group, terapool_group_latency=terapool_group_latency, nb_fus_per_core=nb_fus_per_core))
+                nb_dmas_per_group=nb_dmas_per_group, terapool_group_latency=terapool_group_latency, nb_fus_per_core=nb_fus_per_core, redmule_bandwidth=redmule_bandwidth))
 
         # AXI Interface
         if (nb_sub_groups_per_group > 1): #changed from; terapool or tensorpool:
@@ -80,6 +80,28 @@ class Cluster(st.Component):
                             debug_router.add_mapping("output")
                             self.bind(self.group_list[ini], f'grp_remt{ini^tgt}_tile{tile}_master_out', debug_router, 'input')
                             self.bind(debug_router, 'output', self.group_list[tgt], f'grp_remt{ini^tgt}_tile{tile}_slave_in')
+
+        # Dedicated RedMulE remote channel: inter-group mesh (mirror of the block(s) above)
+        if tensorpool:
+            if (nb_sub_groups_per_group > 1):
+                for ini in range(0, nb_groups):
+                    for tgt in range(0, nb_groups):
+                        if (ini != tgt):
+                            for sg in range(0, nb_sub_groups_per_group):
+                                for tile in range(0, nb_tiles_per_group):
+                                    redmule_debug_router = router.Router(self, 'redmule_debug_router_ini%d_tgt%d_sg%d_tile%d' % (ini, tgt, sg, tile))
+                                    redmule_debug_router.add_mapping("output")
+                                    self.bind(self.group_list[ini], f'redmule_grp_remt{ini^tgt}_sg{sg}_tile{tile}_master_out', redmule_debug_router, 'input')
+                                    self.bind(redmule_debug_router, 'output', self.group_list[tgt], f'redmule_grp_remt{ini^tgt}_sg{sg}_tile{tile}_slave_in')
+            else:
+                for ini in range(0, nb_groups):
+                    for tgt in range(0, nb_groups):
+                        if (ini != tgt):
+                            for tile in range(0, nb_tiles_per_group):
+                                redmule_debug_router = router.Router(self, 'redmule_debug_router_ini%d_tgt%d_tile%d' % (ini, tgt, tile))
+                                redmule_debug_router.add_mapping("output")
+                                self.bind(self.group_list[ini], f'redmule_grp_remt{ini^tgt}_tile{tile}_master_out', redmule_debug_router, 'input')
+                                self.bind(redmule_debug_router, 'output', self.group_list[tgt], f'redmule_grp_remt{ini^tgt}_tile{tile}_slave_in')
 
         # Propagate barrier signals from group to cluster boundary
         for i in range(0, nb_groups):
