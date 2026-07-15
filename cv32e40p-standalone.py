@@ -29,8 +29,10 @@
 #   0x00000000  4MB   Main RAM        (entry point 0x00000080)
 #   0x10000000  256B  Virtual STDOUT  (write-only sink)
 #   0x15000000  256B  Virtual TIMER   (write-only sink)
-#   0x1A110800  16KB  Debug ROM       (read-only sink)
-#   0x20000000  256B  Virtual EXIT    (write-only sink)
+#   0x1A110800  4KB   Debug ROM       (linker script `dbg` region)
+#   0x20000000  256B  Virtual EXIT    (terminates the simulation)
+#   everywhere else   background sparse memory (default route: reads 0 until
+#                     written, writes persist - same as the UVM testbench)
 
 import memory.memory
 import vp.clock_domain
@@ -41,6 +43,7 @@ import gvsoc.runner
 from gvrun.parameter import TargetParameter
 from pulp.cpu.iss.pulp_cores import cv32e40p
 from pulp.cv32e40p_exit.cv32e40p_exit_device import Cv32e40pExitDevice
+from pulp.cv32e40p_sparse_mem.cv32e40p_sparse_mem import Cv32e40pSparseMem
 
 
 class Cv32e40pSoc(gvsoc.systree.Component):
@@ -64,14 +67,24 @@ class Cv32e40pSoc(gvsoc.systree.Component):
         timer_mem = memory.memory.Memory(self, 'timer', size=0x100, init=False)
         ico.o_MAP(timer_mem.i_INPUT(), 'timer', base=0x15000000, size=0x100, rm_base=True)
 
-        # Debug ROM sink @ 0x1A110800 (16KB)
-        debug_mem = memory.memory.Memory(self, 'debug_rom', size=0x4000, init=False)
-        ico.o_MAP(debug_mem.i_INPUT(), 'debug_rom', base=0x1A110800, size=0x4000, rm_base=True)
+        # Debug ROM @ 0x1A110800 (4KB, matches the linker script `dbg` region)
+        debug_mem = memory.memory.Memory(self, 'debug_rom', size=0x1000, init=False)
+        ico.o_MAP(debug_mem.i_INPUT(), 'debug_rom', base=0x1A110800, size=0x1000, rm_base=True)
 
         # Virtual EXIT device @ 0x20000000 (256B)
         # Terminates GVSOC when the program writes exit_valid to offset +0x04
         exit_dev = Cv32e40pExitDevice(self, 'exit')
         ico.o_MAP(exit_dev.i_INPUT(), 'exit', base=0x20000000, size=0x100, rm_base=True)
+
+        # Background sparse memory: default route for everything not mapped
+        # above (size=0 mapping). The UVM testbench serves the whole address
+        # space from a zero-default sparse memory; without this, out-of-map
+        # stores are dropped (readback diverges) and out-of-map fetches fault
+        # with mcause=1 where the RTL executes 0 and traps illegal (mcause=2).
+        # Absolute addresses are forwarded (rm_base=False) so the store is
+        # indexed like the testbench's.
+        bg_mem = Cv32e40pSparseMem(self, 'background_mem')
+        ico.o_MAP(bg_mem.i_INPUT(), 'background', base=0x00000000, size=0, rm_base=False)
 
         # CV32E40P core: uses the cv32e40p model which sets CONFIG_ISS_CORE=cv32e40p
         # and computes misa/mimpid from fpu/zfinx/pulpv2 to match the RTL configuration.

@@ -25,13 +25,18 @@
  *
  * Implements the cv32e40p virtual peripheral status flags (test_programs.rst):
  *
- *   Offset 0x00 (0x2000_0000): test_passed / test_failed flags (write-only sink)
+ *   Offset 0x00 (0x2000_0000): test_passed / test_failed flags
  *   Offset 0x04 (0x2000_0004): assert exit_valid → terminates GVSOC simulation
  *                               exit_value = wdata
- *   Offset 0x08 (0x2000_0008): signature_start_address (write-only sink)
- *   Offset 0x0C (0x2000_000C): signature_end_address   (write-only sink)
- *   Offset 0x10 (0x2000_0010): signature write trigger  (write-only sink)
+ *   Offset 0x08 (0x2000_0008): signature_start_address
+ *   Offset 0x0C (0x2000_000C): signature_end_address
+ *   Offset 0x10 (0x2000_0010): signature write trigger
  *                               also asserts exit_valid with exit_value = 0
+ *
+ * Every write is also retained and readable back: in the UVM testbench this
+ * region is ordinary sparse memory that the virtual peripheral snoops, so a
+ * write-then-read (e.g. of the signature addresses) returns the stored value
+ * there and must do the same here.
  */
 
 #include <cstring>
@@ -55,6 +60,10 @@ private:
 
     vp::IoSlave input_itf;
     vp::Trace   trace;
+
+    /* Backing store (256B region): writes persist and read back, like the
+     * testbench memory under the virtual peripheral. */
+    uint8_t mem[0x100] = {};
 };
 
 Cv32e40pExitDevice::Cv32e40pExitDevice(vp::ComponentConf &config)
@@ -69,14 +78,20 @@ vp::IoReqStatus Cv32e40pExitDevice::handle_req(vp::Block *__this, vp::IoReq *req
 {
     Cv32e40pExitDevice *_this = (Cv32e40pExitDevice *)__this;
 
+    uint32_t offset = (uint32_t)req->get_addr();
+
     if (!req->get_is_write())
     {
-        /* All registers are write-only — return 0 on read */
-        memset(req->get_data(), 0, req->get_size());
+        if (offset + req->get_size() <= sizeof(_this->mem))
+            memcpy(req->get_data(), &_this->mem[offset], req->get_size());
+        else
+            memset(req->get_data(), 0, req->get_size());
         return vp::IO_REQ_OK;
     }
 
-    uint32_t offset = (uint32_t)req->get_addr();
+    if (offset + req->get_size() <= sizeof(_this->mem))
+        memcpy(&_this->mem[offset], req->get_data(), req->get_size());
+
     uint32_t wdata  = (req->get_size() == 4) ? *(uint32_t *)req->get_data() : 0;
 
     switch (offset)
