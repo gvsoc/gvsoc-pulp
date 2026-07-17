@@ -26,6 +26,7 @@
 #include "floonoc_flex.hpp"
 #include <array>
 #include <vp/signal.hpp>
+#include <vp/stats/stats.hpp>
 #include <vp/vp.hpp>
 
 class FlooNoc;
@@ -37,7 +38,6 @@ class RouterQueue
                 vp::ClockEvent *ready_event = NULL);
     vp::Queue queue;
     FloonocNode *stalled_node;
-    int peak_queue_depth;
 };
 
 /**
@@ -76,12 +76,9 @@ class Router : public FloonocNode
     // Pass the routing table during initialization
     void set_routing_table(std::vector<int> table);
 
-    // For performance evaluation
-    int get_max_peak_queue_depth();
-
-    // Performance Counters
-    uint64_t stat_routed_packets = 0;
-    uint64_t stat_stall_cycles = 0;
+    // Performance statistics, dumped by the stats engine when --stats is passed
+    vp::StatScalar stat_routed_packets;
+    vp::StatScalar stat_stall_cycles;
 
   private:
     std::vector<int> routing_table; // Index: dest_node -> Value: next_hop_node

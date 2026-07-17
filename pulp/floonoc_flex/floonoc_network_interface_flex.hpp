@@ -26,6 +26,7 @@
 #include "floonoc_flex.hpp"
 #include <list>
 #include <vp/signal.hpp>
+#include <vp/stats/stats.hpp>
 #include <vp/vp.hpp>
 
 class FlooNoc;
@@ -110,12 +111,12 @@ class NetworkInterface : public FloonocNode
     void grant(vp::IoReq *req);
     void set_router(int nw, Router *router, int latency = 1);
 
-    // Performance Counters
-    uint64_t stat_injected_packets = 0;
-    uint64_t stat_received_responses = 0;
+    // Performance statistics, dumped by the stats engine when --stats is passed
+    vp::StatScalar stat_injected_packets;
+    vp::StatScalar stat_received_responses;
 
-    uint64_t stat_total_packet_latency = 0;
-    uint64_t stat_arrived_packets = 0;
+    vp::StatScalar stat_total_packet_latency;
+    vp::StatScalar stat_arrived_packets;
 
   private:
     // Callback called when a target request is asynchronously granted after a
