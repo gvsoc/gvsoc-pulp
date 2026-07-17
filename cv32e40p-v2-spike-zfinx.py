@@ -18,9 +18,8 @@
 # Authors: Marco Paci, Fondazione Chips-it (marco.paci@chips.it)
 #
 
-# CV32E40P iss_v2 bring-up target, integer configuration (rv32im + CoreV).
-# Platform in pulp/cv32e40p_v2_spike.py, shared by the cv32e40p-v2-spike*
-# variants.
+# CV32E40P iss_v2 bring-up target, ZFINX configuration (FP on the integer
+# register file).
 
 import gvsoc.runner
 from pulp.cv32e40p_v2_spike import Cv32e40pSpikeTop
@@ -29,11 +28,11 @@ from pulp.cv32e40p_v2_spike import Cv32e40pSpikeTop
 class Cv32e40p(Cv32e40pSpikeTop):
 
     def __init__(self, parent, name=None):
-        super().__init__(parent, name)
+        super().__init__(parent, name, zfinx=1)
 
 
 class Target(gvsoc.runner.Target):
 
-    description = "CV32E40P iss_v2 bring-up"
+    description = "CV32E40P iss_v2 bring-up (ZFINX)"
     model = Cv32e40p
-    name = "cv32e40p-v2-spike"
+    name = "cv32e40p-v2-spike-zfinx"

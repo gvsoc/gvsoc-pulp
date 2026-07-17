@@ -62,6 +62,9 @@ class Cv32e40pCsr(IssModule):
         iss.isa.add_define('CONFIG_GVSOC_ISS_CSR', 'Cv32e40pCsr')
         iss.isa.add_include('<cpu/iss_v2/include/cores/cv32e40p/csr.hpp>')
         iss.isa.add_define('CONFIG_GVSOC_ISS_CV32E40P_FPU_IN_ISA', 1 if self.fpu else 0)
+        if self.fpu:
+            # FP write-backs must dirty mstatus.FS (see iss_v2 isa_lib/macros.h).
+            iss.isa.add_define('CONFIG_GVSOC_ISS_FP_STATE_DIRTY', 1)
         iss.isa.add_define('CONFIG_GVSOC_ISS_CV32E40P_ZFINX', 1 if self.zfinx else 0)
         iss.isa.add_define('CONFIG_GVSOC_ISS_CV32E40P_PULP', 1 if self.pulp else 0)
         iss.isa.add_define('CONFIG_GVSOC_ISS_CV32E40P_NUM_MHPMCOUNTERS', self.num_mhpmcounters)
@@ -92,9 +95,11 @@ class Cv32e40p(RiscvCommon):
                  num_mhpmcounters: int=1,
                  extra_extensions: Iterable[IsaSubset] = ()):
 
-        # The PULP extensions change the decoded instruction set, so they
-        # are part of the cache identity and of the generated ISA name.
+        # pulp and zfinx change what gets compiled behind one ISA string,
+        # so both are part of the cache key and of the generated ISA name.
         isa_tag = f"{config.isa}_pulp" if pulp else config.isa
+        if zfinx:
+            isa_tag += '_zfinx'
         cache_key = (type(self).isa_name, isa_tag)
         isa_instance: Isa | None = isa_instances.get(cache_key)
 
@@ -131,4 +136,4 @@ class Cv32e40p(RiscvCommon):
         }
 
         super().__init__(parent, name, config=config, isa=isa_instance,
-                         misa=misa, modules=modules)
+                         misa=misa, zfinx=zfinx, modules=modules)
