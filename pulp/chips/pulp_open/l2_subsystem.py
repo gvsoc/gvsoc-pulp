@@ -40,11 +40,11 @@ class L2Attr(Tree):
 
 class L2Subsystem(st.Component):
 
-    def __init__(self, parent, name, attr):
+    def __init__(self, parent, name, attr, fic=False):
         super(L2Subsystem, self).__init__(parent, name)
 
-        l2_priv0 = memory.Memory(self, 'priv0', size=attr.priv0.size, power_trigger=True)
-        l2_priv1 = memory.Memory(self, 'priv1', size=attr.priv1.size)
+        l2_priv0 = memory.Memory(self, 'priv0', size=attr.priv0.size, power_trigger=True, fic_enabled=fic)
+        l2_priv1 = memory.Memory(self, 'priv1', size=attr.priv1.size, fic_enabled=fic)
 
         l2_shared_size = attr.shared.range.size
 
@@ -61,7 +61,7 @@ class L2Subsystem(st.Component):
 
             for j in range(0, l2_shared_nb_banks):
 
-                cut = memory.Memory(self, 'shared_%d_cut_%d' % (i, j), size=cut_size)
+                cut = memory.Memory(self, 'shared_%d_cut_%d' % (i, j), size=cut_size, fic_enabled=fic)
 
                 self.bind(l2_shared_interleaver, 'out_%d' % j, cut, 'input')
 
