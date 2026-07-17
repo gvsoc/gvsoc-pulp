@@ -91,18 +91,24 @@ Cv32e40pCsr::Cv32e40pCsr(Iss &iss)
     this->declare_csr(&this->minstreth, "minstreth", 0xB82);
 #endif
 
-    /* mcycle: value is derived from the clock with a write offset, and
-     * freezes on mcountinhibit.CY. Registered after the base callback so
-     * this one has the last word. */
+    /* mcycle/mcycleh: one 64-bit count derived from the clock with a write
+     * offset, frozen into the register pair while mcountinhibit.CY is set.
+     * Registered after the base callback so these have the last word. */
     this->mcycle.register_callback(std::bind(&Cv32e40pCsr::mcycle_access, this,
         std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+#if ISS_REG_WIDTH == 32
+    this->mcycleh.register_callback(std::bind(&Cv32e40pCsr::mcycleh_access, this,
+        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+#endif
 
     /* mcountinhibit: reset with all implemented bits set (RTL behaviour),
-     * i.e. counters disabled out of reset. */
+     * i.e. counters disabled out of reset. The callback freezes/unfreezes
+     * the mcycle count on CY toggles. */
     const int num_hpm = CONFIG_GVSOC_ISS_CV32E40P_NUM_MHPMCOUNTERS;
-    iss_reg_t mcountinhibit_mask = 0x5 | (((1u << num_hpm) - 1) << 3);
-    this->mcountinhibit.set_write_mask(mcountinhibit_mask);
-    this->mcountinhibit.reset_val = mcountinhibit_mask;
+    this->mcountinhibit.set_write_mask(MCOUNTINHIBIT_MASK);
+    this->mcountinhibit.reset_val = MCOUNTINHIBIT_MASK;
+    this->mcountinhibit.register_callback(std::bind(&Cv32e40pCsr::mcountinhibit_access, this,
+        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
     /* HPM counters and event selectors: only the first num_mhpmcounters
      * are implemented, the rest are WARL zero (writes ignored). Only
@@ -236,25 +242,86 @@ bool Cv32e40pCsr::tselect_read_zero(iss_insn_t *insn, bool is_write, iss_reg_t &
     return false;
 }
 
+uint64_t Cv32e40pCsr::mcycle_count()
+{
+#if ISS_REG_WIDTH == 32
+    uint64_t frozen = ((uint64_t)this->mcycleh.value << 32) | this->mcycle.value;
+#else
+    uint64_t frozen = this->mcycle.value;
+#endif
+    if (this->mcountinhibit.value & 0x1)
+    {
+        return frozen;
+    }
+    return (uint64_t)((int64_t)this->iss.clock.get_cycles() + this->mcycle_offset);
+}
+
+void Cv32e40pCsr::mcycle_set(uint64_t count)
+{
+    this->mcycle.value = (iss_reg_t)count;
+#if ISS_REG_WIDTH == 32
+    this->mcycleh.value = (iss_reg_t)(count >> 32);
+#endif
+    /* While frozen (CY set) this offset is dead: mcountinhibit_access
+     * recomputes it from the register pair at unfreeze time. */
+    this->mcycle_offset = (int64_t)count - (int64_t)this->iss.clock.get_cycles();
+}
+
 bool Cv32e40pCsr::mcycle_access(iss_insn_t *insn, bool is_write, iss_reg_t &value)
 {
     if (is_write)
     {
-        this->mcycle.value = value;
-        this->mcycle_offset = (int64_t)value - (int64_t)this->iss.clock.get_cycles();
+        this->mcycle_set((this->mcycle_count() & ~(uint64_t)0xFFFFFFFF) | value);
     }
     else
     {
-        if (this->mcountinhibit.value & 0x1)
-        {
-            value = this->mcycle.value;
-        }
-        else
-        {
-            value = (iss_reg_t)((int64_t)this->iss.clock.get_cycles() + this->mcycle_offset);
-        }
+        value = (iss_reg_t)this->mcycle_count();
     }
     return false;
+}
+
+bool Cv32e40pCsr::mcycleh_access(iss_insn_t *insn, bool is_write, iss_reg_t &value)
+{
+    if (is_write)
+    {
+        this->mcycle_set(((uint64_t)value << 32) | (uint32_t)this->mcycle_count());
+    }
+    else
+    {
+        value = (iss_reg_t)(this->mcycle_count() >> 32);
+    }
+    return false;
+}
+
+bool Cv32e40pCsr::mcountinhibit_access(iss_insn_t *insn, bool is_write, iss_reg_t &value)
+{
+    /* Freeze the count into the register pair when CY sets, re-anchor the
+     * clock offset to the frozen value when CY clears. Runs before the
+     * masked store, so this->mcountinhibit.value still holds the old CY. */
+    if (is_write)
+    {
+        /* Event lines fire only from the full handlers (same scheme as the
+         * Ri5ky PCMR write): switch when software touches the inhibit CSR. */
+        this->iss.exec.switch_to_full_mode();
+        bool old_cy = this->mcountinhibit.value & 0x1;
+        bool new_cy = value & 0x1;
+        if (old_cy != new_cy)
+        {
+            uint64_t count = this->mcycle_count();
+            if (new_cy)
+            {
+                this->mcycle.value = (iss_reg_t)count;
+#if ISS_REG_WIDTH == 32
+                this->mcycleh.value = (iss_reg_t)(count >> 32);
+#endif
+            }
+            else
+            {
+                this->mcycle_offset = (int64_t)count - (int64_t)this->iss.clock.get_cycles();
+            }
+        }
+    }
+    return true;
 }
 
 bool Cv32e40pCsr::hwloop_csr_access(iss_insn_t *insn, bool is_write, iss_reg_t &value, int index)

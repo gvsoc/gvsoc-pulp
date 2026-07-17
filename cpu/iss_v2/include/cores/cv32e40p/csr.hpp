@@ -28,6 +28,8 @@
 #ifndef CONFIG_GVSOC_ISS_CV32E40P_NUM_MHPMCOUNTERS
 #define CONFIG_GVSOC_ISS_CV32E40P_NUM_MHPMCOUNTERS 1
 #endif
+static_assert(CONFIG_GVSOC_ISS_CV32E40P_NUM_MHPMCOUNTERS <= 29,
+    "at most 29 HPM counters (mhpmcounter3..31)");
 
 /* CSR that is read-only from CSR instructions: any write attempt raises an
  * illegal-instruction exception before the access happens, so the destination
@@ -62,6 +64,10 @@ public:
 class Cv32e40pCsr : public Csr
 {
 public:
+    /* mcountinhibit implemented bits: CY, IR and one per HPM counter. */
+    static constexpr iss_reg_t MCOUNTINHIBIT_MASK =
+        0x5 | (((1u << CONFIG_GVSOC_ISS_CV32E40P_NUM_MHPMCOUNTERS) - 1) << 3);
+
     Cv32e40pCsr(Iss &iss);
 
     void start();
@@ -74,6 +80,15 @@ public:
      * on FP regfile writes, fflags updates and FP-CSR writes when the FPU is
      * in the ISA (FPU=1, ZFINX=0). SD (bit 31) is derived at read time. */
     inline void fp_state_dirty();
+
+    /* Advance the counters for one retired instruction: events is the OR of
+     * the RTL hpm_events lines it fired (see cores/cv32e40p/events.hpp).
+     * Called once per retire by Cv32e40pEvents::event_retire_account. */
+    inline void hpm_commit(uint32_t events);
+
+    /* True while any implemented counter is enabled: keeps the core on the
+     * full handlers, where the event lines fire (Cv32e40pExec). */
+    inline bool hpm_counting();
 
     /* CV32E40P-only CSRs, absent from the generic register file. */
     Cv32e40pRoCsr mvendorid_ro;  /* 0xF11 (replaces the base read/write reg) */
@@ -110,7 +125,14 @@ private:
     bool hwloop_csr_access(iss_insn_t *insn, bool is_write, iss_reg_t &value, int index);
     bool tselect_read_zero(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool mcycle_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
+    bool mcycleh_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
+    bool mcountinhibit_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool mstatus_read_fixup(iss_insn_t *insn, bool is_write, iss_reg_t &value);
+
+    /* Current 64-bit mcycle count: the frozen register pair while
+     * mcountinhibit.CY is set, the offset clock otherwise. */
+    uint64_t mcycle_count();
+    void mcycle_set(uint64_t count);
 
     int64_t mcycle_offset = 0;
 };
@@ -134,4 +156,41 @@ inline void Cv32e40pCsr::fp_state_dirty()
 #if CONFIG_GVSOC_ISS_CV32E40P_FPU_IN_ISA
     this->mstatus.fs = 3;
 #endif
+}
+
+inline bool Cv32e40pCsr::hpm_counting()
+{
+    /* CY excluded: mcycle is clock-derived and needs no full-handler
+     * support, only minstret and the event counters do. */
+    constexpr iss_reg_t event_bits = MCOUNTINHIBIT_MASK & ~(iss_reg_t)0x1;
+    return (this->mcountinhibit.value & event_bits) != event_bits;
+}
+
+inline void Cv32e40pCsr::hpm_commit(uint32_t events)
+{
+    /* minstret: retired instructions, gated on mcountinhibit.IR (bit 2). */
+    if (!(this->mcountinhibit.value & 0x4))
+    {
+        if (++this->minstret.value == 0)
+        {
+#if ISS_REG_WIDTH == 32
+            this->minstreth.value++;
+#endif
+        }
+    }
+    /* mhpmcounterN advances at most +1 per retire when the mhpmeventN mask
+     * intersects the fired lines and its mcountinhibit bit is clear. */
+    for (int i = 0; i < CONFIG_GVSOC_ISS_CV32E40P_NUM_MHPMCOUNTERS; i++)
+    {
+        if ((this->mhpmevent[i].value & events)
+            && !(this->mcountinhibit.value & (1u << (3 + i))))
+        {
+            if (++this->mhpmcounter[i].value == 0)
+            {
+#if ISS_REG_WIDTH == 32
+                this->mhpmcounterh[i].value++;
+#endif
+            }
+        }
+    }
 }

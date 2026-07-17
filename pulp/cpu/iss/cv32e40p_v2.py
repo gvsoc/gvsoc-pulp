@@ -24,7 +24,7 @@ from typing import Iterable
 from typing_extensions import override
 from gvsoc.systree import Component
 from cpu.iss_v2.riscv import (RiscvCommon, IssModule, Irq, ExecInOrder,
-                              Regfile, Event, LsuV2, Hwloop)
+                              Regfile, LsuV2, Hwloop)
 from cpu.iss.isa_gen.isa_gen import Isa, IsaSubset
 from cpu.iss.isa_gen.isa_riscv_gen import RiscvIsa
 from cpu.iss.isa_gen.isa_cv32e40pv2 import CoreV2
@@ -40,6 +40,41 @@ _MISA_BASE = 0x40001104
 
 class Cv32e40pConfig(RiscvConfig):
     pass
+
+
+class Cv32e40pExec(ExecInOrder):
+    """CV32E40P execution loop: stays on the full handlers while any
+    implemented counter is enabled, so the event lines fire (same scheme
+    as Ri5kyExec)."""
+
+    def __init__(self):
+        super().__init__(scoreboard=True, class_name='Cv32e40pExec',
+                         inorder_commit=True)
+
+    @override
+    def gen(self, iss: RiscvCommon):
+        super().gen(iss)
+        iss.isa.add_include('<cpu/iss_v2/include/cores/cv32e40p/exec.hpp>')
+        iss.isa.add_implem_include('<cpu/iss_v2/include/cores/cv32e40p/exec_implem.hpp>')
+
+
+class Cv32e40pEvent(IssModule):
+    """CV32E40P event accounting.
+
+    Selects the Cv32e40pEvents C++ class for the event slot: routes the
+    architectural event lines (instr, load, store, jump, branch, taken
+    branch, compressed) into the mhpm counters via Cv32e40pCsr::hpm_commit.
+    """
+
+    @override
+    def gen(self, iss: RiscvCommon):
+        iss.isa.add_define('CONFIG_GVSOC_ISS_EVENT', 'Cv32e40pEvents')
+        iss.isa.add_include('<cpu/iss_v2/include/cores/cv32e40p/events.hpp>')
+        iss.isa.add_implem_include('<cpu/iss_v2/include/cores/cv32e40p/events_implem.hpp>')
+        iss.add_sources([
+            'cpu/iss_v2/src/event/event.cpp',
+            'cpu/iss_v2/src/cores/cv32e40p/events.cpp',
+        ])
 
 
 class Cv32e40pCsr(IssModule):
@@ -131,10 +166,10 @@ class Cv32e40p(RiscvCommon):
             # standard mcause codes), as implemented by the RTL. The PULP
             # event-unit style IrqExternal does not apply to this core.
             'irq': Irq(),
-            'event': Event(),
+            'event': Cv32e40pEvent(),
             'csr': Cv32e40pCsr(fpu=fpu, zfinx=zfinx, pulp=pulp,
                                num_mhpmcounters=num_mhpmcounters),
-            'exec': ExecInOrder(scoreboard=True, inorder_commit=True),
+            'exec': Cv32e40pExec(),
             'lsu': LsuV2(),
             'regfile': Regfile(scoreboard=True),
             'hwloop': Hwloop(),
