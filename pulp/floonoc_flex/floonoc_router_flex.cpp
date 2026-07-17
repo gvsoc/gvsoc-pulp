@@ -59,6 +59,14 @@ Router::Router(FlooNoc *noc, std::string name, int node_id, int num_queues,
 
         *(this->stalled_queues[i]) = false;
     }
+
+    std::string stat_prefix = name + std::to_string(node_id) + "/";
+    noc->stats.register_stat(&this->stat_routed_packets,
+                             stat_prefix + "routed_packets",
+                             "Number of packets forwarded by this router");
+    noc->stats.register_stat(
+        &this->stat_stall_cycles, stat_prefix + "stall_cycles",
+        "Number of times a packet could not be forwarded and was retried");
 }
 
 Router::~Router()
@@ -107,6 +115,12 @@ bool Router::handle_request(FloonocNode *node, vp::IoReq *req, int from_node)
     // round-robin Get the one for the router or network interface which sent
     // this request
     int queue_index = this->get_req_queue(from_node);
+    if (queue_index == -1)
+    {
+        this->trace.fatal(
+            "Received request from unknown node (from_node: %d)\n", from_node);
+        return true;
+    }
 
     this->trace.msg(vp::Trace::LEVEL_DEBUG,
                     "Pushed request to input queue (req: %p, queue: %d)\n", req,
@@ -118,13 +132,6 @@ bool Router::handle_request(FloonocNode *node, vp::IoReq *req, int from_node)
     int latency = this->input_latencies[queue_index];
     queue->queue.push_back(req,
                            latency); // Delay representing link latency
-
-    // Update peak queue depth performance metric
-    int current_depth = queue->queue.size();
-    if (current_depth > queue->peak_queue_depth)
-    {
-        queue->peak_queue_depth = current_depth;
-    }
 
     // We let the source enqueue one more request than what is possible to model
     // the fact the request is stalled. This will then stall the source which
@@ -326,7 +333,12 @@ void Router::unstall_queue(int from_node)
     // we can now send a new request
     int queue = this->get_req_queue(from_node);
     if (queue == -1)
-        return; // Prevent negative index access
+    {
+        this->trace.fatal(
+            "Tried to unstall queue of unknown node (from_node: %d)\n",
+            from_node);
+        return;
+    }
 
     this->trace.msg(vp::Trace::LEVEL_TRACE,
                     "Unstalling queue (node: %d, queue: %d)\n", from_node,
@@ -340,7 +352,12 @@ void Router::stall_queue(int from_node)
 {
     int queue = this->get_req_queue(from_node);
     if (queue == -1)
-        return; // Prevent negative index access
+    {
+        this->trace.fatal(
+            "Tried to stall queue of unknown node (from_node: %d)\n",
+            from_node);
+        return;
+    }
 
     this->trace.msg(vp::Trace::LEVEL_TRACE,
                     "Stalling queue (node: %d, queue: %d)\n", from_node, queue);
@@ -364,19 +381,6 @@ int Router::get_req_queue(int from_node)
     return -1;
 }
 
-int Router::get_max_peak_queue_depth()
-{
-    int max_peak = 0;
-    for (int i = 0; i < this->num_queues; i++)
-    {
-        if (this->input_queues[i]->peak_queue_depth > max_peak)
-        {
-            max_peak = this->input_queues[i]->peak_queue_depth;
-        }
-    }
-    return max_peak;
-}
-
 void Router::reset(bool active)
 {
     if (active)
@@ -393,5 +397,4 @@ RouterQueue::RouterQueue(vp::Block *parent, std::string name,
                          vp::ClockEvent *ready_event)
     : queue(parent, name, ready_event)
 {
-    this->peak_queue_depth = 0;
 }

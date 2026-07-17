@@ -133,7 +133,6 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address,
         router_req->set_second_data(req->get_second_data());
 
         // Add injection time to router request
-        /*
         int64_t inject_time;
         if (is_req)
         {
@@ -148,8 +147,6 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address,
 
         *router_req->arg_get(FlooNoc::REQ_INJECT_TIME) =
             (void *)(long)inject_time;
-
-        */
 
         if (is_req)
         {
@@ -227,8 +224,7 @@ void NetworkQueue::send_router_req()
 
     vp::IoReq *burst = *(vp::IoReq **)req->arg_get(FlooNoc::REQ_BURST);
 
-    // Performance Counter
-    // this->ni.stat_injected_packets++;
+    this->ni.stat_injected_packets++;
 
     if (*(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI))
     {
@@ -313,6 +309,20 @@ NetworkInterface::NetworkInterface(FlooNoc *noc, int node_id,
 
     this->ni_outstanding_reqs =
         this->noc->get_js_config()->get("ni_outstanding_reqs")->get_int();
+
+    std::string stat_prefix = "ni_" + std::to_string(node_id) + "/";
+    noc->stats.register_stat(&this->stat_injected_packets,
+                             stat_prefix + "injected_packets",
+                             "Number of packets injected into the NoC");
+    noc->stats.register_stat(&this->stat_received_responses,
+                             stat_prefix + "received_responses",
+                             "Number of responses received from the NoC");
+    noc->stats.register_stat(&this->stat_arrived_packets,
+                             stat_prefix + "arrived_packets",
+                             "Number of wide packets which reached this NI");
+    noc->stats.register_stat(
+        &this->stat_total_packet_latency, stat_prefix + "total_packet_latency",
+        "Accumulated network latency of arrived wide packets (ps)");
 }
 
 void NetworkInterface::set_router(int nw, Router *router, int latency)
@@ -497,8 +507,7 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req,
     {
         this->handle_response(req);
 
-        // Performance Counter
-        // this->stat_received_responses++;
+        this->stat_received_responses++;
     }
     else
     {
@@ -514,30 +523,28 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req,
         int dest_id = (int)(long)*req->arg_get(FlooNoc::REQ_DEST_ID);
         if (dest_id != this->node_id)
         {
-            printf("ERROR: Request packet arrived at wrong destination! "
-                   "Expected node %d, got %d\n",
-                   this->node_id, dest_id);
+            this->trace.fatal("Request packet arrived at wrong destination "
+                              "(expected node %d, got %d)\n",
+                              this->node_id, dest_id);
+            return false;
         }
-        else
+
+        // Packet has arrived correctly
+
+        bool is_wide = (bool)(long)*req->arg_get(FlooNoc::REQ_WIDE);
+
+        // Only compute latency if it is a wide packet
+        if (is_wide)
         {
-            // Packet has arrived correctly
+            int64_t inject_time =
+                (int64_t)(long)*req->arg_get(FlooNoc::REQ_INJECT_TIME);
 
-            bool is_wide = (bool)(long)*req->arg_get(FlooNoc::REQ_WIDE);
+            // Latency in simulation time (ps)
+            int64_t current_time = this->time.get_engine()->get_time();
+            int64_t packet_latency = current_time - inject_time;
 
-            // Only compute latency if it is a wide packet
-            if (is_wide)
-            {
-                // Packet has arrived correctly
-                int64_t inject_time =
-                    (int64_t)(long)*req->arg_get(FlooNoc::REQ_INJECT_TIME);
-
-                // Latency in simulation time (ps)
-                int64_t current_time = this->time.get_engine()->get_time();
-                int64_t packet_latency = current_time - inject_time;
-
-                this->stat_total_packet_latency += packet_latency;
-                this->stat_arrived_packets++;
-            }
+            this->stat_total_packet_latency += packet_latency;
+            this->stat_arrived_packets++;
         }
 
         if ((req->get_is_write() && !req->get_int(FlooNoc::REQ_IS_ADDRESS)) ||
