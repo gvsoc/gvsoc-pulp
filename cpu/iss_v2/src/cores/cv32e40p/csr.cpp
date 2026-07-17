@@ -201,6 +201,12 @@ void Cv32e40pCsr::start()
      * overwrites the read value with the stored one. */
     this->mstatus.register_callback(std::bind(&Cv32e40pCsr::mstatus_read_fixup, this,
         std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+
+    /* Registered here so it runs after IrqRiscv::mtvec_access, which is
+     * registered by the IrqRiscv constructor and stores the value with the
+     * mode bit cleared. */
+    this->mtvec.register_callback(std::bind(&Cv32e40pCsr::mtvec_write_fixup, this,
+        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 }
 
 void Cv32e40pCsr::reset(bool active)
@@ -229,6 +235,23 @@ bool Cv32e40pCsr::mstatus_read_fixup(iss_insn_t *insn, bool is_write, iss_reg_t 
         }
     }
 #endif
+    return false;
+}
+
+bool Cv32e40pCsr::mtvec_write_fixup(iss_insn_t *insn, bool is_write, iss_reg_t &value)
+{
+    if (!is_write)
+    {
+        /* Keep the default read (value = stored register). */
+        return true;
+    }
+
+    /* RTL WARL result (cv32e40p_cs_registers.sv): base = wdata[31:8],
+     * bits [7:1] read 0, mode = wdata[0]; the reset / boot-address path
+     * (insn == NULL) forces mode = 1 (MTVEC_MODE). IrqRiscv::mtvec_access
+     * ran before this and stored the value with the mode bit cleared. */
+    iss_reg_t mode = (insn == NULL) ? 1 : (value & 1);
+    this->mtvec.value = (value & 0xFFFFFF00) | mode;
     return false;
 }
 

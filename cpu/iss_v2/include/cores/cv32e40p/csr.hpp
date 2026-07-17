@@ -128,6 +128,7 @@ private:
     bool mcycleh_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool mcountinhibit_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool mstatus_read_fixup(iss_insn_t *insn, bool is_write, iss_reg_t &value);
+    bool mtvec_write_fixup(iss_insn_t *insn, bool is_write, iss_reg_t &value);
 
     /* Current 64-bit mcycle count: the frozen register pair while
      * mcountinhibit.CY is set, the offset clock otherwise. */

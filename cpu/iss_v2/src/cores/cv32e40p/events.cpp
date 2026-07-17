@@ -12,5 +12,9 @@ void Cv32e40pEvents::reset(bool active)
     if (active)
     {
         this->pending_events = 0;
+        this->commit_push = 0;
+        this->commit_pop = 0;
+        this->inflight_push = 0;
+        this->inflight_pop = 0;
     }
 }

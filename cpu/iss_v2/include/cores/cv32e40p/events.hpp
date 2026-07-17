@@ -33,8 +33,30 @@ public:
     inline void event_taken_branch_account();
     inline void event_jump_account();
     inline void event_retire_account(iss_insn_t *insn);
+    inline void insn_stall_account();
+
+    /* Architectural commit stream for an external stepper (RVVI bridge).
+     * A PC is pushed when the instruction's result is architecturally
+     * visible: at retire for sync instructions, at commit-FIFO drain for
+     * held ones (async load, WFI) - insn_stall_account only fires there -
+     * where the writeback has already happened. The stepper pops. Sampling
+     * the regfile on the raw retire hook instead would race the load
+     * writeback (the LSU response lands one cycle later). */
+    static constexpr int COMMIT_RING = 64;
+    uint64_t commit_push = 0;
+    uint64_t commit_pop = 0;
+    iss_reg_t commit_pc[COMMIT_RING];
+
+    /* Drop commits not consumed yet (external resync forced a new PC). */
+    inline void commit_stream_flush();
 
 private:
+    /* Program-order PCs of the instructions parked in the exec commit
+     * FIFO (held or sync follower); drain pops them in the same order. */
+    uint64_t inflight_push = 0;
+    uint64_t inflight_pop = 0;
+    iss_reg_t inflight_pc[COMMIT_RING];
+
     /* Event lines fired by the executing instruction, committed as one OR
      * mask at retire: each counter advances at most +1 per instruction, as
      * the RTL advances at most +1 per cycle (cv32e40p_cs_registers.sv:1437).

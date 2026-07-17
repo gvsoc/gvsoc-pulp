@@ -164,9 +164,11 @@ class Cv32e40pStandaloneSoc(gvsoc.systree.Component):
         ico.o_MAP ( bg_mem.i_INPUT(), mapping=config.background_mapping )
 
         # Three independent masters, one router input port each.
+        # o_ENTRY is deliberately NOT bound: like the RTL, the core boots at
+        # the fixed BOOT_ADDR (config boot_addr), not at the ELF entry; the
+        # entry sync would also rewrite mtvec after a co-sim CSR injection.
         loader.o_OUT   ( ico.i_INPUT(0)   )
         loader.o_START ( core.i_FETCHEN() )
-        loader.o_ENTRY ( core.i_ENTRY()   )
 
         core.o_FETCH ( ico.i_INPUT(1) )
         core.o_DATA  ( ico.i_INPUT(2) )
