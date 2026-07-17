@@ -102,7 +102,9 @@ class Cv32e40pSpikeConfig(Config):
         # recipe to match the RTL compressed decoder.
         isa = 'rv32imfc' if (self.fpu or self.zfinx) else 'rv32imc'
         self.core = Cv32e40pConfig(isa=isa, boot_addr=self.boot_addr)
-        self.mem = MemoryV3Config('mem', size=self.mem_size, atomics=False, latency=1)
+        # init=False: unwritten memory reads 0, not the 0x57 poison default.
+        self.mem = MemoryV3Config('mem', size=self.mem_size, atomics=False, latency=1,
+                                  init=False)
         self.router = RouterConfig(kind='bandwidth')
         self.mem_mapping = RouterMapping(name='mem_mapping',
                                          base=self.mem_base, size=self.mem_size)
