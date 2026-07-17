@@ -83,11 +83,10 @@ void Router::set_neighbour(int dir, FloonocNode *node, int neighbor_id,
 {
     if (dir >= this->num_queues)
     {
-        printf("\n[FATAL] Router %d tried to map neighbor "
-               "%d to port %d, but num_queues is %d.\n",
-               this->node_id, neighbor_id, dir, this->num_queues);
-        printf("Check your Python script for duplicate add_link() calls!\n");
-        exit(1);
+        this->trace.fatal(
+            "Router %d tried to map neighbor %d to port %d, but num_queues is "
+            "%d (check the Python script for duplicate add_link() calls)\n",
+            this->node_id, neighbor_id, dir, this->num_queues);
     }
     this->output_nodes[dir] = node;
     this->neighbor_to_queue[neighbor_id] = dir;
@@ -192,11 +191,10 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
             if (out_queue_id < 0 || out_queue_id >= _this->num_queues)
             {
-                printf("\n[FATAL] Router %d tried to route packet to NextHop "
-                       "%d, but get_req_queue returned %d!\n",
-                       _this->node_id, next_node, out_queue_id);
-                printf("Original Destination was: %d\n", to_node);
-                exit(1);
+                _this->trace.fatal(
+                    "Router %d tried to route packet to next hop %d, but "
+                    "get_req_queue returned %d (destination: %d)\n",
+                    _this->node_id, next_node, out_queue_id, to_node);
             }
 
             // Only send one request per cycle to the same output
@@ -309,12 +307,12 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 // This is determining the routes the requests will take in the network
 void Router::get_next_router_pos(int to_node, int &next_node)
 {
-    if (to_node < 0 || to_node >= this->routing_table.size())
+    if (to_node < 0 || to_node >= (int)this->routing_table.size())
     {
-        printf("\n[FATAL] Router %d asked to route to Node %d, but "
-               "routing_table size is %lu!\n",
-               this->node_id, to_node, this->routing_table.size());
-        exit(1);
+        this->trace.fatal(
+            "Router %d asked to route to node %d, but routing table size is "
+            "%lu\n",
+            this->node_id, to_node, this->routing_table.size());
     }
     if (to_node != this->node_id)
     {
