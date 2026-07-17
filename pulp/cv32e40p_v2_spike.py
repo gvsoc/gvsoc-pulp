@@ -97,12 +97,10 @@ class Cv32e40pSpikeConfig(Config):
 
     def __post_init__(self):
         super().__post_init__()
-        # No compressed for now: with C enabled the generated decode table
-        # references the rvf c.flwsp/c.fswsp handlers even when they are
-        # inactive (no F), and without an FPU module nothing declares them.
-        # ZFINX also needs the F opcodes in the decoder (routed to the
-        # integer register file).
-        isa = 'rv32imf' if (self.fpu or self.zfinx) else 'rv32im'
+        # ZFINX needs the F opcodes in the decoder (routed to the integer
+        # register file); the compressed FP rows are disabled by the core
+        # recipe to match the RTL compressed decoder.
+        isa = 'rv32imfc' if (self.fpu or self.zfinx) else 'rv32imc'
         self.core = Cv32e40pConfig(isa=isa, boot_addr=self.boot_addr)
         self.mem = MemoryV3Config('mem', size=self.mem_size, atomics=False, latency=1)
         self.router = RouterConfig(kind='bandwidth')

@@ -113,6 +113,11 @@ class Cv32e40p(RiscvCommon):
             isa_instance = RiscvIsa(f"{type(self).isa_name}_{isa_tag}",
                 config.isa, extensions=extensions)
 
+            if zfinx:
+                # RTL decodes the compressed FP loads/stores only with
+                # FPU == 1 && ZFINX == 0 (cv32e40p_compressed_decoder.sv).
+                isa_instance.disable_from_isa_tag('cf')
+
             isa_instances[cache_key] = isa_instance
 
         misa = _MISA_BASE
