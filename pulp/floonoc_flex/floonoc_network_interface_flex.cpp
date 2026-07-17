@@ -569,12 +569,6 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req,
             // network.
             vp::IoReqStatus result = target->req(req);
 
-            /*
-            printf("[Trace] NI %d attempted memory access at local addr 0x%lx. "
-                   "Result code: %d (0=OK, 1=DENIED, 2=UNIMPL, 3=INVALID)\n",
-                   this->node_id, req->get_addr(), result);
-            */
-
             if (result == vp::IO_REQ_OK)
             {
                 if (req->get_latency() > 0)
