@@ -53,12 +53,14 @@ inline void Cv32e40pEvents::event_retire_account(iss_insn_t *insn)
          * head): visible at drain time, through insn_stall_account, in
          * this same program order. */
         this->inflight_pc[this->inflight_push % COMMIT_RING] = insn->addr;
+        this->inflight_trap_seq[this->inflight_push % COMMIT_RING] = this->trap_seq;
         this->inflight_push++;
     }
     else
 #endif
     {
         this->commit_pc[this->commit_push % COMMIT_RING] = insn->addr;
+        this->commit_trap_seq[this->commit_push % COMMIT_RING] = this->trap_seq;
         this->commit_push++;
     }
     /* A trapping instruction does not retire: drop its event lines. */
@@ -82,6 +84,8 @@ inline void Cv32e40pEvents::insn_stall_account()
     {
         this->commit_pc[this->commit_push % COMMIT_RING] =
             this->inflight_pc[this->inflight_pop % COMMIT_RING];
+        this->commit_trap_seq[this->commit_push % COMMIT_RING] =
+            this->inflight_trap_seq[this->inflight_pop % COMMIT_RING];
         this->inflight_pop++;
         this->commit_push++;
     }

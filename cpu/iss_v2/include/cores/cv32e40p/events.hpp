@@ -47,15 +47,27 @@ public:
     uint64_t commit_pop = 0;
     iss_reg_t commit_pc[COMMIT_RING];
 
+    /* Trap-redirect sequence, bumped by Cv32e40pException::raise and the
+     * Cv32e40pIrq take. Each commit entry is stamped with the value seen
+     * when the instruction executed; a stamp older than the current
+     * trap_seq tells the stepper the sampled CSR/GPR state already
+     * includes a later redirect (a trap taken while this entry was still
+     * held in the commit FIFO), so state compares on it must be skipped. */
+    uint64_t trap_seq = 0;
+    uint64_t commit_trap_seq[COMMIT_RING];
+
     /* Drop commits not consumed yet (external resync forced a new PC). */
     inline void commit_stream_flush();
 
 private:
     /* Program-order PCs of the instructions parked in the exec commit
-     * FIFO (held or sync follower); drain pops them in the same order. */
+     * FIFO (held or sync follower); drain pops them in the same order.
+     * The trap_seq stamp is taken here, at execution, and carried to the
+     * commit entry at drain. */
     uint64_t inflight_push = 0;
     uint64_t inflight_pop = 0;
     iss_reg_t inflight_pc[COMMIT_RING];
+    uint64_t inflight_trap_seq[COMMIT_RING];
 
     /* Event lines fired by the executing instruction, committed as one OR
      * mask at retire: each counter advances at most +1 per instruction, as

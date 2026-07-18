@@ -61,6 +61,16 @@ public:
     bool check_access(Iss *iss, bool write, bool read) override;
 };
 
+/* User-mode counter alias (cycle/instret/hpmcounterN and the H views):
+ * reads mirror the machine counter through a registered callback, writes
+ * raise illegal-instruction (0xCxx is the architecturally read-only CSR
+ * range, and the RTL has no write path for it). */
+class Cv32e40pCounterAlias : public CsrAbtractReg
+{
+public:
+    bool check_access(Iss *iss, bool write, bool read) override;
+};
+
 class Cv32e40pCsr : public Csr
 {
 public:
@@ -78,8 +88,9 @@ public:
 
     /* Promote mstatus.FS to Dirty (11) on FP state change. The RTL forces it
      * on FP regfile writes, fflags updates and FP-CSR writes when the FPU is
-     * in the ISA (FPU=1, ZFINX=0). SD (bit 31) is derived at read time. */
-    inline void fp_state_dirty();
+     * in the ISA (FPU=1, ZFINX=0). SD (bit 31) is derived at read time.
+     * Out-of-line: the trapped-instruction guard needs the full Iss type. */
+    void fp_state_dirty();
 
     /* Advance the counters for one retired instruction: events is the OR of
      * the RTL hpm_events lines it fired (see cores/cv32e40p/events.hpp).
@@ -113,6 +124,30 @@ public:
     /* Hardware-loop CSRs: 0xCC0..0xCC2 / 0xCC4..0xCC6 (gap at 0xCC3). */
     Cv32e40pHwloopCsr hwloop_csr[6];
 
+    /* Architectural LPEND per loop, written by the corev.hpp setters. The
+     * Hwloop module stores the loop-back point (LPEND - 4), so it cannot
+     * serve the CSR read: a never-programmed loop must read back 0. */
+    iss_reg_t hwloop_lpend[2] = {0, 0};
+
+    /* mip front-end (0x344): reads mirror the wire-driven base register,
+     * CSR writes are silently dropped — the RTL has no mip write path
+     * (cv32e40p_cs_registers.sv reads it from the interrupt lines only).
+     * Replaces the base mip in the CSR map, so the generic IrqRiscv write
+     * callback (wdata & 0xAAA, which also clears the fast-line bits) can
+     * never corrupt the pending state. */
+    CsrAbtractReg mip_view;
+
+    /* User counter aliases: 0xC00/0xC02/0xC03..0xC1F and the H views at
+     * 0xC80/0xC82/0xC83..0xC9F. time (0xC01) is absent. */
+    Cv32e40pCounterAlias cycle_alias;
+    Cv32e40pCounterAlias instret_alias;
+    Cv32e40pCounterAlias hpmcounter_alias[29];
+#if ISS_REG_WIDTH == 32
+    Cv32e40pCounterAlias cycleh_alias;
+    Cv32e40pCounterAlias instreth_alias;
+    Cv32e40pCounterAlias hpmcounterh_alias[29];
+#endif
+
     /* fflags / frm / fcsr (0x001..0x003). */
     Cv32e40pFpCsr fflags_csr;
     Cv32e40pFpCsr frm_csr;
@@ -124,8 +159,15 @@ private:
     bool fcsr_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool hwloop_csr_access(iss_insn_t *insn, bool is_write, iss_reg_t &value, int index);
     bool tselect_read_zero(iss_insn_t *insn, bool is_write, iss_reg_t &value);
+    bool mip_view_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool mcycle_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool mcycleh_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
+    bool cycle_alias_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
+    bool cycleh_alias_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
+    bool instret_alias_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
+    bool instreth_alias_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
+    bool hpm_alias_access(iss_insn_t *insn, bool is_write, iss_reg_t &value, int index);
+    bool hpmh_alias_access(iss_insn_t *insn, bool is_write, iss_reg_t &value, int index);
     bool mcountinhibit_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool mstatus_read_fixup(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool mtvec_write_fixup(iss_insn_t *insn, bool is_write, iss_reg_t &value);
@@ -149,13 +191,6 @@ inline bool Cv32e40pCsr::fp_access_illegal()
     return false;
 #else
     return true;
-#endif
-}
-
-inline void Cv32e40pCsr::fp_state_dirty()
-{
-#if CONFIG_GVSOC_ISS_CV32E40P_FPU_IN_ISA
-    this->mstatus.fs = 3;
 #endif
 }
 

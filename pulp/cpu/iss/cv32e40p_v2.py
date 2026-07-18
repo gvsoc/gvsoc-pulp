@@ -23,7 +23,7 @@ from __future__ import annotations
 from typing import Iterable
 from typing_extensions import override
 from gvsoc.systree import Component
-from cpu.iss_v2.riscv import (RiscvCommon, IssModule, Irq, ExecInOrder,
+from cpu.iss_v2.riscv import (RiscvCommon, IssModule, ExecInOrder,
                               Regfile, LsuV2, Hwloop)
 from cpu.iss.isa_gen.isa_gen import Isa, IsaSubset
 from cpu.iss.isa_gen.isa_riscv_gen import RiscvIsa
@@ -36,6 +36,34 @@ isa_instances: dict[tuple[str, str], Isa] = {}
 # FPU registers are in the ISA (not for ZFINX). Same values as the v1
 # model (pulp/cpu/iss/pulp_cores.py).
 _MISA_BASE = 0x40001104
+
+
+def _apply_rtl_decode_fixes(isa: Isa) -> None:
+    """Decode-level differences between the generated RISC-V tables and the
+    CV32E40P RTL, applied once per ISA instance:
+
+    - FENCE/FENCE.I: the RTL decoder checks funct3 only and ignores the
+      reserved rd/rs1/fm fields (cv32e40p_decoder.sv, OPCODE_FENCE), as the
+      unprivileged spec requires for forward compatibility; the generated
+      encodings pin those fields to zero, turning e.g. a fence with rd=x31
+      into an illegal instruction.
+    - CSRRC with rs1=x0 and CSRRSI/CSRRCI with uimm=0 must not write the CSR
+      (privileged spec §2.2): the priv subset is routed to the core's
+      handlers (cores/cv32e40p/priv.hpp), same fix as the v1 model.
+    """
+    relaxed = {
+        'fence':   '------- ----- ----- 000 ----- 0001111',
+        'fence.i': '------- ----- ----- 001 ----- 0001111',
+    }
+    for insn in isa.get_isa('rv32i').instrs:
+        encoding = relaxed.get(insn.label)
+        if encoding is not None:
+            # Same transform as Instr.__init__ (reversed, spaces stripped).
+            insn.encoding = encoding[::-1].replace(' ', '')
+
+    isa.get_isa('priv').includes = [
+        '<cpu/iss_v2/include/cores/cv32e40p/priv.hpp>',
+    ]
 
 
 class Cv32e40pConfig(RiscvConfig):
@@ -56,6 +84,26 @@ class Cv32e40pExec(ExecInOrder):
         super().gen(iss)
         iss.isa.add_include('<cpu/iss_v2/include/cores/cv32e40p/exec.hpp>')
         iss.isa.add_implem_include('<cpu/iss_v2/include/cores/cv32e40p/exec_implem.hpp>')
+
+
+class Cv32e40pIrq(IssModule):
+    """CV32E40P interrupt personality.
+
+    Selects the Cv32e40pIrq C++ class for the irq slot: RISC-V privileged
+    interrupt scheme (mie/mip/mtvec, standard mcause codes) with the RTL
+    priority order (fast lines irq[31:16] above MEI/MSI/MTI) and vectored
+    entry (base + 4*id).
+    """
+
+    @override
+    def gen(self, iss: RiscvCommon):
+        iss.isa.add_define('CONFIG_GVSOC_ISS_IRQ', 'Cv32e40pIrq')
+        iss.isa.add_define('CONFIG_GVSOC_ISS_RISCV_EXCEPTIONS', 1)
+        iss.isa.add_include('<cpu/iss_v2/include/cores/cv32e40p/irq.hpp>')
+        iss.add_sources([
+            'cpu/iss_v2/src/irq/irq_riscv.cpp',
+            'cpu/iss_v2/src/cores/cv32e40p/irq.cpp',
+        ])
 
 
 class Cv32e40pEvent(IssModule):
@@ -101,6 +149,10 @@ class Cv32e40pCsr(IssModule):
             # FP write-backs must dirty mstatus.FS (see iss_v2 isa_lib/macros.h).
             iss.isa.add_define('CONFIG_GVSOC_ISS_FP_STATE_DIRTY', 1)
         iss.isa.add_define('CONFIG_GVSOC_ISS_CV32E40P_ZFINX', 1 if self.zfinx else 0)
+        if self.fpu or self.zfinx:
+            # Reserved FP rounding modes raise illegal-instruction with no
+            # architectural side effects (isa_lib int.h + Cv32e40pRegfile).
+            iss.isa.add_define('CONFIG_GVSOC_ISS_CV32E40P_FP_TRAPS', 1)
         iss.isa.add_define('CONFIG_GVSOC_ISS_CV32E40P_PULP', 1 if self.pulp else 0)
         iss.isa.add_define('CONFIG_GVSOC_ISS_CV32E40P_NUM_MHPMCOUNTERS', self.num_mhpmcounters)
         # mstatus write policy, applied by Core::mstatus_update: only
@@ -110,6 +162,58 @@ class Cv32e40pCsr(IssModule):
         iss.add_sources([
             'cpu/iss_v2/src/cores/cv32e40p/csr.cpp',
             'cpu/iss_v2/src/csr.cpp',
+        ])
+
+
+class Cv32e40pRegfileModule(IssModule):
+    """CV32E40P register-file personality.
+
+    Selects the Cv32e40pRegfile C++ class for the regfile slot: a trapped
+    instruction writes no destination register (the reserved-rounding-mode
+    raise in isa_lib int.h arms the one-shot write-back suppression).
+    """
+
+    @override
+    def gen(self, iss: RiscvCommon):
+        iss.isa.add_define('CONFIG_GVSOC_ISS_REGFILE', 'Cv32e40pRegfile')
+        iss.isa.add_define('CONFIG_GVSOC_ISS_REGFILE_SCOREBOARD', '1')
+        iss.isa.add_include('<cpu/iss_v2/include/cores/cv32e40p/regfile.hpp>')
+        iss.add_sources(['cpu/iss_v2/src/regfile.cpp'])
+
+
+class Cv32e40pCoreModule(IssModule):
+    """CV32E40P core personality.
+
+    Selects the Cv32e40pCore C++ class for the core slot: MRET keeps
+    mcause (the RTL holds it until the next trap or an explicit CSR
+    write, the generic handler clears it).
+    """
+
+    @override
+    def gen(self, iss: RiscvCommon):
+        iss.isa.add_define('CONFIG_GVSOC_ISS_CORE', 'Cv32e40pCore')
+        iss.isa.add_include('<cpu/iss_v2/include/cores/cv32e40p/core.hpp>')
+        iss.add_sources([
+            'cpu/iss_v2/src/core.cpp',
+            'cpu/iss_v2/src/cores/cv32e40p/core.cpp',
+        ])
+
+
+class Cv32e40pExceptionModule(IssModule):
+    """CV32E40P exception personality.
+
+    Selects the Cv32e40pException C++ class for the exception slot:
+    exceptions enter at the mtvec base, with the mode bits kept out of
+    the entry PC.
+    """
+
+    @override
+    def gen(self, iss: RiscvCommon):
+        iss.isa.add_define('CONFIG_GVSOC_ISS_EXCEPTION', 'Cv32e40pException')
+        iss.isa.add_include('<cpu/iss_v2/include/cores/cv32e40p/exception.hpp>')
+        iss.add_sources([
+            'cpu/iss_v2/src/exception.cpp',
+            'cpu/iss_v2/src/cores/cv32e40p/exception.cpp',
         ])
 
 
@@ -153,6 +257,8 @@ class Cv32e40p(RiscvCommon):
                 # FPU == 1 && ZFINX == 0 (cv32e40p_compressed_decoder.sv).
                 isa_instance.disable_from_isa_tag('cf')
 
+            _apply_rtl_decode_fixes(isa_instance)
+
             isa_instances[cache_key] = isa_instance
 
         misa = _MISA_BASE
@@ -162,16 +268,15 @@ class Cv32e40p(RiscvCommon):
             misa |= 1 << 23   # X
 
         modules: dict[str, IssModule] = {
-            # RISC-V privileged interrupt/exception scheme (mie/mip/mtvec,
-            # standard mcause codes), as implemented by the RTL. The PULP
-            # event-unit style IrqExternal does not apply to this core.
-            'irq': Irq(),
+            'irq': Cv32e40pIrq(),
+            'core': Cv32e40pCoreModule(),
+            'exception': Cv32e40pExceptionModule(),
             'event': Cv32e40pEvent(),
             'csr': Cv32e40pCsr(fpu=fpu, zfinx=zfinx, pulp=pulp,
                                num_mhpmcounters=num_mhpmcounters),
             'exec': Cv32e40pExec(),
             'lsu': LsuV2(),
-            'regfile': Regfile(scoreboard=True),
+            'regfile': Cv32e40pRegfileModule(),
             'hwloop': Hwloop(),
         }
 

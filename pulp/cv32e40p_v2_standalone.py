@@ -40,6 +40,8 @@ from interco.router_v2 import Router, RouterConfig, RouterMapping
 from utils.loader.loader_v2 import ElfLoader
 from pulp.cv32e40p_exit.cv32e40p_exit_device_v2 import Cv32e40pExitDeviceV2
 from pulp.cv32e40p_sparse_mem.cv32e40p_sparse_mem_v2 import Cv32e40pSparseMemV2
+from pulp.cv32e40p_irq_injector.cv32e40p_irq_injector import (Cv32e40pIrqInjector,
+                                                              IRQ_LINES, IRQ_NUMBERS)
 from pulp.cpu.iss.cv32e40p_v2 import Cv32e40p as Cv32e40pV2Core, Cv32e40pConfig
 
 
@@ -56,6 +58,10 @@ class Cv32e40pStandaloneConfig(Config):
 
     zfinx: int = cfg_field(default=0, dump=True, desc=(
         "ZFINX configuration (FP operations on the integer register file)"
+    ))
+
+    pulp: int = cfg_field(default=1, dump=True, desc=(
+        "PULP configuration (CoreV extensions, misa X bit)"
     ))
 
     core: Cv32e40pConfig = cfg_field(init=False, desc=(
@@ -153,7 +159,8 @@ class Cv32e40pStandaloneSoc(gvsoc.systree.Component):
         bg_mem = Cv32e40pSparseMemV2 ( self, 'background_mem'                     )
         ico    = Router              ( self, 'ico'      , config=config.router    )
         core   = Cv32e40pV2Core      ( self, 'core'     , config=config.core      ,
-                                       fpu=bool(config.fpu), zfinx=bool(config.zfinx) )
+                                       fpu=bool(config.fpu), zfinx=bool(config.zfinx),
+                                       pulp=bool(config.pulp) )
         loader = ElfLoader           ( self, 'loader'   , binary=binary           )
 
         ico.o_MAP ( mem.i_INPUT()   , mapping=config.mem_mapping        )
@@ -173,17 +180,24 @@ class Cv32e40pStandaloneSoc(gvsoc.systree.Component):
         core.o_FETCH ( ico.i_INPUT(1) )
         core.o_DATA  ( ico.i_INPUT(2) )
 
+        # Interrupt lines: the co-sim bridge drives the injector through
+        # gv::wire_bind; each line lands on the core's native slave port,
+        # so mip and the WFI wake-up follow the hardware path.
+        irq_inj = Cv32e40pIrqInjector(self, 'irq_injector')
+        for name, irq in zip(IRQ_LINES, IRQ_NUMBERS):
+            irq_inj.o_LINE(name, core.i_IRQ(irq))
+
 
 class Cv32e40pStandaloneTop(gvsoc.systree.Component):
 
-    def __init__(self, parent, name=None, fpu: int=0, zfinx: int=0):
+    def __init__(self, parent, name=None, fpu: int=0, zfinx: int=0, pulp: int=1):
         super().__init__(parent, name)
 
         binary = TargetParameter(
             self, name='binary', value=None, description='ELF binary to simulate'
         ).get_value()
 
-        config = Cv32e40pStandaloneConfig('soc', fpu=fpu, zfinx=zfinx)
+        config = Cv32e40pStandaloneConfig('soc', fpu=fpu, zfinx=zfinx, pulp=pulp)
 
         clock = vp.clock_domain.Clock_domain(self, 'clock', frequency=50000000)
         soc = Cv32e40pStandaloneSoc(self, 'soc', config, binary)

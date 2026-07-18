@@ -14,6 +14,7 @@
  * which this core configures to raise illegal-instruction. */
 
 #include <cpu/iss_v2/include/cores/cv32e40p/csr.hpp>
+#include <cpu/iss_v2/include/cores/cv32e40p/irq.hpp>
 
 bool Cv32e40pRoCsr::check_access(Iss *iss, bool write, bool read)
 {
@@ -45,6 +46,16 @@ bool Cv32e40pHwloopCsr::check_access(Iss *iss, bool write, bool read)
     return true;
 }
 
+bool Cv32e40pCounterAlias::check_access(Iss *iss, bool write, bool read)
+{
+    if (write)
+    {
+        iss->exception.raise(iss->exec.current_insn, ISS_EXCEPT_ILLEGAL);
+        return false;
+    }
+    return true;
+}
+
 Cv32e40pCsr::Cv32e40pCsr(Iss &iss)
 : Csr(iss)
 {
@@ -61,7 +72,8 @@ Cv32e40pCsr::Cv32e40pCsr(Iss &iss)
         0x740, 0x741, 0x742, 0x744,         /* mnscratch, mnepc, mncause, mnstatus */
         0x008, 0x009, 0x00A, 0x00F,         /* vstart, vxstat, vxrm, vcsr */
         0xC20, 0xC21, 0xC22,                /* vl, vtype, vlenb */
-        0xC00, 0xC01, 0xC02,                /* cycle, time, instret */
+        0xC00, 0xC01, 0xC02,                /* cycle, time, instret (0xC00/0xC02
+                                               re-declared below as RO aliases) */
     };
     for (iss_reg_t addr : nonexistent)
     {
@@ -124,13 +136,52 @@ Cv32e40pCsr::Cv32e40pCsr(Iss &iss)
             0x323 + i, 0, (i < num_hpm) ? 0xFFFF : 0);
     }
 
+    /* User counter aliases: the RTL read mux maps 0xC00..0xC1F and
+     * 0xC80..0xC9F straight onto the machine counter bank
+     * (cv32e40p_cs_registers.sv); writes trap through check_access. */
+    this->declare_csr(&this->cycle_alias, "cycle", 0xC00);
+    this->cycle_alias.register_callback(std::bind(&Cv32e40pCsr::cycle_alias_access, this,
+        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+    this->declare_csr(&this->instret_alias, "instret", 0xC02);
+    this->instret_alias.register_callback(std::bind(&Cv32e40pCsr::instret_alias_access, this,
+        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+#if ISS_REG_WIDTH == 32
+    this->declare_csr(&this->cycleh_alias, "cycleh", 0xC80);
+    this->cycleh_alias.register_callback(std::bind(&Cv32e40pCsr::cycleh_alias_access, this,
+        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+    this->declare_csr(&this->instreth_alias, "instreth", 0xC82);
+    this->instreth_alias.register_callback(std::bind(&Cv32e40pCsr::instreth_alias_access, this,
+        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+#endif
+    for (int i = 0; i < 29; i++)
+    {
+        this->declare_csr(&this->hpmcounter_alias[i], "hpmcounter" + std::to_string(i + 3),
+            0xC03 + i);
+        this->hpmcounter_alias[i].register_callback(std::bind(&Cv32e40pCsr::hpm_alias_access, this,
+            std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, i));
+#if ISS_REG_WIDTH == 32
+        this->declare_csr(&this->hpmcounterh_alias[i], "hpmcounter" + std::to_string(i + 3) + "h",
+            0xC83 + i);
+        this->hpmcounterh_alias[i].register_callback(std::bind(&Cv32e40pCsr::hpmh_alias_access, this,
+            std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, i));
+#endif
+    }
+
     /* Interrupt and trap CSRs: masks from the RTL (cv32e40p_cs_registers.sv).
      * mstatus: only MIE/MPIE (and FS with an FPU) are writable; the mask is
      * applied by Core::mstatus_update via CONFIG_GVSOC_ISS_CORE_MSTATUS_WRITE_MASK
      * set by the recipe. Reset is MPP=M, FS=Off for every configuration. */
     this->mstatus.reset_val = 0x00001800;
-    this->mie.set_write_mask(0xFFFF0888);
-    this->mip.set_write_mask(0);
+    /* mie: declarative only — IrqRiscv::mie_access bypasses the register
+     * write mask; the effective masking is Cv32e40pIrq::mie_write_fixup. */
+    this->mie.set_write_mask(Cv32e40pIrq::IRQ_MASK);
+    /* mip: read-only front-end replaces the base register in the CSR map
+     * (see csr.hpp). The base object stays as the wire-driven store, its
+     * IrqRiscv wire callbacks keep writing it directly. */
+    this->undeclare_csr(0x344);
+    this->declare_csr(&this->mip_view, "mip", 0x344);
+    this->mip_view.register_callback(std::bind(&Cv32e40pCsr::mip_view_access, this,
+        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
     this->mtvec.set_write_mask(0xFFFFFF01);
     this->mtvec.reset_val = 0x1;
     this->mtval.set_write_mask(0);
@@ -220,6 +271,13 @@ void Cv32e40pCsr::reset(bool active)
         this->dcsr = (4 << 28) | 0x3;
 
         this->mcycle_offset = 0;
+
+        /* Excluded from the base reset sweep, which walks the CSR map:
+         * mip left it for the mip_view front-end, hwloop_lpend is a plain
+         * shadow. */
+        this->mip.value = 0;
+        this->hwloop_lpend[0] = 0;
+        this->hwloop_lpend[1] = 0;
     }
 }
 
@@ -261,6 +319,16 @@ bool Cv32e40pCsr::tselect_read_zero(iss_insn_t *insn, bool is_write, iss_reg_t &
     if (!is_write)
     {
         value = 0;
+    }
+    return false;
+}
+
+bool Cv32e40pCsr::mip_view_access(iss_insn_t *insn, bool is_write, iss_reg_t &value)
+{
+    /* Reads mirror the wire-driven register; writes are dropped. */
+    if (!is_write)
+    {
+        value = this->mip.value;
     }
     return false;
 }
@@ -316,6 +384,61 @@ bool Cv32e40pCsr::mcycleh_access(iss_insn_t *insn, bool is_write, iss_reg_t &val
     return false;
 }
 
+void Cv32e40pCsr::fp_state_dirty()
+{
+#if CONFIG_GVSOC_ISS_CV32E40P_FPU_IN_ISA
+    /* A trapped FP instruction has no architectural side effects; the raise
+     * (reserved rounding mode, isa_lib int.h) runs inside the write-back
+     * macro before this call. */
+    if (this->iss.exec.has_exception)
+        return;
+    this->mstatus.fs = 3;
+#endif
+}
+
+/* User counter aliases: read-only mirrors of the machine counters (writes
+ * never reach these callbacks, Cv32e40pCounterAlias::check_access traps
+ * them first). */
+bool Cv32e40pCsr::cycle_alias_access(iss_insn_t *insn, bool is_write, iss_reg_t &value)
+{
+    value = (iss_reg_t)this->mcycle_count();
+    return false;
+}
+
+bool Cv32e40pCsr::cycleh_alias_access(iss_insn_t *insn, bool is_write, iss_reg_t &value)
+{
+    value = (iss_reg_t)(this->mcycle_count() >> 32);
+    return false;
+}
+
+bool Cv32e40pCsr::instret_alias_access(iss_insn_t *insn, bool is_write, iss_reg_t &value)
+{
+    value = this->minstret.value;
+    return false;
+}
+
+bool Cv32e40pCsr::instreth_alias_access(iss_insn_t *insn, bool is_write, iss_reg_t &value)
+{
+#if ISS_REG_WIDTH == 32
+    value = this->minstreth.value;
+#endif
+    return false;
+}
+
+bool Cv32e40pCsr::hpm_alias_access(iss_insn_t *insn, bool is_write, iss_reg_t &value, int index)
+{
+    value = this->mhpmcounter[index].value;
+    return false;
+}
+
+bool Cv32e40pCsr::hpmh_alias_access(iss_insn_t *insn, bool is_write, iss_reg_t &value, int index)
+{
+#if ISS_REG_WIDTH == 32
+    value = this->mhpmcounterh[index].value;
+#endif
+    return false;
+}
+
 bool Cv32e40pCsr::mcountinhibit_access(iss_insn_t *insn, bool is_write, iss_reg_t &value)
 {
     /* Freeze the count into the register pair when CY sets, re-anchor the
@@ -354,9 +477,9 @@ bool Cv32e40pCsr::hwloop_csr_access(iss_insn_t *insn, bool is_write, iss_reg_t &
     switch (index % 3)
     {
         case 0: value = this->iss.hwloop.get_start(loop); break;
-        /* The Hwloop module stores the loop-back point, LPEND - 4 (see the
-         * corev.hpp setters); the architectural LPEND is re-derived here. */
-        case 1: value = this->iss.hwloop.get_end(loop) + 4; break;
+        /* The Hwloop module stores the loop-back point, LPEND - 4; the
+         * architectural value lives in the shadow the setters keep. */
+        case 1: value = this->hwloop_lpend[loop]; break;
         case 2: value = this->iss.hwloop.get_count(loop); break;
     }
     return false;
