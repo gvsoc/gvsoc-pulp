@@ -55,11 +55,16 @@ static int cv32e40p_irq_pick(iss_reg_t pending)
 
 int Cv32e40pIrq::check()
 {
-    /* Debug entry: same as the generic implementation. */
+    /* Debug entry: generic implementation plus dcsr.cause, written
+     * atomically with the entry as the RTL does (the bridge only raises
+     * req_debug). Only haltreq (cause=3) can get here in co-simulation. */
     if (this->req_debug && !this->iss.exec.debug_mode)
     {
         this->iss.exec.debug_mode = true;
         this->iss.csr.depc = this->iss.exec.current_insn;
+        this->iss.csr.dcsr = (this->iss.csr.dcsr & ~(0x7u << 6)) | (3u << 6);
+        /* Commit-stream consumers gate state compares on this (events.hpp). */
+        this->iss.timing.trap_seq++;
         this->debug_saved_irq_enable = this->irq_enable.get();
         this->irq_enable.set(0);
         this->req_debug = false;

@@ -144,6 +144,10 @@ class Cv32e40pCsr(IssModule):
     def gen(self, iss: RiscvCommon):
         iss.isa.add_define('CONFIG_GVSOC_ISS_CSR', 'Cv32e40pCsr')
         iss.isa.add_include('<cpu/iss_v2/include/cores/cv32e40p/csr.hpp>')
+        # Select the RISC-V (not legacy RISCY) SIMD operand order in the
+        # shared isa_lib int.h (lib_VEC_SHUFFLE2_*); the v1 build gets this
+        # from the iss CMakeLists.
+        iss.isa.add_define('RISCV', 1)
         iss.isa.add_define('CONFIG_GVSOC_ISS_CV32E40P_FPU_IN_ISA', 1 if self.fpu else 0)
         if self.fpu:
             # FP write-backs must dirty mstatus.FS (see iss_v2 isa_lib/macros.h).

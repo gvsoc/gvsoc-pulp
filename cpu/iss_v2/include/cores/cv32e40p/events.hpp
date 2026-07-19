@@ -59,6 +59,11 @@ public:
     /* Drop commits not consumed yet (external resync forced a new PC). */
     inline void commit_stream_flush();
 
+    /* Instructions parked in the exec commit FIFO, not yet drained. Their
+     * load-use scoreboard bits are already set, so redirecting while this
+     * is true needs a drain first (see gvsoc_engine_set_pc). */
+    bool inflight_pending() const { return this->inflight_pop != this->inflight_push; }
+
 private:
     /* Program-order PCs of the instructions parked in the exec commit
      * FIFO (held or sync follower); drain pops them in the same order.
