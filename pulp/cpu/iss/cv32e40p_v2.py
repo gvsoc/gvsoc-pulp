@@ -284,5 +284,8 @@ class Cv32e40p(RiscvCommon):
             'hwloop': Hwloop(),
         }
 
+        # dm_halt_addr of the RTL testbench: the debug entry redirects here
+        # (linker script `dbg` region, loaded from the test ELF).
         super().__init__(parent, name, config=config, isa=isa_instance,
-                         misa=misa, zfinx=zfinx, modules=modules)
+                         misa=misa, zfinx=zfinx, modules=modules,
+                         debug_handler=0x1A110800)

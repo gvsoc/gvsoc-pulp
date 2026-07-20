@@ -56,13 +56,16 @@ static int cv32e40p_irq_pick(iss_reg_t pending)
 int Cv32e40pIrq::check()
 {
     /* Debug entry: generic implementation plus dcsr.cause, written
-     * atomically with the entry as the RTL does (the bridge only raises
-     * req_debug). Only haltreq (cause=3) can get here in co-simulation. */
+     * atomically with the entry as the RTL does. The cause comes from
+     * req_debug_cause: 3 (haltreq) on the wire path, 1 (ebreak) or 4
+     * (single-step) when the bridge's informed debug entry armed it. */
     if (this->req_debug && !this->iss.exec.debug_mode)
     {
         this->iss.exec.debug_mode = true;
         this->iss.csr.depc = this->iss.exec.current_insn;
-        this->iss.csr.dcsr = (this->iss.csr.dcsr & ~(0x7u << 6)) | (3u << 6);
+        this->iss.csr.dcsr = (this->iss.csr.dcsr & ~(0x7u << 6)) |
+                             ((iss_reg_t)(this->req_debug_cause & 0x7) << 6);
+        this->req_debug_cause = 3;
         /* Commit-stream consumers gate state compares on this (events.hpp). */
         this->iss.timing.trap_seq++;
         this->debug_saved_irq_enable = this->irq_enable.get();
@@ -70,6 +73,16 @@ int Cv32e40pIrq::check()
         this->req_debug = false;
         this->iss.exec.current_insn = this->debug_handler;
         return 1;
+    }
+
+    /* No interrupt is taken in debug mode (the RTL controller ignores
+     * irq_req entirely there). Explicit guard: inside the take_debug
+     * injection window the defense is down until the first debug-ROM
+     * commit lands, so check() can run again right after the entry and
+     * the ladder below would hijack it with a pending line. */
+    if (this->iss.exec.debug_mode)
+    {
+        return 0;
     }
 
     /* M-mode only core: the take needs a wired pending line and the global

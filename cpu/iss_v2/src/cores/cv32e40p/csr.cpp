@@ -200,6 +200,23 @@ Cv32e40pCsr::Cv32e40pCsr(Iss &iss)
     this->declare_csr(&this->mcontext, "mcontext", 0x7A8, 0, 0);
     this->declare_csr(&this->scontext, "scontext", 0x7AA, 0, 0);
 
+    /* Debug-mode CSRs: views over the base raw fields, kept coherent with
+     * the debug-entry (Cv32e40pIrq::check) and dret paths which write the
+     * raw fields directly. Undeclared in the base, they would otherwise
+     * raise illegal-instruction on the first debug-ROM access. */
+    this->declare_csr(&this->dcsr_view,      "dcsr",      0x7B0);
+    this->dcsr_view.register_callback(std::bind(&Cv32e40pCsr::dcsr_view_access, this,
+        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+    this->declare_csr(&this->dpc_view,       "dpc",       0x7B1);
+    this->dpc_view.register_callback(std::bind(&Cv32e40pCsr::dpc_view_access, this,
+        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+    this->declare_csr(&this->dscratch0_view, "dscratch0", 0x7B2);
+    this->dscratch0_view.register_callback(std::bind(&Cv32e40pCsr::dscratch0_view_access, this,
+        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+    this->declare_csr(&this->dscratch1_view, "dscratch1", 0x7B3);
+    this->dscratch1_view.register_callback(std::bind(&Cv32e40pCsr::dscratch1_view_access, this,
+        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+
 #if CONFIG_GVSOC_ISS_CV32E40P_PULP
     /* PULP custom CSRs. The RTL decoder raises illegal-instruction on any
      * write to them (read-only register type). */
@@ -329,6 +346,65 @@ bool Cv32e40pCsr::mip_view_access(iss_insn_t *insn, bool is_write, iss_reg_t &va
     if (!is_write)
     {
         value = this->mip.value;
+    }
+    return false;
+}
+
+/* RTL WARL (cv32e40p_cs_registers.sv, CSR_DCSR): writable bits are
+ * ebreakm(15), ebreaku(12), stepie(11), step(2) and prv[1:0] (WARL: M when
+ * written as M, U otherwise). xdebugver, cause and the hardwired-zero
+ * fields keep the stored value, which the debug entry writes directly. */
+bool Cv32e40pCsr::dcsr_view_access(iss_insn_t *insn, bool is_write, iss_reg_t &value)
+{
+    if (is_write)
+    {
+        constexpr iss_reg_t WRITABLE = (1u << 15) | (1u << 12) | (1u << 11) | (1u << 2);
+        iss_reg_t prv = ((value & 0x3) == 0x3) ? 0x3 : 0x0;
+        this->dcsr = (this->dcsr & ~(WRITABLE | 0x3)) | (value & WRITABLE) | prv;
+    }
+    else
+    {
+        value = this->dcsr;
+    }
+    return false;
+}
+
+/* RTL forces 16-bit alignment on dpc writes (depc_n = wdata & ~1). */
+bool Cv32e40pCsr::dpc_view_access(iss_insn_t *insn, bool is_write, iss_reg_t &value)
+{
+    if (is_write)
+    {
+        this->depc = value & ~(iss_reg_t)1;
+    }
+    else
+    {
+        value = this->depc;
+    }
+    return false;
+}
+
+bool Cv32e40pCsr::dscratch0_view_access(iss_insn_t *insn, bool is_write, iss_reg_t &value)
+{
+    if (is_write)
+    {
+        this->scratch0 = value;
+    }
+    else
+    {
+        value = this->scratch0;
+    }
+    return false;
+}
+
+bool Cv32e40pCsr::dscratch1_view_access(iss_insn_t *insn, bool is_write, iss_reg_t &value)
+{
+    if (is_write)
+    {
+        this->scratch1 = value;
+    }
+    else
+    {
+        value = this->scratch1;
     }
     return false;
 }

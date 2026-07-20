@@ -25,6 +25,13 @@ public:
      * CONFIG_GVSOC_ISS_IRQ). */
     int check();
 
+    /* dcsr.cause for the next req_debug take (debug spec: 1=ebreak,
+     * 3=haltreq, 4=single-step). The haltreq wire path leaves the
+     * default; the co-simulation bridge's informed debug entry sets it
+     * from the DUT's dcsr before arming req_debug. Reset to 3 by the
+     * entry itself. */
+    int req_debug_cause = 3;
+
 private:
     bool mie_write_fixup(iss_insn_t *insn, bool is_write, iss_reg_t &value);
 };

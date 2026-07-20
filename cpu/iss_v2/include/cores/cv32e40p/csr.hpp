@@ -137,6 +137,17 @@ public:
      * never corrupt the pending state. */
     CsrAbtractReg mip_view;
 
+    /* Debug-mode CSRs (0x7B0-0x7B3): views over the base raw fields
+     * (dcsr/depc/scratch0/scratch1), which the debug-entry and dret paths
+     * write directly. The base register file leaves these addresses
+     * undeclared, so without the views every debug-ROM csrrw raises
+     * illegal-instruction. The RTL has no debug-mode access gate
+     * (cv32e40p_cs_registers.sv decodes them at any time). */
+    CsrAbtractReg dcsr_view;      /* 0x7B0 */
+    CsrAbtractReg dpc_view;       /* 0x7B1 */
+    CsrAbtractReg dscratch0_view; /* 0x7B2 */
+    CsrAbtractReg dscratch1_view; /* 0x7B3 */
+
     /* User counter aliases: 0xC00/0xC02/0xC03..0xC1F and the H views at
      * 0xC80/0xC82/0xC83..0xC9F. time (0xC01) is absent. */
     Cv32e40pCounterAlias cycle_alias;
@@ -160,6 +171,10 @@ private:
     bool hwloop_csr_access(iss_insn_t *insn, bool is_write, iss_reg_t &value, int index);
     bool tselect_read_zero(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool mip_view_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
+    bool dcsr_view_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
+    bool dpc_view_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
+    bool dscratch0_view_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
+    bool dscratch1_view_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool mcycle_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool mcycleh_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool cycle_alias_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
