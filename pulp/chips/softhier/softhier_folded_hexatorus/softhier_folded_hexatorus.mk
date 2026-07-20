@@ -2,7 +2,7 @@
 ## 				Make Targets for SoftHier Simulator 				##
 ######################################################################
 
-ACTUAL_TOPO ?= softhier_fht
+ACTUAL_TOPO ?= softhier_folded_hexatorus
 
 third_party/toolchain:
 	mkdir -p third_party/toolchain
@@ -12,16 +12,16 @@ third_party/toolchain:
 	wget https://github.com/husterZC/gun_toolchain/releases/download/v2.0.0/toolchain.tar.xz &&\
 	tar -xvf toolchain.tar.xz
 
-config_file_fht ?= "pulp/pulp/chips/softhier/softhier_fht/softhier_arch.py"
+config_file_folded_hexatorus ?= "pulp/pulp/chips/softhier/softhier_folded_hexatorus/softhier_arch.py"
 ifdef cfg
-	config_file_fht = "$(cfg)"
+	config_file_folded_hexatorus = "$(cfg)"
 endif
 
 sh-config:
-	@if [ "$(config_file_fht)" != "pulp/pulp/chips/softhier/softhier_fht/softhier_arch.py" ]; then \
-		cp -f $(config_file_fht) pulp/pulp/chips/softhier/softhier_fht/softhier_arch.py; \
+	@if [ "$(config_file_folded_hexatorus)" != "pulp/pulp/chips/softhier/softhier_folded_hexatorus/softhier_arch.py" ]; then \
+		cp -f $(config_file_folded_hexatorus) pulp/pulp/chips/softhier/softhier_folded_hexatorus/softhier_arch.py; \
 	fi
-	python3 pulp/pulp/chips/softhier/common/utils/config.py $(config_file_fht) pulp/pulp/chips/softhier/common/sw/runtime/include
+	python3 pulp/pulp/chips/softhier/common/utils/config.py $(config_file_folded_hexatorus) pulp/pulp/chips/softhier/common/sw/runtime/include
 
 sh-hw:
 	make sh-config

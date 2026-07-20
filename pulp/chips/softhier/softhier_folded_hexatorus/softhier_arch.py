@@ -26,7 +26,7 @@ class SoftHierArch:
         self.num_core_per_cluster    = 1
 
         #Topology
-        self.topology                = "FHT"
+        self.topology                = "FoldedHexaTorus"
         self.num_rings               = 6
         #Not actually needed except for the initial assertion
 

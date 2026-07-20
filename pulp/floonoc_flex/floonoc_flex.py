@@ -657,7 +657,7 @@ class FlooNocFlex(gvsoc.systree.Component):
 
         self.add_property('routing_tables', routing_tables)
     
-    def generate_routing_tables_fht(self):
+    def generate_routing_tables_folded_hexatorus(self):
         """
         Generates routing tables using Multiple Spanning Trees.
         Can be faster than simple Up/Down.

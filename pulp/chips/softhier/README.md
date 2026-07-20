@@ -50,7 +50,7 @@
       make sh-run TOPOLOGY=[topology]
    ```
 
-   Where [topology] can be 3d, torus, 3d_torus, ring, hierarchical_ring, hexamesh or fht (FoldedHexaTorus)
+   Where [topology] can be 3d, torus, 3d_torus, ring, hierarchical_ring, hexamesh or folded_hexatorus
 
 8. FlooGen works by adding a `floogen.yml` configuration file into a chip's folder. Keep in mind to comment out any manual instantiation.
 9. Custom routing tables can be imported by adding a routing.yml file into a chip's folder.
