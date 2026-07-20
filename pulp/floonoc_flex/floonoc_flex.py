@@ -927,18 +927,25 @@ class FlooNocFlex(gvsoc.systree.Component):
             # Populate the table translating string names to integer IDs
             for src_str, routes in custom_yaml.items():
                 if src_str not in node_to_id:
-                    print(f"Warning: Router '{src_str}' from routing.yml not found in NoC.")
-                    continue
+                    raise ValueError(
+                        f"routing.yml ({routing_path}): router '{src_str}' not found in NoC "
+                        f"(known nodes: {sorted(node_to_id.keys())})")
                     
                 src_id = node_to_id[src_str]
                 
                 for dst_str, next_hop_str in routes.items():
-                    if dst_str in node_to_id and next_hop_str in node_to_id:
-                        dst_id = node_to_id[dst_str]
-                        next_hop_id = node_to_id[next_hop_str]
-                        
-                        routing_tables[str(src_id)][str(dst_id)] = next_hop_id
-                    else:
-                        print(f"Warning: Unknown destination/hop '{dst_str}' or '{next_hop_str}' in routing.yml")
+                    if dst_str not in node_to_id:
+                        raise ValueError(
+                            f"routing.yml ({routing_path}): destination '{dst_str}' "
+                            f"(router '{src_str}') not found in NoC")
+                    if next_hop_str not in node_to_id:
+                        raise ValueError(
+                            f"routing.yml ({routing_path}): next hop '{next_hop_str}' "
+                            f"(router '{src_str}' -> '{dst_str}') not found in NoC")
+
+                    dst_id = node_to_id[dst_str]
+                    next_hop_id = node_to_id[next_hop_str]
+                    
+                    routing_tables[str(src_id)][str(dst_id)] = next_hop_id
                         
             self.add_property('routing_tables', routing_tables)
