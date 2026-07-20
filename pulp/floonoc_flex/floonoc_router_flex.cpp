@@ -29,7 +29,7 @@
 
 Router::Router(FlooNoc *noc, std::string name, int node_id, int num_queues,
                int queue_size)
-    : FloonocNode(noc, name + "_" + std::to_string(node_id)),
+    : FloonocNode(noc, name + std::to_string(node_id)),
       fsm_event(this, &Router::fsm_handler),
       signal_req(*this, "req", 64, vp::SignalCommon::ResetKind::HighZ),
       signal_req_size(*this, "req_size", 64,
@@ -60,7 +60,7 @@ Router::Router(FlooNoc *noc, std::string name, int node_id, int num_queues,
         *(this->stalled_queues[i]) = false;
     }
 
-    std::string stat_prefix = name + std::to_string(node_id) + "/";
+    std::string stat_prefix = this->get_name() + "/";
     noc->stats.register_stat(&this->stat_routed_packets,
                              stat_prefix + "routed_packets",
                              "Number of packets forwarded by this router");
