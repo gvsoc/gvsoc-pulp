@@ -71,6 +71,17 @@ public:
     bool check_access(Iss *iss, bool write, bool read) override;
 };
 
+/* Debug-mode CSR front-end (dcsr/dpc/dscratch0-1): accessible only while in
+ * debug mode. The RTL decoder raises illegal-instruction on any M-mode
+ * access (cv32e40p_decoder.sv, CSR_DCSR..CSR_DSCRATCH1 with !debug_mode_i),
+ * so generic_exception_test relies on these accesses trapping. Debug-ROM
+ * code runs with debug_mode set and passes the check. */
+class Cv32e40pDebugCsr : public CsrAbtractReg
+{
+public:
+    bool check_access(Iss *iss, bool write, bool read) override;
+};
+
 class Cv32e40pCsr : public Csr
 {
 public:
@@ -141,12 +152,13 @@ public:
      * (dcsr/depc/scratch0/scratch1), which the debug-entry and dret paths
      * write directly. The base register file leaves these addresses
      * undeclared, so without the views every debug-ROM csrrw raises
-     * illegal-instruction. The RTL has no debug-mode access gate
-     * (cv32e40p_cs_registers.sv decodes them at any time). */
-    CsrAbtractReg dcsr_view;      /* 0x7B0 */
-    CsrAbtractReg dpc_view;       /* 0x7B1 */
-    CsrAbtractReg dscratch0_view; /* 0x7B2 */
-    CsrAbtractReg dscratch1_view; /* 0x7B3 */
+     * illegal-instruction. Access is legal from debug mode only: the RTL
+     * decoder (not cv32e40p_cs_registers.sv, which decodes them at any
+     * time) rejects M-mode accesses with illegal-instruction. */
+    Cv32e40pDebugCsr dcsr_view;      /* 0x7B0 */
+    Cv32e40pDebugCsr dpc_view;       /* 0x7B1 */
+    Cv32e40pDebugCsr dscratch0_view; /* 0x7B2 */
+    Cv32e40pDebugCsr dscratch1_view; /* 0x7B3 */
 
     /* User counter aliases: 0xC00/0xC02/0xC03..0xC1F and the H views at
      * 0xC80/0xC82/0xC83..0xC9F. time (0xC01) is absent. */

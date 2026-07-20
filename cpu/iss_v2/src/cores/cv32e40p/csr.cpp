@@ -56,6 +56,16 @@ bool Cv32e40pCounterAlias::check_access(Iss *iss, bool write, bool read)
     return true;
 }
 
+bool Cv32e40pDebugCsr::check_access(Iss *iss, bool write, bool read)
+{
+    if (!iss->exec.debug_mode)
+    {
+        iss->exception.raise(iss->exec.current_insn, ISS_EXCEPT_ILLEGAL);
+        return false;
+    }
+    return true;
+}
+
 Cv32e40pCsr::Cv32e40pCsr(Iss &iss)
 : Csr(iss)
 {
