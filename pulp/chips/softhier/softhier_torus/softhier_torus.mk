@@ -40,6 +40,7 @@ endif
 arch_cmake_arg := "-DRISCV_ARCH=rv32imafdv_zfh"
 
 sh-sw:
+	make sh-config
 	rm -rf sw_build && mkdir sw_build
 	cd sw_build && $(CMAKE) $(sw_cmake_arg) $(arch_cmake_arg) ../pulp/pulp/chips/softhier/common/sw/ && make
 	@! grep -q "ebreak" sw_build/softhier.dump || (echo "Error: 'ebreak' found in sw_build/softhier.dump" && exit 1)
