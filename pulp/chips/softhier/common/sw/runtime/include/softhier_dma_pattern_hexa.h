@@ -90,7 +90,7 @@ static inline int32_t get_id(FlexPositionHexa pos) {
 
 // Identify if the current topology is a Torus
 static inline int32_t is_torus() {
-    // "FHT" starts with 'F', "HexaMesh" starts with 'H'
+    // "FoldedHexaTorus" starts with 'F', "HexaMesh" starts with 'H'
     return ARCH_TOPOLOGY[0] == 'F'; 
 }
 
