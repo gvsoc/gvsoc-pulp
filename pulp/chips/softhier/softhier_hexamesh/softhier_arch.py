@@ -32,6 +32,7 @@ class SoftHierArch:
 
         #For DMA pattern
         self.shape_category          = 4
+        self.is_torus                = 0
 
         self.cluster_tcdm_bank_width = 4
         self.cluster_tcdm_bank_nb    = 128
