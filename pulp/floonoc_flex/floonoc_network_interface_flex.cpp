@@ -310,7 +310,7 @@ NetworkInterface::NetworkInterface(FlooNoc *noc, int node_id,
     this->ni_outstanding_reqs =
         this->noc->get_js_config()->get("ni_outstanding_reqs")->get_int();
 
-    std::string stat_prefix = "ni_" + std::to_string(node_id) + "/";
+    std::string stat_prefix = this->get_name() + "/";
     noc->stats.register_stat(&this->stat_injected_packets,
                              stat_prefix + "injected_packets",
                              "Number of packets injected into the NoC");
