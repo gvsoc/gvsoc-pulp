@@ -10,3 +10,6 @@ endif
 SOFTHIER_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 
 include $(SOFTHIER_DIR)$(ACTUAL_TOPO)/$(ACTUAL_TOPO).mk
+
+# Forward DEBUG to the top-level build, not just to make itself.
+build: export DEBUG := $(DEBUG)
