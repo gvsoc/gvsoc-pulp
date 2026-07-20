@@ -27,7 +27,7 @@ import gvsoc.systree
 from pulp.chips.softhier.common.cluster_unit import ClusterUnit, ClusterArch
 from pulp.chips.softhier.common.softhier_ctrl import SoftHierCtrl
 from pulp.chips.softhier.common.error_detector import ErrorDetector
-from pulp.chips.softhier.softhier_fht.softhier_arch import SoftHierArch
+from pulp.chips.softhier.softhier_folded_hexatorus.softhier_arch import SoftHierArch
 from pulp.floonoc_flex.floonoc_flex import FlooNocFlex
 
 class SoftHierSystem(gvsoc.systree.Component):
