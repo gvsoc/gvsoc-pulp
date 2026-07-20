@@ -16,6 +16,7 @@
 
 from enum import IntEnum
 import gvsoc.systree
+import os
 import yaml
 from pathlib import Path
 
@@ -190,6 +191,34 @@ class FlooNocFlex(gvsoc.systree.Component):
             The slave interface
         """
         return gvsoc.systree.SlaveItf(self, f'wide_input_{node_id}', signature='io')
+
+    def _check_ni_router_links(self):
+        """
+        Every registered network interface must have exactly one link to a
+        router in the topology, otherwise the routing-table generators
+        silently leave that NI's entries as -1 (indistinguishable from an
+        unused node id), which only surfaces as a fatal error in the C++
+        model once traffic actually targets that NI.
+        """
+        routers = set(r[0] for r in self.get_property('routers'))
+        nis = set(n[0] for n in self.get_property('network_interfaces'))
+        links = self.get_property('links')
+
+        ni_to_router = {}
+        for link in links:
+            node_a, node_b = link[0], link[1]
+            if node_a in nis and node_b in routers:
+                ni_to_router[node_a] = node_b
+            elif node_b in nis and node_a in routers:
+                ni_to_router[node_b] = node_a
+
+        missing = [n for n in nis if n not in ni_to_router]
+        if missing:
+            id_to_name = {v: k for k, v in self.id_map.items()} if self.id_map else {}
+            names = [id_to_name.get(n, n) for n in missing]
+            raise ValueError(
+                f"Network interface(s) {names} have no router link in the "
+                f"topology (check the links / routing.yml configuration)")
 
     def generate_routing_tables_shortest_path(self):
         """
@@ -879,6 +908,11 @@ class FlooNocFlex(gvsoc.systree.Component):
                     if link_pair not in added_links:
                         self.add_link(src_id, dst_id, latency=1)
                         added_links.add(link_pair)
+
+            # Extra generation-time validation, only run for DEBUG builds
+            # (make DEBUG=1 ...) since it adds an extra pass over the topology.
+            if os.environ.get('DEBUG'):
+                self._check_ni_router_links()
 
             algo_name = floo_net.routing.route_algo.name
             
