@@ -16,6 +16,7 @@
 
 # Authors: Chi Zhang <chizhang@ethz.ch>, Siim Rausi <srausi@student.ethz.ch>
 
+import os
 import gvsoc.runner
 import cpu.iss.riscv as iss
 import memory.memory
@@ -27,9 +28,9 @@ import gvsoc.systree
 from pulp.chips.softhier.common.cluster_unit import ClusterUnit, ClusterArch
 from pulp.chips.softhier.common.softhier_ctrl import SoftHierCtrl
 from pulp.chips.softhier.common.error_detector import ErrorDetector
-from pulp.chips.softhier.softhier_3d.softhier_arch import SoftHierArch
+from pulp.chips.softhier.softhier_arch_base import SoftHierArchTorus as SoftHierArch, get_arch_overrides
 from pulp.floonoc_flex.floonoc_flex import FlooNocFlex
-
+import math
 
 class SoftHierSystem(gvsoc.systree.Component):
 
@@ -40,7 +41,7 @@ class SoftHierSystem(gvsoc.systree.Component):
         # Configuration #
         #################
 
-        arch = SoftHierArch()
+        arch = SoftHierArch(**get_arch_overrides(self, SoftHierArch))
 
         # Get Binary
         binary = None
@@ -51,13 +52,14 @@ class SoftHierSystem(gvsoc.systree.Component):
         #############
         # Assertion #
         #############
-        assert arch.num_cluster_x * arch.num_cluster_y * arch.num_cluster_z == arch.num_cluster, f"Topology dimesion not match total number of clusters"
+
+        assert arch.num_cluster_x * arch.num_cluster_y == arch.num_cluster, f"Topology dimesion not match total number of clusters"
 
         ##############
         # Components #
         ##############
 
-        #Clusters
+        # Clusters
         cluster_list=[]
         for cluster_id in range(arch.num_cluster):
             cluster_arch = ClusterArch( num_core 		    = arch.num_core_per_cluster,
@@ -81,91 +83,33 @@ class SoftHierSystem(gvsoc.systree.Component):
             cluster_list.append(ClusterUnit(self,f'cluster_{cluster_id}', cluster_arch, binary))
             pass
 
-        #Virtual router, just for debugging and non-performance-critical jobs
+        # Virtual router, just for debugging and non-performance-critical jobs
         virtual_interco = router.Router(self, 'virtual_interco', bandwidth=8)
 
-        #Debug Memory
+        # Debug Memory
         error_detector = ErrorDetector(self,'error_detector')
 
-        #Control register
+        # Control register
         softhier_ctrl = SoftHierCtrl(self, 'softhier_ctrl', num_cluster=arch.num_cluster, num_core_per_cluster=arch.num_core_per_cluster)
 
-       # --- FlooNoC Flex Initialization & Topology Building ---
+        topologies_dir = os.path.join(os.getcwd(), 'pulp', 'pulp', 'chips',
+                                       'softhier', 'topologies', 'generated')
+        floogen_path = os.path.join(topologies_dir, '2d_torus.floogen.yml')
+        routing_path = os.path.join(topologies_dir, '2d_torus.routing.yml')
+        link_latencies_path = os.path.join(topologies_dir, '2d_torus.link_latencies.yml')
 
-        router_degrees = 7
-        
-        # Calculate Dimensions (Adding a 1-node border for targets on all 3 axes)
-        dim_x = arch.num_cluster_x + 2
-        dim_y = arch.num_cluster_y + 2
-        dim_z = arch.num_cluster_z + 2
-        
-        MESH_SIZE = dim_x * dim_y * dim_z
-        nb_nodes = MESH_SIZE * 2
+        if not os.path.exists(floogen_path):
+            raise FileNotFoundError(f"FlooGen config not found at expected path: {floogen_path}")
 
-        noc = FlooNocFlex(self, 'noc',      
+        noc = FlooNocFlex(self, 'noc',
                 wide_width=arch.noc_link_width,
                 narrow_width=8,
-                router_degrees=router_degrees,
-                nb_nodes=nb_nodes,
                 router_input_queue_size=16,
-                ni_outstanding_reqs=arch.noc_outstanding)
-
-        def get_router_id(x, y, z):
-            # 3D Math: z * (Area) + y * (Width) + x
-            return z * (dim_x * dim_y) + y * dim_x + x
-            
-        def get_ni_id(x, y, z):
-            return MESH_SIZE + get_router_id(x, y, z)
-
-        routers_map = {} 
-        nis_map = {}     
-
-        # Add routers
-        for z in range(dim_z):
-            for y in range(dim_y):
-                for x in range(dim_x):
-                    r_id = get_router_id(x, y, z)
-                    routers_map[(x, y, z)] = r_id
-                    noc.add_router(r_id, num_queues=router_degrees)
-
-        # Add network interfaces everywhere except the 8 corners
-        for z in range(dim_z):
-            for y in range(dim_y):
-                for x in range(dim_x):
-                    if (x == 0 or x == dim_x - 1) and (y == 0 or y == dim_y - 1) and (z == 0 or z == dim_z - 1):
-                        continue
-                    ni_id = get_ni_id(x, y, z)
-                    nis_map[(x, y, z)] = ni_id
-                    noc.add_network_interface(ni_id)
-
-        # Add links (NI <-> Local Router 1:1 mapping)
-        for (nx, ny, nz), ni_id in nis_map.items():
-            r_id = routers_map[(nx, ny, nz)]
-            noc.add_link(ni_id, r_id, latency=1)
-
-        # Add links (Router <-> Router Mesh Network)
-        for z in range(dim_z):
-            for y in range(dim_y):
-                for x in range(dim_x):
-                    r_id = routers_map[(x, y, z)]
-                    
-                    # Link East (X-axis)
-                    if x < dim_x - 1:
-                        east_id = routers_map[(x + 1, y, z)]
-                        noc.add_link(r_id, east_id, latency=1)
-                        
-                    # Link South (Y-axis)
-                    if y < dim_y - 1:
-                        south_id = routers_map[(x, y + 1, z)]
-                        noc.add_link(r_id, south_id, latency=1)
-                        
-                    # Link Down (Z-axis)
-                    if z < dim_z - 1:
-                        down_id = routers_map[(x, y, z + 1)]
-                        noc.add_link(r_id, down_id, latency=1)
-
-        # Generate routing tables
-        noc.generate_routing_tables_shortest_path()
+                ni_outstanding_reqs=arch.noc_outstanding,
+                network_path=floogen_path,
+                routing_path=routing_path,
+                default_link_latency=arch.link_latency,
+                link_latencies_path=link_latencies_path)
 
         ############
         # Bindings #
@@ -176,15 +120,13 @@ class SoftHierSystem(gvsoc.systree.Component):
 
         # Control register
         virtual_interco.o_MAP(softhier_ctrl.i_INPUT(), base=arch.soc_register_base, size=arch.soc_register_size, rm_base=True)
-        
+
         # Clusters
         for cluster_id in range(arch.num_cluster):
-            
             x_id = int(cluster_id % arch.num_cluster_x)
-            y_id = int((cluster_id // arch.num_cluster_x) % arch.num_cluster_y)
-            z_id = int(cluster_id // (arch.num_cluster_x * arch.num_cluster_y))
-            
-            ni_node_id = nis_map[(x_id + 1, y_id + 1, z_id + 1)]
+            y_id = int(cluster_id / arch.num_cluster_x)
+
+            ni_node_id = noc.id_map[f"cluster_{x_id}_{y_id}_ni"]
             
             narrow_arbiter = router.Router(self, f'narrow_arbiter_{cluster_id}', bandwidth=8)
             narrow_arbiter.o_MAP(virtual_interco.i_INPUT())
@@ -203,26 +145,20 @@ class SoftHierSystem(gvsoc.systree.Component):
             cluster_list[cluster_id].o_NARROW_SOC(narrow_arbiter.i_INPUT())
             cluster_list[cluster_id].o_WIDE_SOC(wide_arbiter.i_INPUT())
             
-            narrow_base = arch.cluster_tcdm_remote + cluster_id * arch.cluster_tcdm_size
             noc.o_NARROW_MAP(cluster_list[cluster_id].i_NARROW_INPUT(),
-                            base=narrow_base,
-                            size=arch.cluster_tcdm_size,
-                            node_id=ni_node_id,
-                            rm_base=False, 
-                            remove_offset=narrow_base - arch.cluster_tcdm_base) 
-
+                           base=arch.cluster_tcdm_remote  + cluster_id * arch.cluster_tcdm_size,
+                           size=arch.cluster_tcdm_size,
+                           node_id=ni_node_id,
+                           rm_base=True)
+                           
             wide_base = arch.cluster_tcdm_remote + cluster_id * arch.cluster_tcdm_size
             wide_name = cluster_list[cluster_id].i_WIDE_INPUT().component.name
-
+            
             noc.get_property('mappings')[f"wide_{wide_name}"] = {
-                'base': wide_base, 
-                'size': arch.cluster_tcdm_size, 
-                'node_id': ni_node_id, 
-                'remove_offset': wide_base - arch.cluster_tcdm_base
+                'base': wide_base, 'size': arch.cluster_tcdm_size, 'node_id': ni_node_id, 'remove_offset': wide_base
             }
             noc.o_WIDE_BIND(cluster_list[cluster_id].i_WIDE_INPUT(), ni_node_id)
-        
-        
+
 
 class SoftHierPlatform(gvsoc.systree.Component):
 

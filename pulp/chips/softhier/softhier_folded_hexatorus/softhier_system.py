@@ -16,6 +16,7 @@
 
 # Authors: Chi Zhang <chizhang@ethz.ch>, Siim Rausi <srausi@student.ethz.ch>
 
+import os
 import gvsoc.runner
 import cpu.iss.riscv as iss
 import memory.memory
@@ -27,7 +28,7 @@ import gvsoc.systree
 from pulp.chips.softhier.common.cluster_unit import ClusterUnit, ClusterArch
 from pulp.chips.softhier.common.softhier_ctrl import SoftHierCtrl
 from pulp.chips.softhier.common.error_detector import ErrorDetector
-from pulp.chips.softhier.softhier_folded_hexatorus.softhier_arch import SoftHierArch
+from pulp.chips.softhier.softhier_arch_base import SoftHierArchFoldedHexaTorus as SoftHierArch, get_arch_overrides
 from pulp.floonoc_flex.floonoc_flex import FlooNocFlex
 
 class SoftHierSystem(gvsoc.systree.Component):
@@ -39,7 +40,7 @@ class SoftHierSystem(gvsoc.systree.Component):
         # Configuration #
         #################
 
-        arch = SoftHierArch()
+        arch = SoftHierArch(**get_arch_overrides(self, SoftHierArch))
 
         # Get Binary
         binary = None
@@ -89,105 +90,26 @@ class SoftHierSystem(gvsoc.systree.Component):
         #Control register
         softhier_ctrl = SoftHierCtrl(self, 'softhier_ctrl', num_cluster=arch.num_cluster, num_core_per_cluster=arch.num_core_per_cluster)
 
-        # --- FlooNoC Flex Initialization & FoldedHexaTorus Topology Building ---        
-        router_degrees = 7
-        nb_nodes = arch.num_cluster * 2
+        topologies_dir = os.path.join(os.getcwd(), 'pulp', 'pulp', 'chips',
+                                       'softhier', 'topologies', 'generated')
+        floogen_path = os.path.join(topologies_dir, 'folded_hexatorus.floogen.yml')
+        routing_path = os.path.join(topologies_dir, 'folded_hexatorus.routing.yml')
+        link_latencies_path = os.path.join(topologies_dir, 'folded_hexatorus.link_latencies.yml')
 
-        noc = FlooNocFlex(self, 'noc',  
-                narrow_width=8,    
+        if not os.path.exists(floogen_path):
+            raise FileNotFoundError(f"FlooGen config not found at expected path: {floogen_path}")
+
+        noc = FlooNocFlex(self, 'noc',
+                narrow_width=8,
                 wide_width=arch.noc_link_width,
-                router_degrees=router_degrees,
-                nb_nodes=nb_nodes,
                 router_input_queue_size=16,
-                ni_outstanding_reqs=arch.noc_outstanding)
+                ni_outstanding_reqs=arch.noc_outstanding,
+                network_path=floogen_path,
+                routing_path=routing_path,
+                default_link_latency=arch.link_latency,
+                link_latencies_path=link_latencies_path)
 
-        # Axial coordinate generation
-        ring_walk_dirs = [(-1, 1), (-1, 0), (0, -1), (1, -1), (1, 0), (0, 1)]
-        
-        coords = [(0, 0)]
-        ring = 1
-        while len(coords) < arch.num_cluster:
-            q, r = ring, 0 
-            for dq, dr in ring_walk_dirs:
-                for _ in range(ring):
-                    if len(coords) < arch.num_cluster:
-                        coords.append((q, r))
-                    q += dq
-                    r += dr
-            ring += 1
-
-        coord_to_id = {coord: idx for idx, coord in enumerate(coords)}
-        routers_map = {} 
-        nis_map = {}     
-
-        # Instantiate Routers and NIs
-        for cluster_id, (q, r) in enumerate(coords):
-            r_id = cluster_id
-            ni_id = arch.num_cluster + cluster_id
-            
-            routers_map[cluster_id] = r_id
-            nis_map[cluster_id] = ni_id
-
-            noc.add_router(r_id, num_queues=router_degrees) 
-            noc.add_network_interface(ni_id)
-        
-        R = arch.num_rings
-
-        # Lattice translation vectors
-        C_vectors = [
-            (R + 1, R),
-            (-R, 2 * R + 1),
-            (-2 * R - 1, R + 1),
-            (-R - 1, -R),
-            (R, -2 * R - 1),
-            (2 * R + 1, -R - 1)
-        ]
-
-        def get_torus_neighbor(q, r, dq, dr):
-            """Calculates the Torus neighbor, wrapping around the hex edges if needed."""
-            nq, nr = q + dq, r + dr
-            if (nq, nr) in coord_to_id:
-                return coord_to_id[(nq, nr)] # Internal link
-            
-            # If off-chip, shift back using the periodic lattice vectors
-            for cq, cr in C_vectors:
-                wq, wr = nq - cq, nr - cr
-                if (wq, wr) in coord_to_id:
-                    return coord_to_id[(wq, wr)] # Wrap-around link
-            return -1
-        
-        # Axis 1: East (1, 0) / West (-1, 0) priority
-        coords_q_desc = sorted(coords, key=lambda c: c[0], reverse=True)
-        for q, r in coords_q_desc:
-            east_id = get_torus_neighbor(q, r, 2, 0)
-            if east_id != -1:
-                r_id = routers_map[coord_to_id[(q, r)]]
-                noc.add_link(r_id, routers_map[east_id], latency=1)
-
-        # Axis 2: SouthEast (0, 1) / NorthWest (0, -1) priority
-        coords_r_desc = sorted(coords, key=lambda c: c[1], reverse=True)
-        for q, r in coords_r_desc:
-            se_id = get_torus_neighbor(q, r, 0, 2)
-            if se_id != -1:
-                r_id = routers_map[coord_to_id[(q, r)]]
-                noc.add_link(r_id, routers_map[se_id], latency=1)
-
-        # Axis 3: SouthWest (-1, 1) / NorthEast (1, -1) priority
-        coords_sw_desc = sorted(coords, key=lambda c: -c[0] + c[1], reverse=True)
-        for q, r in coords_sw_desc:
-            sw_id = get_torus_neighbor(q, r, -2, 2)
-            if sw_id != -1:
-                r_id = routers_map[coord_to_id[(q, r)]]
-                noc.add_link(r_id, routers_map[sw_id], latency=1)
-
-        # Add NI <-> Router links
-        for cluster_id, _ in enumerate(coords):
-            ni_id = nis_map[cluster_id]
-            r_id = routers_map[cluster_id]
-            noc.add_link(ni_id, r_id, latency=1)
-        
-        # Generate routing tables
-        noc.generate_routing_tables_shortest_path()
+        nis_map = {i: noc.id_map[f"cluster_{i}_ni"] for i in range(arch.num_cluster)}
 
         ############
         # Bindings #

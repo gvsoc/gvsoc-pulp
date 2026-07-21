@@ -51,7 +51,8 @@ class FlooNocFlex(gvsoc.systree.Component):
     """
     def __init__(self, parent: gvsoc.systree.Component, name, narrow_width: int, wide_width:int,
             router_degrees: int=0, nb_nodes: int=0, ni_outstanding_reqs: int=8, router_input_queue_size: int=2,
-            network_path: str | None = None, routing_path: str | None = None):
+            network_path: str | None = None, routing_path: str | None = None,
+            default_link_latency: int=1, link_latencies_path: str | None = None):
         super().__init__(parent, name)
 
         self.add_sources([
@@ -67,13 +68,18 @@ class FlooNocFlex(gvsoc.systree.Component):
         self.add_property('narrow_width', narrow_width)
         self.add_property('wide_width', wide_width)
         self.add_property('router_input_queue_size', router_input_queue_size)
-        
+
         self.add_property('nb_nodes', nb_nodes)
         self.add_property('links', [])
-        self.add_property('router_degrees', router_degrees)       
+        self.add_property('router_degrees', router_degrees)
         self.id_map = {}
+        # floogen's own schema has no per-link timing field, so per-link
+        # latencies are sourced from an optional side file keyed
+        # by node name pairs (see load_from_floogen); any link not listed
+        # there falls back to this single uniform default.
+        self.default_link_latency = default_link_latency
         if network_path is not None:
-            self.id_map = self.load_from_floogen(network_path, routing_path)
+            self.id_map = self.load_from_floogen(network_path, routing_path, link_latencies_path)
 
     def __add_mapping(self, name: str, base: int, size: int, node_id: int, remove_offset:int =0):
         self.get_property('mappings')[name] =  {'base': base, 'size': size, 'node_id': node_id, 'remove_offset':remove_offset}
@@ -281,207 +287,6 @@ class FlooNocFlex(gvsoc.systree.Component):
                     routing_tables[str(src)][str(dst)] = best_first_hop[target_router]
                 else:
                     routing_tables[str(src)][str(dst)] = src
-
-        self.add_property('routing_tables', routing_tables)
-
-    def generate_routing_tables_mesh_2d(self, dim_x: int, dim_y: int):
-        """
-        Generates routing tables imitating FlooNoC behaviour.
-        """
-        nb_nodes = self.get_property('nb_nodes')
-        links = self.get_property('links')
-
-        routers = [r[0] for r in self.get_property('routers')]
-        nis = [n[0] for n in self.get_property('network_interfaces')]
-
-        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
-
-        ni_to_router = {}
-        for link in links:
-            node_a, node_b = link[0], link[1]
-            if node_a in nis and node_b in routers:
-                ni_to_router[node_a] = node_b
-            elif node_b in nis and node_a in routers:
-                ni_to_router[node_b] = node_a
-
-        for src in routers:
-            for dst in range(nb_nodes):
-                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
-
-                if target_router == -1:
-                    continue
-                if src == target_router:
-                    routing_tables[str(src)][str(dst)] = dst
-                    continue
-
-                src_x, src_y = src % dim_x, src // dim_x
-                dst_x, dst_y = target_router % dim_x, target_router // dim_x
-
-                if src_x != dst_x:
-                    next_hop = src + 1 if dst_x > src_x else src - 1
-                else:
-                    next_hop = src + dim_x if dst_y > src_y else src - dim_x
-
-                routing_tables[str(src)][str(dst)] = next_hop
-
-        self.add_property('routing_tables', routing_tables)
-
-    def generate_routing_tables_mesh_3d(self, dim_x: int, dim_y: int, dim_z: int):
-        """
-        Generates routing tables for the routers based on grid dimensions.
-        """
-        nb_nodes = self.get_property('nb_nodes')
-        links = self.get_property('links')
-
-        routers = [r[0] for r in self.get_property('routers')]
-        nis = [n[0] for n in self.get_property('network_interfaces')]
-
-        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
-
-        ni_to_router = {}
-        for link in links:
-            node_a, node_b = link[0], link[1]
-            if node_a in nis and node_b in routers:
-                ni_to_router[node_a] = node_b
-            elif node_b in nis and node_a in routers:
-                ni_to_router[node_b] = node_a
-
-        for src in routers:
-            for dst in range(nb_nodes):
-                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
-
-                if target_router == -1:
-                    continue
-                if src == target_router:
-                    routing_tables[str(src)][str(dst)] = dst
-                    continue
-
-                src_x, src_y, src_z = src % dim_x, (src // dim_x) % dim_y, src // (dim_x * dim_y)
-                dst_x, dst_y, dst_z = target_router % dim_x, (target_router // dim_x) % dim_y, target_router // (dim_x * dim_y)
-
-                if src_x != dst_x:
-                    next_hop = src + 1 if dst_x > src_x else src - 1
-                elif src_y != dst_y:
-                    next_hop = src + dim_x if dst_y > src_y else src - dim_x
-                else:
-                    next_hop = src + dim_x * dim_y if dst_z > src_z else src - dim_x * dim_y
-
-                routing_tables[str(src)][str(dst)] = next_hop
-
-        self.add_property('routing_tables', routing_tables)
-
-    def generate_routing_tables_ring(self):
-        """
-        Generates routing tables for a Ring topology.
-        """
-        nb_nodes = self.get_property('nb_nodes')
-        links = self.get_property('links')
-
-        routers = sorted([r[0] for r in self.get_property('routers')])
-        nis = [n[0] for n in self.get_property('network_interfaces')]
-        num_routers = len(routers)
-
-        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
-
-        ni_to_router = {}
-        for link in links:
-            node_a, node_b = link[0], link[1]
-            if node_a in nis and node_b in routers:
-                ni_to_router[node_a] = node_b
-            elif node_b in nis and node_a in routers:
-                ni_to_router[node_b] = node_a
-
-        for src in routers:
-            src_idx = routers.index(src)
-            for dst in range(nb_nodes):
-                
-                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
-
-                if target_router == -1:
-                    continue
-                
-                if src == target_router:
-                    routing_tables[str(src)][str(dst)] = dst
-                    continue
-
-                target_idx = routers.index(target_router)
-
-                if target_idx > src_idx:
-                    next_hop_idx = src_idx + 1
-                else:
-                    next_hop_idx = src_idx - 1
-
-                next_hop = routers[next_hop_idx]
-                routing_tables[str(src)][str(dst)] = next_hop
-
-        self.add_property('routing_tables', routing_tables)
-
-    def generate_routing_tables_hier_ring(self, dim_g: int, dim_l: int):
-        """
-        Generates routing tables for a Hierarchical Ring topology.
-        """
-        nb_nodes = self.get_property('nb_nodes')
-        links = self.get_property('links')
-
-        routers = sorted([r[0] for r in self.get_property('routers')])
-        nis = [n[0] for n in self.get_property('network_interfaces')]
-        
-        N = dim_g * dim_l
-
-        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
-
-        ni_to_router = {}
-        for link in links:
-            node_a, node_b = link[0], link[1]
-            if node_a in nis and node_b in routers:
-                ni_to_router[node_a] = node_b
-            elif node_b in nis and node_a in routers:
-                ni_to_router[node_b] = node_a
-
-        for src in routers:
-            for dst in range(nb_nodes):
-                
-                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
-
-                if target_router == -1:
-                    continue
-                
-                if src == target_router:
-                    routing_tables[str(src)][str(dst)] = dst
-                    continue
-
-                if target_router >= N: 
-                    target_g = target_router - N 
-                else:
-                    target_g = target_router // dim_l
-
-                if src >= N:
-                    src_g = src - N
-                    
-                    if src_g == target_g:
-                        next_hop = target_g * dim_l
-                    else:
-                        if target_g > src_g:
-                            next_hop = N + src_g + 1
-                        else:
-                            next_hop = N + src_g - 1
-
-                else:
-                    src_g = src // dim_l
-                    bridge_id = src_g * dim_l
-                    
-                    if src_g == target_g:
-                        if target_router > src:
-                            next_hop = src + 1
-                        else:
-                            next_hop = src - 1
-                    else:
-                        if src == bridge_id:
-                            next_hop = N + src_g
-                        else:
-                            next_hop = src - 1
-
-                routing_tables[str(src)][str(dst)] = next_hop
 
         self.add_property('routing_tables', routing_tables)
 
@@ -863,7 +668,7 @@ class FlooNocFlex(gvsoc.systree.Component):
         self.add_property('routing_tables', routing_tables)
 
 
-    def load_from_floogen(self, network_path: str, routing_path: str = None):
+    def load_from_floogen(self, network_path: str, routing_path: str = None, link_latencies_path: str = None):
             """
             Parses a FlooGen YAML file and populates the GVSoC NoC topology.
             """
@@ -872,6 +677,15 @@ class FlooNocFlex(gvsoc.systree.Component):
             floo_net = parse_config(Network, Path(network_path))
             floo_net.create_network()
             floo_net.compile_network()
+
+            # Optional {src_name: {dst_name: latency}} side file for
+            # per-link latencies (see the matching comment in __init__).
+            link_latencies = {}
+            if link_latencies_path is not None and Path(link_latencies_path).exists():
+                with open(link_latencies_path, 'r') as f:
+                    for src_name, dsts in (yaml.safe_load(f) or {}).items():
+                        for dst_name, latency in dsts.items():
+                            link_latencies[(src_name, dst_name)] = latency
 
             # Compatibility layer: Maps FlooGen string names to Floonoc-Flex IDs
             node_to_id = {}
@@ -906,7 +720,9 @@ class FlooNocFlex(gvsoc.systree.Component):
                     
                     # Only add bidirectional link if not already added
                     if link_pair not in added_links:
-                        self.add_link(src_id, dst_id, latency=1)
+                        latency = link_latencies.get((src_name, dst_name),
+                                  link_latencies.get((dst_name, src_name), self.default_link_latency))
+                        self.add_link(src_id, dst_id, latency=latency)
                         added_links.add(link_pair)
 
             # Extra generation-time validation, only run for DEBUG builds
