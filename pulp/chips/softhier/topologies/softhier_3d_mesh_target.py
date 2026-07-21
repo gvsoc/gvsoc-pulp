@@ -1,7 +1,11 @@
 from pulp.chips.softhier.softhier_target_base import SoftHierTargetBase
-from pulp.chips.softhier.softhier_3d_mesh.softhier_system import SoftHierPlatform
+from pulp.chips.softhier.softhier_system_base import SoftHierPlatform
+
+
+class Platform(SoftHierPlatform):
+    topology = "3d_mesh"
 
 
 class Target(SoftHierTargetBase):
-    model = SoftHierPlatform
+    model = Platform
     name = "3d_mesh"

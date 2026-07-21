@@ -1,7 +1,11 @@
 from pulp.chips.softhier.softhier_target_base import SoftHierTargetBase
-from pulp.chips.softhier.softhier_folded_hexatorus.softhier_system import SoftHierPlatform
+from pulp.chips.softhier.softhier_system_base import SoftHierPlatform
+
+
+class Platform(SoftHierPlatform):
+    topology = "folded_hexatorus"
 
 
 class Target(SoftHierTargetBase):
-    model = SoftHierPlatform
+    model = Platform
     name = "folded_hexatorus"
