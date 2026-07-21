@@ -46,19 +46,40 @@
       make sh-run TOPOLOGY=[topology]
    ```
 
-   Where [topology] can be 3d, torus, 3d_torus, ring, hierarchical_ring, hexamesh or folded_hexatorus
+   Where `[topology]` can be `2d_mesh` (the default, used when `TOPOLOGY=` is
+   omitted), `2d_torus`, `3d_mesh`, `3d_torus`, `ring`, `hierarchical_ring`,
+   `hexamesh` or `folded_hexatorus`.
 
-8. FlooGen works by adding a `floogen.yml` configuration file into a chip's folder. Keep in mind to comment out any manual instantiation.
-9. Custom routing tables can be imported by adding a routing.yml file into a chip's folder.
-   The connections should be defined as:
+## Topology configuration
 
-   ```yaml
-   router_0_0:
-      cluster_ni_1_1: router_1_0
-      cluster_ni_0_2: router_0_1
+Every topology's parameters (cluster count, dimensions, link latencies, ...)
+are defined as a class in
+[`softhier_arch_base.py`](softhier_arch_base.py), keyed by topology name in
+its `TOPOLOGIES` dict. At `make sh-config` time,
+[`topologies/gen_floogen_topology.py`](topologies/gen_floogen_topology.py)
+generates the FlooGen topology (`.floogen.yml`), routing table
+(`.routing.yml`) and per-link latencies (`.link_latencies.yml`) for the
+selected topology straight from its `TOPOLOGIES` entry, and writes them to
+`topologies/generated/`.
+The same command also regenerates the C headers consumed by the SoftHier
+runtime (`common/sw/runtime/include/softhier_arch.h`/`.inc`).
 
-   router_1_0:
-      cluster_ni_1_1: cluster_ni_1_1
-   ```
+Three ways to change a topology's parameters:
 
-10. When using FlooGen, keep in mind to update the topology dimension in `softhier_arch.py`.
+- **`PARAMS=key=value,key2=value2`** (at `make sh-config`/`sh-sw` time). Example:
+
+  ```bash
+  make sh-config TOPOLOGY=2d_torus PARAMS=num_cluster=100,link_latency=2
+  ```
+
+- **`--config-opt <component-path>/<property>=<value>`** (at `make sh-run`
+  time, via `RUN_ARGS`). Example:
+
+  ```bash
+  make sh-run TOPOLOGY=2d_torus RUN_ARGS="--config-opt system/num_cluster=48"
+  ```
+
+- **`cfg=<path-to-file>`** (at `make sh-config` time): bypasses the
+  `TOPOLOGIES` registry entirely and scrapes arch parameters from a custom
+  Python file instead, for a full replacement rather than a few field
+  overrides.
