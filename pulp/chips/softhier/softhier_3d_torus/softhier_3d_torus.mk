@@ -12,20 +12,13 @@ third_party/toolchain:
 	wget https://github.com/husterZC/gun_toolchain/releases/download/v2.0.0/toolchain.tar.xz &&\
 	tar -xvf toolchain.tar.xz
 
-config_file_3d_torus ?= "pulp/pulp/chips/softhier/softhier_3d_torus/softhier_arch.py"
-ifdef cfg
-	config_file_3d_torus = "$(cfg)"
-endif
-
 sh-config:
-	@if [ "$(config_file_3d_torus)" != "pulp/pulp/chips/softhier/softhier_3d_torus/softhier_arch.py" ]; then \
-		cp -f $(config_file_3d_torus) pulp/pulp/chips/softhier/softhier_3d_torus/softhier_arch.py; \
-	fi
-	python3 pulp/pulp/chips/softhier/common/utils/config.py $(config_file_3d_torus) pulp/pulp/chips/softhier/common/sw/runtime/include
+	python3 pulp/pulp/chips/softhier/common/utils/config.py 3d_torus \
+		pulp/pulp/chips/softhier/common/sw/runtime/include $(if $(cfg),--arch-file $(cfg))
 
 sh-hw:
 	make sh-config
-	make TARGETS=pulp.chips.softhier.$(ACTUAL_TOPO).softhier_target all
+	make TARGETS=pulp.chips.softhier.topologies.$(ACTUAL_TOPO)_target all
 
 ######################################################################
 ## 				Make Targets for SoftHier Software	 				##
@@ -53,4 +46,4 @@ sh-sw-clean:
 ######################################################################
 
 sh-run:
-	./install/bin/gvsoc --target=pulp.chips.softhier.$(ACTUAL_TOPO).softhier_target --binary sw_build/softhier.elf run
+	./install/bin/gvsoc --target=pulp.chips.softhier.topologies.$(ACTUAL_TOPO)_target --binary sw_build/softhier.elf run
