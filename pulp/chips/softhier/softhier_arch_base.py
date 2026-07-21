@@ -16,6 +16,28 @@
 
 # Authors: Chi Zhang <chizhang@ethz.ch>, Siim Rausi <srausi@student.ethz.ch>
 
+def get_arch_overrides(component, arch_cls):
+    """
+    Read gapy --config-opt overrides for every field arch_cls's default
+    construction sets, via component.get_property(field_name)
+
+    Usage (from a topology's SoftHierSystem.__init__, which receives the
+    systree Component as `self`):
+        arch = SoftHierArch(**get_arch_overrides(self, SoftHierArch))
+    Invoked as e.g.:
+        ./install/bin/gvsoc --target=... --config-opt system/num_cluster=48 run
+    """
+    overrides = {}
+    for field_name, default_value in vars(arch_cls()).items():
+        value = component.get_property(field_name)
+        if value is None:
+            continue
+        if isinstance(default_value, int) and isinstance(value, str):
+            value = int(value, 0)
+        overrides[field_name] = value
+    return overrides
+
+
 class SoftHierArchBase:
     """
     Attributes shared identically by every SoftHier topology, plus None
@@ -71,6 +93,8 @@ class SoftHierArch2DMesh(SoftHierArchBase):
         self.num_cluster_x           = 4
         self.num_cluster_y           = 4
         self.shape_category          = 2
+        self.is_torus                = 0
+        self.link_latency            = 1
         self.idma_outstand_txn       = 128
         self.idma_outstand_burst     = 256
         self.noc_outstanding         = 64
@@ -86,6 +110,9 @@ class SoftHierArchTorus(SoftHierArchBase):
         self.num_cluster_x           = 8
         self.num_cluster_y           = 8
         self.shape_category          = 2
+        self.is_torus                = 1
+        self.link_latency            = 1
+        self.wraparound_latency      = 5
         self.idma_outstand_txn       = 16
         self.idma_outstand_burst     = 256
         self.noc_outstanding         = 64
@@ -102,6 +129,8 @@ class SoftHierArch3D(SoftHierArchBase):
         self.num_cluster_y           = 4
         self.num_cluster_z           = 4
         self.shape_category          = 3
+        self.is_torus                = 0
+        self.link_latency            = 1
         self.idma_outstand_txn       = 256
         self.idma_outstand_burst     = 1024
         self.noc_outstanding         = 256
@@ -118,6 +147,8 @@ class SoftHierArch3DTorus(SoftHierArchBase):
         self.num_cluster_y           = 5
         self.num_cluster_z           = 5
         self.shape_category          = 3
+        self.is_torus                = 1
+        self.link_latency            = 1
         self.idma_outstand_txn       = 16
         self.idma_outstand_burst     = 256
         self.noc_outstanding         = 64
@@ -150,6 +181,7 @@ class SoftHierArchHierRing(SoftHierArchBase):
         self.idma_outstand_txn       = 16
         self.idma_outstand_burst     = 256
         self.noc_outstanding         = 64
+        self.link_latency            = 1
         for k, v in overrides.items():
             setattr(self, k, v)
 
@@ -163,6 +195,7 @@ class SoftHierArchHexaMesh(SoftHierArchBase):
         self.num_rings               = 4
         self.shape_category          = 4
         self.is_torus                = 0
+        self.link_latency            = 1
         self.idma_outstand_txn       = 16
         self.idma_outstand_burst     = 256
         self.noc_outstanding         = 64
@@ -179,20 +212,17 @@ class SoftHierArchFoldedHexaTorus(SoftHierArchBase):
         self.num_rings               = 6
         self.shape_category          = 4
         self.is_torus                = 1
+        self.link_latency            = 1
         self.idma_outstand_txn       = 16
         self.idma_outstand_burst     = 256
         self.noc_outstanding         = 64
         for k, v in overrides.items():
             setattr(self, k, v)
 
-
-# Keyed by the same topology name used in TOPOLOGY= on the make command
-# line ("softhier" is the default/base topology, matching ACTUAL_TOPO's
-# own naming when TOPOLOGY= is left empty).
 TOPOLOGIES = {
-    "softhier":          SoftHierArch2DMesh,
-    "torus":             SoftHierArchTorus,
-    "3d":                SoftHierArch3D,
+    "2d_mesh":           SoftHierArch2DMesh,
+    "2d_torus":          SoftHierArchTorus,
+    "3d_mesh":           SoftHierArch3D,
     "3d_torus":          SoftHierArch3DTorus,
     "ring":              SoftHierArchRing,
     "hierarchical_ring": SoftHierArchHierRing,

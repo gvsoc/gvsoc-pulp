@@ -12,9 +12,18 @@ third_party/toolchain:
 	wget https://github.com/husterZC/gun_toolchain/releases/download/v2.0.0/toolchain.tar.xz &&\
 	tar -xvf toolchain.tar.xz
 
+empty :=
+space := $(empty) $(empty)
+comma := ,
+# PARAMS=key=value,... overrides individual arch attributes when
+# generating floogen.yml/routing.yml/C headers at sh-config time.
+PARAM_FLAGS = $(foreach p,$(subst $(comma),$(space),$(PARAMS)),--param $(p))
+
 sh-config:
+	python3 pulp/pulp/chips/softhier/topologies/gen_floogen_topology.py folded_hexatorus \
+		pulp/pulp/chips/softhier/topologies/generated $(PARAM_FLAGS)
 	python3 pulp/pulp/chips/softhier/common/utils/config.py folded_hexatorus \
-		pulp/pulp/chips/softhier/common/sw/runtime/include $(if $(cfg),--arch-file $(cfg))
+		pulp/pulp/chips/softhier/common/sw/runtime/include $(if $(cfg),--arch-file $(cfg)) $(PARAM_FLAGS)
 
 sh-hw:
 	make sh-config
@@ -47,4 +56,4 @@ sh-sw-clean:
 ######################################################################
 
 sh-run:
-	./install/bin/gvsoc --target=pulp.chips.softhier.topologies.$(ACTUAL_TOPO)_target --binary sw_build/softhier.elf run
+	./install/bin/gvsoc --target=pulp.chips.softhier.topologies.$(ACTUAL_TOPO)_target --binary sw_build/softhier.elf $(RUN_ARGS) run

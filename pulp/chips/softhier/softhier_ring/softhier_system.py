@@ -16,6 +16,7 @@
 
 # Authors: Chi Zhang <chizhang@ethz.ch>, Siim Rausi <srausi@student.ethz.ch>
 
+import os
 import gvsoc.runner
 import cpu.iss.riscv as iss
 import memory.memory
@@ -27,7 +28,7 @@ import gvsoc.systree
 from pulp.chips.softhier.common.cluster_unit import ClusterUnit, ClusterArch
 from pulp.chips.softhier.common.softhier_ctrl import SoftHierCtrl
 from pulp.chips.softhier.common.error_detector import ErrorDetector
-from pulp.chips.softhier.softhier_ring.softhier_arch import SoftHierArch
+from pulp.chips.softhier.softhier_arch_base import SoftHierArchRing as SoftHierArch, get_arch_overrides
 from pulp.floonoc_flex.floonoc_flex import FlooNocFlex
 
 class SoftHierSystem(gvsoc.systree.Component):
@@ -39,7 +40,7 @@ class SoftHierSystem(gvsoc.systree.Component):
         # Configuration #
         #################
 
-        arch = SoftHierArch()
+        arch = SoftHierArch(**get_arch_overrides(self, SoftHierArch))
 
         # Get Binary
         binary = None
@@ -84,48 +85,26 @@ class SoftHierSystem(gvsoc.systree.Component):
         # Control register
         softhier_ctrl = SoftHierCtrl(self, 'softhier_ctrl', num_cluster=arch.num_cluster, num_core_per_cluster=arch.num_core_per_cluster)
 
-        # --- FlooNoC Flex Initialization & Topology Building ---
-        
-        nb_nodes = arch.num_cluster * 2
+        topologies_dir = os.path.join(os.getcwd(), 'pulp', 'pulp', 'chips',
+                                       'softhier', 'topologies', 'generated')
+        floogen_path = os.path.join(topologies_dir, 'ring.floogen.yml')
+        routing_path = os.path.join(topologies_dir, 'ring.routing.yml')
+        link_latencies_path = os.path.join(topologies_dir, 'ring.link_latencies.yml')
 
-        router_degrees = 3
+        if not os.path.exists(floogen_path):
+            raise FileNotFoundError(f"FlooGen config not found at expected path: {floogen_path}")
 
-        noc = FlooNocFlex(self, 'noc',      
+        noc = FlooNocFlex(self, 'noc',
                 wide_width=arch.noc_link_width,
                 narrow_width=8,
-                router_degrees=router_degrees,
-                nb_nodes=nb_nodes,
                 router_input_queue_size=16,
-                ni_outstanding_reqs=arch.noc_outstanding)
+                ni_outstanding_reqs=arch.noc_outstanding,
+                network_path=floogen_path,
+                routing_path=routing_path,
+                default_link_latency=arch.link_latency,
+                link_latencies_path=link_latencies_path)
 
-        routers_map = {} 
-        nis_map = {}     
-
-        # Add routers and network interfaces
-        for i in range(arch.num_cluster):
-            r_id = i
-            ni_id = arch.num_cluster + i
-            
-            routers_map[i] = r_id
-            nis_map[i] = ni_id
-            
-            noc.add_router(r_id, num_queues=3) 
-            noc.add_network_interface(ni_id)
-
-        # Add links (NI <-> Router)
-        for i in range(arch.num_cluster):
-            r_id = routers_map[i]
-            ni_id = nis_map[i]
-            noc.add_link(ni_id, r_id, latency=1)
-
-        # Add links (Router <-> Router)
-        for i in range(arch.num_cluster):
-            r_id = routers_map[i]
-            next_r_id = routers_map[(i + 1) % arch.num_cluster]
-            noc.add_link(r_id, next_r_id, latency=1)
-
-        # Generate routing tables
-        noc.generate_routing_tables_shortest_path()
+        nis_map = {i: noc.id_map[f"cluster_{i}_ni"] for i in range(arch.num_cluster)}
 
         ############
         # Bindings #
