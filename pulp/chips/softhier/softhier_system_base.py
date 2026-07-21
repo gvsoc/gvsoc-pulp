@@ -20,12 +20,8 @@
 
 
 import os
-import gvsoc.runner
-import cpu.iss.riscv as iss
-import memory.memory
 import interco.router as router
 from vp.clock_domain import Clock_domain
-import utils.loader.loader
 import gvsoc.systree
 from gvrun.parameter import TargetParameter
 from pulp.chips.softhier.common.cluster_unit import ClusterUnit, ClusterArch
