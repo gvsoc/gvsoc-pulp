@@ -2,7 +2,7 @@
 ## 				Make Targets for SoftHier Simulator 				##
 ######################################################################
 
-ACTUAL_TOPO ?= softhier_3d
+ACTUAL_TOPO ?= softhier_2d_mesh
 
 third_party/toolchain:
 	mkdir -p third_party/toolchain
@@ -12,13 +12,22 @@ third_party/toolchain:
 	wget https://github.com/husterZC/gun_toolchain/releases/download/v2.0.0/toolchain.tar.xz &&\
 	tar -xvf toolchain.tar.xz
 
+empty :=
+space := $(empty) $(empty)
+comma := ,
+# PARAMS=key=value,... overrides individual arch attributes when
+# generating floogen.yml/routing.yml/C headers at sh-config time.
+PARAM_FLAGS = $(foreach p,$(subst $(comma),$(space),$(PARAMS)),--param $(p))
+
 sh-config:
-	python3 pulp/pulp/chips/softhier/common/utils/config.py 3d \
-		pulp/pulp/chips/softhier/common/sw/runtime/include $(if $(cfg),--arch-file $(cfg))
+	python3 pulp/pulp/chips/softhier/topologies/gen_floogen_topology.py 2d_mesh \
+		pulp/pulp/chips/softhier/topologies/generated $(PARAM_FLAGS)
+	python3 pulp/pulp/chips/softhier/common/utils/config.py 2d_mesh \
+		pulp/pulp/chips/softhier/common/sw/runtime/include $(if $(cfg),--arch-file $(cfg)) $(PARAM_FLAGS)
 
 sh-hw:
 	make sh-config
-	make TARGETS=pulp.chips.softhier.topologies.$(ACTUAL_TOPO)_target all
+	make TARGETS=pulp.chips.softhier.topologies.softhier_2d_mesh_target all
 
 ######################################################################
 ## 				Make Targets for SoftHier Software	 				##
@@ -41,9 +50,10 @@ sh-sw:
 sh-sw-clean:
 	rm -rf sw_build
 
+
 ######################################################################
 ## 				Make Targets for Run Simulator		 				##
 ######################################################################
 
 sh-run:
-	./install/bin/gvsoc --target=pulp.chips.softhier.topologies.$(ACTUAL_TOPO)_target --binary sw_build/softhier.elf run
+	./install/bin/gvsoc --target=pulp.chips.softhier.topologies.softhier_2d_mesh_target --binary sw_build/softhier.elf $(RUN_ARGS) run

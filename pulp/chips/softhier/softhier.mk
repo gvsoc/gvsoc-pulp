@@ -1,6 +1,6 @@
 # Call the correct Makefile depending on TOPOLOGY variable
 ifeq ($(TOPOLOGY),)
-    ACTUAL_TOPO = softhier
+    ACTUAL_TOPO = softhier_2d_mesh
 else ifeq ($(findstring softhier,$(TOPOLOGY)),)
     ACTUAL_TOPO = softhier_$(TOPOLOGY)
 else

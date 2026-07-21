@@ -16,6 +16,7 @@
 
 # Authors: Chi Zhang <chizhang@ethz.ch>, Siim Rausi <srausi@student.ethz.ch>
 
+import os
 import gvsoc.runner
 import cpu.iss.riscv as iss
 import memory.memory
@@ -27,8 +28,10 @@ import gvsoc.systree
 from pulp.chips.softhier.common.cluster_unit import ClusterUnit, ClusterArch
 from pulp.chips.softhier.common.softhier_ctrl import SoftHierCtrl
 from pulp.chips.softhier.common.error_detector import ErrorDetector
-from pulp.chips.softhier.softhier_torus.softhier_arch import SoftHierArch
+from pulp.chips.softhier.softhier_arch_base import SoftHierArch2DMesh as SoftHierArch, get_arch_overrides
 from pulp.floonoc_flex.floonoc_flex import FlooNocFlex
+from gvrun.parameter import TargetParameter
+import os
 import math
 
 class SoftHierSystem(gvsoc.systree.Component):
@@ -40,25 +43,42 @@ class SoftHierSystem(gvsoc.systree.Component):
         # Configuration #
         #################
 
-        arch = SoftHierArch()
+        arch = SoftHierArch(**get_arch_overrides(self, SoftHierArch))
 
-        # Get Binary
+        _ = TargetParameter(
+            self, name='binary', value=None, description='Binary to be loaded and started',
+            cast=str
+        )
+
+        # Get Binary.
+        # With the legacy gvsoc launcher, configure() is never called and the binary comes
+        # from the command line, so it must be resolved now. With gvrun, it comes from a
+        # parameter and is handled in configure() since it can also be set from the build
+        # process.
         binary = None
-        if parser is not None:
+        if os.environ.get('USE_GVRUN') is None and parser is not None:
             [args, otherArgs] = parser.parse_known_args()
             binary = args.binary
+
+        topologies_dir = os.path.join(os.getcwd(), 'pulp', 'pulp', 'chips',
+                                       'softhier', 'topologies', 'generated')
+        floogen_path = os.path.join(topologies_dir, '2d_mesh.floogen.yml')
+        routing_path = os.path.join(topologies_dir, '2d_mesh.routing.yml')
+        link_latencies_path = os.path.join(topologies_dir, '2d_mesh.link_latencies.yml')
+
+        if not os.path.exists(floogen_path):
+            raise FileNotFoundError(f"FlooGen config not found at expected path: {floogen_path}")
 
         #############
         # Assertion #
         #############
-
         assert arch.num_cluster_x * arch.num_cluster_y == arch.num_cluster, f"Topology dimesion not match total number of clusters"
 
         ##############
         # Components #
         ##############
 
-        # Clusters
+        #Clusters
         cluster_list=[]
         for cluster_id in range(arch.num_cluster):
             cluster_arch = ClusterArch( num_core 		    = arch.num_core_per_cluster,
@@ -82,19 +102,28 @@ class SoftHierSystem(gvsoc.systree.Component):
             cluster_list.append(ClusterUnit(self,f'cluster_{cluster_id}', cluster_arch, binary))
             pass
 
-        # Virtual router, just for debugging and non-performance-critical jobs
+        # Keep the clusters so configure() can push the binary to their loaders when
+        # it is provided through a parameter (gvrun flow).
+        self.clusters = cluster_list
+        self.register_binary_handler(self.handle_binary)
+
+        #Virtual router, just for debugging and non-performance-critical jobs
         virtual_interco = router.Router(self, 'virtual_interco', bandwidth=8)
 
-        # Debug Memory
+        #Debug Memory
         error_detector = ErrorDetector(self,'error_detector')
 
-        # Control register
+        #Control register
         softhier_ctrl = SoftHierCtrl(self, 'softhier_ctrl', num_cluster=arch.num_cluster, num_core_per_cluster=arch.num_core_per_cluster)
 
         # --- FlooNoC Flex Initialization & Topology Building ---
+        # 1. Manual approach
+        # Parameters and links added manually
+        # Links generated in a specific order to imitate FlooNoC round-robin
+        '''
         router_degrees = 5
         
-        # Calculate Dimensions (Preserving the +2 padding for external network interfaces)
+        # Calculate Dimensions
         dim_x = arch.num_cluster_x + 2
         dim_y = arch.num_cluster_y + 2
         
@@ -102,14 +131,15 @@ class SoftHierSystem(gvsoc.systree.Component):
         MESH_SIZE = dim_x * dim_y
         nb_nodes = MESH_SIZE * 2
 
-        noc = FlooNocFlex(self, 'noc',      
+        noc = FlooNocFlex(self, 'noc',  
+                narrow_width=8,    
                 wide_width=arch.noc_link_width,
-                narrow_width=8,
+                router_degrees=router_degrees,
                 nb_nodes=nb_nodes,
                 router_input_queue_size=16,
                 ni_outstanding_reqs=arch.noc_outstanding)
 
-        # Get router ID for 2D mesh/torus
+        # Get router ID for 2D mesh
         def get_router_id(x, y):
             return y * dim_x + x
         
@@ -134,47 +164,47 @@ class SoftHierSystem(gvsoc.systree.Component):
                 nis_map[(x, y)] = ni_id
                 noc.add_network_interface(ni_id)
 
-        '''
-        Torus Link Generation: 
-        Inner links are generated backwards to preserve Right/Up priority.
-        Wrap-around links are appended last to close the torus rings.
-        '''
-
-        # Add Horizontal Links (Torus Rings on X-axis)
+        # Add Horizontal Links (Right / Left priority)
+        # We iterate X backwards (max to 1). 
+        # For any router (X), the link to (X+1) is created before the link from (X-1).
         for y in range(1, arch.num_cluster_y + 1):
-            # Inner horizontal links (Right before Left priority)
             for x in range(arch.num_cluster_x - 1, 0, -1):
                 r_id = routers_map[(x, y)]
                 east_id = routers_map[(x + 1, y)]
                 noc.add_link(r_id, east_id, latency=1)
-            
-            # Wrap-around horizontal link (Right-most to Left-most)
-            r_rightmost = routers_map[(arch.num_cluster_x, y)]
-            r_leftmost = routers_map[(1, y)]
-            noc.add_link(r_rightmost, r_leftmost, latency=5)
 
-        # Add Vertical Links (Torus Rings on Y-axis)
+        # Add Vertical Links (Up / Down priority)
+        # We iterate Y backwards for Up links to be prioritized
         for x in range(1, arch.num_cluster_x + 1):
-            # Inner vertical links (Up before Down priority)
             for y in range(arch.num_cluster_y - 1, 0, -1):
                 r_id = routers_map[(x, y)]
                 north_id = routers_map[(x, y + 1)]
                 noc.add_link(r_id, north_id, latency=1)
-            
-            # Wrap-around vertical link (Bottom-most to Top-most)
-            r_bottom = routers_map[(x, arch.num_cluster_y)]
-            r_top = routers_map[(x, 1)]
-            noc.add_link(r_bottom, r_top, latency=5)
 
-        # Add the NI <-> Router links
+        #Add the NI <-> Router links
         for y in range(1, arch.num_cluster_y + 1):
             for x in range(1, arch.num_cluster_x + 1):
                 ni_id = get_ni_id(x, y)
                 r_id = routers_map[(x, y)]
                 noc.add_link(ni_id, r_id, latency=1)
 
-        #Generate routing tables
-        noc.generate_routing_tables_shortest_path()
+        # Generate routing tables
+        noc.generate_routing_tables_mesh_2d(dim_x=dim_x, dim_y=dim_y)
+        # Or
+        # noc.generat_routing_tables_shortest_path()
+        '''
+
+        noc = FlooNocFlex(self, 'noc',
+                narrow_width=8,
+                wide_width=arch.noc_link_width,
+                router_input_queue_size=16,
+                ni_outstanding_reqs=arch.noc_outstanding,
+                network_path=floogen_path,
+                routing_path=routing_path,
+                default_link_latency=arch.link_latency,
+                link_latencies_path=link_latencies_path)
+
+
 
         ############
         # Bindings #
@@ -191,7 +221,15 @@ class SoftHierSystem(gvsoc.systree.Component):
             x_id = int(cluster_id % arch.num_cluster_x)
             y_id = int(cluster_id / arch.num_cluster_x)
             
-            ni_node_id = nis_map[(x_id + 1, y_id + 1)]
+            # For manual instantiation
+            # ni_node_id = nis_map[(x_id + 1, y_id + 1)]
+
+            # For FlooGen instantiation
+            ni_yaml_name = f"cluster_{x_id}_{y_id}_ni"
+            if ni_yaml_name not in noc.id_map:
+                raise KeyError(f"Network Interface '{ni_yaml_name}' not found in FlooGen layout. "
+                               f"Available FlooGen nodes: {list(noc.id_map.keys())}")
+            ni_node_id = noc.id_map[ni_yaml_name]
             
             narrow_arbiter = router.Router(self, f'narrow_arbiter_{cluster_id}', bandwidth=8)
             narrow_arbiter.o_MAP(virtual_interco.i_INPUT())
@@ -224,6 +262,18 @@ class SoftHierSystem(gvsoc.systree.Component):
             }
             noc.o_WIDE_BIND(cluster_list[cluster_id].i_WIDE_INPUT(), ni_node_id)
 
+    def configure(self):
+        # With gvrun the binary is provided through a parameter (set either from the
+        # command line or from the build process), so push it to the cluster loaders here.
+        binary = self.get_parameter('binary')
+        if binary is not None:
+            for cluster in self.clusters:
+                cluster.set_binary(binary)
+
+    def handle_binary(self, binary):
+        # Called when an executable is attached to a hierarchy containing this component.
+        self.set_parameter('binary', binary)
+        
 
 class SoftHierPlatform(gvsoc.systree.Component):
 
