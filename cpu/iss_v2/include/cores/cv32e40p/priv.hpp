@@ -201,6 +201,15 @@ static inline iss_reg_t mret_exec(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
 
 static inline iss_reg_t dret_exec(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
 {
+    /* dret is legal only in debug mode; outside it the RTL raises an illegal
+     * instruction (RISC-V Debug spec, cv32e40p debug.rst). dret_handle()
+     * itself is unconditional (clears debug_mode, restores irq_enable, jumps
+     * to depc), so the guard must live here. */
+    if (!iss->exec.debug_mode)
+    {
+        iss->exception.raise(pc, ISS_EXCEPT_ILLEGAL);
+        return pc;
+    }
     return iss->core.dret_handle();
 }
 
