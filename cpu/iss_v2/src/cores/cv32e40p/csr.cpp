@@ -361,16 +361,16 @@ bool Cv32e40pCsr::mip_view_access(iss_insn_t *insn, bool is_write, iss_reg_t &va
 }
 
 /* RTL WARL (cv32e40p_cs_registers.sv, CSR_DCSR): writable bits are
- * ebreakm(15), ebreaku(12), stepie(11), step(2) and prv[1:0] (WARL: M when
- * written as M, U otherwise). xdebugver, cause and the hardwired-zero
- * fields keep the stored value, which the debug entry writes directly. */
+ * ebreakm(15), ebreaku(12), stepie(11) and step(2).  prv[1:0] is WARL-3:
+ * the core is M-mode only, so any written value reads back as M.
+ * xdebugver, cause and the hardwired-zero fields keep the stored value,
+ * which the debug entry writes directly. */
 bool Cv32e40pCsr::dcsr_view_access(iss_insn_t *insn, bool is_write, iss_reg_t &value)
 {
     if (is_write)
     {
         constexpr iss_reg_t WRITABLE = (1u << 15) | (1u << 12) | (1u << 11) | (1u << 2);
-        iss_reg_t prv = ((value & 0x3) == 0x3) ? 0x3 : 0x0;
-        this->dcsr = (this->dcsr & ~(WRITABLE | 0x3)) | (value & WRITABLE) | prv;
+        this->dcsr = (this->dcsr & ~WRITABLE) | (value & WRITABLE) | 0x3;
     }
     else
     {
