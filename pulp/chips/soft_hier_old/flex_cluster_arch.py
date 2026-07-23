@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2025 ETH Zurich and University of Bologna
+# Copyright (C) 2020 ETH Zurich and University of Bologna
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,13 +23,13 @@ class FlexClusterArch:
         #Cluster
         self.num_cluster_x           = 4
         self.num_cluster_y           = 4
-        self.num_core_per_cluster    = 5
+        self.num_core_per_cluster    = 3
 
-        self.cluster_tcdm_bank_width = 32
-        self.cluster_tcdm_bank_nb    = 128
+        self.cluster_tcdm_bank_width = 64
+        self.cluster_tcdm_bank_nb    = 64
 
         self.cluster_tcdm_base       = 0x00000000
-        self.cluster_tcdm_size       = 0x00060000
+        self.cluster_tcdm_size       = 0x00100000
         self.cluster_tcdm_remote     = 0x30000000
 
         self.cluster_stack_base      = 0x10000000
@@ -42,30 +42,28 @@ class FlexClusterArch:
         self.cluster_reg_size        = 0x00000200
 
         #Spatz Vector Unit
-        self.spatz_attaced_core_list = [0, 1, 2, 3]
+        self.spatz_attaced_core_list = []
         self.spatz_num_vlsu_port     = 8
-        self.spatz_num_function_unit = 4
+        self.spatz_num_function_unit = 8
 
         #RedMule
-        self.redmule_ce_height       = 32
-        self.redmule_ce_width        = 16
-        self.redmule_ce_pipe         = 1
+        self.redmule_ce_height       = 128
+        self.redmule_ce_width        = 32
+        self.redmule_ce_pipe         = 3
         self.redmule_elem_size       = 2
         self.redmule_queue_depth     = 1
         self.redmule_reg_base        = 0x20020000
         self.redmule_reg_size        = 0x00000200
 
         #IDMA
-        self.idma_outstand_txn       = 64
+        self.idma_outstand_txn       = 16
         self.idma_outstand_burst     = 256
 
         #HBM
         self.hbm_start_base          = 0xc0000000
-        self.hbm_node_addr_space     = 0xc0000000
-        self.num_node_per_ctrl       = 4
-        self.hbm_chan_placement      = [4,0,0,4]
-        self.hbm_node_aliase         = 4
-        self.hbm_ctrl_xor_scrambling = 1
+        self.hbm_node_addr_space     = 0x04000000
+        self.num_node_per_ctrl       = 1
+        self.hbm_chan_placement      = [8,0,0,8]
 
         #NoC
         self.noc_outstanding         = 64
