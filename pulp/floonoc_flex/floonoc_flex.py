@@ -667,6 +667,67 @@ class FlooNocFlex(gvsoc.systree.Component):
 
         self.add_property('routing_tables', routing_tables)
 
+    def generate_routing_tables_dimension_order(self, node_to_id: dict, first_axis: str):
+        """
+        Dimension-order (XY or YX) routing for a rectangular mesh, used
+        by load_from_floogen() for FlooGen YAMLs with route_algo "XY"/
+        "YX". Each router's (x, y) is parsed from its floogen graph node 
+        name rather than assumed from node id order.
+
+        first_axis: "x" routes X-then-Y (XY), "y" routes Y-then-X (YX).
+        Falls back to generic shortest-path BFS if any router name lacks
+        a parseable coordinate suffix.
+        """
+        nb_nodes = self.get_property('nb_nodes')
+        links = self.get_property('links')
+        routers = [r[0] for r in self.get_property('routers')]
+        nis = [n[0] for n in self.get_property('network_interfaces')]
+        id_to_name = {v: k for k, v in node_to_id.items()}
+
+        id_to_coord = {}
+        for r in routers:
+            parts = id_to_name.get(r, '').rsplit('_', 2)
+            try:
+                x, y = int(parts[-2]), int(parts[-1])
+            except (IndexError, ValueError):
+                self.generate_routing_tables_shortest_path()
+                return
+            id_to_coord[r] = (x, y)
+        coord_to_id = {c: r for r, c in id_to_coord.items()}
+
+        ni_to_router = {}
+        for link in links:
+            node_a, node_b = link[0], link[1]
+            if node_a in nis and node_b in routers:
+                ni_to_router[node_a] = node_b
+            elif node_b in nis and node_a in routers:
+                ni_to_router[node_b] = node_a
+
+        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
+        for src in routers:
+            sx, sy = id_to_coord[src]
+            for dst in range(nb_nodes):
+                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
+                if target_router == -1:
+                    continue
+                if src == target_router:
+                    routing_tables[str(src)][str(dst)] = dst
+                    continue
+
+                dx, dy = id_to_coord[target_router]
+                align_x_first = (first_axis == 'x')
+                if (align_x_first and sx != dx) or (not align_x_first and sy == dy):
+                    next_coord = (sx + (1 if dx > sx else -1), sy)
+                else:
+                    next_coord = (sx, sy + (1 if dy > sy else -1))
+
+                next_hop = coord_to_id.get(next_coord)
+                if next_hop is None:
+                    self.generate_routing_tables_shortest_path()
+                    return
+                routing_tables[str(src)][str(dst)] = next_hop
+
+        self.add_property('routing_tables', routing_tables)
 
     def load_from_floogen(self, network_path: str, routing_path: str = None, link_latencies_path: str = None):
             """
@@ -734,16 +795,10 @@ class FlooNocFlex(gvsoc.systree.Component):
             
             match algo_name:
                 case "XY":
-                    dim_x, dim_y = None, None
-                    if floo_net.routers and hasattr(floo_net.routers[0], 'array'):
-                        array_dims = floo_net.routers[0].array
-                        if len(array_dims) >= 2:
-                            dim_x, dim_y = array_dims[0], array_dims[1]
-                    self.generate_routing_tables_mesh_2d(dim_x, dim_y)
-                        
+                    self.generate_routing_tables_dimension_order(node_to_id, first_axis='x')
+
                 case "YX":
-                    # YX Routing not implemented
-                    self.generate_routing_tables_shortest_path()
+                    self.generate_routing_tables_dimension_order(node_to_id, first_axis='y')
                     
                 case "ID" | "SRC":
                     if routing_path is not None and Path(routing_path).exists():
