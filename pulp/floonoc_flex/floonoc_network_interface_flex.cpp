@@ -339,12 +339,9 @@ void NetworkInterface::set_router(int nw, Router *router, int latency)
     this->router[nw] = router;
     switch (nw)
     {
-    case NW_REQ:
-        this->req_queue.router = router;
-    case NW_RSP:
-        this->rsp_queue.router = router;
-    case NW_WIDE:
-        this->wide_queue.router = router;
+        case NW_REQ:    this->req_queue.router = router;    break;
+        case NW_RSP:    this->rsp_queue.router = router;    break;
+        case NW_WIDE:   this->wide_queue.router = router;   break;
     }
 }
 
