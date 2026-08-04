@@ -21,12 +21,8 @@ from cpu.iss.isa_gen.isa_gen import Isa
 def extend_isa(isa_instance: Isa):
     # Assign tags to instructions so that we can handle them with different blocks
 
-    # For now only load/stores are assigned to vlsu. Fault-only-first loads
-    # (vle<N>ff.v) are regular unit-stride loads for the VLSU — missing them
-    # here would send them to the compute block, serializing them with the
-    # arithmetic instructions instead of running them in parallel like the
-    # RTL (the widening-bp fmatmul kernel loads its operands with vle8ff).
-    vle_pattern = re.compile(r'^(vle\d+(ff)?\.v)$')
+    # For now only load/stores are assigned to vlsu.
+    vle_pattern = re.compile(r'^(vle\d+\.v)$')
     vse_pattern = re.compile(r'^(vse\d+\.v)$')
     vlse_pattern = re.compile(r'^(vlse\d+\.v)$')
     vsse_pattern = re.compile(r'^(vsse\d+\.v)$')
@@ -127,9 +123,30 @@ def extend_isa(isa_instance: Isa):
                 'vfnmsub')):
             insn.add_field('fpu_lat_class', '1')
 
+    tag_integer_insns(isa_instance)
+
+
+def tag_integer_insns(isa_instance):
+    # Additional per-instruction timing fields. This must be done after all
+    # the other fields since generated field initializers must follow the
+    # declaration order.
+    for insn in isa_instance.get_isa('v').get_insns():
+        # Loads write their result to the VRF one cycle after the memory
+        # response, which chained consumers see as one pipeline stage
+        if 'vload' in insn.tags:
+            insn.add_field('fpu_lat_class', '2')
+        # Integer computational instructions are executed by the vector
+        # unit's integer units, which can be fewer than the FPU lanes. This
+        # includes the integer multiplies and multiply-accumulates, whose
+        # multiplier sits in the IPU SIMD lanes, mirroring the RTL VFU
+        # routing (is_fpu_insn = op inside {[VFADD:VSDOTP]}).
+        if 'vothers' in insn.tags and not insn.label.startswith('vf'):
+            insn.add_field('is_ipu', '1')
+
+
 def attach(component: Component, vlen: int, nb_lanes: int, use_spatz: bool=False,
         spatz_nb_ports: int|None=None, lane_width=8, vlsu_v2: bool=False,
-        nb_outstanding_reqs: int=8):
+        nb_outstanding_reqs: int=8, nb_ipus: int|None=None):
     component.add_sources([
         "cpu/iss_v2/src/vector_unit/vector_unit.cpp",
         "cpu/iss_v2/src/vector_unit/vector_unit_compute.cpp",
@@ -168,6 +185,8 @@ def attach(component: Component, vlen: int, nb_lanes: int, use_spatz: bool=False
     ])
 
     component.add_property('vu/nb_lanes', nb_lanes)
+    if nb_ipus is not None:
+        component.add_property('vu/nb_ipus', nb_ipus)
     component.add_property('vu/lane_width', lane_width)
     if use_spatz:
         component.add_property('vu/nb_ports', nb_lanes if spatz_nb_ports is None else spatz_nb_ports)

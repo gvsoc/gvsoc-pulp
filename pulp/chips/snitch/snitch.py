@@ -297,8 +297,19 @@ class Soc(gvsoc.systree.Component):
         binary = self.get_parameter('binary')
         if binary is not None:
             self.loader.set_binary(binary)
-            for cluster in self.clusters:
-                cluster.handle_executable(binary)
+            # Under gvrun, the binary may not exist yet at configure time since it can be
+            # produced by the build step. Register it as an executable so that the cores
+            # handle it at generate time, once it has been built. Binaries built by gvrun
+            # register themselves as executables, so only register the missing ones,
+            # like prebuilt binaries given through the binary parameter.
+            if os.environ.get('USE_GVRUN2') is None:
+                for cluster in self.clusters:
+                    cluster.handle_executable(binary)
+            else:
+                from gvrun.systree import ExecutableContainer
+                registered = [exe.get_binary() for exe in self.get_executables()]
+                if binary not in registered:
+                    self.add_executable(ExecutableContainer(binary))
 
 
     def handle_binary(self, binary):
@@ -471,6 +482,10 @@ class SnitchBoard(gvsoc.systree.Component):
         else:
             arch = SnitchAttr(self, 'snitch', spatz=spatz)
 
+        # Expose the attributes so that tools like the build process can query
+        # the architecture (memory map, cluster characteristics, and so on)
+        self.set_attributes(arch)
+
         chip = Snitch(self, 'chip', parser, arch.chip, binary, debug_binaries)
 
         if arch.hbm.type == 'dramsys':
@@ -488,3 +503,7 @@ class SpatzBoard(SnitchBoard):
 
     def __init__(self, parent, name:str, parser, options):
         super().__init__(parent, name, parser, options, spatz=True)
+
+        # Attach a target name so that the build process knows how to compile
+        # executables for this board (pulpos.spatz module)
+        self.set_target_name('spatz')

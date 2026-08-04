@@ -22,7 +22,7 @@ from typing_extensions import override
 from gvsoc.gui import Signal, DisplayStringBox, DisplayPulse
 from cpu.iss.isa_gen.isa_gen import Isa
 from pulp.snitch.snitch_isa import Xdma
-from cpu.iss.isa_gen.isa_smallfloats import Xf16, Xf16alt, Xf8, XfvecSnitch, Xfaux
+from cpu.iss.isa_gen.isa_smallfloats import Xf16, Xf16alt, Xf8, Xf8Snitch, XfvecSnitch, Xfaux
 import gvsoc.systree
 from gvsoc.systree import Component
 import pulp.ara.ara_v2
@@ -52,7 +52,7 @@ class Spatz(RiscvCommon):
 
         if isa_instance is None:
 
-            extensions = [ Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ]
+            extensions = [ Xdma(), Xf16(), Xf16alt(), Xf8(), Xf8Snitch(), XfvecSnitch(), Xfaux() ]
 
             isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("spatz_" + isa_key,
                 config.isa, extensions=extensions)
@@ -85,7 +85,8 @@ class Spatz(RiscvCommon):
 
         pulp.ara.ara_v2.attach(self, config.vlen, nb_lanes=config.nb_lanes, use_spatz=True,
             lane_width=config.lane_width, vlsu_v2=config.vlsu_v2,
-            nb_outstanding_reqs=config.nb_outstanding_reqs)
+            nb_outstanding_reqs=config.nb_outstanding_reqs,
+            nb_ipus=config.nb_ipus if config.nb_ipus != 0 else None)
 
 
     def o_BARRIER_REQ(self, itf: gvsoc.systree.SlaveItf):

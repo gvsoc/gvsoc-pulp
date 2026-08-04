@@ -31,6 +31,10 @@ class SpatzConfig(RiscvConfig):
     nb_lanes: int = cfg_field(default=4, dump=True, desc=(
         "Number of lanes."
     ))
+    nb_ipus: int = cfg_field(default=0, dump=True, desc=(
+        "Number of integer units. Integer computational instructions are "
+        "processed at this rate. Defaults to the number of lanes when 0."
+    ))
     lane_width: int = cfg_field(default=8, dump=True, desc=(
         "Lane width in bytes. This sets the width of LSU and compute units."
     ))
