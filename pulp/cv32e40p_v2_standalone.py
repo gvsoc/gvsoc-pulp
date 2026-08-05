@@ -120,13 +120,13 @@ class Cv32e40pStandaloneConfig(Config):
         self.core = Cv32e40pConfig(isa=isa, boot_addr=self.boot_addr)
         # init=False: never-written bytes must read 0 (testbench memory
         # contract), not the 0x57 poison pattern of the default init=True.
-        self.mem       = MemoryV3Config('mem', size=0x0040_0000, atomics=False, latency=1,
+        self.mem       = MemoryV3Config('mem', size=0x0040_0000, atomics=False, latency=0,
                                         init=False)
-        self.stdout    = MemoryV3Config('stdout', size=0x100, atomics=False, latency=1,
+        self.stdout    = MemoryV3Config('stdout', size=0x100, atomics=False, latency=0,
                                         init=False)
-        self.timer     = MemoryV3Config('timer', size=0x100, atomics=False, latency=1,
+        self.timer     = MemoryV3Config('timer', size=0x100, atomics=False, latency=0,
                                         init=False)
-        self.debug_rom = MemoryV3Config('debug_rom', size=0x1000, atomics=False, latency=1,
+        self.debug_rom = MemoryV3Config('debug_rom', size=0x1000, atomics=False, latency=0,
                                         init=False)
         self.router = RouterConfig(kind='bandwidth')
         self.mem_mapping       = RouterMapping(name='mem_mapping',
