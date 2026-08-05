@@ -197,14 +197,23 @@ Cv32e40pCsr::Cv32e40pCsr(Iss &iss)
     this->mtval.set_write_mask(0);
     this->mcause.set_write_mask(0x8000001F);
 
-    /* Trigger module: one trigger, tselect hardwired to 0, tdata* writable
-     * only from debug mode (not modelled), tinfo reports type 2. */
+    /* Trigger module: one trigger, tselect hardwired to 0, tinfo reports
+     * type 2. tdata1 (only bit 2, execute match enable) and tdata2 (match
+     * address) latch only from debug mode: tmatch_control_we/tmatch_value_we
+     * are gated on debug_mode_i, so an M-mode write is silently dropped,
+     * not an illegal instruction. The execute match itself is evaluated at
+     * the dispatch boundary, before the matched instruction runs (see
+     * Cv32e40pIrq::check()). */
     this->tselect.set_write_mask(0);
     this->tselect.register_callback(std::bind(&Cv32e40pCsr::tselect_read_zero, this,
         std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
     this->tdata1.reset_val = 0x28001040;
-    this->tdata1.set_write_mask(0);
-    this->tdata2.set_write_mask(0);
+    this->tdata1.set_write_mask(0x4);
+    this->tdata1.register_callback(std::bind(&Cv32e40pCsr::tdata_debug_gate, this,
+        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+    this->tdata2.set_write_mask(0xFFFFFFFF);
+    this->tdata2.register_callback(std::bind(&Cv32e40pCsr::tdata_debug_gate, this,
+        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
     this->tdata3.set_write_mask(0);
     this->declare_csr(&this->tinfo,    "tinfo",    0x7A4, 0x4, 0);
     this->declare_csr(&this->mcontext, "mcontext", 0x7A8, 0, 0);
@@ -348,6 +357,13 @@ bool Cv32e40pCsr::tselect_read_zero(iss_insn_t *insn, bool is_write, iss_reg_t &
         value = 0;
     }
     return false;
+}
+
+bool Cv32e40pCsr::tdata_debug_gate(iss_insn_t *insn, bool is_write, iss_reg_t &value)
+{
+    /* tdata1/tdata2 writes latch only in debug mode; outside it the RTL
+     * drops them silently (no illegal-instruction), reads are unrestricted. */
+    return !is_write || this->iss.exec.debug_mode;
 }
 
 bool Cv32e40pCsr::mip_view_access(iss_insn_t *insn, bool is_write, iss_reg_t &value)

@@ -55,10 +55,26 @@ static int cv32e40p_irq_pick(iss_reg_t pending)
 
 int Cv32e40pIrq::check()
 {
+    /* Execute-address trigger (trigger module, mcontrol): the match fires
+     * BEFORE the instruction at tdata2 executes (RTL trigger_match_o on
+     * pc_id), entering debug with dcsr.cause=2 and dpc = the matched PC.
+     * Evaluated at the dispatch boundary so the matched instruction is
+     * never retired - a batched co-sim step cannot run past the entry.
+     * Only the slow dispatch handler runs check(): the co-sim personality
+     * pins it; a standalone fast-mode run does not evaluate triggers. */
+    if ((this->iss.csr.tdata1.value & (1u << 2)) &&
+        !this->iss.exec.debug_mode && !this->req_debug &&
+        this->iss.exec.current_insn == this->iss.csr.tdata2.value)
+    {
+        this->req_debug = true;
+        this->req_debug_cause = 2;
+    }
+
     /* Debug entry: generic implementation plus dcsr.cause, written
      * atomically with the entry as the RTL does. The cause comes from
-     * req_debug_cause: 3 (haltreq) on the wire path, 1 (ebreak) or 4
-     * (single-step) when the bridge's informed debug entry armed it. */
+     * req_debug_cause: 3 (haltreq) on the wire path, 2 (trigger) from the
+     * local execute-trigger match above, 1 (ebreak) or 4 (single-step)
+     * when armed by an external debug-entry request. */
     if (this->req_debug && !this->iss.exec.debug_mode)
     {
         this->iss.exec.debug_mode = true;

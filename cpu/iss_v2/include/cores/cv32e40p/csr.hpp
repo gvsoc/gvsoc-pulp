@@ -182,6 +182,7 @@ private:
     bool fcsr_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool hwloop_csr_access(iss_insn_t *insn, bool is_write, iss_reg_t &value, int index);
     bool tselect_read_zero(iss_insn_t *insn, bool is_write, iss_reg_t &value);
+    bool tdata_debug_gate(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool mip_view_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool dcsr_view_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool dpc_view_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
