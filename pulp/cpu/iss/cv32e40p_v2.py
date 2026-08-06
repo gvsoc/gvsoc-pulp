@@ -99,6 +99,24 @@ class Cv32e40pIrq(IssModule):
     def gen(self, iss: RiscvCommon):
         iss.isa.add_define('CONFIG_GVSOC_ISS_IRQ', 'Cv32e40pIrq')
         iss.isa.add_define('CONFIG_GVSOC_ISS_RISCV_EXCEPTIONS', 1)
+        # Marks the CV32E40P iss_v2 personality build for the shared ISA
+        # headers: gates the debug-entry hooks (ebreak with dcsr.ebreakm,
+        # dret single-step window) in isa/rv32i.hpp and isa/rv32c.hpp.
+        # The v1 flag CONFIG_GVSOC_ISS_CV32E40P must stay off here (it
+        # also gates v1-only core.hpp/csr.hpp/dbgunit paths).
+        iss.isa.add_define('CONFIG_GVSOC_ISS_CV32E40P_V2', 1)
+        # Strict RVC decoding (isa/rv32c.hpp): reserved code-points
+        # (c.addi4spn nzuimm=0, c.addi16sp/c.lui imm=0, c.lwsp rd=0,
+        # c.jr rs1=0) raise illegal-instruction, as the CV32E40P RTL does.
+        # Opt-in so the other cores keep the historical permissive
+        # decoding (and their golden traces) by default.
+        iss.isa.add_define('CONFIG_GVSOC_ISS_RVC_STRICT', 1)
+        # IEEE754 leaves the tininess detection point to the
+        # implementation: FPnew (the CV32E40P FPU) detects it after
+        # rounding with unbounded exponent (fpnew_fma.sv:616). Opt-in for
+        # parity with the RTL; other cores keep flexfloat's default
+        # (before-rounding) so their FP flags are unchanged.
+        iss.add_c_flags(['-DFLEXFLOAT_TININESS_AFTER_ROUNDING=1'])
         iss.isa.add_include('<cpu/iss_v2/include/cores/cv32e40p/irq.hpp>')
         iss.add_sources([
             'cpu/iss_v2/src/irq/irq_riscv.cpp',

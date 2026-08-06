@@ -112,6 +112,12 @@ public:
      * full handlers, where the event lines fire (Cv32e40pExec). */
     inline bool hpm_counting();
 
+    /* EBREAK in M-mode enters debug when dcsr.ebreakm=1 (RISC-V Debug
+     * Spec, dcsr bit 15). Consumed by ebreak_exec/c_ebreak_exec
+     * (isa/rv32i.hpp, isa/rv32c.hpp), which check debug_mode first, so
+     * this is only reached outside debug mode. */
+    bool ebreak_m_mode_enters_debug() { return ((this->dcsr >> 15) & 1) != 0; }
+
     /* CV32E40P-only CSRs, absent from the generic register file. */
     Cv32e40pRoCsr mvendorid_ro;  /* 0xF11 (replaces the base read/write reg) */
     Cv32e40pRoCsr marchid_ro;    /* 0xF12 (replaces the base read/write reg) */

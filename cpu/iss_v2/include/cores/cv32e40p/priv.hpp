@@ -188,7 +188,19 @@ static inline iss_reg_t csrrsi_exec(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
 
 static inline iss_reg_t wfi_exec(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
 {
-    iss->irq.wfi_handle(insn);
+    /* wfi degrades to a nop whenever the hart must stay responsive to the
+     * debugger (RISC-V Debug Spec; RTL cv32e40p_sleep_unit.sv /
+     * controller): in debug mode, in the single-step window (dcsr.step)
+     * and with a pending debug request - the RTL never sleeps with
+     * debug_req_i asserted, and a level-high haltreq produces no fresh
+     * wire edge to wake a parked hart. The guard lives HERE, in the
+     * personality, so the shared IrqRiscv::wfi_handle keeps its
+     * historical behaviour for the other iss_v2 cores. */
+    if (!iss->irq.req_debug && !iss->exec.debug_mode &&
+        !((iss->csr.dcsr >> 2) & 1))
+    {
+        iss->irq.wfi_handle(insn);
+    }
     return iss_insn_next(iss, insn, pc);
 }
 
@@ -210,6 +222,9 @@ static inline iss_reg_t dret_exec(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
         iss->exception.raise(pc, ISS_EXCEPT_ILLEGAL);
         return pc;
     }
+    /* dcsr.step=1: open the single-step window (depc still live here);
+     * check() re-enters debug with cause=4 after one instruction. */
+    iss->irq.dret_step_check();
     return iss->core.dret_handle();
 }
 

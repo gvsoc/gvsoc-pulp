@@ -21,9 +21,9 @@
 /*
  * CV32E40P interrupt-line injector.
  *
- * Exposes the core interrupt wires to an external gv:: client: the
- * co-simulation bridge binds each line with gv::wire_bind and drives it
- * as the RTL irq_i inputs change. Every line forwards to the matching
+ * Exposes the core interrupt wires to an external gv:: client, which
+ * binds each line with gv::wire_bind and drives it as the RTL irq_i
+ * inputs change. Every line forwards to the matching
  * IrqRiscv slave port, so mip and the wake-up logic follow the same path
  * as a platform interrupt source.
  */
@@ -59,8 +59,14 @@ private:
         vp::WireMaster<bool> itf;
     };
 
-    /* msi, mti, mei plus the sixteen fast lines irq[31:16]. */
-    static constexpr int NB_LINES = 19;
+    /* msi, mti, mei, the sixteen fast lines irq[31:16], plus the debug
+     * halt request (RTL debug_req_i - wakes a WFI-parked hart, so it must
+     * travel the wire path like the interrupt lines, not a struct write)
+     * and the wfi_wake release (externally driven, no architectural
+     * effect: fires when the DUT's stream proves a wake the wires cannot
+     * carry). */
+    static constexpr int NB_IRQ_LINES = 19;
+    static constexpr int NB_LINES = 21;
     Line lines[NB_LINES];
 };
 
@@ -70,10 +76,12 @@ Cv32e40pIrqInjector::Cv32e40pIrqInjector(vp::ComponentConf &config)
     this->lines[0].name = "msi";
     this->lines[1].name = "mti";
     this->lines[2].name = "mei";
-    for (int i = 3; i < NB_LINES; i++)
+    for (int i = 3; i < NB_IRQ_LINES; i++)
     {
         this->lines[i].name = "external_irq_" + std::to_string(16 + i - 3);
     }
+    this->lines[NB_IRQ_LINES].name = "haltreq";
+    this->lines[NB_IRQ_LINES + 1].name = "wfi_wake";
 
     for (auto &line : this->lines)
     {

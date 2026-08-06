@@ -180,12 +180,27 @@ class Cv32e40pStandaloneSoc(gvsoc.systree.Component):
         core.o_FETCH ( ico.i_INPUT(1) )
         core.o_DATA  ( ico.i_INPUT(2) )
 
-        # Interrupt lines: the co-sim bridge drives the injector through
+        # Interrupt lines: an external client drives the injector through
         # gv::wire_bind; each line lands on the core's native slave port,
         # so mip and the WFI wake-up follow the hardware path.
         irq_inj = Cv32e40pIrqInjector(self, 'irq_injector')
         for name, irq in zip(IRQ_LINES, IRQ_NUMBERS):
             irq_inj.o_LINE(name, core.i_IRQ(irq))
+        # Debug halt request (RTL debug_req_i): same wire path as the
+        # interrupt lines. Handled by Cv32e40pIrq::haltreq_sync, which arms
+        # req_debug and wakes a WFI-parked hart (the RTL sleep unit exits on
+        # debug_req_i regardless of mie/mip). The port is CV32E40P-specific
+        # (registered by the Cv32e40pIrq constructor), hence the inline
+        # SlaveItf instead of a riscv.py getter.
+        irq_inj.o_LINE('haltreq', gvsoc.systree.SlaveItf(
+            core, itf_name='haltreq', signature='wire<bool>'))
+        # WFI release (co-simulation only): pulsed externally when the
+        # DUT's retire stream proves the hart woke (the RTL retires wfi at
+        # execute and sleeps after; wakes like a debug_req level are not
+        # all visible as interrupt wires). Cv32e40pIrq::wfi_wake_sync runs
+        # the three-step release with no architectural side effect.
+        irq_inj.o_LINE('wfi_wake', gvsoc.systree.SlaveItf(
+            core, itf_name='wfi_wake', signature='wire<bool>'))
 
 
 class Cv32e40pStandaloneTop(gvsoc.systree.Component):
