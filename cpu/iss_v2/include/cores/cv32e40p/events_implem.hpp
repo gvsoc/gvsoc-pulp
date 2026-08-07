@@ -54,6 +54,8 @@ inline void Cv32e40pEvents::event_retire_account(iss_insn_t *insn)
          * this same program order. */
         this->inflight_pc[this->inflight_push % COMMIT_RING] = insn->addr;
         this->inflight_trap_seq[this->inflight_push % COMMIT_RING] = this->trap_seq;
+        this->inflight_trapped[this->inflight_push % COMMIT_RING] =
+            this->iss.exec.has_exception;
         this->inflight_push++;
     }
     else
@@ -61,6 +63,8 @@ inline void Cv32e40pEvents::event_retire_account(iss_insn_t *insn)
     {
         this->commit_pc[this->commit_push % COMMIT_RING] = insn->addr;
         this->commit_trap_seq[this->commit_push % COMMIT_RING] = this->trap_seq;
+        this->commit_trapped[this->commit_push % COMMIT_RING] =
+            this->iss.exec.has_exception;
         this->commit_push++;
     }
     /* A trapping instruction does not retire: drop its event lines. */
@@ -86,6 +90,8 @@ inline void Cv32e40pEvents::insn_stall_account()
             this->inflight_pc[this->inflight_pop % COMMIT_RING];
         this->commit_trap_seq[this->commit_push % COMMIT_RING] =
             this->inflight_trap_seq[this->inflight_pop % COMMIT_RING];
+        this->commit_trapped[this->commit_push % COMMIT_RING] =
+            this->inflight_trapped[this->inflight_pop % COMMIT_RING];
         this->inflight_pop++;
         this->commit_push++;
     }

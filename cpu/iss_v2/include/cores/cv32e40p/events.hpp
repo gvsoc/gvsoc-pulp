@@ -56,6 +56,16 @@ public:
     uint64_t trap_seq = 0;
     uint64_t commit_trap_seq[COMMIT_RING];
 
+    /* Whether the committed instruction itself TRAPPED (exec.has_exception
+     * at the retire hook). The external stepper needs this on trap rows:
+     * an ecall/ebreak commit is the faulting step and must be consumed
+     * there, while a pipeline kill-and-replay row (rvfi_trap with no
+     * architectural trap) commits a NORMAL instruction that the DUT
+     * re-executes on the next row - consuming it there would shift the
+     * compare stream by one retire. The trap_seq stamp cannot separate
+     * the two: the faulting insn is stamped after its own raise(). */
+    bool commit_trapped[COMMIT_RING];
+
     /* Drop commits not consumed yet (external resync forced a new PC). */
     inline void commit_stream_flush();
 
@@ -73,6 +83,7 @@ private:
     uint64_t inflight_pop = 0;
     iss_reg_t inflight_pc[COMMIT_RING];
     uint64_t inflight_trap_seq[COMMIT_RING];
+    bool inflight_trapped[COMMIT_RING];
 
     /* Event lines fired by the executing instruction, committed as one OR
      * mask at retire: each counter advances at most +1 per instruction, as
