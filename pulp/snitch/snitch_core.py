@@ -27,7 +27,6 @@ from pulp.snitch.snitch_core_config import SnitchCoreConfig
 
 def add_latencies(isa, is_fast=False, use_spatz=False):
 
-
     if is_fast and not use_spatz:
         isa.get_insn('flb').set_exec_label('flb_snitch')
         isa.get_insn('fsb').set_exec_label('fsb_snitch')
@@ -38,6 +37,10 @@ def add_latencies(isa, is_fast=False, use_spatz=False):
         if isa.get_insn('fld') is not None:
             isa.get_insn('fld').set_exec_label('fld_snitch')
             isa.get_insn('fsd').set_exec_label('fsd_snitch')
+        # The Snitch-encoded FP8 accesses get the same handlers as the
+        # PULP-encoded ones
+        for insn in isa.get_isa('f8snitch').get_insns():
+            insn.set_exec_label(insn.name + '_snitch')
 
     # To model the fact that alt fp16 and fp18 instructions are dynamically enabled through a
     # CSR, we insert a stub which call the proper handler depending on the CSR value
@@ -213,7 +216,7 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             if pulp_v2:
                 extensions = [ PulpV2(hwloop=False, elw=False), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ]
             else:
-                extensions = [ Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux() ]
+                extensions = [ Xdma(), Xf16(), Xf16alt(), Xf8(), Xf8Snitch(), XfvecSnitch(), Xfaux() ]
 
                 if not inc_spatz:
                     extensions += [Rv32frep()]
