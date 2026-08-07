@@ -96,6 +96,16 @@ public:
      * timing only the DUT can observe. */
     int collide_irq_id = -1;
 
+    /* Certification of an adjacent-row collision candidate (the take's
+     * mcause rode the row BEFORE the entry row): the take fires only if
+     * the entry boundary (current_insn, the future depc source) equals
+     * the take's mepc - a stale-mcause candidate fails this by
+     * construction. Checked here, at the entry itself: only the model
+     * knows the boundary at dispatch time. collide_certify=false keeps
+     * the unconditional same-row behaviour. */
+    iss_reg_t collide_expected_mepc = 0;
+    bool collide_certify = false;
+
     vp::WireSlave<bool> haltreq_itf;
     vp::WireSlave<bool> wfi_wake_itf;
 

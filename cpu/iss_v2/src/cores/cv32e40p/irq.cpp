@@ -53,6 +53,7 @@ void Cv32e40pIrq::reset(bool active)
          * actual wire level, which the reset does not change. */
         this->step_state = 0;
         this->collide_irq_id = -1;
+        this->collide_certify = false;
         this->req_debug_cause = 3;
     }
 }
@@ -228,7 +229,24 @@ int Cv32e40pIrq::check()
              * blindly. */
             iss_reg_t line = (this->collide_irq_id < 32) ?
                 (((iss_reg_t)1 << this->collide_irq_id) & IRQ_MASK) : 0;
-            if (line)
+            /* Adjacent-row candidates carry the take's mepc and are
+             * certified HERE, where current_insn is the entry boundary
+             * (the future depc source): a stale-mcause candidate - a take
+             * this hart already followed rows ago - parks the boundary
+             * elsewhere and is discarded without a take. Same-row
+             * candidates (collide_certify=false) keep the unconditional
+             * behaviour. */
+            if (this->collide_certify &&
+                this->iss.exec.current_insn != this->collide_expected_mepc)
+            {
+                this->trace.msg(vp::Trace::LEVEL_WARNING,
+                    "Informed IRQ+debug collision id %d discarded: entry "
+                    "boundary 0x%x != take mepc 0x%x\n",
+                    this->collide_irq_id,
+                    (unsigned)this->iss.exec.current_insn,
+                    (unsigned)this->collide_expected_mepc);
+            }
+            else if (line)
             {
                 this->irq_take(line);
             }
@@ -239,6 +257,7 @@ int Cv32e40pIrq::check()
                     "take skipped\n", this->collide_irq_id);
             }
             this->collide_irq_id = -1;
+            this->collide_certify = false;
         }
 
         /* Any entry closes a live single-step window: without this, a
