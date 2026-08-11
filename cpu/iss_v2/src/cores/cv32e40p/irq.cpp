@@ -158,10 +158,17 @@ static int cv32e40p_irq_pick(iss_reg_t pending)
 
 int Cv32e40pIrq::check()
 {
-    /* Arming order encodes the Debug-spec cause priority (each block
-     * yields to an already-armed request): trigger(2) > haltreq(3) >
-     * step(4). The edge path (haltreq_sync) arms asynchronously and so
-     * outranks a same-boundary trigger match. */
+    /* Cause arbitration on a shared entry boundary follows the RTL, which
+     * has TWO distinct entry paths:
+     *  - DBG_TAKEN_ID (kill of the ID insn): TRIGGER (highest) > EBREAK >
+     *    HALTREQ. The trigger block therefore OVERRIDES an armed haltreq -
+     *    e.g. the async wire edge that latched before the matched boundary;
+     *    the level re-arm serves it after dret, like the RTL re-halt.
+     *  - DBG_TAKEN_IF (single-step window close): its cause mux never
+     *    looks at trigger_match, so an armed STEP request (cause 4) is
+     *    NOT overridden even when the next insn sits at tdata2 - the
+     *    trigger fires on the following session instead. An armed cause
+     *    1/2 (injected ebreak/trigger, DUT-observed) is left alone too. */
 
     /* Execute-address trigger (trigger module, mcontrol): the match fires
      * BEFORE the instruction at tdata2 executes (RTL trigger_match_o on
@@ -170,12 +177,38 @@ int Cv32e40pIrq::check()
      * never retired - a batched co-sim step cannot run past the entry.
      * Only the slow dispatch handler runs check(): the co-sim personality
      * pins it; a standalone fast-mode run does not evaluate triggers. */
-    if ((this->iss.csr.tdata1.value & (1u << 2)) &&
-        !this->iss.exec.debug_mode && !this->req_debug &&
-        this->iss.exec.current_insn == this->iss.csr.tdata2.value)
+    /* The step-window guard mirrors DBG_TAKEN_IF: when the window closes
+     * at this boundary (armed and the stepped insn is done) the step entry
+     * wins even if the NEXT insn sits at tdata2 - the trigger block runs
+     * first in program order, so it must yield explicitly. A window still
+     * on its own step_pc (dret straight onto the matched insn) does not
+     * close here and the trigger fires as on the RTL. */
+    bool trigger_match =
+        (this->iss.csr.tdata1.value & (1u << 2)) &&
+        !this->iss.exec.debug_mode &&
+        (!this->req_debug || this->req_debug_cause == 3) &&
+        !(this->step_state && this->iss.exec.current_insn != this->step_pc) &&
+        this->iss.exec.current_insn == this->iss.csr.tdata2.value;
+    if (trigger_match)
     {
         this->req_debug = true;
         this->req_debug_cause = 2;
+    }
+
+    /* One-shot async gate, consumed AFTER the trigger match: the execute
+     * trigger is synchronous debug (mcontrol timing=before), not an
+     * asynchronous event, so it fires even on a suppressed dispatch and
+     * falls through to the entry below. Everything past this point -
+     * haltreq wire re-arm, step window, interrupt ladder - is asynchronous
+     * and stays out of a suppressed boundary (DPI lockstep stepping: the
+     * engine holds the line high and injects takes explicitly). */
+    if (this->iss.exec.skip_irq_check)
+    {
+        this->iss.exec.skip_irq_check = false;
+        if (!trigger_match)
+        {
+            return 0;
+        }
     }
 
     /* Held-high haltreq re-arms (RTL debug_req_i is level-sensitive: the
