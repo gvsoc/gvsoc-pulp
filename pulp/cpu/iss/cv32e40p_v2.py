@@ -302,8 +302,11 @@ class Cv32e40p(RiscvCommon):
             'hwloop': Hwloop(),
         }
 
-        # dm_halt_addr of the RTL testbench: the debug entry redirects here
-        # (linker script `dbg` region, loaded from the test ELF).
+        # dm_halt_addr / dm_exception_addr of the RTL testbench: the debug
+        # entry redirects to the first, exceptions taken while in debug mode
+        # to the second (linker script `dbg` region, loaded from the test
+        # ELF; uvme_cv32e40p_cfg defaults).
         super().__init__(parent, name, config=config, isa=isa_instance,
                          misa=misa, zfinx=zfinx, modules=modules,
-                         debug_handler=0x1A110800)
+                         debug_handler=0x1A110800,
+                         debug_exception_handler=0x1A111600)
