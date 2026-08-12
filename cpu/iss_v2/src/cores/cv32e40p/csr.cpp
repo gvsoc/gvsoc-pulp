@@ -90,6 +90,19 @@ Cv32e40pCsr::Cv32e40pCsr(Iss &iss)
         this->undeclare_csr(addr);
     }
 
+    /* No PMP: the UM's CSR chapter has no pmpcfg/pmpaddr bank and the RTL
+     * raises illegal on any access. The generic model declares the whole
+     * bank even when the PMP module is the empty variant
+     * (CONFIG_GVSOC_ISS_PMP is a type name, always defined). */
+    for (iss_reg_t addr = 0x3A0; addr < 0x3B0; addr++) /* pmpcfg0..15 */
+    {
+        this->undeclare_csr(addr);
+    }
+    for (iss_reg_t addr = 0x3B0; addr < 0x3F0; addr++) /* pmpaddr0..63 */
+    {
+        this->undeclare_csr(addr);
+    }
+
     this->raise_on_unsupported_csr = true;
 
     /* Machine information registers: read-only, writes raise illegal.
