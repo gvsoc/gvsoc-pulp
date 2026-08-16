@@ -33,6 +33,18 @@ public:
     /* Shadows the base setters (static dispatch via CONFIG_GVSOC_ISS_REGFILE). */
     inline void set_reg(int reg, uint64_t value)
     {
+        /* x0 is hardwired to zero (RTL: cv32e40p_register_file_ff.sv "R0 is
+         * nil"; unpriv spec). The decoder redirects rd==x0 writes to
+         * ISS_DUMMY_REG, but the XPULP post-increment addressing modes write
+         * the base register back through in_regs (IN_REG_SET, corev.hpp),
+         * which is never remapped: with rs1==x0 the increment lands in the
+         * real x0 slot and corrupts it (class C11, fv_ms1_20260816). Writes
+         * to x0 are architectural no-ops: drop them up front so they can
+         * never consume the wb_suppress one-shot either. */
+        if (reg == 0)
+        {
+            return;
+        }
         if (this->wb_suppress)
         {
             this->wb_suppress = false;
