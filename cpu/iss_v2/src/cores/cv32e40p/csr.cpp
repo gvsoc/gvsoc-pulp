@@ -103,6 +103,30 @@ Cv32e40pCsr::Cv32e40pCsr(Iss &iss)
         this->undeclare_csr(addr);
     }
 
+    /* Undeclaring removes a register from Csr::reset() coverage (reset walks
+     * the declared map only) while its raw .value - never initialized by the
+     * CsrReg constructor - is still read unguarded by shared trap code:
+     * Exception::raise consults medeleg for delegation and redirects through
+     * stvec; Core::sret_handle returns sepc. Left as heap garbage, a stray
+     * medeleg bit silently delegated sync traps to S-mode: mstatus.spp set
+     * (the bit-8 delta of the C3 trap-snapshot lanes), mcause/mepc stale,
+     * entry at garbage stvec (the 0x20202020 runaways). Zero them once here;
+     * nothing can write them afterwards - undeclared means any ISA access
+     * raises illegal, like the RTL. satp is left alone: guarded by
+     * CONFIG_GVSOC_ISS_MMU on every read path and unreachable on this core. */
+    this->medeleg.value    = 0;
+    this->mideleg.value    = 0;
+    this->sstatus.value    = 0;
+    this->sie.value        = 0;
+    this->stvec.value      = 0;
+    this->scounteren.value = 0;
+    this->sscratch.value   = 0;
+    this->sepc.value       = 0;
+    this->scause.value     = 0;
+    this->stval.value      = 0;
+    this->sip.value        = 0;
+    this->mcounteren.value = 0;
+
     this->raise_on_unsupported_csr = true;
 
     /* Machine information registers: read-only, writes raise illegal.

@@ -230,8 +230,12 @@ static inline iss_reg_t dret_exec(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
 
 static inline iss_reg_t sret_exec(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
 {
-    iss->timing.stall_insn_dependency_account(5);
-    return iss->core.sret_handle();
+    /* No S-mode on CV32E40P: the RTL decodes sret as illegal. The generic
+     * handler would jump through sepc - never architecturally written on
+     * this core - and demote the privilege mode via mstatus.spp. Same
+     * guard shape as dret_exec above. */
+    iss->exception.raise(pc, ISS_EXCEPT_ILLEGAL);
+    return pc;
 }
 
 static inline iss_reg_t sfence_vma_exec(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
