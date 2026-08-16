@@ -126,6 +126,17 @@ Cv32e40pCsr::Cv32e40pCsr(Iss &iss)
     this->declare_csr(&this->minstreth, "minstreth", 0xB82);
 #endif
 
+    /* minstret/minstreth writes go through the default masked store; the
+     * callbacks (return true) only arm the same-row increment suppression
+     * consumed by hpm_commit (RTL: the write wins over the increment in
+     * the writing instruction's own retire cycle). */
+    this->minstret.register_callback(std::bind(&Cv32e40pCsr::minstret_access, this,
+        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+#if ISS_REG_WIDTH == 32
+    this->minstreth.register_callback(std::bind(&Cv32e40pCsr::minstreth_access, this,
+        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+#endif
+
     /* mcycle/mcycleh: one 64-bit count derived from the clock with a write
      * offset, frozen into the register pair while mcountinhibit.CY is set.
      * Registered after the base callback so these have the last word. */
@@ -320,6 +331,7 @@ void Cv32e40pCsr::reset(bool active)
         this->dcsr = (4 << 28) | 0x3;
 
         this->mcycle_offset = 0;
+        this->minstret_written = false;
 
         /* Excluded from the base reset sweep, which walks the CSR map:
          * mip left it for the mip_view front-end, hwloop_lpend is a plain
@@ -484,6 +496,27 @@ bool Cv32e40pCsr::mcycle_access(iss_insn_t *insn, bool is_write, iss_reg_t &valu
         value = (iss_reg_t)this->mcycle_count();
     }
     return false;
+}
+
+bool Cv32e40pCsr::minstret_access(iss_insn_t *insn, bool is_write, iss_reg_t &value)
+{
+    /* Arm the same-row increment suppression; the store itself is the
+     * default masked one (return true). */
+    if (is_write)
+    {
+        this->minstret_written = true;
+    }
+    return true;
+}
+
+bool Cv32e40pCsr::minstreth_access(iss_insn_t *insn, bool is_write, iss_reg_t &value)
+{
+    /* RTL suppresses the increment on a write to EITHER half. */
+    if (is_write)
+    {
+        this->minstret_written = true;
+    }
+    return true;
 }
 
 bool Cv32e40pCsr::mcycleh_access(iss_insn_t *insn, bool is_write, iss_reg_t &value)

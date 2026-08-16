@@ -104,9 +104,11 @@ public:
     void fp_state_dirty();
 
     /* Advance the counters for one retired instruction: events is the OR of
-     * the RTL hpm_events lines it fired (see cores/cv32e40p/events.hpp).
-     * Called once per retire by Cv32e40pEvents::event_retire_account. */
-    inline void hpm_commit(uint32_t events);
+     * the RTL hpm_events lines it fired (see cores/cv32e40p/events.hpp);
+     * count_instr is the RTL minstret event line (false for EBREAK, which
+     * never counts - cv32e40p_id_stage.sv:1639). Called once per retire by
+     * Cv32e40pEvents::event_retire_account. */
+    inline void hpm_commit(uint32_t events, bool count_instr);
 
     /* True while any implemented counter is enabled: keeps the core on the
      * full handlers, where the event lines fire (Cv32e40pExec). */
@@ -196,6 +198,8 @@ private:
     bool dscratch1_view_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool mcycle_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool mcycleh_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
+    bool minstret_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
+    bool minstreth_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool cycle_alias_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool cycleh_alias_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool instret_alias_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
@@ -212,6 +216,13 @@ private:
     void mcycle_set(uint64_t count);
 
     int64_t mcycle_offset = 0;
+
+    /* Set by a CSR write to minstret/minstreth, consumed (and cleared) by
+     * hpm_commit at that same instruction's retire: the RTL suppresses the
+     * minstret increment on the cycle the counter is written
+     * (cv32e40p_cs_registers.sv, !write_lower && !write_upper gate), so
+     * the csrw itself must not count on top of the written value. */
+    bool minstret_written = false;
 };
 
 inline bool Cv32e40pCsr::fp_access_illegal()
@@ -236,10 +247,15 @@ inline bool Cv32e40pCsr::hpm_counting()
     return (this->mcountinhibit.value & event_bits) != event_bits;
 }
 
-inline void Cv32e40pCsr::hpm_commit(uint32_t events)
+inline void Cv32e40pCsr::hpm_commit(uint32_t events, bool count_instr)
 {
-    /* minstret: retired instructions, gated on mcountinhibit.IR (bit 2). */
-    if (!(this->mcountinhibit.value & 0x4))
+    /* minstret: retired instructions, gated on mcountinhibit.IR (bit 2),
+     * on the RTL event line (count_instr, false for EBREAK) and on the
+     * same-row write suppression. The flag clears unconditionally: it
+     * belongs to this retire only. */
+    bool wrote_counter = this->minstret_written;
+    this->minstret_written = false;
+    if (count_instr && !wrote_counter && !(this->mcountinhibit.value & 0x4))
     {
         if (++this->minstret.value == 0)
         {

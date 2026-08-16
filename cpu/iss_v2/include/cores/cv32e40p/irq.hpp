@@ -106,6 +106,31 @@ public:
     iss_reg_t collide_expected_mepc = 0;
     bool collide_certify = false;
 
+    /* Co-sim asynchronous-event hold (level, external-driver owned).
+     *
+     * While set, check() delivers asynchronous external events as STATE
+     * (mip via the wires, req_debug latched from the haltreq level) but
+     * never TAKES them at a dispatch boundary: no interrupt-ladder take,
+     * no haltreq re-arm, no cause-3 (haltreq) debug entry. The take
+     * boundary of an asynchronous event is decided by pipeline timing the
+     * model cannot see; in lockstep the DUT proves the boundary and the
+     * driver injects the take there (take_irq/take_debug windows lower
+     * this hold together with skip_irq_check).
+     *
+     * Synchronous conditions keep their architectural timing and ignore
+     * the hold: the execute-address trigger (evaluated on the matched
+     * boundary itself), the single-step window close (exactly one
+     * instruction after dret), ebreak-to-debug and driver-armed entries
+     * (cause 1/2/4).
+     *
+     * This is a LEVEL, unlike exec.skip_irq_check (a one-shot consumed at
+     * the first check() of a step quantum): a 20 ns engine quantum runs
+     * several dispatches, and every dispatch after the first ran with the
+     * one-shot already consumed - the window through which the model used
+     * to take wire IRQs on its own, racing the DUT's entry boundary.
+     * Standalone (non co-sim) runs never set it: behaviour unchanged. */
+    bool dpi_async_hold = false;
+
     vp::WireSlave<bool> haltreq_itf;
     vp::WireSlave<bool> wfi_wake_itf;
 

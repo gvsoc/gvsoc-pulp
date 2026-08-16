@@ -213,8 +213,11 @@ int Cv32e40pIrq::check()
 
     /* Held-high haltreq re-arms (RTL debug_req_i is level-sensitive: the
      * hart re-halts right after dret while the line stays asserted; the
-     * wire itself only syncs on level changes). */
-    if (this->haltreq_level && !this->req_debug && !this->iss.exec.debug_mode)
+     * wire itself only syncs on level changes). Under the co-sim hold the
+     * re-arm waits for the driver's injection window: the level is state,
+     * the halt boundary is the DUT's to prove (dpi_async_hold contract). */
+    if (this->haltreq_level && !this->dpi_async_hold &&
+        !this->req_debug && !this->iss.exec.debug_mode)
     {
         this->req_debug = true;  /* req_debug_cause keeps its default (3) */
     }
@@ -244,6 +247,19 @@ int Cv32e40pIrq::check()
      * when armed by an external debug-entry request. */
     if (this->req_debug && !this->iss.exec.debug_mode)
     {
+        /* Wire-armed haltreq entry (cause 3) under the co-sim hold: stay
+         * latched. The haltreq_sync edge arms req_debug at net-delivery
+         * time, which is row-granular - taking at the next dispatch would
+         * race the DUT's own halt boundary (the same race as the interrupt
+         * ladder below). The request is not lost: the driver's take_debug
+         * window lowers the hold and the entry lands on the DUT-proven
+         * boundary. Driver-armed causes (1 ebreak / 4 step) only ever run
+         * inside such a window; the synchronous trigger match (cause 2,
+         * set above) keeps its architectural boundary and enters here. */
+        if (this->dpi_async_hold && this->req_debug_cause == 3 && !trigger_match)
+        {
+            return 0;
+        }
         /* Informed interrupt+debug collision: the RTL takes the interrupt
          * first and enters debug on the first handler instruction - dpc is
          * the (vectored) entry and mstatus/mepc/mcause carry the take; the
@@ -326,6 +342,15 @@ int Cv32e40pIrq::check()
      * dcsr.stepie=1 (bit 11): the RTL controller holds irq_req off while
      * single-stepping (cv32e40p_controller.sv debug_single_step_i). */
     if (this->step_state && !((this->iss.csr.dcsr >> 11) & 1))
+    {
+        return 0;
+    }
+
+    /* Co-sim hold: pending wired interrupts stay pending. The ladder take
+     * below picks a boundary out of the model's own stepping cadence, which
+     * races the DUT's controller timing; the lockstep driver injects the
+     * take at the DUT-proven entry boundary instead (take_irq window). */
+    if (this->dpi_async_hold)
     {
         return 0;
     }

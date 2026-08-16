@@ -46,6 +46,10 @@ inline void Cv32e40pEvents::event_jump_account()
 inline void Cv32e40pEvents::event_retire_account(iss_insn_t *insn)
 {
     Events::event_retire_account(insn);
+    /* Encoding for the RVVI INS compare. The fetched word carries the NEXT
+     * parcel in its upper half on RVC rows, so truncate to the insn size
+     * (the bridge masks the DUT side the same way). */
+    iss_reg_t enc = (insn->size == 2) ? (insn->opcode & 0xFFFF) : insn->opcode;
 #ifdef CONFIG_GVSOC_ISS_EXEC_INORDER_COMMIT
     if (this->iss.exec.queue_head != NULL)
     {
@@ -53,6 +57,7 @@ inline void Cv32e40pEvents::event_retire_account(iss_insn_t *insn)
          * head): visible at drain time, through insn_stall_account, in
          * this same program order. */
         this->inflight_pc[this->inflight_push % COMMIT_RING] = insn->addr;
+        this->inflight_insn[this->inflight_push % COMMIT_RING] = enc;
         this->inflight_trap_seq[this->inflight_push % COMMIT_RING] = this->trap_seq;
         this->inflight_trapped[this->inflight_push % COMMIT_RING] =
             this->iss.exec.has_exception;
@@ -62,6 +67,7 @@ inline void Cv32e40pEvents::event_retire_account(iss_insn_t *insn)
 #endif
     {
         this->commit_pc[this->commit_push % COMMIT_RING] = insn->addr;
+        this->commit_insn[this->commit_push % COMMIT_RING] = enc;
         this->commit_trap_seq[this->commit_push % COMMIT_RING] = this->trap_seq;
         this->commit_trapped[this->commit_push % COMMIT_RING] =
             this->iss.exec.has_exception;
@@ -73,10 +79,19 @@ inline void Cv32e40pEvents::event_retire_account(iss_insn_t *insn)
         this->pending_events = 0;
         return;
     }
-    uint32_t events = this->pending_events | CV32E40P_HPM_INSTR
-        | (insn->size == 2 ? CV32E40P_HPM_COMP_INSTR : 0);
+    /* RTL minstret event (cv32e40p_id_stage.sv:1639) excludes EBREAK
+     * unconditionally; the compressed-retired event shares the gate
+     * (:1664, minstret && is_compressed). The trapping ebreak forms were
+     * dropped above with has_exception - this covers the debug-entry
+     * ebreak (dcsr.ebreakm=1), which retires without an architectural
+     * trap yet must not count. */
+    bool count_instr = !(enc == 0x00100073u
+                         || (insn->size == 2 && enc == 0x9002u));
+    uint32_t events = this->pending_events
+        | (count_instr ? (CV32E40P_HPM_INSTR
+            | (insn->size == 2 ? CV32E40P_HPM_COMP_INSTR : 0)) : 0);
     this->pending_events = 0;
-    this->iss.csr.hpm_commit(events);
+    this->iss.csr.hpm_commit(events, count_instr);
 }
 
 inline void Cv32e40pEvents::insn_stall_account()
@@ -88,6 +103,8 @@ inline void Cv32e40pEvents::insn_stall_account()
     {
         this->commit_pc[this->commit_push % COMMIT_RING] =
             this->inflight_pc[this->inflight_pop % COMMIT_RING];
+        this->commit_insn[this->commit_push % COMMIT_RING] =
+            this->inflight_insn[this->inflight_pop % COMMIT_RING];
         this->commit_trap_seq[this->commit_push % COMMIT_RING] =
             this->inflight_trap_seq[this->inflight_pop % COMMIT_RING];
         this->commit_trapped[this->commit_push % COMMIT_RING] =

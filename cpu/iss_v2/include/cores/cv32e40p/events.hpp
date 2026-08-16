@@ -47,6 +47,11 @@ public:
     uint64_t commit_pop = 0;
     iss_reg_t commit_pc[COMMIT_RING];
 
+    /* Raw encoding of the committed instruction (insn->opcode at the push
+     * site). The external stepper forwards it for the RVVI INSBIN compare
+     * against the DUT's rvfi_insn. Same push/pop discipline as commit_pc. */
+    iss_reg_t commit_insn[COMMIT_RING];
+
     /* Trap-redirect sequence, bumped by Cv32e40pException::raise and the
      * Cv32e40pIrq take. Each commit entry is stamped with the value seen
      * when the instruction executed; a stamp older than the current
@@ -82,6 +87,7 @@ private:
     uint64_t inflight_push = 0;
     uint64_t inflight_pop = 0;
     iss_reg_t inflight_pc[COMMIT_RING];
+    iss_reg_t inflight_insn[COMMIT_RING];
     uint64_t inflight_trap_seq[COMMIT_RING];
     bool inflight_trapped[COMMIT_RING];
 
