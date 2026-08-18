@@ -356,6 +356,7 @@ void Cv32e40pCsr::reset(bool active)
 
         this->mcycle_offset = 0;
         this->minstret_written = false;
+        this->mcountinhibit_stale = false;
 
         /* Excluded from the base reset sweep, which walks the CSR map:
          * mip left it for the mip_view front-end, hwloop_lpend is a plain
@@ -621,6 +622,10 @@ bool Cv32e40pCsr::mcountinhibit_access(iss_insn_t *insn, bool is_write, iss_reg_
         /* Event lines fire only from the full handlers (same scheme as the
          * Ri5ky PCMR write): switch when software touches the inhibit CSR. */
         this->iss.exec.switch_to_full_mode();
+        /* The writing instruction itself still counts under the OLD gates
+         * (consumed by hpm_commit at this same retire). */
+        this->mcountinhibit_old = this->mcountinhibit.value;
+        this->mcountinhibit_stale = true;
         bool old_cy = this->mcountinhibit.value & 0x1;
         bool new_cy = value & 0x1;
         if (old_cy != new_cy)

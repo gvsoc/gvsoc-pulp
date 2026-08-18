@@ -223,6 +223,15 @@ private:
      * (cv32e40p_cs_registers.sv, !write_lower && !write_upper gate), so
      * the csrw itself must not count on top of the written value. */
     bool minstret_written = false;
+
+    /* Armed by a CSR write to mcountinhibit, consumed (and cleared) by
+     * hpm_commit at that same instruction's retire: the RTL evaluates the
+     * increment gates on mcountinhibit_q in the cycle the write commits
+     * (cv32e40p_cs_registers.sv:1428), so the writing instruction is still
+     * gated by the OLD value and the write takes effect from the next
+     * instruction on. */
+    bool mcountinhibit_stale = false;
+    iss_reg_t mcountinhibit_old = 0;
 };
 
 inline bool Cv32e40pCsr::fp_access_illegal()
@@ -249,13 +258,18 @@ inline bool Cv32e40pCsr::hpm_counting()
 
 inline void Cv32e40pCsr::hpm_commit(uint32_t events, bool count_instr)
 {
+    /* An instruction writing mcountinhibit is gated by the pre-write
+     * value; both flags clear unconditionally: they belong to this
+     * retire only. */
+    iss_reg_t inhibit = this->mcountinhibit_stale ? this->mcountinhibit_old
+                                                  : this->mcountinhibit.value;
+    this->mcountinhibit_stale = false;
     /* minstret: retired instructions, gated on mcountinhibit.IR (bit 2),
      * on the RTL event line (count_instr, false for EBREAK) and on the
-     * same-row write suppression. The flag clears unconditionally: it
-     * belongs to this retire only. */
+     * same-row write suppression. */
     bool wrote_counter = this->minstret_written;
     this->minstret_written = false;
-    if (count_instr && !wrote_counter && !(this->mcountinhibit.value & 0x4))
+    if (count_instr && !wrote_counter && !(inhibit & 0x4))
     {
         if (++this->minstret.value == 0)
         {
@@ -269,7 +283,7 @@ inline void Cv32e40pCsr::hpm_commit(uint32_t events, bool count_instr)
     for (int i = 0; i < CONFIG_GVSOC_ISS_CV32E40P_NUM_MHPMCOUNTERS; i++)
     {
         if ((this->mhpmevent[i].value & events)
-            && !(this->mcountinhibit.value & (1u << (3 + i))))
+            && !(inhibit & (1u << (3 + i))))
         {
             if (++this->mhpmcounter[i].value == 0)
             {
