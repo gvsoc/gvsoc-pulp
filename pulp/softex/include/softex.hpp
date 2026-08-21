@@ -119,11 +119,9 @@ namespace SoftexAddr
 // Softex's own master port toward the L1 interleaver: stream-in and
 // stream-out share this single, muxed port (only one direction active at a
 // time), so a beat (SOFTEX_N_ROWS elements, up to 16B) that's wider than
-// this needs multiple cycles to actually cross the interconnect.
-namespace SoftexBus
-{
-    constexpr uint32_t WIDTH_BYTES = SOFTEX_DATA_WIDTH_BITS / 8; // 96 bits -> 12B (3x32-bit)
-}
+// the port's width (Softex::width_bytes, a runtime per-instance parameter --
+// see `data_width_bits` in softex.py) needs multiple cycles to actually
+// cross the interconnect.
 
 /**************************************************************************
 * Control FSM states
@@ -269,7 +267,7 @@ private:
     * Modeled directly after pulp/light_redmule's fsm_handler PRELOAD/
     * ROUTINE/STORING cases (see light_redmule.cpp), not an async
     * request-slot pool: softex has a single, muxed master port toward the
-    * L1 interleaver (SoftexBus::WIDTH_BYTES wide -- stream-in and
+    * L1 interleaver (width_bytes wide -- stream-in and
     * stream-out share it, never concurrent), so stream_tick() below issues
     * at most one bus-width block per cycle (an `if`, not a `while`) and
     * tracks in-flight blocks' completion timestamps in pending_req_queue,
@@ -277,6 +275,7 @@ private:
     * synchronously (IO_REQ_OK) -- no resp/grant callbacks.
     **********************************************************************/
     uint32_t queue_depth;
+    uint32_t width_bytes;  // max bytes/cycle on the muxed master port (data_width_bits/8)
 
     vp::IoReq *stream_req;                  // single reused request for streaming
     std::queue<int64_t> pending_req_queue;  // completion timestamp per in-flight block

@@ -20,7 +20,7 @@ import gvsoc
 class Softex(st.Component):
 
     def __init__(self, parent, name, n_state_slots: int = 2, cache_slot_size: int = 32,
-                 queue_depth: int = 8):
+                 queue_depth: int = 8, data_width_bits: int = 96):
         """
         n_state_slots:   number of state slots kept locally in the accelerator
                           (softex_pkg::N_CTRL_STATE_SLOTS in the RTL, default 2).
@@ -29,10 +29,14 @@ class Softex(st.Component):
                           cache (max + denominator, rounded up).
         queue_depth:     max outstanding request blocks on the memory port at
                           once (see stream_tick() in softex_stream.cpp -- one
-                          block, at most SOFTEX_DATA_WIDTH_BITS/8 bytes, is
-                          still issued per cycle regardless of this value).
-                          Higher values let the model overlap more real
-                          memory latency with streaming; must be >= 1.
+                          block, at most data_width_bits/8 bytes, is still
+                          issued per cycle regardless of this value). Higher
+                          values let the model overlap more real memory
+                          latency with streaming; must be >= 1.
+        data_width_bits: width in bits of softex's muxed master-port datapath
+                          (excludes the 32-bit strobe/aux lane); caps how many
+                          bytes of a beat are moved across the interconnect
+                          per cycle (see stream_tick() in softex_stream.cpp).
         """
         super(Softex, self).__init__(parent, name)
 
@@ -42,6 +46,7 @@ class Softex(st.Component):
             'n_state_slots': n_state_slots,
             'cache_slot_size': cache_slot_size,
             'queue_depth': queue_depth,
+            'data_width_bits': data_width_bits,
         })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:

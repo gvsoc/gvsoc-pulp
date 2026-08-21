@@ -19,8 +19,7 @@
 #ifndef __ARCHI_SOFTEX_GVSOC_H__
 #define __ARCHI_SOFTEX_GVSOC_H__
 
-#define SOFTEX_DATA_WIDTH_BITS  96    // width of the datapath (excludes the 32-bit strobe/aux lane in DATA_W)
-#define SOFTEX_N_ROWS           8     // SOFTEX_DATA_WIDTH_BITS / 16 (FP16ALT elements per beat)
+#define SOFTEX_N_ROWS           8     // Softex DATA_W/16 (FP16ALT elements per beat)
 
 // Control regs (below SOFTEX_REG_OFFS)
 #define SOFTEX_TRIGGER     0x00
