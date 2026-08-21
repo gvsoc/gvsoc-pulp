@@ -30,6 +30,12 @@ void Softex::enqueue_fsm(int64_t cycles)
     this->event_enqueue(this->fsm_event, cycles);
 }
 
+void Softex::trace_phase(const char *name)
+{
+    this->trace.msg(vp::Trace::LEVEL_INFO, "phase -> %s @ cycle %lld\n",
+        name, (long long)this->clock.get_cycles());
+}
+
 // Load the queued job in cxt_use_ptr and kick off the FSM (IDLE -> ...).
 void Softex::start_next_job()
 {
@@ -48,6 +54,7 @@ void Softex::start_next_job()
     if (j.no_op())
     {
         this->reg_fsm_state.set(SOFTEX_FSM_FINISHED);
+        this->trace_phase("FINISHED (no_op)");
         this->reg_busy.set(1);
         this->enqueue_fsm(SoftexLatency::CTRL_LAT);
         return;
@@ -73,6 +80,7 @@ void Softex::start_next_job()
             if (!this->slot_lookup(j.slot_id(), this->cur_slot))
             {
                 this->reg_fsm_state.set(SOFTEX_FSM_WAIT_SLOT_VALID);
+                this->trace_phase("WAIT_SLOT_VALID");
                 this->reg_busy.set(1);
                 this->slot_fill_from_mem(j.slot_id(), this->slot_cache_base_addr, this->cur_slot);
                 this->enqueue_fsm(SoftexLatency::CTRL_LAT + 4); // approx round-trip to fetch 6B from mem
@@ -94,20 +102,22 @@ void Softex::start_next_job()
         // by a previous ACC_ONLY(+LAST)/full run (see FINISHED below)
         ff_init_double(&this->reciprocal, this->cur_slot.denominator, SoftexFormat::acc());
         this->reg_fsm_state.set(SOFTEX_FSM_DIVIDING);
+        this->trace_phase("DIVIDING");
     }
     else
     {
         this->reg_fsm_state.set(SOFTEX_FSM_ACCUMULATION);
+        this->trace_phase("ACCUMULATION");
     }
     this->reg_busy.set(1);
     this->begin_datapath_phase();
 }
 
-// Beat/element bookkeeping + kick off the async issue engine for whichever
-// phase reg_fsm_state currently holds (ACCUMULATION or DIVIDING). Called
-// from start_next_job() (fast path), from the WAIT_SLOT_VALID continuation,
-// and from WAIT_INVERSION when a full (non-acc_only/div_only) job moves on
-// to normalize its input a second time.
+// Beat/element bookkeeping + kick off the streaming engine at beat 0, for
+// whichever phase reg_fsm_state currently holds (ACCUMULATION or DIVIDING).
+// Called from start_next_job() (fast path), from the WAIT_SLOT_VALID
+// continuation, and from WAIT_INVERSION when a full (non-acc_only/div_only)
+// job moves on to normalize its input a second time.
 void Softex::begin_datapath_phase()
 {
     SoftexJob &j = this->job;
@@ -118,7 +128,6 @@ void Softex::begin_datapath_phase()
     this->beat_size_in = elem_size_in * SOFTEX_N_ROWS;
     this->beat_size_out = (j.cast_output() ? 1 : 2) * SOFTEX_N_ROWS;
 
-    this->beats_issued = 0;
     this->beats_completed = 0;
 
     if (this->n_beats == 0)
@@ -127,25 +136,31 @@ void Softex::begin_datapath_phase()
         if (this->reg_fsm_state.get() == SOFTEX_FSM_ACCUMULATION)
         {
             this->reg_fsm_state.set(SOFTEX_FSM_WAIT_DATAPATH_EMPTY);
+            this->trace_phase("WAIT_DATAPATH_EMPTY (empty job)");
         }
         else
         {
             this->reg_fsm_state.set(SOFTEX_FSM_FINISHED);
+            this->trace_phase("FINISHED (empty job)");
         }
         this->enqueue_fsm(SoftexLatency::CTRL_LAT);
         return;
     }
 
-    this->pump_issue();
+    this->stream_start_beat(0);
+    // Command-decode/in_start-out_start handshake before the first block is
+    // actually visible on the bus.
+    this->enqueue_fsm(SoftexLatency::STREAM_START_LAT);
 }
 
 /**************************************************************************
-* Control-state FSM tick
-* Only fires for the "control" states -- the data
-* movement states (ACCUMULATION/DIVIDING) never enqueue fsm_event
-* themselves; they run entirely off pump_issue()/handle_mem_response()
-* (see softex_stream.cpp) and jump straight to the next control state
-* once the last beat's response lands.
+* FSM tick
+* Handles the control states (IDLE, WAIT_SLOT_VALID, WAIT_DATAPATH_EMPTY,
+* WAIT_ACCUMULATION, WAIT_INVERSION, FINISHED) directly; ACCUMULATION and
+* DIVIDING are driven by stream_tick() (softex_stream.cpp), which
+* re-enqueues fsm_event itself every cycle for as long as either state
+* stays active, and jumps to the next control state once the last beat's
+* last block has landed.
 **************************************************************************/
 void Softex::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 {
@@ -181,19 +196,27 @@ void Softex::fsm_step()
         {
             ff_init_double(&this->reciprocal, this->cur_slot.denominator, SoftexFormat::acc());
             this->reg_fsm_state.set(SOFTEX_FSM_DIVIDING);
+            this->trace_phase("DIVIDING");
         }
         else
         {
             this->reg_fsm_state.set(SOFTEX_FSM_ACCUMULATION);
+            this->trace_phase("ACCUMULATION");
         }
         this->begin_datapath_phase();
         return;
     }
 
+    case SOFTEX_FSM_ACCUMULATION:
+    case SOFTEX_FSM_DIVIDING:
+        this->stream_tick();
+        return;
+
     case SOFTEX_FSM_WAIT_DATAPATH_EMPTY:
         // waiting for the last accumulator FMA / reduction result to drain
         this->reg_fsm_state.set(SOFTEX_FSM_WAIT_ACCUMULATION);
-        this->enqueue_fsm(SoftexLatency::FMA_REGS_ACC);
+        this->trace_phase("WAIT_ACCUMULATION");
+        this->enqueue_fsm(SoftexLatency::ACC_REDUCE_LAT);
         return;
 
     case SOFTEX_FSM_WAIT_ACCUMULATION:
@@ -203,11 +226,13 @@ void Softex::fsm_step()
         {
             // stash the partial max/denominator (not yet inverted) and stop
             this->reg_fsm_state.set(SOFTEX_FSM_FINISHED);
+            this->trace_phase("FINISHED (acc_only partial)");
             this->enqueue_fsm(SoftexLatency::CTRL_LAT);
         }
         else
         {
             this->reg_fsm_state.set(SOFTEX_FSM_WAIT_INVERSION);
+            this->trace_phase("WAIT_INVERSION");
             this->enqueue_fsm(SoftexLatency::INV_LATENCY);
         }
         return;
@@ -217,18 +242,20 @@ void Softex::fsm_step()
     {
         // Newton-Raphson reciprocal of the accumulated denominator
         // (softex_pkg::N_NEWTON_ITERS iterations, correctly rounded FP32
-        // arithmetic at each step via flexfloat -- see newton_reciprocal()).
+        // arithmetic at each step via flexfloat).
         this->reciprocal = this->newton_reciprocal(this->running_sum);
 
         SoftexJob &j = this->job;
         if (j.acc_only())
         {
             this->reg_fsm_state.set(SOFTEX_FSM_FINISHED);
+            this->trace_phase("FINISHED (acc_only+last)");
             this->enqueue_fsm(SoftexLatency::CTRL_LAT);
         }
         else
         {
             this->reg_fsm_state.set(SOFTEX_FSM_DIVIDING);
+            this->trace_phase("DIVIDING");
             this->begin_datapath_phase();
         }
         return;
@@ -263,6 +290,7 @@ void Softex::fsm_step()
         }
 
         this->reg_fsm_state.set(SOFTEX_FSM_IDLE);
+        this->trace_phase("IDLE");
         this->reg_busy.set(0);
         this->enqueue_fsm(1);
         return;

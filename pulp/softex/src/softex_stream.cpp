@@ -21,301 +21,198 @@
 #include <algorithm>
 
 /**************************************************************************
-* Async memory streaming engine
-* A pool of `queue_depth + 1` reusable IoReq
-* slots lets several beat requests be outstanding at once (instead of the
-* single blocking request the previous version of this model used), so
-* ACCUMULATION/DIVIDING phase duration now emerges from actual
-* request/response timing against `out` rather than a hand-computed
-* estimate.
+* Memory streaming engine (ACCUMULATION / DIVIDING)
+* See the block comment above the member declarations in softex.hpp.
 **************************************************************************/
 
-// A slot is free once its `available_at` timestamp has elapsed; scan the
-// pool and grab the first slot, marking it reserved (INT64_MAX) until
-// either the sync-OK path or the async response callback installs a real
-// completion timestamp.
-int Softex::alloc_req_slot()
+// See SoftexAddr::CLUSTER_WINDOW_MASK / this method's declaration in
+// softex.hpp for why this exists.
+uint32_t Softex::local_addr(uint32_t addr) const
 {
-    int64_t now = this->clock.get_cycles();
-    int best_id = -1;
-    int64_t best_cycle = INT64_MAX;
-    for (size_t i = 0; i < this->req_slots.size(); i++)
+    return addr & SoftexAddr::CLUSTER_WINDOW_MASK;
+}
+
+// See this method's declaration in softex.hpp for why this exists. Splits
+// [addr, addr+size) into chunks that never cross a 4-byte (GRANULE)
+// boundary, issuing one `out.req()` per chunk on the caller-supplied `req`
+// object, and (if requested) reports the max latency seen across those
+// chunks. Several of them land in the same cycle across the L1
+// interleaver's parallel banks, so the group's cost is their max, not
+// their sum.
+// PENDING/DENIED on the very first chunk (nothing transferred yet)
+// is propagated exactly like a single unsplit request would be; a later
+// chunk resolving to anything but OK is a hard fatal.
+vp::IoReqStatus Softex::req_split(vp::IoReq *req, uint32_t addr, uint8_t *buf, uint32_t size, bool is_write,
+                                   int64_t *out_max_latency)
+{
+    constexpr uint32_t GRANULE = 4; // L1 interleaver granule (interleaving_bits=2)
+    uint32_t done = 0;
+    int64_t max_latency = 0;
+    while (done < size)
     {
-        int64_t at = this->req_slots[i].available_at;
-        if (at <= now && at < best_cycle)
+        uint32_t chunk = std::min(size - done, GRANULE - ((addr + done) % GRANULE));
+
+        req->prepare();
+        req->set_addr(addr + done);
+        req->set_size(chunk);
+        req->set_is_write(is_write);
+        req->set_data(buf + done);
+
+        vp::IoReqStatus err = this->out.req(req);
+        if (err != vp::IO_REQ_OK)
         {
-            best_id = (int)i;
-            best_cycle = at;
+            if (done == 0)
+            {
+                return err;
+            }
+            this->trace.fatal("Softex: unexpected IoReq status mid-beat while splitting a request across L1 banks\n");
+            return err;
         }
+
+        int64_t latency = (int64_t)req->get_latency();
+        if (latency > max_latency)
+        {
+            max_latency = latency;
+        }
+
+        done += chunk;
     }
-    if (best_id >= 0)
+    if (out_max_latency != nullptr)
     {
-        this->req_slots[best_id].available_at = INT64_MAX;
+        *out_max_latency = max_latency;
     }
-    return best_id;
+    return vp::IO_REQ_OK;
 }
 
-void Softex::free_req_slot(int id, int64_t available_at)
+// Set up cur_beat_* to (re-)start streaming beat `beat_idx`. For
+// ACCUMULATION and the read half of DIVIDING this means reading
+// job.in_addr's bytes for that beat; DIVIDING's write half is instead set
+// up directly by stream_advance_beat() once the read+compute is done.
+void Softex::stream_start_beat(uint32_t beat_idx)
 {
-    this->req_slots[id].available_at = available_at;
+    this->cur_beat_idx = beat_idx;
+
+    uint32_t elem_size = this->job.cast_input() ? 1 : 2;
+    uint32_t elems = std::min((uint32_t)SOFTEX_N_ROWS, this->num_elements - beat_idx * SOFTEX_N_ROWS);
+
+    this->cur_beat_bytes = elems * elem_size;
+    this->cur_beat_bytes_sent = 0;
+    this->cur_beat_is_write = false;
+    this->cur_beat_base_addr = this->local_addr(this->job.in_addr + beat_idx * this->beat_size_in);
+    memset(this->cur_beat_buf, 0, sizeof(this->cur_beat_buf));
 }
 
-// Issue-side capacity gate: outstanding requests (in flight or still
-// "busy" from a sync-OK access) must stay within queue_depth.
-bool Softex::issue_slot_gate_ok()
+// Called once the beat/direction that stream_tick() was streaming has had
+// all of its bytes both sent and their responses retired (pending_req_queue
+// empty). Applies that beat's numerics then either moves on to the next 
+// beat/direction or, once the whole phase is done, hands off to the matching
+// control state exactly like the old beats_completed check did.
+void Softex::stream_advance_beat()
 {
-    int64_t now = this->clock.get_cycles();
-    uint32_t outstanding = 0;
-    for (auto &slot : this->req_slots)
-    {
-        // A slot freed this cycle (available_at == now) is already
-        // reusable per alloc_req_slot()'s own "at <= now" free test; using
-        // ">=" here double-counted same-cycle synchronous completions as
-        // still outstanding, which deadlocks pump_issue() as soon as
-        // exactly pool_size beats have been issued on a zero-latency
-        // target (every slot's available_at lands on the same "now").
-        if (slot.available_at > now) outstanding++;
-    }
-    return outstanding <= this->queue_depth;
-}
-
-void Softex::mem_response(vp::Block *__this, vp::IoReq *req)
-{
-    Softex *_this = (Softex *)__this;
-    int slot_id = *((int *)req->arg_get(0));
-    _this->handle_mem_response(slot_id, _this->clock.get_cycles());
-}
-
-// DENIED -> granted: clear the denied flag and try to keep issuing. The
-// original (denied) request's own response still arrives later via
-// mem_response.
-void Softex::mem_grant(vp::Block *__this, vp::IoReq *req)
-{
-    Softex *_this = (Softex *)__this;
-    _this->request_denied = false;
-    _this->pump_issue();
-}
-
-void Softex::handle_mem_response(int slot_id, int64_t free_cycle)
-{
-    ReqSlot &slot = this->req_slots[slot_id];
-
-    // snapshot what we need before freeing the slot, since pump_issue()
-    // called at the end of this function may immediately reuse it
-    uint32_t phase = slot.phase;
-    uint32_t beat_idx = slot.beat_idx;
-    uint32_t valid_bytes = slot.valid_bytes;
-    uint8_t buf[SOFTEX_N_ROWS * 2];
-    memcpy(buf, slot.buf, sizeof(buf));
-
-    this->free_req_slot(slot_id, free_cycle);
-
-    switch (phase)
-    {
-    case REQ_ACC_READ:
-        this->complete_acc_beat(buf, valid_bytes, beat_idx);
-        break;
-    case REQ_DIV_READ:
-        this->complete_div_read_beat(buf, valid_bytes, beat_idx);
-        break;
-    case REQ_DIV_WRITE:
-        this->complete_div_write_beat(beat_idx);
-        break;
-    }
-
-    // keep the pipe full
-    this->pump_issue();
-}
-
-// Try to issue as many outstanding beat reads as the slot pool currently
-// allows for whichever phase is active. Called on phase entry and again
-// every time a slot frees up (see handle_mem_response()).
-//
-// Note: on a target memory that always completes synchronously with zero
-// latency (IO_REQ_OK, get_latency()==0), handle_mem_response() calls back
-// into pump_issue() before returning, which can issue the next beat
-// straight away -- for very large vectors against such an idealized
-// memory this recurses roughly once per beat. Real memory models (with
-// nonzero latency, or that return IO_REQ_PENDING) complete asynchronously
-// instead and don't hit this. If you need to stream extremely large
-// vectors through a zero-latency test memory, consider capping
-// queue_depth low or converting this into an explicit work queue drained
-// from fsm ticks instead of recursive calls.
-void Softex::pump_issue()
-{
-    if (this->request_denied)
-    {
-        return;
-    }
-
     uint32_t state = this->reg_fsm_state.get();
 
     if (state == SOFTEX_FSM_ACCUMULATION)
     {
-        while (this->beats_issued < this->n_beats && this->issue_slot_gate_ok())
+        this->complete_acc_beat(this->cur_beat_buf, this->cur_beat_bytes, this->cur_beat_idx);
+
+        this->beats_completed++;
+        if (this->beats_completed == this->n_beats)
         {
-            // Bump beats_issued *before* issuing: on a zero-latency target,
-            // issue_acc_read() completes synchronously and reenters this
-            // function (via handle_mem_response()'s "keep the pipe full"
-            // call) before returning here. If beats_issued were only
-            // incremented after the call, that reentrant call would still
-            // see the old value and reissue the very same beat forever.
-            uint32_t beat_idx = this->beats_issued;
-            this->beats_issued++;
-            if (!this->issue_acc_read(beat_idx))
-            {
-                this->beats_issued--;
-                break;
-            }
+            // approximate pipeline fill+drain, charged once the stream is done
+            this->reg_fsm_state.set(SOFTEX_FSM_WAIT_DATAPATH_EMPTY);
+            this->trace_phase("WAIT_DATAPATH_EMPTY");
+            this->enqueue_fsm(SoftexLatency::ACC_FILL);
+            return;
+        }
+        this->stream_start_beat(this->cur_beat_idx + 1);
+        return;
+    }
+
+    // SOFTEX_FSM_DIVIDING
+    if (!this->cur_beat_is_write)
+    {
+        // Finished reading+normalizing this beat's input; queue its
+        // computed output bytes for the (shared, muxed) port's write half.
+        uint32_t out_bytes = this->complete_div_read_beat(this->cur_beat_buf, this->cur_beat_bytes,
+                                                            this->cur_beat_idx, this->cur_beat_outbuf);
+        this->cur_beat_is_write = true;
+        this->cur_beat_bytes = out_bytes;
+        this->cur_beat_bytes_sent = 0;
+        this->cur_beat_base_addr = this->local_addr(this->job.out_addr + this->cur_beat_idx * this->beat_size_out);
+        return;
+    }
+
+    // Finished writing this beat's output.
+    this->beats_completed++;
+    if (this->beats_completed == this->n_beats)
+    {
+        // softex_ctrl.sv's DIVIDING transitions straight to FINISHED on
+        // out_stream_flags_i.done, no separate drain state, and
+        // FINISHED itself is unconditionally 1 cycle; see CTRL_LAT.
+        this->reg_fsm_state.set(SOFTEX_FSM_FINISHED);
+        this->trace_phase("FINISHED");
+        this->enqueue_fsm(SoftexLatency::CTRL_LAT);
+        return;
+    }
+    this->stream_start_beat(this->cur_beat_idx + 1);
+}
+
+// One cycle's worth of ACCUMULATION/DIVIDING streaming work. Ticks every
+// cycle (re-enqueues fsm_event with delay 1) for as long as either state
+// stays active. Modeled directly on light_redmule::fsm_handler's
+// PRELOAD/ROUTINE/STORING cases:
+//   - Send: issue at most one SoftexBus::WIDTH_BYTES-sized block this cycle
+//   - Receive: retire any in-flight blocks whose latency has elapsed.
+//   - Once a beat/direction's bytes are all sent and retired, apply its
+//     numerics and move on (stream_advance_beat()).
+void Softex::stream_tick()
+{
+    int64_t now = this->clock.get_cycles();
+
+    if (this->cur_beat_bytes_sent < this->cur_beat_bytes &&
+        (uint32_t)this->pending_req_queue.size() <= this->queue_depth)
+    {
+        uint32_t chunk = std::min((uint32_t)SoftexBus::WIDTH_BYTES,
+                                   this->cur_beat_bytes - this->cur_beat_bytes_sent);
+        uint8_t *buf_ptr = (this->cur_beat_is_write ? this->cur_beat_outbuf : this->cur_beat_buf)
+                           + this->cur_beat_bytes_sent;
+        uint32_t addr = this->cur_beat_base_addr + this->cur_beat_bytes_sent;
+
+        int64_t max_latency = 0;
+        vp::IoReqStatus err = this->req_split(this->stream_req, addr, buf_ptr, chunk,
+                                               this->cur_beat_is_write, &max_latency);
+        if (err != vp::IO_REQ_OK)
+        {
+            // Softex's TCDM port is assumed to always resolve synchronously
+            // PENDING/DENIED would mean it's wired to a target that doesn't 
+            // match that assumption.
+            this->trace.fatal("Softex: unexpected IoReq status while streaming\n");
+            return;
+        }
+
+        this->pending_req_queue.push(now + max_latency);
+        this->cur_beat_bytes_sent += chunk;
+    }
+
+    while (!this->pending_req_queue.empty() && this->pending_req_queue.front() <= now)
+    {
+        this->pending_req_queue.pop();
+    }
+
+    if (this->cur_beat_bytes_sent >= this->cur_beat_bytes && this->pending_req_queue.empty())
+    {
+        this->stream_advance_beat();
+
+        uint32_t state = this->reg_fsm_state.get();
+        if (state != SOFTEX_FSM_ACCUMULATION && state != SOFTEX_FSM_DIVIDING)
+        {
+            // stream_advance_beat() moved on to a control state and already
+            // called enqueue_fsm() itself -- don't also tick next cycle.
+            return;
         }
     }
-    else if (state == SOFTEX_FSM_DIVIDING)
-    {
-        while (this->beats_issued < this->n_beats && this->issue_slot_gate_ok())
-        {
-            uint32_t beat_idx = this->beats_issued;
-            this->beats_issued++;
-            if (!this->issue_div_read(beat_idx))
-            {
-                this->beats_issued--;
-                break;
-            }
-        }
-    }
-}
 
-bool Softex::issue_acc_read(uint32_t beat_idx)
-{
-    int slot_id = this->alloc_req_slot();
-    if (slot_id < 0)
-    {
-        return false;
-    }
-
-    ReqSlot &slot = this->req_slots[slot_id];
-    uint32_t elem_size = this->job.cast_input() ? 1 : 2;
-    uint32_t elems = std::min((uint32_t)SOFTEX_N_ROWS, this->num_elements - beat_idx * SOFTEX_N_ROWS);
-    uint32_t bytes = elems * elem_size;
-    uint32_t addr = this->job.in_addr + beat_idx * this->beat_size_in;
-
-    slot.phase = REQ_ACC_READ;
-    slot.beat_idx = beat_idx;
-    slot.valid_bytes = bytes;
-    memset(slot.buf, 0, sizeof(slot.buf));
-
-    slot.req->prepare(); // preserves arg(0)/arg(1), unlike init()
-    slot.req->set_addr(addr);
-    slot.req->set_size(bytes);
-    slot.req->set_is_write(false);
-    slot.req->set_data(slot.buf);
-
-    vp::IoReqStatus err = this->out.req(slot.req);
-    if (err == vp::IO_REQ_OK)
-    {
-        int64_t free_cycle = this->clock.get_cycles() + (int64_t)slot.req->get_latency();
-        this->handle_mem_response(slot_id, free_cycle);
-    }
-    else if (err == vp::IO_REQ_PENDING)
-    {
-        // response arrives later via mem_response()
-    }
-    else if (err == vp::IO_REQ_DENIED)
-    {
-        this->request_denied = true;
-    }
-    else
-    {
-        this->trace.fatal("Softex: unexpected IoReq status on ACC read\n");
-        return false;
-    }
-    return true;
-}
-
-bool Softex::issue_div_read(uint32_t beat_idx)
-{
-    int slot_id = this->alloc_req_slot();
-    if (slot_id < 0)
-    {
-        return false;
-    }
-
-    ReqSlot &slot = this->req_slots[slot_id];
-    uint32_t elem_size = this->job.cast_input() ? 1 : 2;
-    uint32_t elems = std::min((uint32_t)SOFTEX_N_ROWS, this->num_elements - beat_idx * SOFTEX_N_ROWS);
-    uint32_t bytes = elems * elem_size;
-    uint32_t addr = this->job.in_addr + beat_idx * this->beat_size_in;
-
-    slot.phase = REQ_DIV_READ;
-    slot.beat_idx = beat_idx;
-    slot.valid_bytes = bytes;
-    memset(slot.buf, 0, sizeof(slot.buf));
-
-    slot.req->prepare();
-    slot.req->set_addr(addr);
-    slot.req->set_size(bytes);
-    slot.req->set_is_write(false);
-    slot.req->set_data(slot.buf);
-
-    vp::IoReqStatus err = this->out.req(slot.req);
-    if (err == vp::IO_REQ_OK)
-    {
-        int64_t free_cycle = this->clock.get_cycles() + (int64_t)slot.req->get_latency();
-        this->handle_mem_response(slot_id, free_cycle);
-    }
-    else if (err == vp::IO_REQ_PENDING)
-    {
-    }
-    else if (err == vp::IO_REQ_DENIED)
-    {
-        this->request_denied = true;
-    }
-    else
-    {
-        this->trace.fatal("Softex: unexpected IoReq status on DIV read\n");
-        return false;
-    }
-    return true;
-}
-
-bool Softex::issue_div_write(uint32_t addr, const uint8_t *data, uint32_t bytes, uint32_t beat_idx)
-{
-    int slot_id = this->alloc_req_slot();
-    if (slot_id < 0)
-    {
-        return false;
-    }
-
-    ReqSlot &slot = this->req_slots[slot_id];
-    slot.phase = REQ_DIV_WRITE;
-    slot.beat_idx = beat_idx;
-    slot.valid_bytes = bytes;
-    memcpy(slot.buf, data, bytes);
-
-    slot.req->prepare();
-    slot.req->set_addr(addr);
-    slot.req->set_size(bytes);
-    slot.req->set_is_write(true);
-    slot.req->set_data(slot.buf);
-
-    vp::IoReqStatus err = this->out.req(slot.req);
-    if (err == vp::IO_REQ_OK)
-    {
-        int64_t free_cycle = this->clock.get_cycles() + (int64_t)slot.req->get_latency();
-        this->handle_mem_response(slot_id, free_cycle);
-    }
-    else if (err == vp::IO_REQ_PENDING)
-    {
-    }
-    else if (err == vp::IO_REQ_DENIED)
-    {
-        this->request_denied = true;
-    }
-    else
-    {
-        this->trace.fatal("Softex: unexpected IoReq status on DIV write\n");
-        return false;
-    }
-    return true;
+    this->enqueue_fsm(1);
 }
 
 /**************************************************************************
@@ -325,34 +222,26 @@ bool Softex::issue_div_write(uint32_t addr, const uint8_t *data, uint32_t bytes,
 
 int64_t Softex::stream_read_beat(uint32_t addr, uint8_t *buf, int size)
 {
-    this->mem_req->set_addr(addr);
-    this->mem_req->set_data(buf);
-    this->mem_req->set_size(size);
-    this->mem_req->set_is_write(false);
-
-    vp::IoReqStatus err = this->out.req(this->mem_req);
+    int64_t max_latency = 0;
+    vp::IoReqStatus err = this->req_split(this->mem_req, addr, buf, (uint32_t)size, false, &max_latency);
     if (err != vp::IO_REQ_OK)
     {
         this->trace.fatal("Softex: memory read error at %x (size %d)\n", addr, size);
         return 0;
     }
-    return this->mem_req->get_latency();
+    return max_latency;
 }
 
 int64_t Softex::stream_write_beat(uint32_t addr, uint8_t *buf, int size)
 {
-    this->mem_req->set_addr(addr);
-    this->mem_req->set_data(buf);
-    this->mem_req->set_size(size);
-    this->mem_req->set_is_write(true);
-
-    vp::IoReqStatus err = this->out.req(this->mem_req);
+    int64_t max_latency = 0;
+    vp::IoReqStatus err = this->req_split(this->mem_req, addr, buf, (uint32_t)size, true, &max_latency);
     if (err != vp::IO_REQ_OK)
     {
         this->trace.fatal("Softex: memory write error at %x (size %d)\n", addr, size);
         return 0;
     }
-    return this->mem_req->get_latency();
+    return max_latency;
 }
 
 /**************************************************************************
@@ -376,7 +265,7 @@ bool Softex::slot_lookup(uint32_t id, SoftexSlot &out)
 
 void Softex::slot_spill_to_mem(SoftexSlot &victim, uint32_t cache_base_addr)
 {
-    uint32_t addr = cache_base_addr + victim.id * (uint32_t)this->cache_slot_size;
+    uint32_t addr = this->local_addr(cache_base_addr + victim.id * (uint32_t)this->cache_slot_size);
     uint16_t max_bits = Softex::f32_to_bf16((float)victim.maximum);
     float denom_f = (float)victim.denominator;
 
@@ -396,7 +285,7 @@ void Softex::slot_fill_from_mem(uint32_t id, uint32_t cache_base_addr, SoftexSlo
         this->slot_spill_to_mem(s, cache_base_addr);
     }
 
-    uint32_t addr = cache_base_addr + id * (uint32_t)this->cache_slot_size;
+    uint32_t addr = this->local_addr(cache_base_addr + id * (uint32_t)this->cache_slot_size);
     uint8_t buf[6] = {0};
     this->stream_read_beat(addr, buf, 6);
 

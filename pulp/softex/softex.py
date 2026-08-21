@@ -27,10 +27,12 @@ class Softex(st.Component):
                           Extra slots spill to memory at CACHE_BASE_ADDR.
         cache_slot_size: bytes reserved per slot in the memory-backed slot
                           cache (max + denominator, rounded up).
-        queue_depth:     max outstanding beat requests on the memory port at
-                          once (async slot pool).
-                          Higher values let the model overlap more memory
-                          latency with streaming; must be >= 1.
+        queue_depth:     max outstanding request blocks on the memory port at
+                          once (see stream_tick() in softex_stream.cpp -- one
+                          block, at most SOFTEX_DATA_WIDTH_BITS/8 bytes, is
+                          still issued per cycle regardless of this value).
+                          Higher values let the model overlap more real
+                          memory latency with streaming; must be >= 1.
         """
         super(Softex, self).__init__(parent, name)
 

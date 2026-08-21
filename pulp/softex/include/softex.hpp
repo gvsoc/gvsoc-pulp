@@ -25,6 +25,7 @@
 #include <vp/register.hpp>
 #include <cpu/iss/flexfloat/flexfloat.h>
 #include <vector>
+#include <queue>
 #include <cstdint>
 #include "archi_softex.h"
 
@@ -60,25 +61,68 @@ namespace SoftexLatency
     constexpr int INV_APPR_REGS  = 1;   // NUM_REGS_INV_APPR
     constexpr int N_NEWTON_ITERS = 2;   // softex_pkg::N_NEWTON_ITERS
 
-    // clog2(N_ROWS) reduction-tree depth * regs/stage (softex_datapath.sv VECT_SUM_DELAY)
-    constexpr int SUM_TREE_LAT = 3 * SUM_REGS_ACC; // clog2(8) = 3
+    // Cross-checked against softex_acc_ctrl.sv's actual FSM (COMPUTING ->
+    // FINISHING -> REDUCTION -> INVERSION -> INV_FMA -> INV_MUL) and
+    // calibrated against a real RTL run (LENGTH=1024, PULP cluster integration):
+    // ACC_FILL=8, the WAIT_DATAPATH_EMPTY->WAIT_ACCUMULATION transition=8,
+    // INV_LATENCY=14.
 
-    // Depth from a fresh input beat to it landing in the running accumulator:
-    // max-subtract FMA -> exp unit -> reduction tree -> accumulator FMA.
-    // Charged once, when the last ACCUMULATION beat's response arrives, as
-    // an approximation of pipeline fill+drain (see complete_acc_beat()).
-    constexpr int ACC_FILL = FMA_REGS_IN + EXP_REGS + SUM_TREE_LAT + FMA_REGS_ACC;
+    // softex_ctrl.sv's WAIT_DATAPATH_EMPTY only waits for the front of the
+    // pipe to drain (addmul_o_busy/exp_o_busy/sum_o_busy/add_fifo empty --
+    // see softex_datapath.sv's datapath_busy). The accumulator-FMA stage
+    // itself is drained separately, by REDUCTION/WAIT_ACCUMULATION below.
+    // 2*SUM_REGS_ACC (not clog2(N_ROWS)*SUM_REGS_ACC): the reduction tree's
+    // final combine stage doesn't add a further register beyond what's
+    // already counted here (confirmed empirically).
+    constexpr int ACC_FILL = FMA_REGS_IN + EXP_REGS + 2 * SUM_REGS_ACC;
 
-    // Newton-Raphson reciprocal: 1 initial approximation + N_NEWTON_ITERS
-    // iterations, each costing ~2 FMA passes (residual + correction).
-    constexpr int INV_LATENCY = INV_APPR_REGS + N_NEWTON_ITERS * (2 * FMA_REGS_ACC);
+    // ACC_REDUCE_LAT accounts for every other cycle of FMA_REGS_ACC partial
+    // accumulations in flight (see softex_acc_ctrl.sv's REDUCTION
+    // state) -- charged once, at the WAIT_DATAPATH_EMPTY -> WAIT_ACCUMULATION
+    // transition.
+    constexpr int ACC_REDUCE_LAT = 2 * FMA_REGS_ACC;
 
-    // Depth from a fresh input beat to the normalized output beat during DIVIDING.
-    // Charged once, when the last DIVIDING beat's write completes.
-    constexpr int DIV_FILL = FMA_REGS_ACC;
+    // Newton-Raphson reciprocal: N_NEWTON_ITERS iterations, each 2 dependent
+    // FMA passes (INV_FMA then INV_MUL in softex_acc_ctrl.sv), but the
+    // second pass's operands latch the same cycle the first pass's result
+    // becomes valid (result forwarding), so each iteration costs
+    // 2*FMA_REGS_ACC-1, not 2*FMA_REGS_ACC; the initial inv_appr approximation
+    // (INV_APPR_REGS) overlaps the REDUCTION->INVERSION handoff and doesn't
+    // add separately.
+    constexpr int INV_LATENCY = N_NEWTON_ITERS * (2 * FMA_REGS_ACC - 1);
 
-    // Fixed overhead for control-plane transitions (register commit, clear, etc.)
+    // Handshake latency before the first streaming block is actually
+    // visible on the bus (command decode / in_start /out_start
+    // pulse in softex_ctrl.sv). Charged once at the start of
+    // ACCUMULATION and once at the start of DIVIDING. Calibrated against
+    // the same RTL run as above.
+    constexpr int STREAM_START_LAT = 5;
+
+    // Overhead for control-plane transitions (register commit, clear, etc.):
+    // it matches softex_ctrl.sv's FINISHED state, which is unconditionally
+    // 1 cycle (next_state = IDLE is combinational, no wait condition):
+    // every *->FINISHED transition should charge exactly this, not a separate
+    // drain latency (confirmed against an RTL run -- see the
+    // DIVIDING->FINISHED transition in stream_advance_beat()).
     constexpr int CTRL_LAT = 1;
+}
+
+// `out` is wired straight into the cluster L1 interleaver, with no
+// Router/remove_offset stage in between (see l1_subsystem.py) to strip a
+// PI_L1 pointer's cluster base off for us -- so every set_addr() on `out`
+// must already be a cluster-local (0-based) offset.
+namespace SoftexAddr
+{
+    constexpr uint32_t CLUSTER_WINDOW_MASK = 0x400000 - 1; // cluster L1 window size (cluster.json)
+}
+
+// Softex's own master port toward the L1 interleaver: stream-in and
+// stream-out share this single, muxed port (only one direction active at a
+// time), so a beat (SOFTEX_N_ROWS elements, up to 16B) that's wider than
+// this needs multiple cycles to actually cross the interconnect.
+namespace SoftexBus
+{
+    constexpr uint32_t WIDTH_BYTES = SOFTEX_DATA_WIDTH_BITS / 8; // 96 bits -> 12B (3x32-bit)
 }
 
 /**************************************************************************
@@ -96,14 +140,6 @@ enum softex_fsm_state_e : uint32_t
     SOFTEX_FSM_WAIT_INVERSION,
     SOFTEX_FSM_DIVIDING,
     SOFTEX_FSM_FINISHED
-};
-
-// Async memory-request phases (what a completed ReqSlot request was for)
-enum softex_req_phase_e : uint32_t
-{
-    REQ_ACC_READ = 0,
-    REQ_DIV_READ,
-    REQ_DIV_WRITE
 };
 
 // Softex job configured through a register context
@@ -134,7 +170,7 @@ struct SoftexJob
     bool out_signed()     const { return cast_ctrl & SOFTEX_CAST_OUT_SIGNED_BIT; }
 };
 
-// softex_pkg::slot_t -- a partial-softmax state slot (running max + running
+// softex_pkg::slot_t: partial-softmax state slot (running max + running
 // denominator), used to resume "online softmax" accumulation across calls.
 struct SoftexSlot
 {
@@ -163,14 +199,21 @@ public:
 private:
     static vp::IoReqStatus cfg_slave(vp::Block *__this, vp::IoReq *req);
 
-    // top-level FSM tick: only handles the "control" states (IDLE,
+    // Top-level FSM tick: handles the "control" states (IDLE,
     // WAIT_SLOT_VALID, WAIT_DATAPATH_EMPTY, WAIT_ACCUMULATION,
-    // WAIT_INVERSION, FINISHED). ACCUMULATION/DIVIDING are driven entirely
-    // by the async memory response callbacks, see pump_issue() below.
+    // WAIT_INVERSION, FINISHED) directly, and drives ACCUMULATION/DIVIDING
+    // via stream_tick() below -- ticking every cycle for as long as either
+    // of those two states is active.
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
     void fsm_step();
     void enqueue_fsm(int64_t cycles);
     vp::ClockEvent *fsm_event;
+
+    // Logs a phase-boundary timestamp at LEVEL_INFO (cycle + phase name),
+    // for lining up against an RTL waveform/testbench cycle breakdown --
+    // see every reg_fsm_state.set() call site. Enable with
+    // `--trace=.*softex.* --trace-level=info` on gvrun/gapy.
+    void trace_phase(const char *name);
 
     // register file access
     void handle_cfg_read(uint32_t offset, uint32_t *value);
@@ -189,8 +232,9 @@ private:
     void    soft_clear();
 
     // shared setup for ACCUMULATION/DIVIDING (beat/element bookkeeping +
-    // kicking off the async issue engine); called from start_next_job()
-    // and from the WAIT_SLOT_VALID / WAIT_INVERSION continuations.
+    // kicking off the streaming engine at beat 0); called from
+    // start_next_job() and from the WAIT_SLOT_VALID / WAIT_INVERSION
+    // continuations.
     void begin_datapath_phase();
 
     // state-slot cache (softex_slot_regfile.sv, simplified/functional;
@@ -203,46 +247,58 @@ private:
     int64_t stream_read_beat(uint32_t addr, uint8_t *buf, int size);
     int64_t stream_write_beat(uint32_t addr, uint8_t *buf, int size);
 
+    // Strips a PI_L1 pointer's cluster-window base off before it reaches
+    // `out`'s set_addr() -- see SoftexAddr::CLUSTER_WINDOW_MASK above.
+    uint32_t local_addr(uint32_t addr) const;
+
+    // L1 interleaver routes bank_id/offset from a request's start address
+    // alone and never splits a wide access across banks itself (see
+    // l1_interleaver_impl.cpp's req()) so any transfer that could span
+    // more than one 4-byte interleaving granule must be pre-split into
+    // per-granule requests, same workaround redmule_streamer.cpp's
+    // BYTES_PER_BANK loop applies for the same interconnect. Optionally
+    // reports the max latency seen across the sub-chunks (several chunks 
+    // land in the same cycle across parallel banks, so the group's cost
+    // is their max, not their sum).
+    vp::IoReqStatus req_split(vp::IoReq *req, uint32_t addr, uint8_t *buf, uint32_t size, bool is_write,
+                               int64_t *out_max_latency = nullptr);
+
     /**********************************************************************
-    * Async memory streaming engine
-    * Pure byte transport over `out`: issues/tracks beat requests and 
-    * hands completed beats off to the datapath methods below, which
-    * are the only ones that interpret what the bytes mean.
+    * Memory streaming engine (ACCUMULATION / DIVIDING)
+    *
+    * Modeled directly after pulp/light_redmule's fsm_handler PRELOAD/
+    * ROUTINE/STORING cases (see light_redmule.cpp), not an async
+    * request-slot pool: softex has a single, muxed master port toward the
+    * L1 interleaver (SoftexBus::WIDTH_BYTES wide -- stream-in and
+    * stream-out share it, never concurrent), so stream_tick() below issues
+    * at most one bus-width block per cycle (an `if`, not a `while`) and
+    * tracks in-flight blocks' completion timestamps in pending_req_queue,
+    * gated by queue_depth. The L1 target is assumed to always resolve
+    * synchronously (IO_REQ_OK) -- no resp/grant callbacks.
     **********************************************************************/
-    
-    struct ReqSlot
-    {
-        vp::IoReq *req;
-        uint8_t   buf[SOFTEX_N_ROWS * 2];
-        uint32_t  phase;
-        uint32_t  beat_idx;
-        uint32_t  valid_bytes;
-        // <=now: free. >now (finite): sync-OK in-flight until that cycle.
-        // INT64_MAX: async PENDING/DENIED awaiting a callback.
-        int64_t   available_at;
-    };
-    std::vector<ReqSlot> req_slots;
     uint32_t queue_depth;
-    bool     request_denied;
 
-    int  alloc_req_slot();
-    void free_req_slot(int id, int64_t available_at);
-    bool issue_slot_gate_ok();
+    vp::IoReq *stream_req;                  // single reused request for streaming
+    std::queue<int64_t> pending_req_queue;  // completion timestamp per in-flight block
 
-    static void mem_response(vp::Block *__this, vp::IoReq *req);
-    static void mem_grant(vp::Block *__this, vp::IoReq *req);
-    void handle_mem_response(int slot_id, int64_t free_cycle);
+    uint32_t cur_beat_idx;                  // which beat (0..n_beats-1) is in flight
+    uint32_t cur_beat_base_addr;            // local (cluster-window) address of its current direction
+    uint32_t cur_beat_bytes;                // valid bytes for the current direction of this beat
+    uint32_t cur_beat_bytes_sent;           // bytes already handed to req_split() so far
+    bool     cur_beat_is_write;             // DIVIDING only: false=reading input, true=writing output
+    uint8_t  cur_beat_buf[SOFTEX_N_ROWS * 2];    // accumulates read bytes (ACC read / DIV read)
+    uint8_t  cur_beat_outbuf[SOFTEX_N_ROWS * 2]; // computed output bytes, queued for DIV write
 
-    void pump_issue();
-    bool issue_acc_read(uint32_t beat_idx);
-    bool issue_div_read(uint32_t beat_idx);
-    bool issue_div_write(uint32_t addr, const uint8_t *data, uint32_t bytes, uint32_t beat_idx);
-
+    void stream_start_beat(uint32_t beat_idx);
+    void stream_advance_beat();
+    void stream_tick();
 
     // Accelerator datapath methods
     void complete_acc_beat(const uint8_t *buf, uint32_t valid_bytes, uint32_t beat_idx);
-    void complete_div_read_beat(const uint8_t *buf, uint32_t valid_bytes, uint32_t beat_idx);
-    void complete_div_write_beat(uint32_t beat_idx);
+    // Computes the normalized output for one DIVIDING beat into `outbuf`
+    // (caller-provided, SOFTEX_N_ROWS*2 bytes) and returns its valid byte
+    // count; no longer issues the write itself -- see stream_advance_beat().
+    uint32_t complete_div_read_beat(const uint8_t *buf, uint32_t valid_bytes, uint32_t beat_idx, uint8_t *outbuf);
 
     // schraudolph_exp approximates exp(x) the way softex's expu actually
     // does in hardware: not a call to libm, but the classic Schraudolph
@@ -315,7 +371,6 @@ private:
     uint32_t beat_size_out;
     uint32_t n_beats;             // number of beats for this job's tot_len
     uint32_t num_elements;        // total valid elements (last beat may be partial)
-    uint32_t beats_issued;        // reads issued so far in the active phase
     uint32_t beats_completed;     // beats fully done (ACC: read done; DIV: write done)
 
     flexfloat_t running_max; // FP16ALT
