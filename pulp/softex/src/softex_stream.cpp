@@ -161,7 +161,7 @@ void Softex::stream_advance_beat()
 // cycle (re-enqueues fsm_event with delay 1) for as long as either state
 // stays active. Modeled directly on light_redmule::fsm_handler's
 // PRELOAD/ROUTINE/STORING cases:
-//   - Send: issue at most one SoftexBus::WIDTH_BYTES-sized block this cycle
+//   - Send: issue at most one width_bytes-sized block this cycle
 //   - Receive: retire any in-flight blocks whose latency has elapsed.
 //   - Once a beat/direction's bytes are all sent and retired, apply its
 //     numerics and move on (stream_advance_beat()).
@@ -172,7 +172,7 @@ void Softex::stream_tick()
     if (this->cur_beat_bytes_sent < this->cur_beat_bytes &&
         (uint32_t)this->pending_req_queue.size() <= this->queue_depth)
     {
-        uint32_t chunk = std::min((uint32_t)SoftexBus::WIDTH_BYTES,
+        uint32_t chunk = std::min(this->width_bytes,
                                    this->cur_beat_bytes - this->cur_beat_bytes_sent);
         uint8_t *buf_ptr = (this->cur_beat_is_write ? this->cur_beat_outbuf : this->cur_beat_buf)
                            + this->cur_beat_bytes_sent;

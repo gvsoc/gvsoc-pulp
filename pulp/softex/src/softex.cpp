@@ -51,6 +51,13 @@ Softex::Softex(vp::ComponentConf &config)
         this->queue_depth = 8;
     }
 
+    int32_t data_width_bits = this->get_js_config()->get_child_int("data_width_bits");
+    if (data_width_bits <= 0)
+    {
+        this->trace.fatal("Softex: data_width_bits must be > 0\n");
+    }
+    this->width_bytes = (uint32_t)data_width_bits / 8;
+
     this->fsm_event = this->event_new(&Softex::fsm_handler);
     this->mem_req = this->out.req_new(0, NULL, 0, false);
     // Single reused request for the ACCUMULATION/DIVIDING streaming engine
@@ -74,8 +81,8 @@ Softex::Softex(vp::ComponentConf &config)
     ff_init_double(&this->running_sum, 0.0, SoftexFormat::acc());
     ff_init_double(&this->reciprocal, 0.0, SoftexFormat::acc());
 
-    this->trace.msg(vp::Trace::LEVEL_INFO, "Softex model built (n_state_slots=%d, queue_depth=%d)\n",
-        this->n_state_slots, this->queue_depth);
+    this->trace.msg(vp::Trace::LEVEL_INFO, "Softex model built (n_state_slots=%d, queue_depth=%d, data_width_bits=%d)\n",
+        this->n_state_slots, this->queue_depth, data_width_bits);
 }
 
 void Softex::reset(bool active)
