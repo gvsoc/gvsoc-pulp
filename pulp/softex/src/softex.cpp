@@ -53,28 +53,10 @@ Softex::Softex(vp::ComponentConf &config)
 
     this->fsm_event = this->event_new(&Softex::fsm_handler);
     this->mem_req = this->out.req_new(0, NULL, 0, false);
-
-    // async slot pool: queue_depth+1 entries
-    this->request_denied = false;
-    this->out.set_resp_meth(&Softex::mem_response);
-    this->out.set_grant_meth(&Softex::mem_grant);
-
-    int pool_size = (int)this->queue_depth + 1;
-    this->req_slots.resize(pool_size);
-    for (int i = 0; i < pool_size; i++)
-    {
-        ReqSlot &slot = this->req_slots[i];
-        slot.req = this->out.req_new(0, NULL, 0, false);
-        slot.phase = 0;
-        slot.beat_idx = 0;
-        slot.valid_bytes = 0;
-        slot.available_at = 0;
-        memset(slot.buf, 0, sizeof(slot.buf));
-        // arg(0) = slot id, arg(1) = back-pointer, used by mem_response/mem_grant
-        slot.req->arg_alloc(2);
-        *((int *)slot.req->arg_get(0)) = i;
-        *((void **)slot.req->arg_get(1)) = (void *)this;
-    }
+    // Single reused request for the ACCUMULATION/DIVIDING streaming engine
+    // (see stream_tick() in softex_stream.cpp) -- softex has one, muxed
+    // master port, so there's never more than one request in flight.
+    this->stream_req = this->out.req_new(0, NULL, 0, false);
 
     this->reg_fsm_state.set(SOFTEX_FSM_IDLE);
     this->reg_busy.set(0);
@@ -125,12 +107,12 @@ void Softex::reset(bool active)
         ff_init_double(&this->running_sum, 0.0, SoftexFormat::acc());
         ff_init_double(&this->reciprocal, 0.0, SoftexFormat::acc());
 
-        int64_t now = this->clock.get_cycles();
-        for (auto &slot : this->req_slots)
+        // Drop any in-flight streaming blocks tracked from before this
+        // reset -- see the matching clear in soft_clear() below.
+        while (!this->pending_req_queue.empty())
         {
-            slot.available_at = now;
+            this->pending_req_queue.pop();
         }
-        this->request_denied = false;
 
         this->irq_pending = false;
     }
@@ -355,12 +337,11 @@ void Softex::soft_clear()
         this->event_cancel(this->fsm_event);
     }
 
-    int64_t now = this->clock.get_cycles();
-    for (auto &slot : this->req_slots)
+    // See the matching clear in reset() above.
+    while (!this->pending_req_queue.empty())
     {
-        slot.available_at = now;
+        this->pending_req_queue.pop();
     }
-    this->request_denied = false;
 }
 
 extern "C" vp::Component *gv_new(vp::ComponentConf &config)

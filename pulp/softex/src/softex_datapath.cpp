@@ -134,23 +134,19 @@ void Softex::complete_acc_beat(const uint8_t *buf, uint32_t valid_bytes, uint32_
     ff_add(&new_sum2, &this->running_sum, &beat_sum);
     this->running_sum = new_sum2;
 
-    this->beats_completed++;
-    if (this->beats_completed == this->n_beats)
-    {
-        // approximate pipeline fill+drain, charged once the stream is done
-        this->reg_fsm_state.set(SOFTEX_FSM_WAIT_DATAPATH_EMPTY);
-        this->enqueue_fsm(SoftexLatency::ACC_FILL);
-    }
 }
 
-void Softex::complete_div_read_beat(const uint8_t *buf, uint32_t valid_bytes, uint32_t beat_idx)
+// Computes the normalized output for one DIVIDING beat into `outbuf`
+// (caller-provided, SOFTEX_N_ROWS*2 bytes) and returns its valid byte
+// count. Only computes the numerics -- streaming the result back out is
+// stream_advance_beat()'s job (softex_stream.cpp).
+uint32_t Softex::complete_div_read_beat(const uint8_t *buf, uint32_t valid_bytes, uint32_t beat_idx, uint8_t *outbuf)
 {
     int elem_size_in = this->job.cast_input() ? 1 : 2;
     int elem_size_out = this->job.cast_output() ? 1 : 2;
     int n_elem = valid_bytes / elem_size_in;
 
-    uint8_t outbuf[SOFTEX_N_ROWS * 2];
-    memset(outbuf, 0, sizeof(outbuf));
+    memset(outbuf, 0, SOFTEX_N_ROWS * 2);
 
     // softex_datapath.sv's i_inv_cast narrows the FP32 reciprocal down to
     // FP16ALT before the normalization multiply -- the multiply itself
@@ -179,26 +175,7 @@ void Softex::complete_div_read_beat(const uint8_t *buf, uint32_t valid_bytes, ui
         this->cast_out_from_ff(outbuf, i, y16, this->job.cast_output());
     }
 
-    uint32_t addr_out = this->job.out_addr + beat_idx * this->beat_size_out;
-    uint32_t bytes_out = n_elem * elem_size_out;
-
-    if (!this->issue_div_write(addr_out, outbuf, bytes_out, beat_idx))
-    {
-        // Slot pool exhausted -- shouldn't happen since the read that just
-        // completed freed its own slot right before this call, but guard
-        // anyway rather than silently dropping the beat.
-        this->trace.fatal("Softex: no free slot to issue DIV write (increase queue_depth)\n");
-    }
-}
-
-void Softex::complete_div_write_beat(uint32_t beat_idx)
-{
-    this->beats_completed++;
-    if (this->beats_completed == this->n_beats)
-    {
-        this->reg_fsm_state.set(SOFTEX_FSM_FINISHED);
-        this->enqueue_fsm(SoftexLatency::DIV_FILL);
-    }
+    return (uint32_t)(n_elem * elem_size_out);
 }
 
 /**************************************************************************
