@@ -48,3 +48,19 @@ class SpatzConfig(RiscvConfig):
         "buffer). Matches num_spatz_outstanding_loads in the RTL cluster "
         "config (4 in the default spatz_cluster configuration)."
     ))
+    lsu_nb_outstanding: int = cfg_field(default=1, dump=True, desc=(
+        "Outstanding-access depth of the scalar data LSU (vlsu_v2 "
+        "configurations only). The spatz_v3 cluster passes 5, calibrated "
+        "against its RTL, whose FPU sequencer pipelines four scalar FP "
+        "loads next to Snitch's single integer one. The default of 1 is "
+        "the historical behaviour, kept for the other users of this core "
+        "(the voscap CU controller and IMC cores), whose timing is locked "
+        "by their own calibration tests."
+    ))
+    lsu_width: int = cfg_field(default=4, dump=True, desc=(
+        "Width in bytes of the scalar data LSU port (vlsu_v2 "
+        "configurations only): an access crossing a port-word boundary is "
+        "split into two serialized beats. The spatz_v3 cluster passes 8, "
+        "its scalar path being 64-bit end to end; the default of 4 is the "
+        "historical behaviour, kept for the other users of this core."
+    ))

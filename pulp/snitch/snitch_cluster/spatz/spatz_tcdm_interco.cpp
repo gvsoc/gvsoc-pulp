@@ -178,8 +178,27 @@ private:
     // may forward inline: a cascaded fresh wide request would double-serve
     // the banks within the same cycle.
     int wide_retrying = -1;
+    // Banks already committed during the current cycle, one bit per bank,
+    // and the cycle the mask belongs to. A wide access is accepted on
+    // arrival (see wide_input_req) rather than through a deny/retry round
+    // trip, so the banks it takes have to be visible to the arbiter that
+    // may run later in the same cycle.
+    uint64_t banks_busy = 0;
+    int64_t  banks_busy_cycle = -1;
+    // Cycle in which a wide access was last served. The wide side of the
+    // TCDM is fed by a single 512-bit port (`axi_to_mem_interleaved` on the
+    // wide crossbar), so it carries ONE access per cycle whichever
+    // direction it goes -- a DMA read and a DMA write cannot both progress
+    // in the same cycle even when they land on different banks. That is
+    // what makes an L1->L1 copy run at half the bandwidth of a one-sided
+    // transfer, on the RTL (31 vs 55-56 B/cycle) as in this model.
+    int64_t  wide_used_cycle = -1;
     // Scratch request used to slice a wide access into per-bank accesses.
     vp::IoReq wide_chunk_req;
+
+    // Refresh `banks_busy` for the current cycle and return the banks that
+    // are still free.
+    uint64_t banks_free_now();
 
     // Per-bank backdoor targets, resolved on first debug access through the
     // bank output ports' final bindings. nullptr where the bank component
@@ -281,6 +300,9 @@ void SpatzTcdmInterco::reset(bool active)
     {
         this->in_election = false;
         this->wide_retrying = -1;
+        this->banks_busy = 0;
+        this->banks_busy_cycle = -1;
+        this->wide_used_cycle = -1;
         for (auto &b : this->banks)
         {
             b->pending_mask = 0;
@@ -419,6 +441,11 @@ vp::IoReqStatus SpatzTcdmInterco::forward_wide(vp::IoReq *req, int id)
     uint64_t addr = req->get_addr();
     uint64_t size = req->get_size();
     uint8_t *data = req->get_data();
+    // A byte strobe is sliced along with the data, so a partial write keeps
+    // its per-byte enables when it is split across banks. Wide accesses come
+    // from the DMA, which does not use one today, but sub->prepare() clears
+    // the field and dropping it silently would be a trap.
+    uint8_t *strb = req->get_strb();
     int64_t max_latency = 0;
 
     vp_assert_always(req->get_opcode() == vp::IoReqOpcode::READ ||
@@ -444,6 +471,7 @@ vp::IoReqStatus SpatzTcdmInterco::forward_wide(vp::IoReq *req, int id)
         sub->set_addr(this->decode_offset(addr));
         sub->set_size(chunk);
         sub->set_data(data);
+        sub->set_strb(strb);
         sub->set_opcode(req->get_opcode());
 
         vp::IoReqStatus st = this->banks[bank_id]->itf.req(sub);
@@ -461,11 +489,23 @@ vp::IoReqStatus SpatzTcdmInterco::forward_wide(vp::IoReq *req, int id)
 
         addr += chunk;
         if (data != nullptr) data += chunk;
+        if (strb != nullptr) strb += chunk;
         size -= chunk;
     }
 
     req->inc_latency(max_latency);
     return vp::IO_REQ_DONE;
+}
+
+uint64_t SpatzTcdmInterco::banks_free_now()
+{
+    int64_t now = this->clock.get_cycles();
+    if (this->banks_busy_cycle != now)
+    {
+        this->banks_busy_cycle = now;
+        this->banks_busy = 0;
+    }
+    return ~this->banks_busy;
 }
 
 vp::IoReqStatus SpatzTcdmInterco::wide_input_req(vp::Block *__this, vp::IoReq *req, int id)
@@ -477,6 +517,36 @@ vp::IoReqStatus SpatzTcdmInterco::wide_input_req(vp::Block *__this, vp::IoReq *r
         // The FSM elected this wide input and its banks are reserved for
         // this tick; serve the whole access inline.
         return _this->forward_wide(req, id);
+    }
+
+    // A wide master has unconditional priority in the RTL (`sel_wide_i =
+    // dma.q_valid` in mem_wide_narrow_mux): the superbank mux switches to
+    // the DMA in the cycle it raises its request, and it is the NARROW
+    // side that gets its q_ready pulled low. So a wide access must not pay
+    // a deny/retry round trip when its banks are free — doing so halved
+    // the DMA's write bandwidth into the TCDM (one 64 B beat every two
+    // cycles instead of one per cycle, i.e. 32 B/cycle against the 55
+    // B/cycle the RTL sustains, which is what
+    // tests/calibration/targets/spatz/dma measures on the DRAM->L1 path).
+    // Serve it inline and record the banks so the arbiter, which may run
+    // later in this same cycle, leaves them to the next tick.
+    if (!_this->in_election)
+    {
+        uint64_t claim = _this->wide_claim_mask(req->get_addr(), req->get_size());
+        uint64_t free_banks = _this->banks_free_now();
+        if ((claim & ~free_banks) == 0 &&
+            _this->wide_used_cycle != _this->clock.get_cycles())
+        {
+            _this->wide_used_cycle = _this->clock.get_cycles();
+            _this->banks_busy |= claim;
+            return _this->forward_wide(req, id);
+        }
+        // Either the wide port has already carried an access this cycle,
+        // or the banks were committed to a narrow master before the DMA
+        // showed up. Fall through to the deny/retry path: the access is
+        // redone next cycle. In the second case the RTL would have
+        // preempted the narrow master instead; the model cannot un-serve
+        // it, so the cycle is charged to the DMA rather than to the core.
     }
 
     // Idle state: record the intent (address/size only, never the request
@@ -506,13 +576,16 @@ void SpatzTcdmInterco::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     // Wide masters are served first, with priority over the narrow ones —
     // in the RTL the DMA side of the superbank mux preempts the cores.
     // Each elected wide master reserves all its banks for this tick.
-    uint64_t banks_taken = 0;
+    // Banks taken by a wide access already served inline this cycle (the
+    // common case, see wide_input_req) count as reserved too.
+    uint64_t banks_taken = ~_this->banks_free_now();
     for (auto &w : _this->wide_inputs)
     {
         if (!w->pending) continue;
 
         uint64_t claim = _this->wide_claim_mask(w->pending_addr, w->pending_size);
-        if ((claim & banks_taken) != 0)
+        if ((claim & banks_taken) != 0 ||
+            _this->wide_used_cycle == _this->clock.get_cycles())
         {
             // Overlaps a wide master already served this tick; try again
             // next cycle.
@@ -521,6 +594,8 @@ void SpatzTcdmInterco::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         }
 
         banks_taken |= claim;
+        _this->banks_busy |= claim;
+        _this->wide_used_cycle = _this->clock.get_cycles();
         w->pending = false;
 
         _this->trace.msg(vp::Trace::LEVEL_DEBUG,
@@ -550,6 +625,9 @@ void SpatzTcdmInterco::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         int winner = _this->pick_winner(bank->pending_mask, bank->rr_next, nb);
         bank->pending_mask &= ~(1ULL << winner);
         bank->rr_next = (winner + 1) % nb;
+        // Committed for this cycle: a wide access arriving later in the
+        // same cycle must not take this bank as well.
+        _this->banks_busy |= 1ULL << bank->id;
 
         _this->trace.msg(vp::Trace::LEVEL_DEBUG,
             "Round-robin pick (bank: %d, winner: %d, remaining_mask: 0x%llx)\n",

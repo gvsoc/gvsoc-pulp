@@ -34,8 +34,9 @@ More accurate model of ``tests/spatz/spatz-rtl`` than the v2 cluster:
   beat AXI back-end), looping back to the TCDM through the wide router
   like the RTL.
 - Instruction caches: per-core private L0 (8 x 32 B lines) + shared
-  L1 (4 KiB, 2 ways) built from ``cache.cache_v4``, refilling through
-  the wide router.
+  L1 (4 KiB, 2 ways) built from ``pulp.snitch.snitch_icache``, refilling
+  through the wide router. The L1 runs the RTL snitch_icache's
+  branch-target prefetcher with two miss-status holding registers.
 - Peripherals: io_v2 Spatz cluster registers (HW barrier, CLINT,
   bootaddr) and zero memory.
 """
@@ -52,8 +53,8 @@ import interco.router_v2 as router_v2
 from interco.router_v2 import RouterConfig, RouterMapping, KIND_UNTIMED, KIND_BEAT
 from pulp.snitch.snitch_cluster.spatz.spatz_tcdm_interco import (
     SpatzTcdmInterco, SpatzTcdmIntercoConfig)
-import cache.cache_v4 as cache_v4
-from cache.cache_v4 import CacheConfig
+import pulp.snitch.snitch_icache as snitch_icache
+from pulp.snitch.snitch_icache import SnitchIcacheConfig
 from pulp.snitch.zero_mem_v2 import ZeroMem
 import pulp.snitch.snitch_cluster.spatz.cluster_registers_v2 as cluster_registers_v2
 from ips.pulp.idma_v2.snitch_dma import SnitchDmaV2
@@ -182,13 +183,14 @@ class SnitchCluster(gvsoc.systree.Component):
         # entries, 2 ways = 4 KiB), refilling through the wide crossbar.
         l0_caches = []
         for core_id in range(0, arch.nb_core):
-            l0_caches.append(cache_v4.Cache(self, f'l0_icache_{core_id}',
-                config=CacheConfig(size=256, line_size=32, ways=1)))
+            l0_caches.append(snitch_icache.SnitchIcache(self, f'l0_icache_{core_id}',
+                config=SnitchIcacheConfig(size=256, line_size=32, ways=1)))
         icache_refill_ico = router_v2.Router(self, 'icache_refill_ico',
             config=RouterConfig(kind=KIND_UNTIMED))
-        l1_icache = cache_v4.Cache(self, 'l1_icache',
-            config=CacheConfig(size=4096, line_size=32, ways=2, refill_latency=2,
-                prefetch=True))
+        l1_icache = snitch_icache.SnitchIcache(self, 'l1_icache',
+            config=SnitchIcacheConfig(size=4096, line_size=32, ways=2,
+                refill_latency=2, prefetch=True, prefetch_branch_target=True,
+                nb_refills=2))
 
         # Cores
         cores = []
@@ -199,6 +201,7 @@ class SnitchCluster(gvsoc.systree.Component):
                 boot_addr=arch.boot_addr, hart_id=arch.first_hartid + core_id,
                 htif=True, nb_lanes=arch.spatz_nb_lanes, lane_width=8,
                 vlsu_v2=True, nb_outstanding_reqs=arch.spatz_nb_outstanding_reqs,
+                lsu_nb_outstanding=5, lsu_width=8,
                 nb_ipus=1)
             cores.append(Spatz(self, f'pe{core_id}', config=config))
             # Per-core demux (RTL reqrsp_demux in spatz_cc): TCDM accesses

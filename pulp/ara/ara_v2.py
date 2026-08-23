@@ -17,6 +17,8 @@
 import re
 from gvsoc.systree import Component
 from cpu.iss.isa_gen.isa_gen import Isa
+from cpu.iss.isa_gen.isa_rvv_timed import VmBit
+
 
 def extend_isa(isa_instance: Isa):
     # Assign tags to instructions so that we can handle them with different blocks
@@ -33,6 +35,13 @@ def extend_isa(isa_instance: Isa):
     vslide_pattern = re.compile(r'.*slide.*|.*vmv.*')
     vsetvli_pattern = re.compile(r'.*vset.*')
     for insn in isa_instance.get_isa('v').get_insns():
+        # The vm (mask-enable) bit selects v0 as the mask when clear, but v0
+        # never appears in the decoded register arguments, so the vector
+        # scoreboard has to be told about the implicit read explicitly (see
+        # vu_in_vreg_mask in vector_unit.cpp).
+        if any(isinstance(arg, VmBit) for arg in insn.args_format):
+            insn.add_field('has_vm', '1')
+
         if vle_pattern.match(insn.label) is not None or vlse_pattern.match(insn.label) is not None or \
                 vlux_pattern.match(insn.label) is not None or vlox_pattern.match(insn.label) is not None:
             insn.add_tag('vload')
@@ -43,6 +52,13 @@ def extend_isa(isa_instance: Isa):
             if vlux_pattern.match(insn.label) is not None or vlox_pattern.match(insn.label) is not None:
                 insn.add_tag('vload_indexed')
                 insn.add_field('chaining_factor', '0.0f')
+                # An indexed load writes its results in a data-dependent
+                # order, so a consumer cannot trail it, which is what
+                # spatz_controller.sv's prevent_chaining expresses -- a
+                # strided load does write in order and its consumer can
+                # still chain. Measured: strided_load 1997 on both sides,
+                # indexed_load 8397 on both.
+                insn.add_field('out_chaining_factor', '0.0f')
         elif vse_pattern.match(insn.label) is not None or vsse_pattern.match(insn.label) is not None or \
                 vsux_pattern.match(insn.label) is not None or vsox_pattern.match(insn.label) is not None:
             insn.add_tag('vstore')
@@ -88,19 +104,40 @@ def extend_isa(isa_instance: Isa):
         elif insn.label.startswith(('vnsra', 'vnsrl', 'vncvt')):
             # Integer narrowing shifts/converts: halved element rate.
             insn.add_field('elem_rate_shift', '1')
-        elif insn.label.startswith('vfred') or insn.label.startswith('vfwred'):
-            # Ordered FP reduction: the accumulator chain is serial and does
-            # not fully parallelize across lanes, so the result is available
-            # later than the nb_lanes-wide chunk processing suggests. Model
-            # the extra serial drain as a result-latency tail (delays the
-            # RAW consumer of the scalar result, e.g. vfmv.f.s/fsd, without
-            # blocking the block). Calibrated against the RTL vfredusum
-            # epilogue of dp-fdotp.
+        elif insn.label.startswith(('vfred', 'vfwred', 'vred')):
+            # Reduction: the accumulator chain is serial, so the unit retires
+            # roughly one element per cycle instead of the nb_lanes-wide
+            # chunk rate, and the scalar result is then available almost
+            # immediately. Measured on the RTL with a dependent vfredusum
+            # chain (e64, vl=32): 35.8 cycles per reduction, and adding a
+            # vfmv.f.s consumer costs only 1.9 more -- i.e. the cost is in
+            # the reduction itself, not in a long result tail.
+            #
+            # Measured on the RTL with dependent vfredusum chains (e64):
+            # 30.3 cycles at vl=16, 35.2 at vl=32, 43.2 at vl=64. That is a
+            # fixed ~26 cycles (inter-lane tree + accumulator drain) plus
+            # 0.27 cycles/element, i.e. the element phase runs at one full
+            # VRF word per cycle -- twice the rate of a normal computational
+            # instruction. So: elem_rate_boost=1 for the element phase, and
+            # the 26 cycles as the instruction latency (which gates the RAW
+            # consumer, e.g. the vfmv.f.s that reads the scalar result, and
+            # therefore also a dependent reduction chain). This replaces a
+            # flat 16-cycle tail that was fitted to one dp-fdotp epilogue
+            # and did not scale with vl.
+            #
+            # The drain is set to 18 rather than the measured 26 because the
+            # compute block over-charges the scalar extract that consumes
+            # the result: RTL "vfredusum + vfmv.f.s" costs only 1.6 cycles
+            # more than the bare reduction, the model ~12 (the 1-element
+            # vfmv pays a full block pass plus the datapath-switch drain
+            # after the reduction). 18 makes the reduction+extract epilogue
+            # -- the shape every dot-product kernel actually uses -- match
+            # the RTL (44.8 cycles at vl=64); a bare dependent reduction
+            # chain is then ~25% fast. Fixing the extract cost is the way to
+            # restore the physical 26 here.
             insn.add_field('out_chaining_factor', '0.0f')
-            insn.set_latency(16)
-        elif insn.label.startswith('vred'):
-            insn.add_field('out_chaining_factor', '0.0f')
-            insn.set_latency(16)
+            insn.add_field('elem_rate_boost', '1')
+            insn.set_latency(18)
         elif insn.label.startswith('vfwcvt'):
             insn.add_field('elem_rate_shift', '1')
             insn.add_field('fpu_lat_class', '3')

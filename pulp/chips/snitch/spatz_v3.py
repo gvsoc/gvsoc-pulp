@@ -269,7 +269,7 @@ class SpatzBoard(gvsoc.systree.Component):
         # (calibrated against the RTL: a scalar load round trip costs
         # ~30 cycles there, an icache line refill similar).
         mem = memory_v3.Memory(self, 'mem', config=MemoryV3Config(
-            size=arch.hbm.size, atomics=True, latency=8, init=False))
+            size=arch.hbm.size, atomics=True, latency=10, init=False))
 
         self.bind(clock, 'out', chip, 'clock')
         self.bind(clock, 'out', mem, 'clock')

@@ -73,7 +73,17 @@ class Spatz(RiscvCommon):
         # unit (see types.hpp), so the scalar data LSU has to switch to its v2
         # variant too — the v1 Lsu code uses v1-only API (arg stack,
         # IO_REQ_OK, get_resp_port, ...) that does not exist in io_v2.hpp.
-        modules['lsu'] = LsuV2() if config.vlsu_v2 else Lsu()
+        # The scalar-LSU depth and port width are facts of the instantiating
+        # platform, not of this core model: the spatz_v3 cluster passes 5 and
+        # 8 (its RTL pipelines four scalar FP loads in the FPU sequencer next
+        # to Snitch's single integer one, and its scalar path is 64-bit end
+        # to end), while the other users of this core -- the voscap CU
+        # controller and IMC cores -- keep the historical 1 and 4 that their
+        # calibration locks were measured against. Hardcoding 5/8 here is
+        # what silently shifted the voscap DMA benches.
+        modules['lsu'] = (LsuV2(nb_outstanding=config.lsu_nb_outstanding,
+                                width=config.lsu_width)
+                          if config.vlsu_v2 else Lsu())
 
         super().__init__(parent, name, config=config, isa=isa_instance, modules=modules)
 
