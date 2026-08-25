@@ -5,4 +5,4 @@ install(DIRECTORY targets DESTINATION ${CMAKE_INSTALL_PREFIX}
 FILES_MATCHING PATTERN "*.py" PATTERN "*.json" PATTERN __pycache__ EXCLUDE)
 
 add_subdirectory(pulp)
-add_subdirectory(models/pulp)
+add_subdirectory(models)
