@@ -17,12 +17,13 @@
 
 /*
  * Authors: Germain Haugou, ETH (germain.haugou@iis.ee.ethz.ch)
-            Jonas Martin, ETH (martinjo@student.ethz.ch)
+ *          Jonas Martin, ETH (martinjo@student.ethz.ch)
+ *          Siim Rausi, ETH (srausi@student.ethz.ch)
  */
 
-#include "floonoc_network_interface.hpp"
-#include "floonoc.hpp"
-#include "floonoc_router.hpp"
+#include "floonoc_network_interface_flex.hpp"
+#include "floonoc_flex.hpp"
+#include "floonoc_router_flex.hpp"
 #include <string>
 #include <vp/itf/io.hpp>
 #include <vp/vp.hpp>
@@ -56,14 +57,13 @@ void NetworkQueue::check()
     }
 }
 
-void NetworkQueue::unstall_queue(int from_x, int from_y)
+void NetworkQueue::unstall_queue(int from_node)
 {
     // The request which was previously denied has been granted. Unstall the
     // output queue and schedule the FSM handler to check if something has to be
     // done
     this->trace.msg(vp::Trace::LEVEL_TRACE,
-                    "Unstalling queue (position: (%d, %d), queue: %d)\n",
-                    from_x, from_y);
+                    "Unstalling queue (from node: %d)\n", from_node);
     this->stalled = false;
     this->ni.fsm_event.enqueue();
 }
@@ -98,8 +98,8 @@ void NetworkQueue::handle_rsp(vp::IoReq *req, bool is_address)
                              *(bool *)req->arg_get(FlooNoc::REQ_WIDE), false);
 }
 
-bool NetworkQueue::handle_request(FloonocNode *node, vp::IoReq *req, int from_x,
-                                  int from_y)
+bool NetworkQueue::handle_request(FloonocNode *node, vp::IoReq *req,
+                                  int from_node)
 {
     return true;
 }
@@ -132,7 +132,26 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address,
         router_req->set_opcode(req->get_opcode());
         router_req->set_second_data(req->get_second_data());
 
+        // Add injection time to router request
+        /*
+        int64_t inject_time;
         if (is_req)
+        {
+            inject_time = (int64_t)(long)*req->arg_get_last(
+                NetworkInterface::REQ_ARRIVAL_TIME);
+        }
+        else
+        {
+            inject_time =
+                (int64_t)(long)*req->arg_get(FlooNoc::REQ_INJECT_TIME);
+        }
+
+        *router_req->arg_get(FlooNoc::REQ_INJECT_TIME) =
+            (void *)(long)inject_time;
+
+        */
+
+        if (*(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI))
         {
             if (wide)
             {
@@ -150,11 +169,12 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address,
 
             if (entry == NULL)
             {
+
                 // Burst is invalid if no target is found
                 this->trace.msg(vp::Trace::LEVEL_ERROR,
                                 "No entry found for base 0x%x\n", burst_base);
                 return;
-                // TODO
+                // TODO from FlooNoC
                 // burst->status = vp::IO_REQ_INVALID;
 
                 // this->remove_pending_burst();
@@ -165,32 +185,28 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address,
             {
                 // Be careful to not have any request which is crossing 2
                 // entries
+
                 uint64_t max_size = entry->base + entry->size - burst_base;
                 size = std::min(max_size, size);
 
                 this->trace.msg(vp::Trace::LEVEL_TRACE,
                                 "Enqueue request to router (req: %p, base: "
                                 "0x%x, size: 0x%x, "
-                                "destination: (%d, %d))\n",
-                                router_req, burst_base, size, entry->x,
-                                entry->y);
+                                "destination: node %d)\n",
+                                router_req, burst_base, size, entry->node_id);
 
                 router_req->set_size(size);
                 router_req->set_addr(burst_base - entry->remove_offset);
                 router_req->initiator_addr = burst_base;
-                *router_req->arg_get(FlooNoc::REQ_DEST_X) =
-                    (void *)(long)entry->x;
-                *router_req->arg_get(FlooNoc::REQ_DEST_Y) =
-                    (void *)(long)entry->y;
+                *router_req->arg_get(FlooNoc::REQ_DEST_ID) =
+                    (void *)(long)entry->node_id;
             }
         }
         else
         {
             *router_req->arg_get(FlooNoc::REQ_SRC_NI) = NULL;
-            *router_req->arg_get(FlooNoc::REQ_DEST_X) =
-                *req->arg_get(FlooNoc::REQ_DEST_X);
-            *router_req->arg_get(FlooNoc::REQ_DEST_Y) =
-                *req->arg_get(FlooNoc::REQ_DEST_Y);
+            *router_req->arg_get(FlooNoc::REQ_DEST_ID) =
+                *req->arg_get(FlooNoc::REQ_DEST_ID);
             *router_req->arg_get(FlooNoc::REQ_BURST) =
                 *req->arg_get(FlooNoc::REQ_BURST);
         }
@@ -208,7 +224,11 @@ void NetworkQueue::send_router_req()
 {
     vp::IoReq *req = this->queue.front();
     this->queue.pop();
+
     vp::IoReq *burst = *(vp::IoReq **)req->arg_get(FlooNoc::REQ_BURST);
+
+    // Performance Counter
+    // this->ni.stat_injected_packets++;
 
     if (*(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI))
     {
@@ -241,13 +261,12 @@ void NetworkQueue::send_router_req()
 
     // Note that the router may not grant the request if its input queue is
     // full. In this case we must stall the network interface
-    this->stalled =
-        this->router->handle_request(this, req, this->ni.x, this->ni.y);
+    this->stalled = this->router->handle_request(this, req, this->ni.node_id);
     if (this->stalled)
     {
         this->trace.msg(vp::Trace::LEVEL_TRACE,
-                        "Stalling network interface (position: (%d, %d))\n",
-                        this->ni.x, this->ni.y);
+                        "Stalling network interface (node: %d)\n",
+                        this->ni.node_id);
     }
 
     // Since we processed a burst, we need to check again in the next cycle if
@@ -258,9 +277,9 @@ void NetworkQueue::send_router_req()
     }
 }
 
-NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y,
+NetworkInterface::NetworkInterface(FlooNoc *noc, int node_id,
                                    std::string itf_name)
-    : FloonocNode(noc, "ni_" + std::to_string(x) + "_" + std::to_string(y)),
+    : FloonocNode(noc, "ni_" + std::to_string(node_id)),
       fsm_event(this, &NetworkInterface::fsm_handler),
       signal_narrow_req(*this, "narrow_req", 64),
       signal_wide_req(*this, "wide_req", 64),
@@ -270,39 +289,35 @@ NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y,
       response_queue(this, "response_queue", &this->fsm_event)
 {
     this->noc = noc;
-    this->x = x;
-    this->y = y;
+    this->node_id = node_id;
 
     this->wide_output_itf.set_resp_meth(&NetworkInterface::wide_response);
     this->wide_output_itf.set_grant_meth(&NetworkInterface::wide_grant);
-    noc->new_master_port("ni_wide_" + std::to_string(x) + "_" +
-                             std::to_string(y),
+    noc->new_master_port("ni_wide_" + std::to_string(node_id),
                          &this->wide_output_itf, this);
 
     this->narrow_output_itf.set_resp_meth(&NetworkInterface::narrow_response);
     this->narrow_output_itf.set_grant_meth(&NetworkInterface::narrow_grant);
-    noc->new_master_port("ni_narrow_" + std::to_string(x) + "_" +
-                             std::to_string(y),
+    noc->new_master_port("ni_narrow_" + std::to_string(node_id),
                          &this->narrow_output_itf, this);
 
     traces.new_trace("trace", &trace, vp::DEBUG);
 
     // Network interface input port
     this->narrow_input_itf.set_req_meth(&NetworkInterface::narrow_req);
-    noc->new_slave_port("narrow_input_" + std::to_string(x) + "_" +
-                            std::to_string(y),
+    noc->new_slave_port("narrow_input_" + std::to_string(node_id),
                         &this->narrow_input_itf, this);
     this->wide_input_itf.set_req_meth(&NetworkInterface::wide_req);
-    noc->new_slave_port("wide_input_" + std::to_string(x) + "_" +
-                            std::to_string(y),
+    noc->new_slave_port("wide_input_" + std::to_string(node_id),
                         &this->wide_input_itf, this);
 
     this->ni_outstanding_reqs =
         this->noc->get_js_config()->get("ni_outstanding_reqs")->get_int();
 }
 
-void NetworkInterface::set_router(int nw, Router *router)
+void NetworkInterface::set_router(int nw, Router *router, int latency)
 {
+    this->router_in_latency = latency;
     if (router == NULL)
     {
         this->trace.fatal("No router found for network interface (nw: %s)\n",
@@ -390,17 +405,19 @@ int NetworkInterface::get_rsp_nw(bool is_wide, bool is_write)
     return is_wide ? NetworkInterface::NW_WIDE : NetworkInterface::NW_RSP;
 }
 
-int NetworkInterface::get_x() { return this->x; }
+void NetworkInterface::unstall_queue(int node_id) {}
 
-int NetworkInterface::get_y() { return this->y; }
-
-void NetworkInterface::unstall_queue(int from_x, int from_y) {}
+int NetworkInterface::get_id() { return this->node_id; }
 
 vp::IoReqStatus NetworkInterface::narrow_req(vp::Block *__this, vp::IoReq *req)
 {
     NetworkInterface *_this = (NetworkInterface *)__this;
     _this->signal_narrow_req = req->get_addr();
     *req->arg_get_last(NetworkInterface::REQ_WIDE) = (void *)0;
+
+    *req->arg_get_last(NetworkInterface::REQ_ARRIVAL_TIME) =
+        (void *)(long)_this->time.get_engine()->get_time();
+
     return _this->handle_req(req);
 }
 
@@ -409,6 +426,10 @@ vp::IoReqStatus NetworkInterface::wide_req(vp::Block *__this, vp::IoReq *req)
     NetworkInterface *_this = (NetworkInterface *)__this;
     _this->signal_wide_req = req->get_addr();
     *req->arg_get_last(NetworkInterface::REQ_WIDE) = (void *)1;
+
+    *req->arg_get_last(NetworkInterface::REQ_ARRIVAL_TIME) =
+        (void *)(long)_this->time.get_engine()->get_time();
+
     return _this->handle_req(req);
 }
 
@@ -467,54 +488,17 @@ vp::IoReqStatus NetworkInterface::handle_req(vp::IoReq *req)
 }
 
 bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req,
-                                      int from_x, int from_y)
+                                      int from_node)
 {
     NetworkInterface *origin_ni =
         *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);
 
     if (origin_ni == NULL)
     {
-        this->trace.msg(vp::Trace::LEVEL_DEBUG,
-                        "Received response from router (req: %p)\n", req);
+        this->handle_response(req);
 
-        vp::IoReq *burst = *(vp::IoReq **)req->arg_get(FlooNoc::REQ_BURST);
-        bool wide = *(vp::IoReq **)req->arg_get(FlooNoc::REQ_WIDE);
-
-        if (burst->get_is_write())
-        {
-            this->trace.msg(vp::Trace::LEVEL_DEBUG,
-                            "Received write burst response (burst: %p)\n",
-                            burst);
-            this->nb_pending_bursts[wide]--;
-
-            burst->get_resp_port()->resp(burst);
-        }
-        else
-        {
-            this->trace.msg(
-                vp::Trace::LEVEL_TRACE,
-                "Reducing remaining size of burst (burst: %p, size: %d, req: "
-                "%p, "
-                "size %d)\n",
-                burst,
-                *(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE),
-                req, req->get_size());
-            *(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE) -=
-                req->get_size();
-
-            if (*(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE) ==
-                0)
-            {
-                this->trace.msg(vp::Trace::LEVEL_DEBUG,
-                                "Finished burst (burst: %p)\n", burst);
-                this->nb_pending_bursts[wide]--;
-                burst->get_resp_port()->resp(burst);
-            }
-        }
-
-        this->fsm_event.enqueue();
-
-        delete req;
+        // Performance Counter
+        // this->stat_received_responses++;
     }
     else
     {
@@ -522,10 +506,39 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req,
             vp::Trace::LEVEL_DEBUG,
             "Received request from router (req: %p, base: 0x%x, size: "
             "0x%x, isaddr: (%d), "
-            "position: (%d, %d)) origin Ni: (%d, %d)\n",
+            "position: %d origin Ni: %d)\n",
             req, req->get_addr(), req->get_size(),
-            req->get_int(FlooNoc::REQ_IS_ADDRESS), this->x, this->y,
-            origin_ni->get_x(), origin_ni->get_y());
+            req->get_int(FlooNoc::REQ_IS_ADDRESS), this->node_id,
+            origin_ni->get_id());
+
+        int dest_id = (int)(long)*req->arg_get(FlooNoc::REQ_DEST_ID);
+        if (dest_id != this->node_id)
+        {
+            printf("ERROR: Request packet arrived at wrong destination! "
+                   "Expected node %d, got %d\n",
+                   this->node_id, dest_id);
+        }
+        else
+        {
+            // Packet has arrived correctly
+
+            bool is_wide = (bool)(long)*req->arg_get(FlooNoc::REQ_WIDE);
+
+            // Only compute latency if it is a wide packet
+            if (is_wide)
+            {
+                // Packet has arrived correctly
+                int64_t inject_time =
+                    (int64_t)(long)*req->arg_get(FlooNoc::REQ_INJECT_TIME);
+
+                // Latency in simulation time (ps)
+                int64_t current_time = this->time.get_engine()->get_time();
+                int64_t packet_latency = current_time - inject_time;
+
+                this->stat_total_packet_latency += packet_latency;
+                this->stat_arrived_packets++;
+            }
+        }
 
         if ((req->get_is_write() && !req->get_int(FlooNoc::REQ_IS_ADDRESS)) ||
             !req->get_is_write())
@@ -533,20 +546,27 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req,
             bool is_stalled = false;
 
             // Received a address request from a router.
-            // Handle it by sending it to the target network interface and then
-            // sending the response packets back respecting the bandwidth of the
-            // network
+            // Handle it by sending it to the target network interface and
+            // then sending the response packets back respecting the
+            // bandwidth of the network
             bool wide = *(vp::IoReq **)req->arg_get(FlooNoc::REQ_WIDE);
             vp::IoMaster *target =
                 wide ? &this->wide_output_itf : &this->narrow_output_itf;
-            this->trace.msg(
-                vp::Trace::LEVEL_DEBUG,
-                "Sending request to target (req: %p, base: 0x%x, size: 0x%x)\n",
-                req, req->get_addr(), req->get_size());
-            // This does the actual operation(read, write or atomic operation)
-            // on the target Note: Memory is read/written already here. The
-            // backward path is only used to get the delay of the network.
+            this->trace.msg(vp::Trace::LEVEL_DEBUG,
+                            "Sending request to target (req: %p, base: "
+                            "0x%x, size: 0x%x)\n",
+                            req, req->get_addr(), req->get_size());
+            // This does the actual operation(read, write or atomic
+            // operation) on the target Note: Memory is read/written already
+            // here. The backward path is only used to get the delay of the
+            // network.
             vp::IoReqStatus result = target->req(req);
+
+            /*
+            printf("[Trace] NI %d attempted memory access at local addr 0x%lx. "
+                   "Result code: %d (0=OK, 1=DENIED, 2=UNIMPL, 3=INVALID)\n",
+                   this->node_id, req->get_addr(), result);
+            */
 
             if (result == vp::IO_REQ_OK)
             {
@@ -561,9 +581,9 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req,
             }
             else if (result == vp::IO_REQ_DENIED)
             {
-                // Store the NI in the request. Since the grant is received by
-                // top noc, it will use this argument to notify the NI about the
-                // grant
+                // Store the NI in the request. Since the grant is received
+                // by top noc, it will use this argument to notify the NI
+                // about the grant
                 this->target_stalled = true;
                 is_stalled = true;
             }
@@ -583,6 +603,79 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req,
     return false;
 }
 
+void NetworkInterface::handle_response(vp::IoReq *req)
+{
+    NetworkInterface *origin_ni =
+        *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);
+    if (origin_ni == NULL)
+    {
+        this->trace.msg(vp::Trace::LEVEL_DEBUG,
+                        "Received response from router (req: %p)\n", req);
+
+        vp::IoReq *burst = *(vp::IoReq **)req->arg_get(FlooNoc::REQ_BURST);
+        bool wide = *(vp::IoReq **)req->arg_get(FlooNoc::REQ_WIDE);
+
+        if (burst->get_is_write())
+        {
+            this->nb_pending_bursts[wide]--;
+            burst->get_resp_port()->resp(burst);
+        }
+        else
+        {
+            *(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE) -=
+                req->get_size();
+            if (*(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE) ==
+                0)
+            {
+                this->nb_pending_bursts[wide]--;
+                burst->get_resp_port()->resp(burst);
+            }
+        }
+        this->fsm_event.enqueue();
+        delete req;
+        return;
+    }
+
+    if (!req->get_is_write())
+    {
+        *req->arg_get(FlooNoc::REQ_SRC_NI) = NULL;
+        *req->arg_get(FlooNoc::REQ_DEST_ID) = (void *)(long)origin_ni->node_id;
+        if (*(bool *)req->arg_get(FlooNoc::REQ_WIDE))
+        {
+            this->wide_queue.handle_rsp(req, false);
+        }
+        else
+        {
+            this->rsp_queue.handle_rsp(req, false);
+        }
+    }
+    else
+    {
+        vp::IoReq *burst = *(vp::IoReq **)req->arg_get(FlooNoc::REQ_BURST);
+
+        this->trace.msg(
+            vp::Trace::LEVEL_TRACE,
+            "Reducing remaining size of burst (burst: %p, size: %d, "
+            "req: %p, size %d)\n",
+            burst, *(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE),
+            req, req->get_size());
+        *(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE) -=
+            req->get_size();
+
+        if (*(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE) == 0)
+        {
+            this->trace.msg(vp::Trace::LEVEL_DEBUG,
+                            "Finished burst (burst: %p)\n", burst);
+
+            *req->arg_get(FlooNoc::REQ_SRC_NI) = NULL;
+            *req->arg_get(FlooNoc::REQ_DEST_ID) =
+                (void *)(long)origin_ni->node_id;
+            this->rsp_queue.handle_rsp(req, true);
+        }
+    }
+    delete req;
+}
+
 void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 {
     NetworkInterface *_this = (NetworkInterface *)__this;
@@ -598,9 +691,10 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
     if (_this->routers_stalled && !_this->target_stalled)
     {
-        // If we removed a pending burst and the number of pending bursts was
-        // the maximum, notify the local router that it can send another request
-        _this->routers_stalled->unstall_queue(_this->x, _this->y);
+        // If we removed a pending burst and the number of pending bursts
+        // was the maximum, notify the local router that it can send another
+        // request
+        _this->routers_stalled->unstall_queue(_this->node_id);
         _this->routers_stalled = NULL;
     }
 
@@ -632,8 +726,8 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         _this->fsm_event.enqueue();
     }
 
-    // We also have to check if another burst has been denied that can now be
-    // granted
+    // We also have to check if another burst has been denied that can now
+    // be granted
     if (_this->wide_denied_read_req.size() > 0 &&
         _this->wide_read_pending_burst == NULL &&
         _this->nb_pending_bursts[1] < _this->ni_outstanding_reqs)
@@ -680,8 +774,8 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         _this->fsm_event.enqueue();
     }
 
-    // We also have to check if another burst has been denied that can now be
-    // granted
+    // We also have to check if another burst has been denied that can now
+    // be granted
     if (_this->narrow_denied_read_req.size() > 0 &&
         _this->narrow_read_pending_burst == NULL &&
         _this->nb_pending_bursts[0] < _this->ni_outstanding_reqs)
@@ -715,54 +809,6 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     }
 
     _this->response_queue.trigger_next();
-}
-
-void NetworkInterface::handle_response(vp::IoReq *req)
-{
-    if (!req->get_is_write())
-    {
-        NetworkInterface *origin_ni =
-            *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);
-
-        *req->arg_get(FlooNoc::REQ_SRC_NI) = NULL;
-        *req->arg_get(FlooNoc::REQ_DEST_X) = (void *)(long)origin_ni->x;
-        *req->arg_get(FlooNoc::REQ_DEST_Y) = (void *)(long)origin_ni->y;
-        if (*(bool *)req->arg_get(FlooNoc::REQ_WIDE))
-        {
-            this->wide_queue.handle_rsp(req, false);
-        }
-        else
-        {
-            this->rsp_queue.handle_rsp(req, false);
-        }
-    }
-    else
-    {
-        vp::IoReq *burst = *(vp::IoReq **)req->arg_get(FlooNoc::REQ_BURST);
-
-        this->trace.msg(
-            vp::Trace::LEVEL_TRACE,
-            "Reducing remaining size of burst (burst: %p, size: %d, "
-            "req: %p, size %d)\n",
-            burst, *(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE),
-            req, req->get_size());
-        *(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE) -=
-            req->get_size();
-
-        if (*(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE) == 0)
-        {
-            this->trace.msg(vp::Trace::LEVEL_DEBUG,
-                            "Finished burst (burst: %p)\n", burst);
-            NetworkInterface *origin_ni =
-                *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);
-
-            *req->arg_get(FlooNoc::REQ_SRC_NI) = NULL;
-            *req->arg_get(FlooNoc::REQ_DEST_X) = (void *)(long)origin_ni->x;
-            *req->arg_get(FlooNoc::REQ_DEST_Y) = (void *)(long)origin_ni->y;
-            this->rsp_queue.handle_rsp(req, true);
-        }
-    }
-    delete req;
 }
 
 void NetworkInterface::grant(vp::IoReq *req)

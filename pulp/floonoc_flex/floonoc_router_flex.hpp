@@ -18,11 +18,12 @@
 /*
  * Authors: Germain Haugou, ETH (germain.haugou@iis.ee.ethz.ch)
  *          Jonas Martin, ETH (martinjo@student.ethz.ch)
+ *          Siim Rausi, ETH (srausi@student.ethz.ch)
  */
 
 #pragma once
 
-#include "floonoc.hpp"
+#include "floonoc_flex.hpp"
 #include <array>
 #include <vp/signal.hpp>
 #include <vp/vp.hpp>
@@ -36,6 +37,7 @@ class RouterQueue
                 vp::ClockEvent *ready_event = NULL);
     vp::Queue queue;
     FloonocNode *stalled_node;
+    int peak_queue_depth;
 };
 
 /**
@@ -47,40 +49,60 @@ class RouterQueue
 class Router : public FloonocNode
 {
   public:
-    Router(FlooNoc *noc, std::string name, int x, int y, int queue_size);
+    Router(FlooNoc *noc, std::string name, int node_id, int num_queues,
+           int queue_size);
     ~Router();
 
     void reset(bool active);
 
     // This gets called by other routers or a network interface to move a
     // request to this router
-    bool handle_request(FloonocNode *node, vp::IoReq *req, int from_x,
-                        int from_y) override;
+    bool handle_request(FloonocNode *node, vp::IoReq *req,
+                        int from_node) override;
     // Called by other routers or NI to unstall an output queue after an input
     // queue became available
-    void unstall_queue(int from_x, int from_y) override;
+    void unstall_queue(int from_node) override;
     // Called by NI to stall the queues in case no more request should be sent
     // to NI
-    void stall_queue(int from_x, int from_y);
-    void set_neighbour(int dir, FloonocNode *node);
+    void stall_queue(int from_node);
 
-    // X position of this router in the grid
-    int x;
-    // Y position of this router in the grid
-    int y;
+    // Node ID for flexible topologies
+    int node_id;
+    int num_queues;
+
+    void set_neighbour(int dir, FloonocNode *node, int neighbor_id,
+                       int latency = 1);
+
+    // Pass the routing table during initialization
+    void set_routing_table(std::vector<int> table);
+
+    // For performance evaluation
+    int get_max_peak_queue_depth();
+
+    // Performance Counters
+    uint64_t stat_routed_packets = 0;
+    uint64_t stat_stall_cycles = 0;
+
+  private:
+    std::vector<int> routing_table; // Index: dest_node -> Value: next_hop_node
+    std::vector<int> input_latencies; // Index: queue_index -> Value: latency
+    std::unordered_map<int, int>
+        neighbor_to_queue; // Key: neighbor_id -> Value: queue_index
+    std::unordered_map<int, int>
+        queue_to_neighbor; // Key: queue_index -> Value: neighbor_id
 
   private:
     // FSM event handler called when something happened and queues need to be
     // checked to see if a request should be handled.
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
     // Get the position of the next router which should handle a request.
-    void get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_y);
+    void get_next_router_pos(int dest_node, int &next_node);
     // Get the index of the queue corresponding to a source or destination
     // position
-    int get_req_queue(int from_x, int from_y);
+    int get_req_queue(int from_node);
     // Return the source or destination position which corresponds to a source
     // or destination queue index
-    void get_pos_from_queue(int queue, int &pos_x, int &pos_y);
+    void get_node_from_queue(int queue, int &node_id);
 
     // Pointer to top
     FlooNoc *noc;
@@ -90,8 +112,8 @@ class Router : public FloonocNode
     // same source which can be pending
     int queue_size;
     // The input queues for each direction and the local one
-    RouterQueue *input_queues[5];
-    FloonocNode *output_nodes[5];
+    std::vector<RouterQueue *> input_queues;
+    std::vector<FloonocNode *> output_nodes;
     // Clock event used to schedule FSM handler. This is scheduled eveytime
     // something may need to be done
     vp::ClockEvent fsm_event;
@@ -99,8 +121,7 @@ class Router : public FloonocNode
     int current_queue;
     // State of the output queues, true if it is stalled and nothing can be sent
     // to it anymore until it is unstalled.
-    std::array<vp::Signal<bool>, 5> stalled_queues;
-
+    std::vector<vp::Signal<bool> *> stalled_queues;
     // Signal used for tracing router request address
     vp::Signal<uint64_t> signal_req;
     vp::Signal<uint64_t> signal_req_size;
