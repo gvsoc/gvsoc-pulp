@@ -18,14 +18,29 @@
 
 import gvsoc.runner
 import gvsoc.systree
-from pulp.chips.softhier.softhier_system import SoftHierPlatform
 
-class Target(gvsoc.runner.Target):
 
+class SoftHierTargetBase(gvsoc.runner.Target):
+    """
+    Shared Target base class for every SoftHier topology.
+
+    NOTE: Each topology's target module is a small subclass:
+
+        from pulp.chips.softhier.softhier_target_base import SoftHierTargetBase
+        from pulp.chips.softhier.softhier_system_base import SoftHierPlatform
+
+        class Platform(SoftHierPlatform):
+            topology = "2d_mesh"
+
+        class Target(SoftHierTargetBase):
+            model = Platform
+            name = "2d_mesh"
+
+    NOTE: to port to gvrun with single target definition
+    """
     gapy_description = "SoftHier Platform"
-    model = SoftHierPlatform
-    name = "softhier"
+    model = None
 
     def __init__(self, parser, options=None, name=None):
-        super(Target, self).__init__(parser, options,
-            model=SoftHierPlatform, name=name)
+        super(SoftHierTargetBase, self).__init__(parser, options,
+            model=self.model, name=name)

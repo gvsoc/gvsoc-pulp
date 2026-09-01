@@ -5,6 +5,10 @@
 int main()
 {
     flex_global_barrier_init();
+    if(flex_get_cluster_id() == 0 && flex_is_first_core()){
+        printf("[SoftHier NoC Topology]  %s\n", ARCH_TOPOLOGY);
+    }
+    flex_global_barrier_polling();
     for(int i=0; i < 10; i++){
         flex_global_barrier_polling();
         if(flex_get_cluster_id() == 0 && flex_is_first_core()){
