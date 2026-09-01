@@ -65,6 +65,8 @@ class Soc(st.Component):
         # Debug ROM
         debug_rom = memory.Memory(self, 'debug_rom', size=0x00040000, 
                                   stim_file=self.get_file_path('pulp/chips/pulp/debug_rom.bin'))
+        bootrom = memory.Memory(self, 'bootrom', size=0x00040000,
+                                stim_file=self.get_file_path('pulp/chips/rv64/rom.bin'))
 
         # Memory
         spm = memory.Memory(self, 'spm', size=0x10000000, atomics=True, width_log2=-1)
@@ -88,7 +90,9 @@ class Soc(st.Component):
         regs = soc_regs.ControlRegs(self, 'control_regs')
 
         # CVA6 Host
-        host = cva6.CVA6(self, 'host', isa="rv64imafdc", boot_addr=entry)
+        self.host = cva6.CVA6(self, 'host', isa="rv64imafdc", misa=0x14112D,
+                              boot_addr=0x02000000)
+        host = self.host
 
         # System DMA
         idma = CheshireDma(self, 'idma', 
@@ -98,7 +102,8 @@ class Soc(st.Component):
                            loc_size=0x00010000)
         
         # Narrow 64bits router
-        narrow_axi = router.Router(self, 'narrow_axi', bandwidth=8, latency=5)
+        self.narrow_axi = router.Router(self, 'narrow_axi', bandwidth=8, latency=5)
+        narrow_axi = self.narrow_axi
         
         # GDB Server
         gdb = GdbServer.Gdbserver(self, 'gdbserver')
@@ -109,12 +114,13 @@ class Soc(st.Component):
 
         # Main components
         narrow_axi.o_MAP(debug_rom.i_INPUT(), name='debug_rom', base=0x00000000, size=0x00040000)
+        narrow_axi.o_MAP(bootrom.i_INPUT(), name='bootrom', base=0x02000000, size=0x00040000)
         narrow_axi.o_MAP(idma.i_INPUT(), name='idma', base=0x01000000, size=0x00010000)
-        narrow_axi.o_MAP(clint.i_INPUT(), name='clint', base=0x02040000, size=0x00400000)
+        narrow_axi.o_MAP(clint.i_INPUT(), name='clint', base=0x02040000, size=0x00040000)
         narrow_axi.o_MAP(regs.i_INPUT(), name='control_regs', base=0x03000000, size=0x00001000)
         narrow_axi.o_MAP(llc_ctrl.i_INPUT(), name='llc_ctrl', base=0x03001000, size=0x00001000)
         narrow_axi.o_MAP(uart.i_INPUT(), name='uart', base=0x03002000, size=0x00001000)
-        narrow_axi.o_MAP(plic.i_INPUT(), name='plic', base=0x04000000, size=0x08000000)
+        narrow_axi.o_MAP(plic.i_INPUT(), name='plic', base=0x04000000, size=0x04000000)
         narrow_axi.o_MAP(spm.i_INPUT(), name='spm', base=0x10000000, size=0x10000000, latency=5)
         narrow_axi.o_MAP(dram.i_INPUT(), name='dram', base=0x80000000, size=0x80000000, latency=5)
         
