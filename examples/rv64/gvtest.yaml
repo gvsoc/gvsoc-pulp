@@ -1,2 +1,3 @@
 targets:
   rv64:
+  cva6:

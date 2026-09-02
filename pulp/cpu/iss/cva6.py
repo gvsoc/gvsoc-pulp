@@ -42,33 +42,46 @@ class Cva6(RiscvCommon):
             config: Cva6Config
         ):
 
+        # The vector extension is optional so that the same class can model both a
+        # standalone scalar CVA6 and the Ara host core.
+        self.has_vector: bool = 'v' in config.isa[4:]
+
         isa_instance: Isa | None = isa_instances.get(config.isa)
 
         if isa_instances.get(config.isa) is None:
 
-            isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("cva6_" + config.isa,
-                config.isa)
+            # The instance is named differently from the iss v1 CVA6 one so that both
+            # models can coexist in the same build with the same ISA string.
+            isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa("cva6_v2_" + config.isa,
+                config.isa, inc_user=True)
             isa_instances[config.isa] = isa_instance
 
-            pulp.ara.ara_v2.extend_isa(isa_instance)
+            if self.has_vector:
+                pulp.ara.ara_v2.extend_isa(isa_instance)
 
         modules: dict[str, IssModule] = {
-            'arch': Arch('Ara'),
             'exec': ExecInOrder(scoreboard=True),
             'regfile': Regfile(scoreboard=True),
             'prefetch': PrefetchSingleLine(),
-            'offload': Offload(),
             'irq': Irq()
         }
 
+        if self.has_vector:
+            modules['arch'] = Arch('Ara')
+            modules['offload'] = Offload()
+
         super().__init__(parent, name, config=config, isa=isa_instance, modules=modules)
 
-        self.add_sources([
-            'cpu/iss_v2/src/cores/ara/ara.cpp',
-        ])
+        # The core supports user mode, so that mret/sret fall back to it
+        self.add_c_flags(['-DCONFIG_GVSOC_ISS_USER_MODE=1'])
 
-        pulp.ara.ara_v2.attach(self, config.vlen, nb_lanes=config.nb_lanes,
-            lane_width=config.lane_width)
+        if self.has_vector:
+            self.add_sources([
+                'cpu/iss_v2/src/cores/ara/ara.cpp',
+            ])
+
+            pulp.ara.ara_v2.attach(self, config.vlen, nb_lanes=config.nb_lanes,
+                lane_width=config.lane_width)
 
 
     def o_BARRIER_REQ(self, itf: gvsoc.systree.SlaveItf):
@@ -91,6 +104,9 @@ class Cva6(RiscvCommon):
     @override
     def gen_gui(self, parent_signal: Signal) -> Signal:
         active = super().gen_gui(parent_signal)
+
+        if not self.has_vector:
+            return active
 
         ara = Signal(self, active, name='ara', path='ara/label', groups=['regmap'],
             display=DisplayStringBox())

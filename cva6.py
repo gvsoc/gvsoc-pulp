@@ -14,17 +14,27 @@
 # limitations under the License.
 #
 
+try:
+    from typing import override  # Python 3.12+
+except ImportError:
+    from typing_extensions import override  # Python 3.10–3.11
+
+import os
+
 import gvsoc.runner
-import pulp.cva6.cva6
+from pulp.cpu.iss.cva6 import Cva6
+from pulp.cpu.iss.cva6_config import Cva6Config
 import memory.memory as memory
-import pulp.cva6.control_regs
 from vp.clock_domain import Clock_domain
 import interco.router as router
+import devices.uart.ns16550 as ns16550
+import cpu.clint
+import cpu.plic
 import utils.loader.loader
 import gvsoc.systree as st
 from elftools.elf.elffile import *
 import gvsoc.runner as gvsoc
-from pulp.stdout.stdout_v3 import Stdout
+from gvrun.parameter import TargetParameter
 
 
 class Soc(st.Component):
@@ -32,38 +42,84 @@ class Soc(st.Component):
     def __init__(self, parent, name, parser):
         super().__init__(parent, name)
 
-        [args, __] = parser.parse_known_args()
+        _ = TargetParameter(
+            self, name='binary', value=None, description='Binary to be loaded and started',
+            cast=str
+        )
+        _ = TargetParameter(
+            self, name='isa', value='rv64imafdc', description='RISC-V ISA string',
+            cast=str
+        )
 
+        # With the legacy gvsoc launcher, configure() is never called and options come
+        # from the command line, so they must be resolved now. With gvrun, they come
+        # from parameters, the binary being handled in configure() since it can also
+        # be set from the build process.
         binary = None
-        if parser is not None:
-            [args, otherArgs] = parser.parse_known_args()
+        if os.environ.get('USE_GVRUN') is None and parser is not None:
+            parser.add_argument("--isa", dest="isa", type=str, default="rv64imafdc",
+                help="RISCV-V ISA string (default: %(default)s)")
+
+            [args, __] = parser.parse_known_args()
             binary = args.binary
+            isa = args.isa
+        else:
+            isa = self.get_parameter('isa')
 
-        dram = memory.Memory(self, 'dram', size=0x10000000, atomics=True, width_log2=-1)
-
-        mem = memory.Memory(self, 'mem', size=0x80000000, atomics=True, width_log2=-1)
-        regs = pulp.cva6.control_regs.ControlRegs(self, 'control_regs', dram_end=0xc0000000)
-
-        stdout = Stdout(self, 'stdout')
+        mem = memory.Memory(self, 'mem', size=0x80000000, atomics=True)
+        rom = memory.Memory(self, 'rom', size=0x10000, stim_file=self.get_file_path('pulp/chips/rv64/rom.bin'))
+        uart = ns16550.Ns16550(self, 'uart')
+        clint = cpu.clint.Clint(self, 'clint')
+        plic = cpu.plic.Plic(self, 'plic', ndev=1)
 
         ico = router.Router(self, 'ico')
 
-        ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x80000000, latency=5)
+        ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x80000000)
         self.bind(ico, 'mem', mem, 'input')
 
-        ico.o_MAP(stdout.i_INPUT(), name='stdout', base=0xC0000000, size=0x10000000)
-        ico.o_MAP(dram.i_INPUT(), name='dram', base=0xB0000000, size=0x10000000, latency=5)
-        ico.o_MAP(regs.i_INPUT(), name='control_regs', base=0xD0000000, size=0x10000000)
+        ico.add_mapping('rom', base=0x00001000, remove_offset=0x00001000, size=0x10000)
+        self.bind(ico, 'rom', rom, 'input')
 
-        host = pulp.cva6.cva6.CVA6(self, 'host', isa='rv64imafdc', boot_addr=0x80000000)
+        ico.add_mapping('uart', base=0x10000000, remove_offset=0x10000000, size=0x100)
+        self.bind(ico, 'uart', uart, 'input')
+
+        ico.add_mapping('clint', base=0x2000000, remove_offset=0x2000000, size=0x10000)
+        self.bind(ico, 'clint', clint, 'input')
+
+        ico.add_mapping('plic', base=0xC000000, remove_offset=0xC000000, size=0x1000000)
+        self.bind(ico, 'plic', plic, 'input')
+        self.bind(uart, 'irq', plic, 'irq1')
+
+        host = Cva6(self, 'host', config=Cva6Config(isa=isa, boot_addr=0x1000, htif=False))
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 
         self.bind(host, 'data', ico, 'input')
         self.bind(host, 'fetch', ico, 'input')
+        self.bind(host, 'time', clint, 'time')
         self.bind(loader, 'out', ico, 'input')
         self.bind(loader, 'start', host, 'fetchen')
 
+        self.bind(clint, 'sw_irq_0', host, 'msi')
+        self.bind(clint, 'timer_irq_0', host, 'mti')
+        self.bind(plic, 's_irq_0', host, 'sei')
+        self.bind(plic, 'm_irq_0', host, 'mei')
+
+        self.loader = loader
+        self.register_binary_handler(self.handle_binary)
+
+    @override
+    def configure(self) -> None:
+        # We configure the loader binary now in the configure step since it is coming from
+        # a parameter which can be set either from command line or from the build process
+        binary = self.get_parameter('binary')
+        if binary is not None:
+            self.loader.set_binary(binary)
+
+    def handle_binary(self, binary: str):
+        # This gets called when an executable is attached to a hierarchy of components containing
+        # this one
+        self.set_parameter('binary', binary)
 
 
 class Cva6Chip(st.Component):
@@ -82,7 +138,9 @@ class Cva6Chip(st.Component):
 class Target(gvsoc.Target):
 
     gapy_description="CVA6 virtual board"
+    model = Cva6Chip
+    name = "cva6"
 
-    def __init__(self, parser, options):
+    def __init__(self, parser, options=None, name=None):
         super(Target, self).__init__(parser, options,
-            model=Cva6Chip)
+            model=Cva6Chip, name=name)
