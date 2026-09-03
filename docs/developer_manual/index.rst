@@ -16,3 +16,4 @@ guides that are specific to the PULP targets and their models.
    :caption: Contents
 
    tutorials_hwpe
+   tutorials_flooforge
