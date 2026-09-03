@@ -216,32 +216,155 @@ B - Write a component from scratch
 ............................................
 Folder: ``B_build_a_component``
 
-Author a brand-new component, ``MyComp``, in Python + C++, map it at
-``0x20000000``, and have the binary read a fixed value back from it.
+The goal of this step is to write a brand-new component from scratch, add it
+to the system from section A, and access it from the binary.
+``my_system.py`` is already provided, and ``main.c`` has been changed to access 
+the dedicated region we want to redirect to our component:
 
-.. admonition:: Task - B.1 Write my_comp.py and my_comp.cpp
+.. code-block:: c
+
+   printf("Hello, got 0x%x from my comp\n", *(uint32_t *)0x20000000);
+
+.. admonition:: Task - B.1 Declare the component skeleton
    :class: task
 
-   - ``my_comp.py``: a ``gvsoc.systree.Component`` taking a ``value``
-     property, exposing an ``i_INPUT()`` slave port with signature ``'io'``.
-   - ``my_comp.cpp``: a ``vp::Component`` with a ``vp::IoSlave input_itf``
-     registered via ``new_slave_port``, and a static ``handle_req`` callback
-     that returns ``value`` on any 4-byte read.
-   - Wire it into ``my_system.py`` at ``0x20000000`` via
-     ``ico.o_MAP(comp.i_INPUT(), 'comp', base=0x20000000, size=0x1000, rm_base=True)``.
+   Create ``my_comp.py``:
 
-   The finished version is under ``solution/``.
+   .. code-block:: python
 
-.. admonition:: Verify - B.1
+      import gvsoc.systree
+
+      class MyComp(gvsoc.systree.Component):
+
+          def __init__(self, parent: gvsoc.systree.Component, name: str, value: int):
+              super().__init__(parent, name)
+
+   Every Python generator takes ``parent`` and ``name`` and hands them to the
+   base class - this is how a component knows where it sits in the tree.
+   ``value`` is our own parameter: whoever instantiates ``MyComp`` will choose
+   what it reads back.
+
+.. admonition:: Task - B.2 Register the C++ source and the value as a property
+   :class: task
+
+   .. code-block:: python
+
+      self.add_sources(['my_comp.cpp'])
+
+      self.add_properties({
+          "value": value
+      })
+
+   ``add_sources`` is what triggers compilation of our component into a
+   loadable library. ``add_properties`` puts ``value`` into the component's 
+   JSON configuration, which is how the C++ files will be able to read it back.
+
+.. admonition:: Task - B.3 Add the input port method
+   :class: task
+
+   .. code-block:: python
+
+      def i_INPUT(self) -> gvsoc.systree.SlaveItf:
+          return gvsoc.systree.SlaveItf(self, 'input', signature='io')
+
+   The port name (``'input'``) must match the one declared on the C++ side.
+   ``signature='io'`` is just information for the framework, so it can check
+   that two ports being bound together are of the same kind.
+
+.. admonition:: Task - B.4 Declare the C++ class
+   :class: task
+
+   Create ``my_comp.cpp``:
+
+   .. code-block:: cpp
+
+      #include <vp/vp.hpp>
+      #include <vp/itf/io.hpp>
+
+      class MyComp : public vp::Component
+      {
+      public:
+          MyComp(vp::ComponentConf &config);
+
+      private:
+          static vp::IoReqStatus handle_req(vp::Block *__this, vp::IoReq *req);
+
+          vp::IoSlave input_itf;
+          uint32_t value;
+      };
+
+      MyComp::MyComp(vp::ComponentConf &config)
+          : vp::Component(config)
+      {
+          this->input_itf.set_req_meth(&MyComp::handle_req);
+          this->new_slave_port("input", &this->input_itf);
+
+          this->value = this->get_js_config()->get_child_int("value");
+      }
+
+      extern "C" vp::Component *gv_new(vp::ComponentConf &config)
+      {
+          return new MyComp(config);
+      }
+
+   ``gv_new`` is the factory function the framework calls to instantiate our
+   class once the shared library is loaded. The constructor registers
+   ``input_itf`` as the port named ``"input"`` (matching ``i_INPUT()``), and
+   reads ``value`` back out of the JSON configuration that ``add_properties``
+   wrote on the Python side.
+
+.. admonition:: Task - B.5 Implement the request handler
+   :class: task
+
+   .. code-block:: cpp
+
+      vp::IoReqStatus MyComp::handle_req(vp::Block *__this, vp::IoReq *req)
+      {
+          MyComp *_this = (MyComp *)__this;
+
+          printf("Received request at offset 0x%lx, size 0x%lx, is_write %d\n",
+              req->get_addr(), req->get_size(), req->get_is_write());
+          if (!req->get_is_write() && req->get_addr() == 0 && req->get_size() == 4)
+          {
+              *(uint32_t *)req->get_data() = _this->value;
+          }
+          return vp::IO_REQ_OK;
+      }
+
+   The handler is ``static`` (a plain function pointer),
+   so the cast back to ``MyComp*`` is needed to reach instance state. On a
+   4-byte read at offset 0, it writes ``value`` into the request's data
+   buffer.
+
+.. admonition:: Task - B.6 Wire the component into my_system.py
+   :class: task
+
+   .. code-block:: python
+
+      import my_comp
+
+      comp = my_comp.MyComp(self, 'my_comp', value=0x12345678)
+      ico.o_MAP(comp.i_INPUT(), 'comp', base=0x20000000, size=0x00001000, rm_base=True)
+
+   After this, we can now compile and run the application.
+
+.. admonition:: Verify - B
    :class: solution
 
    .. code-block:: bash
 
-      $ cp solution/* .
       $ make gvsoc all
       $ make run
 
-   Expected output: ``Hello, got 0x12345678 from my comp``.
+   Expected output:
+
+   .. code-block:: text
+
+      Received request at offset 0x0, size 0x4, is_write 0
+      Hello, got 0x12345678 from my comp
+
+   If ``my_comp.py``/``my_comp.cpp`` do not match, the finished versions are
+   under ``solution/``.
 
 C - Add traces and a VCD signal
 .........................................
