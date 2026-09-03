@@ -203,11 +203,11 @@ A small runtime is available at
       $ make run runner_args="--trace=insn"
 
    And GDB, in a second terminal once ``make run runner_args=--gdbserver``
-   is waiting for a connection:
+   is waiting for a connection, typing from GVSoC root:
 
    .. code-block:: text
 
-      $ riscv64-unknown-elf-gdb build/test/test
+      $ riscv64-unknown-elf-gdb ./build_flooforge/A_build_a_system/test/test
       (gdb) target remote:12345
       (gdb) break main
       (gdb) c
@@ -358,7 +358,10 @@ the full version, including ``my_comp2.cpp``'s power/voltage controller).
       $ make run runner_args=--power
 
    Look for the ``@power.measure_N@value@`` lines in the output and
-   ``build/power_report.csv``. If time allows, walk through
+   ``$GVSOC_ROOT/build_flooforge/E_add_power_sources/work/power_report.csv``
+   (gvrun runs the simulation with that work directory as its current
+   directory, which is where the power report gets written). If time allows,
+   walk through
    ``solution/my_comp2.cpp`` (the power/voltage controller) and
    ``solution/my_system.py`` to show a full OFF / clock-gated / ON / ON-with-
    accesses power sweep across three voltages, and the matching GTKWave power
