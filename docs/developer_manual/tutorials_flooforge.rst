@@ -473,40 +473,93 @@ D - The IO request interface, sync vs async
 ......................................................
 Folder: ``D_io_request_interface``
 
-Contrast synchronous and asynchronous reply handling on the IO request API -
-the mechanism you need for any component with realistic, non-zero response
-latency.
+Memory transactions are modeled as a request/response pair. To handle this,
+the components implementa the IO interface. We will see different ways to handle
+the incoming requests.
 
-.. admonition:: Task - D.1 Synchronous latency
+.. admonition:: Task - D.1 Add synchronous latency
    :class: task
 
-   On the register-0 read path, call ``req->inc_latency(1000)`` before
-   returning ``vp::IO_REQ_OK``. The reply is still immediate, but it reports
-   1000 extra cycles of latency, which stalls the initiator.
+   .. code-block:: cpp
 
-.. admonition:: Task - D.2 Asynchronous reply
+      if (req->get_addr() == 0)
+      {
+          *(uint32_t *)req->get_data() = _this->value;
+          req->inc_latency(1000);
+          return vp::IO_REQ_OK;
+      }
+
+   First, if a request is received at address 0, we respond synchronously: 
+   the master gets its response in the same
+   function call. ``inc_latency`` tells
+   the master the response took 1000 extra cycles, which is what actually
+   stalls the core's pipeline. Latency added this way accumulates with
+   whatever else is added further along the path from initiator to target.
+
+.. admonition:: Task - D.2 Declare the event and pending-request state
    :class: task
 
-   Add a second register (offset 4). Store the incoming ``vp::IoReq *`` in a
-   ``pending_req`` member, enqueue a ``vp::ClockEvent`` 2000 cycles out, and
-   return ``vp::IO_REQ_PENDING`` instead of replying immediately. In the event
-   handler, fill in the response data and call
-   ``pending_req->get_resp_port()->resp(pending_req)``.
+   .. code-block:: cpp
 
-.. admonition:: Verify - D.1/D.2
+      vp::ClockEvent event;
+      ...
+      vp::IoReq *pending_req;
+
+   .. code-block:: cpp
+
+      MyComp::MyComp(vp::ComponentConf &config)
+          : vp::Component(config), event(this, MyComp::handle_event)
+
+   Let's now add the ``ClockEvent`` that will be used to schedule the asynchronous 
+   reply, and a pointer to the pending request. The event is initialized with a callback to
+   ``handle_event`` (written next).
+
+.. admonition:: Task - D.3 Handle the second register asynchronously
+   :class: task
+
+   .. code-block:: cpp
+
+      else if (req->get_addr() == 4)
+      {
+          _this->pending_req = req;
+          _this->event.enqueue(2000);
+          return vp::IO_REQ_PENDING;
+      }
+
+   Instead of replying, we store the request as pending, schedule the event 2000 cycles
+   out, and return ``vp::IO_REQ_PENDING`` to tell the initiator that we will reply later.
+
+.. admonition:: Task - D.4 Implement the event handler
+   :class: task
+
+   .. code-block:: cpp
+
+      void MyComp::handle_event(vp::Block *__this, vp::ClockEvent *event)
+      {
+          MyComp *_this = (MyComp *)__this;
+
+          *(uint32_t *)_this->pending_req->get_data() = _this->value;
+          _this->pending_req->get_resp_port()->resp(_this->pending_req);
+      }
+
+   In the event handler, we write the value into the pending request's data buffer, and
+   call ``resp()`` on the request's response port to complete it. 
+
+.. admonition:: Verify - D
    :class: solution
 
    .. code-block:: bash
 
-      $ cp solution/my_comp.cpp .
       $ make gvsoc all
-      $ make run
+      $ make run runner_args="--trace=my_comp --trace=insn"
 
-   The Python files are unchanged from section B - only ``my_comp.cpp``
-   differs. This is the same pattern real components use for e.g. unknown-
-   latency cache refills or bus arbitration: async replies are typically a
-   chain of callbacks across several components before the initiator sees
-   its response.
+   You should see the offset-0 read stall for 1000 cycles before
+   the next instruction retires, and the offset-4 read stall for 2000
+   cycles with the response arriving from ``handle_event`` rather than
+   inline. In practice, real async replies are typically a chain of
+   callbacks across several components before the initiator finally sees its
+   response.
+
 
 E - Add power sources
 ...............................
