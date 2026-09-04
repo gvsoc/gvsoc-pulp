@@ -10,7 +10,6 @@ public:
 
 private:
     static vp::IoReqStatus handle_req(vp::Block *__this, vp::IoReq *req);
-    void power_supply_set(vp::PowerSupplyState state);
 
     vp::IoSlave input_itf;
 
@@ -38,19 +37,7 @@ MyComp::MyComp(vp::ComponentConf &config)
     this->power.new_power_source("access", &access_power, this->get_js_config()->get("**/access_power"));
 
     this->background_power.leakage_power_start();
-}
-
-void MyComp::power_supply_set(vp::PowerSupplyState state)
-{
-    if (state == vp::PowerSupplyState::ON)
-    {
-        this->background_power.dynamic_power_start();
-
-    }
-    else
-    {
-        this->background_power.dynamic_power_stop();
-    }
+    this->background_power.dynamic_power_start();
 }
 
 vp::IoReqStatus MyComp::handle_req(vp::Block *__this, vp::IoReq *req)
