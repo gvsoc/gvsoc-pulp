@@ -565,40 +565,84 @@ E - Add power sources
 ...............................
 Folder: ``E_add_power_sources``
 
-Time-boxed to the essential path: a single access-driven power source and a
-terminal power report (skip the background/leakage power-controller wiring
-and the VCD power-trace walkthrough if short on time - see ``solution/`` for
-the full version, including ``my_comp2.cpp``'s power/voltage controller).
+Power modeling is based on power sources: any number of them can be
+instantiated in a component to represent something in it comsuming power. This
+step extends ``MyComp`` with power models representingstatic leakage, idle dynamic
+consumption, and access-driven dynamic power.
 
-.. admonition:: Task - E.1 Declare an access power source
+.. admonition:: Task - E.1 Declare two power sources
    :class: task
 
-   In ``my_comp.py``, add an ``access_power`` property (a ``dynamic`` power
-   table in pJ per access, keyed by temperature/voltage - see
-   ``solution/my_comp.py`` for the JSON shape). In ``my_comp.cpp``, declare
-   ``vp::PowerSource access_power;``, register it with
-   ``this->power.new_power_source(...)``, and call
-   ``access_power.account_energy_quantum()`` on every access in
-   ``handle_req``.
+   .. code-block:: cpp
 
-.. admonition:: Verify - E.1
+      vp::PowerSource access_power;
+      vp::PowerSource background_power;
+
+   ``background_power`` will model power that does not depend on how many
+   accesses happen - leakage (static) and idle dynamic (toggling) power.
+   ``access_power`` will model the dynamic energy spent per access.
+
+.. admonition:: Task - E.2 Register them and start leakage and background power
+   :class: task
+
+   .. code-block:: cpp
+
+      this->power.new_power_source("leakage", &background_power, this->get_js_config()->get("**/background_power"));
+      this->power.new_power_source("access", &access_power, this->get_js_config()->get("**/access_power"));
+
+      this->background_power.leakage_power_start();
+      this->background_power.dynamic_power_start();
+
+   Both power sources are started unconditionally in the constructor.
+
+.. admonition:: Task - E.3 Feed power values from Python
+   :class: task
+
+   .. code-block:: python
+
+      self.add_properties({
+          "background_power": {
+              "dynamic": {"type": "linear", "unit": "W",  "values": {"25": {"1.2": {"any": 0.00050}}}},
+              "leakage": {"type": "linear", "unit": "W",  "values": {"25": {"1.2": {"any": 0.00010}}}},
+          },
+          "access_power": {
+              "dynamic": {"type": "linear", "unit": "pJ", "values": {"25": {"1.2": {"any": 10.0}}}}
+          }
+      })
+
+   Values are given at one temperature (25°C) and one voltage (1.2V, the
+   engine's default).
+
+.. admonition:: Task - E.4 Account access energy
+   :class: task
+
+   .. code-block:: cpp
+
+      _this->access_power.account_energy_quantum();
+
+   Added at the top of ``handle_req``. Whenever a request is received, the access
+   power source is told to account for the energy consumed by that access.
+
+.. admonition:: Verify - E
    :class: solution
 
    .. code-block:: bash
 
-      $ cp solution/my_comp.py solution/my_comp.cpp .
       $ make gvsoc all
-      $ make run runner_args=--power
+      $ make run runner_args="--power"
 
-   Look for the ``@power.measure_N@value@`` lines in the output and
-   ``$GVSOC_ROOT/build_flooforge/E_add_power_sources/work/power_report.csv``
-   (gvrun runs the simulation with that work directory as its current
-   directory, which is where the power report gets written). If time allows,
-   walk through
-   ``solution/my_comp2.cpp`` (the power/voltage controller) and
-   ``solution/my_system.py`` to show a full OFF / clock-gated / ON / ON-with-
-   accesses power sweep across three voltages, and the matching GTKWave power
-   traces (``power_vcd.png``, ``power_vcd_with_mem.png`` in this folder).
+   The engine will dump a single report covering the whole run at the end of the
+   simulation, in
+   ``$GVSOC_ROOT/build_flooforge/E_add_power_sources/work/power_report.csv``. 
+   Each line has the shape
+   ``Trace path; Dynamic power (W); Leakage power (W); Total (W); Percentage``.
+
+   To see it as a VCD trace instead:
+
+   .. code-block:: bash
+
+      $ make run runner_args="--power --vcd --event=.*"
+
 
 F - An array of components on the original FlooNoC
 .............................................................

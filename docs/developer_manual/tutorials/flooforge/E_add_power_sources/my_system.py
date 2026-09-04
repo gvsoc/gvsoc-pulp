@@ -62,6 +62,6 @@ class Rv64(gvsoc.systree.Component):
 # This is the top target that gvrun will instantiate
 class Target(gvsoc.runner.Target):
 
-    description = "Custom system"
+    gapy_description = "Custom system"
     model = Rv64
     name = "test"
