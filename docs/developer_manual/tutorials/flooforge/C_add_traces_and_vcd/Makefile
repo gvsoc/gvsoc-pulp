@@ -1,7 +1,7 @@
 include ../utils/rt.mk
 
 GVSOC_ROOT ?= ../../../../../..
-GVSOC_WORKDIR ?= $(CURDIR)/build
+GVSOC_WORKDIR ?= $(abspath $(GVSOC_ROOT))/build_flooforge/$(notdir $(CURDIR))
 ifdef BUILDDIR
 FULL_BUILDDIR := $(GVSOC_WORKDIR)/$(BUILDDIR)
 else
@@ -9,8 +9,8 @@ FULL_BUILDDIR := $(GVSOC_WORKDIR)
 endif
 
 clean:
-	rm -rf $(FULL_BUILDDIR)/test
-	make -C $(GVSOC_ROOT) TARGETS=my_system MODULES=$(CURDIR) BUILDDIR=$(FULL_BUILDDIR)/build INSTALLDIR=$(FULL_BUILDDIR)/install $(OPTIONS) clean
+	rm -rf __pycache__
+	rm -rf $(FULL_BUILDDIR)/test $(FULL_BUILDDIR)/work
 
 all:
 	mkdir -p $(FULL_BUILDDIR)/test
@@ -19,11 +19,8 @@ all:
 gvsoc:
 	make -C $(GVSOC_ROOT) TARGETS=my_system MODULES=$(CURDIR) BUILDDIR=$(FULL_BUILDDIR)/build INSTALLDIR=$(FULL_BUILDDIR)/install $(OPTIONS) build
 
-prepare_traces:
-	cp solution_traces/* .
-
-prepare_vcd:
-	cp solution_vcd/* .
+prepare:
+	cp solution/* .
 
 run:
 	$(FULL_BUILDDIR)/install/bin/gvrun --target-dir=$(CURDIR) --target=my_system --work-dir=$(FULL_BUILDDIR)/work --parameter binary=$(FULL_BUILDDIR)/test/test run $(runner_args)

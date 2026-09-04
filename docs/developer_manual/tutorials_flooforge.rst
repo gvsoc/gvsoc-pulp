@@ -172,7 +172,7 @@ A small runtime is available at
    bootloader; once done, it drives the core's boot address (``i_ENTRY``) and
    raises its fetch-enable pin (``i_FETCHEN``) so it starts executing.
 
-.. admonition:: Task - A.6 (optional) Add a GDB server
+.. admonition:: Task - A.6 Add a GDB server
    :class: task
 
    .. code-block:: python
@@ -370,47 +370,104 @@ C - Add traces and a VCD signal
 .........................................
 Folder: ``C_add_traces_and_vcd``
 
-Two quick, additive diffs on top of ``MyComp``.
+In this step we will show how to add a trace and a VCD signal to the component,
+so we can see what it is doing at runtime in the trace log and in GTKWave.
+``main.c`` already writes the values 0-19 to the component (in addition to
+its earlier read), showing the changes in the VCD signal.
 
-.. admonition:: Task - C.1 Add a text trace
+.. admonition:: Task - C.1 Declare and register the trace
    :class: task
 
-   Declare a ``vp::Trace trace;`` member, register it with
-   ``this->traces.new_trace("trace", &this->trace)``, and replace any
-   ``printf`` in ``handle_req`` with
-   ``this->trace.msg(vp::TraceLevel::DEBUG, "Received request at offset 0x%lx, size 0x%lx, is_write %d\\n", ...)``.
+   .. code-block:: cpp
 
-.. admonition:: Verify - C.1
+      vp::Trace trace;
+
+   .. code-block:: cpp
+
+      this->traces.new_trace("trace", &this->trace);
+
+   The trace is declared as a member, then activated and named in the
+   constructor. This name is what shows up in the trace path when it is
+   dumped, and what you select on the command line.
+
+.. admonition:: Task - C.2 Use the trace in the request handler
+   :class: task
+
+   .. code-block:: cpp
+
+      _this->trace.msg(vp::TraceLevel::DEBUG, "Received request at offset 0x%lx, size 0x%lx, is_write %d\n",
+          req->get_addr(), req->get_size(), req->get_is_write());
+
+   A trace can be displayed using the function ``msg()``
+   with a trace level (``DEBUG``, ``INFO``, ``WARNING``, ``ERROR``) and a
+   ``printf``-style format string. When printed, the trace will be prefixed with the 
+   timestamp and the component name.
+
+.. admonition:: Task - C.3 Declare the VCD signal
+   :class: task
+
+   .. code-block:: cpp
+
+      vp::Signal<uint32_t> vcd_value;
+
+   .. code-block:: cpp
+
+      MyComp::MyComp(vp::ComponentConf &config)
+          : vp::Component(config), vcd_value(*this, "status", 32)
+
+   The VCD signal's template type must be at least as wide as the signal itself.
+   The constructor initializer gives it the name (``"status"``) and width
+   (32 bits) shown in the VCD viewer and used to enable it from the command line.
+
+.. admonition:: Task - C.4 Set or release the signal in the handler
+   :class: task
+
+   .. code-block:: cpp
+
+      if (!req->get_is_write())
+      {
+          *(uint32_t *)req->get_data() = _this->value;
+      }
+      else
+      {
+          uint32_t value = *(uint32_t *)req->get_data();
+          if (value == 5)
+          {
+              _this->vcd_value.release();
+          }
+          else
+          {
+              _this->vcd_value.set(value);
+          }
+      }
+
+   ``set()`` is what the viewer sees change over time; ``release()`` shows
+   the signal as high-impedance - useful for representing idleness.
+
+.. admonition:: Verify - C
    :class: solution
 
    .. code-block:: bash
 
-      $ cp solution_traces/* .
       $ make gvsoc all
-      $ make run runner_args=--trace=my_comp
 
-   The trace is selectable by a regex on the component's path, independent of
-   the log-level filtering ``printf`` can't give you.
-
-.. admonition:: Task - C.2 Expose a VCD signal
-   :class: task
-
-   Add a ``vp::Signal<uint32_t> vcd_value;`` member, initialized as
-   ``vcd_value(*this, "status", 32)``. On a write, call ``vcd_value.set(value)``;
-   to demonstrate a high-impedance ("unknown") state, call
-   ``vcd_value.release()`` when the written value is ``5``. Optionally add a
-   ``gen_gtkw`` override in ``my_comp.py`` so the signal auto-appears in
-   GTKWave's overview.
-
-.. admonition:: Verify - C.2
-   :class: solution
+   Check the trace, optionally combined with instruction tracing to see where
+   the access happens:
 
    .. code-block:: bash
 
-      $ cp solution_vcd/* .
-      $ make gvsoc all
+      $ make run runner_args="--trace=my_comp --trace=insn"
+
+   Then check the VCD signal:
+
+   .. code-block:: bash
+
       $ make run runner_args="--vcd --event=.*"
-      $ gtkwave <work-dir>/gtkwave/view.gtkw   # open the SST pane, soc -> my_comp, Append
+      $ gtkwave <work-dir>/view.gtkw
+   The signal is  visible in GTKWave, found from the SST pane under ``soc -> my_comp``.
+   As you can see, initially the signal is uninitialized ('X') until 
+   writes from 0 to 19. When the value 5 is written, the signal is released and 
+   shows as high-impedance ('Z').
 
 D - The IO request interface, sync vs async
 ......................................................
