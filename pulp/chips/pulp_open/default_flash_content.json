@@ -1,6 +1,10 @@
 {
     "sections": [
         {
+            "name": "boot_pointer",
+            "template": "boot_pointer"
+        },
+        {
             "name": "partition_table",
             "template": "partition_table"
         },
