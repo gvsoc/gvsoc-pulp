@@ -3,7 +3,7 @@
     "alias": "0x00000000",
     "mapping": {
         "base": "0x10000000",
-        "size": "0x00400000"
+        "size": "0x00C00000"
     },
 
     "iss_config": {
@@ -38,12 +38,12 @@
     "l1": {
         "mapping": {
             "base": "0x10000000",
-            "size": "0x00010000",
+            "size": "0x00040000",
             "remove_offset": "0x10000000"
         },
         "ts_mapping": {
             "base": "0x10100000",
-            "size": "0x00010000",
+            "size": "0x00040000",
             "remove_offset": "0x10100000"
         },
         "banking_factor": 2,
