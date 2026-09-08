@@ -23,7 +23,7 @@
 #include "me/idma_me_3d.hpp"
 #include "be/idma_be.hpp"
 #include "be/idma_be_axi.hpp"
-#include "be/idma_be_tcdm.hpp"
+#include "be/idma_be_tcdm_banks.hpp"
 
 
 /**
@@ -33,7 +33,9 @@
  * pulp_cluster compiles when built with the idma bender target, and puts together:
  *   - reg32_3d front-end, exposing one register file per core plus the peripheral ports
  *   - 3D middle end, decomposing transfers along up to three dimensions
- *   - AXI and TCDM backend protocols, for the external interconnect and the local TCDM
+ *   - AXI and bank-interleaved TCDM backend protocols, for the external interconnect and the
+ *     local TCDM. The TCDM side is split over two banks per direction, giving the four
+ *     tcdm_master ports dmac_wrap drives through mem_to_banks.
  *
  * The hardware selects the source and destination backends from the protocol fields of the
  * configuration register. The backend here picks them from the address instead, which gives the
@@ -51,8 +53,8 @@ private:
     IDmaMe3d me;
     IDmaBeAxi be_axi_read;
     IDmaBeAxi be_axi_write;
-    IDmaBeTcdm be_tcdm_read;
-    IDmaBeTcdm be_tcdm_write;
+    IDmaBeTcdmBanks be_tcdm_read;
+    IDmaBeTcdmBanks be_tcdm_write;
     IDmaBe be;
 };
 

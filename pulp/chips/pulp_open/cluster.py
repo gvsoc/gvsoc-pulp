@@ -286,10 +286,11 @@ class Cluster(st.Component):
             self.bind(dma, 'axi_read', cluster_ico, 'input')
             self.bind(dma, 'axi_write', cluster_ico, 'input')
 
-            # The hardware has four TCDM ports, the backend model drives a single one. Transfers
-            # are correct but the L1 contention is optimistic compared to mchan.
-            self.bind(dma, 'tcdm_read', l1, 'dma_in_0')
-            self.bind(dma, 'tcdm_write', l1, 'dma_in_0')
+            # Four TCDM ports as in dmac_wrap: two banks for the write channel and two for the
+            # read one, each direction splitting its accesses the way mem_to_banks does.
+            for i in range(0, 2):
+                self.bind(dma, 'tcdm_write_%d' % i, l1, 'dma_in_%d' % i)
+                self.bind(dma, 'tcdm_read_%d' % i, l1, 'dma_in_%d' % (2 + i))
 
             # Completion is broadcast to every core, and no interrupt is raised, so dma_1 stays
             # unbound. The peripheral event stands in for the mchan external interrupt, which is
