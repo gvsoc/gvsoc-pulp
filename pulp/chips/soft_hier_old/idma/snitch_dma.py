@@ -38,6 +38,8 @@ class SnitchDma(gvsoc.systree.Component):
         Size of the local area.
     tcdm_width: int
         Width of the local interconnect, in bytes.
+    gather_enable: bool
+        Enable DMIDX and sparse gather through DMCPYI config bit 2. Requires an index port binding.
     """
 
     def __init__(self, parent: gvsoc.systree.Component, name: str,
@@ -45,7 +47,8 @@ class SnitchDma(gvsoc.systree.Component):
             burst_queue_size: int=8,
             loc_base: int=0,
             loc_size: int=0,
-            tcdm_width: int=0):
+            tcdm_width: int=0,
+            gather_enable: bool=False):
 
         super().__init__(parent, name)
 
@@ -64,7 +67,16 @@ class SnitchDma(gvsoc.systree.Component):
             "loc_base": loc_base,
             "loc_size": loc_size,
             "tcdm_width": tcdm_width,
+            "gather_enable": gather_enable,
         })
+
+    def o_INDEX(self, itf: gvsoc.systree.SlaveItf):
+        """Bind the optional 64-bit index-read port (IO v1, absolute addresses).
+
+        Connect it to local memory through a router that removes the local base.
+        Enable gather_enable when constructing this component.
+        """
+        self.itf_bind('index', itf, signature='io')
 
     def i_OFFLOAD(self) -> gvsoc.systree.SlaveItf:
         """Returns the offload port.

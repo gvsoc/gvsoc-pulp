@@ -23,6 +23,8 @@
 #include <string>
 #include <iostream>
 #include <sstream>
+#include <deque>
+#include <unordered_set>
 #include <vp/vp.hpp>
 #include <cpu/iss/include/offload.hpp>
 #include <vp/register.hpp>
@@ -76,6 +78,13 @@ private:
     vp::Register<uint64_t> dst_stride;
     // Register holding replication
     vp::Register<uint32_t> reps;
+    // DMIDX uses an RV32 address and log2(index size in bytes).
+    vp::Register<uint32_t> index_addr;
+    vp::Register<uint32_t> index_width;
+    bool gather_enable = false;
+    // Empty gathers must not advance completion past older memory transfers.
+    std::deque<uint32_t> issued_transfers;
+    std::unordered_set<uint32_t> finished_transfers;
     // Transfer ID of the next transfer
     vp::Register<uint32_t> next_transfer_id;
     // Transfer ID of the last completed ID

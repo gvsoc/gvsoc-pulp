@@ -21,6 +21,7 @@
 #pragma once
 
 #include <vp/vp.hpp>
+#include <vp/itf/io.hpp>
 #include "../idma.hpp"
 
 
@@ -53,6 +54,10 @@ public:
 private:
     // FSM handler, called to check if any action should be taken after something was updated
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
+    static void index_response(vp::Block *__this, vp::IoReq *req);
+    static void index_grant(vp::Block *, vp::IoReq *) {}
+    void index_completed(vp::IoReq *req);
+    void gather_step();
 
     // Pointer to frontend
     IdmaTransferProducer *fe;
@@ -75,4 +80,17 @@ private:
     uint64_t current_dst;
     // Current replication of the current transfer, updated each time a burst is sent
     uint64_t current_reps;
+
+    // One packed 64-bit index word, with at most one index read in flight.
+    // The legacy backend continues to handle row data and acknowledgements.
+    bool gather_enable = false;
+    vp::IoMaster index_itf;
+    vp::IoReq index_req;
+    uint8_t index_data[8];
+    uint64_t index_ptr = 0;
+    uint64_t index_word = 0;
+    uint32_t index_lane = 0;
+    bool index_pending = false;
+    bool index_valid = false;
+    int64_t index_ready_cycle = -1;
 };

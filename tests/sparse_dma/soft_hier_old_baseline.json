@@ -1,0 +1,36 @@
+{
+  "pulp_commit": "94b98f540d5d411a15a0e634368114df308c97cd",
+  "test_sha256": "2fff778f0071ca0056097c69d7e4727d72e4f9b5c5d3da062ecaebb5ce6237a6",
+  "configuration": {
+    "frequency": 1000000000,
+    "transfer_queue_size": 2,
+    "burst_queue_size": 256,
+    "tcdm_width": 64,
+    "tcdm_latency": 0,
+    "axi_read_delays": [
+      23,
+      5
+    ],
+    "axi_write_delay": 7
+  },
+  "summary": {
+    "cases": "9",
+    "cycles": "329",
+    "index_reads": "0",
+    "denied_indices": "0",
+    "stalls": "0",
+    "grants": "0",
+    "traffic": "8cce2c15f4fea9a1"
+  },
+  "accounting": [
+    "Finished : 7 ns ---> 40 ns | period = 33 ns | runtime = 33 ns | Txn 0 = {type: 1D, src: 0x80000ffa, dst: 0x100000, size: 0x12c }",
+    "Finished : 46 ns ---> 93 ns | period = 47 ns | runtime = 80 ns | Txn 1 = {type: 2D, src: 0x80010000, src_stride: 0x80, dst: 0x101000, dst_stride: 0x50, repeats: 0x7, size: 0x3f }",
+    "Finished : 99 ns ---> 134 ns | period = 35 ns | runtime = 115 ns | Txn 2 = {type: 1D, src: 0x118000, dst: 0x90002000, size: 0x100 }",
+    "Finished : 140 ns ---> 146 ns | period = 6 ns | runtime = 121 ns | Txn 3 = {type: 1D, src: 0x118200, dst: 0x103000, size: 0xc0 }",
+    "Finished : 152 ns ---> 169 ns | period = 17 ns | runtime = 138 ns | Txn 4 = {type: 1D, src: 0x80040000, dst: 0x90004000, size: 0x100 }",
+    "Finished : 175 ns ---> 218 ns | period = 43 ns | runtime = 181 ns | Txn 5 = {type: 1D, src: 0x80050000, dst: 0x105000, size: 0x400 }",
+    "Finished : 224 ns ---> 249 ns | period = 25 ns | runtime = 206 ns | Txn 6 = {type: 1D, src: 0x80060000, dst: 0x106000, size: 0x400 }",
+    "Finished : 255 ns ---> 298 ns | period = 43 ns | runtime = 249 ns | Txn 7 = {type: 1D, src: 0x80070000, dst: 0x107000, size: 0x400 }",
+    "Finished : 304 ns ---> 329 ns | period = 25 ns | runtime = 274 ns | Txn 8 = {type: 1D, src: 0x80080000, dst: 0x108000, size: 0x400 }"
+  ]
+}

@@ -30,12 +30,16 @@ IDmaFeXdma::IDmaFeXdma(vp::Component *idma, IdmaTransferConsumer *me)
     src_stride(*this, "src_stride", 32),
     dst_stride(*this, "dst_stride", 32),
     reps(*this, "reps", 32),
+    index_addr(*this, "index_addr", 32, true, 0),
+    index_width(*this, "index_width", 2, true, 0),
     next_transfer_id(*this, "next_transfer_id", 32),
     completed_id(*this, "completed_id", 32),
     do_transfer_grant(*this, "do_transfer_grant", 1)
 {
     // Middle-end will be used later for interaction
     this->me = me;
+    auto gather = idma->get_js_config()->get("gather_enable");
+    this->gather_enable = gather && gather->get_bool();
 
     // Declare our own trace so that we can individually activate traces
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
@@ -92,6 +96,16 @@ void IDmaFeXdma::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *insn)
             _this->trace.msg(vp::Trace::LEVEL_TRACE, "Received dmrep operation (reps: 0x%lx)\n", insn->arg_a);
             _this->reps.set(insn->arg_a);
             break;
+        case 0b0001000:
+            if (_this->gather_enable)
+            {
+                _this->index_addr.set(insn->arg_a);
+                _this->index_width.set(insn->arg_b & 3);
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,
+                    "Received dmidx operation (addr: 0x%x, width: %u)\n",
+                    insn->arg_a, insn->arg_b & 3);
+            }
+            break;
         case 0b0000011:
             _this->trace.msg(vp::Trace::LEVEL_TRACE, "Received dmcpy collectve operation (config: 0x%lx, size: 0x%lx)\n",
                 ((insn->opcode >> 20) & 0b11111), insn->arg_a);
@@ -138,10 +152,21 @@ uint32_t IDmaFeXdma::enqueue_copy(uint32_t config, uint32_t size, bool &granted,
     // Allocate transfer ID
     uint32_t transfer_id = this->next_transfer_id.get();
     this->next_transfer_id.set(transfer_id + 1);
+    bool gather = this->gather_enable && (config & 4);
+    if (this->gather_enable)
+        this->issued_transfers.push_back(transfer_id);
 
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Allocated transfer ID (id: %d)\n", transfer_id);
     std::stringstream ss;
-    if (config == 0)
+    if (gather)
+    {
+        ss << "| Txn " << transfer_id << " = {type: gather, src: 0x" << std::hex << this->src.get()
+           << ", dst: 0x" << this->dst.get() << ", index: 0x" << this->index_addr.get()
+           << ", index_width: " << this->index_width.get() << ", src_stride: 0x" << this->src_stride.get()
+           << ", dst_stride: 0x" << this->dst_stride.get() << ", repeats: 0x" << this->reps.get()
+           << ", size: 0x" << size << " }";
+    }
+    else if (config == 0)
     {
         ss << "| Txn " << transfer_id << " = {type: 1D, src: 0x" << std::hex << this->src.get() \
         << ", dst: 0x" << std::hex << this->dst.get() << ", size: 0x"<< std::hex << size << " }";
@@ -167,11 +192,35 @@ uint32_t IDmaFeXdma::enqueue_copy(uint32_t config, uint32_t size, bool &granted,
     transfer->dst_stride = this->dst_stride.get();
     transfer->reps = this->reps.get();
     transfer->config = config;
+    transfer->gather = gather;
+    transfer->index_addr = this->index_addr.get();
+    transfer->index_width = this->index_width.get();
+    transfer->transfer_id = transfer_id;
 #ifdef ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
-    transfer->collective_type = collective_type;
-    transfer->collective_row_mask = this->collective_row_mask;
-    transfer->collective_col_mask = this->collective_col_mask;
+    if (gather)
+    {
+        // Gather is a unicast copy. Previously programmed collective masks
+        // remain in the frontend for subsequent legacy collective operations.
+        transfer->collective_type = 0;
+        transfer->collective_row_mask = 0;
+        transfer->collective_col_mask = 0;
+    }
+    else
+    {
+        transfer->collective_type = collective_type;
+        transfer->collective_row_mask = this->collective_row_mask;
+        transfer->collective_col_mask = this->collective_col_mask;
+    }
 #endif //ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
+
+    // Only new gather descriptors use this fast path; keep legacy empty-copy
+    // handling unchanged. Completion is retired in the original issue order.
+    if (gather && (size == 0 || transfer->reps == 0))
+    {
+        granted = true;
+        this->ack_transfer(transfer);
+        return transfer_id;
+    }
 
     // Check if middle end can accept a new transfer
     if (this->me->can_accept_transfer())
@@ -198,7 +247,20 @@ uint32_t IDmaFeXdma::enqueue_copy(uint32_t config, uint32_t size, bool &granted,
 // Called by middle-end when a transfer is done
 void IDmaFeXdma::ack_transfer(IdmaTransfer *transfer)
 {
-    this->completed_id.inc(1);
+    if (this->gather_enable)
+    {
+        this->finished_transfers.insert(transfer->transfer_id);
+        while (!this->issued_transfers.empty()
+            && this->finished_transfers.erase(this->issued_transfers.front()))
+        {
+            this->issued_transfers.pop_front();
+            this->completed_id.inc(1);
+        }
+    }
+    else
+    {
+        this->completed_id.inc(1);
+    }
     this->num_inflight_transfer -= 1;
     if (this->num_inflight_transfer == 0)
     {
@@ -236,4 +298,9 @@ void IDmaFeXdma::update()
 
 void IDmaFeXdma::reset(bool active)
 {
+    if (active)
+    {
+        this->issued_transfers.clear();
+        this->finished_transfers.clear();
+    }
 }

@@ -27,6 +27,8 @@ class Xdma(IsaSubset):
             Instr('dmdst',     Format_R  ,   '0000001 ----- ----- 000 00000 0101011'),
             Instr('dmstr',     Format_R  ,   '0000110 ----- ----- 000 00000 0101011'),
             Instr('dmrep',     Format_R  ,   '0000111 ----- ----- 000 00000 0101011'),
+            Instr('dmidx', [InReg(0, Range(15, 5)), UnsignedImm(0, Range(20, 5))],
+                                          '0001000 ----- ----- 000 00000 0101011'),
             Instr('dmcpy',     Format_R  ,   '0000011 ----- ----- 000 ----- 0101011'),
             Instr('dmmask',    Format_R  ,   '0000101 ----- ----- 000 ----- 0101011'),
             Instr('dmcpyi',    Format_I1U,   '0000010 ----- ----- 000 ----- 0101011'),

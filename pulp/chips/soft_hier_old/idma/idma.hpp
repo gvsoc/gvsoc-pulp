@@ -49,6 +49,12 @@ public:
     uint64_t reps;
     // Transfer config
     uint64_t config;
+    // Optional sparse-gather descriptor, snapshotted by the frontend.
+    // A separate flag preserves legacy config handling when gather is disabled.
+    bool gather = false;
+    uint64_t index_addr = 0;
+    uint32_t index_width = 0;
+    uint32_t transfer_id = 0;
 #ifdef ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
     // Transfer collective type
     uint64_t collective_type;

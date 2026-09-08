@@ -19,6 +19,7 @@
  */
 
 #include <vp/vp.hpp>
+#include <algorithm>
 #include "idma_me_2d.hpp"
 
 
@@ -35,6 +36,15 @@ IDmaMe2D::IDmaMe2D(vp::Component *idma, IdmaTransferProducer *fe, IdmaTransferCo
 
     // Get the top parameter giving the maximum number of enqueued transfers
     this->transfer_queue_size = idma->get_js_config()->get_int("transfer_queue_size");
+    auto gather = idma->get_js_config()->get("gather_enable");
+    this->gather_enable = gather && gather->get_bool();
+    if (this->gather_enable)
+    {
+        this->index_itf.set_resp_meth(&IDmaMe2D::index_response);
+        // Retain denied requests until their response, without reissuing them.
+        this->index_itf.set_grant_meth(&IDmaMe2D::index_grant);
+        idma->new_master_port("index", &this->index_itf, this);
+    }
 }
 
 
@@ -97,6 +107,10 @@ void IDmaMe2D::reset(bool active)
 
         // Clear current transfer
         this->current_transfer = NULL;
+        this->index_pending = false;
+        this->index_valid = false;
+        this->index_ready_cycle = -1;
+        this->index_lane = 0;
     }
 }
 
@@ -115,11 +129,33 @@ void IDmaMe2D::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         _this->current_dst = _this->current_transfer->dst;
         _this->current_reps = _this->current_transfer->reps;
 
+        if (_this->current_transfer->gather)
+        {
+            uint64_t stride = _this->current_transfer->src_stride;
+            if (!_this->gather_enable || !_this->index_itf.is_bound())
+                _this->trace.fatal("Gather requires gather_enable and a bound index port\n");
+            if (!stride || (stride & (stride - 1)))
+                _this->trace.fatal("Gather source stride must be a nonzero power of two\n");
+            _this->index_ptr = _this->current_transfer->index_addr;
+            if (_this->index_ptr & 7)
+                _this->trace.fatal("Gather index stream must be aligned to a 64-bit TCDM word\n");
+            _this->index_valid = false;
+            _this->index_lane = 0;
+            _this->fsm_event.enqueue();
+            return; // Match the gather extension's registered idle-to-run transition.
+        }
+
         // In case it is a 1D transfer, turn it into a 2D transfer to simplify control
         if (((_this->current_transfer->config >> 1) & 1) == 0)
         {
             _this->current_reps = 1;
         }
+    }
+
+    if (_this->current_transfer && _this->current_transfer->gather)
+    {
+        _this->gather_step();
+        return;
     }
 
     // Check if we can extract a burst from the current transfer
@@ -168,4 +204,90 @@ void IDmaMe2D::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 void IDmaMe2D::update()
 {
     this->fsm_event.enqueue();
+}
+
+
+void IDmaMe2D::index_response(vp::Block *__this, vp::IoReq *req)
+{
+    static_cast<IDmaMe2D *>(__this)->index_completed(req);
+}
+
+void IDmaMe2D::index_completed(vp::IoReq *req)
+{
+    // Even an inline memory response becomes visible on a later clock edge.
+    this->index_ready_cycle = this->clock.get_cycles()
+        + std::max<uint64_t>(1, req->get_latency());
+    this->fsm_event.enqueue(std::max<uint64_t>(1, req->get_latency()));
+}
+
+void IDmaMe2D::gather_step()
+{
+    if (this->index_pending && this->index_ready_cycle > this->clock.get_cycles())
+        this->fsm_event.enqueue(this->index_ready_cycle - this->clock.get_cycles());
+    if (this->index_pending && this->index_ready_cycle >= 0
+        && this->index_ready_cycle <= this->clock.get_cycles())
+    {
+        this->index_word = 0;
+        for (unsigned i = 0; i < 8; ++i)
+            this->index_word |= uint64_t(this->index_data[i]) << (8 * i);
+        this->index_pending = false;
+        this->index_valid = true;
+        this->index_ready_cycle = -1;
+    }
+
+    if (this->index_valid && this->be->can_accept_transfer())
+    {
+        IdmaTransfer *parent = this->current_transfer;
+        unsigned bits = 8U << parent->index_width;
+        unsigned lanes = 64 / bits;
+        uint64_t mask = bits == 64 ? UINT64_MAX : (uint64_t(1) << bits) - 1;
+        uint64_t index = (this->index_word >> (this->index_lane * bits)) & mask;
+        IdmaTransfer *row = new IdmaTransfer();
+        row->parent = parent;
+        row->src = parent->src + index * parent->src_stride;
+        row->dst = this->current_dst;
+        row->size = parent->size;
+        row->transfer_id = parent->transfer_id;
+        parent->nb_bursts++;
+        this->trace.msg(vp::Trace::LEVEL_TRACE,
+            "GATHER_ROW id=%u index=%llu src=0x%llx dst=0x%llx cycle=%lld\n",
+            parent->transfer_id, index, row->src, row->dst, this->clock.get_cycles());
+        this->current_dst += parent->dst_stride;
+        --this->current_reps;
+        if (++this->index_lane == lanes || this->current_reps == 0)
+        {
+            this->index_lane = 0;
+            this->index_valid = false;
+        }
+        if (this->current_reps == 0)
+        {
+            parent->bursts_sent = true;
+            this->current_transfer = nullptr;
+            this->transfer_queue.pop();
+            this->fe->update();
+        }
+        this->be->enqueue_transfer(row);
+        this->fsm_event.enqueue();
+    }
+
+    // spill_ready permits the next read on the cycle the last lane is used.
+    if (this->current_transfer && !this->index_valid && !this->index_pending)
+    {
+        this->index_req.prepare();
+        this->index_req.set_addr(this->index_ptr);
+        this->index_req.set_size(8);
+        this->index_req.set_is_write(false);
+        this->index_req.set_data(this->index_data);
+        this->index_pending = true;
+        this->index_ptr += 8;
+        this->trace.msg(vp::Trace::LEVEL_TRACE, "INDEX_READ addr=0x%llx cycle=%lld\n",
+            this->index_req.get_addr(), this->clock.get_cycles());
+        auto status = this->index_itf.req(&this->index_req);
+        if (status == vp::IO_REQ_OK)
+            this->index_completed(&this->index_req);
+        else if (status == vp::IO_REQ_INVALID)
+            this->trace.fatal("Invalid gather index read at 0x%llx\n",
+                this->index_req.get_addr());
+        // PENDING and DENIED retain the request until the response callback.
+    }
 }
