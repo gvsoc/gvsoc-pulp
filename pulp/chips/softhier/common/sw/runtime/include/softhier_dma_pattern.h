@@ -129,85 +129,22 @@ void flex_dma_async_wait_all(){
     bare_dma_wait_all(); // Wait for iDMA Finishing
 }
 
-/*******************
-* Cluster Position *
-*******************/
+// --- Topology-Specific Pattern Routing ---
+// 1 = 1D (Ring / Hierarchical Ring)
+// 2 = 2D (Mesh / Torus)
+// 3 = 3D (Mesh / Torus)
+// 4 = Hexagonal (HexaMesh / FoldedHexaTorus)
 
-typedef struct FlexPosition
-{
-    uint32_t x;
-    uint32_t y;
-}FlexPosition;
-
-FlexPosition get_pos(uint32_t cluster_id) {
-    FlexPosition pos;
-    pos.x = cluster_id % ARCH_NUM_CLUSTER_X;
-    pos.y = cluster_id / ARCH_NUM_CLUSTER_X;
-    return pos;
-}
-
-//Methods
-FlexPosition right_pos(FlexPosition pos) {
-    uint32_t new_x = (pos.x + 1) % ARCH_NUM_CLUSTER_X;
-    uint32_t new_y = pos.y;
-    FlexPosition new_pos;
-    new_pos.x = new_x;
-    new_pos.y = new_y;
-    return new_pos;
-}
-
-FlexPosition left_pos(FlexPosition pos) {
-    uint32_t new_x = (pos.x + ARCH_NUM_CLUSTER_X - 1) % ARCH_NUM_CLUSTER_X;
-    uint32_t new_y = pos.y;
-    FlexPosition new_pos;
-    new_pos.x = new_x;
-    new_pos.y = new_y;
-    return new_pos;
-}
-
-FlexPosition top_pos(FlexPosition pos) {
-    uint32_t new_x = pos.x;
-    uint32_t new_y = (pos.y + 1) % ARCH_NUM_CLUSTER_Y;
-    FlexPosition new_pos;
-    new_pos.x = new_x;
-    new_pos.y = new_y;
-    return new_pos;
-}
-
-FlexPosition bottom_pos(FlexPosition pos) {
-    uint32_t new_x = pos.x;
-    uint32_t new_y = (pos.y + ARCH_NUM_CLUSTER_Y - 1) % ARCH_NUM_CLUSTER_Y;
-    FlexPosition new_pos;
-    new_pos.x = new_x;
-    new_pos.y = new_y;
-    return new_pos;
-}
-
-#define cluster_index(x,y)          ((y)*ARCH_NUM_CLUSTER_X+(x))
-#define remote_xy(x,y,offset)       (ARCH_CLUSTER_TCDM_REMOTE+cluster_index(x,y)*ARCH_CLUSTER_TCDM_SIZE+offset)
-#define remote_pos(pos,offset)      (ARCH_CLUSTER_TCDM_REMOTE+cluster_index(pos.x,pos.y)*ARCH_CLUSTER_TCDM_SIZE+offset)
-
-
-/*******************************************
-*  Traffic Pattern: Asynchronize Interface *
-*******************************************/
-
-//Pattern: Round Shift Right
-void flex_dma_async_pattern_round_shift_right(uint32_t local_offset, uint32_t remote_offset, size_t transfer_size){
-    FlexPosition pos = get_pos(flex_get_cluster_id());
-    bare_dma_start_1d(local(local_offset),remote_pos(left_pos(pos),remote_offset), transfer_size); //Start iDMA
-}
-
-void flex_dma_async_pattern_round_shift_up(uint32_t local_offset, uint32_t remote_offset, size_t transfer_size){
-    FlexPosition pos = get_pos(flex_get_cluster_id());
-    bare_dma_start_1d(local(local_offset),remote_pos(bottom_pos(pos),remote_offset), transfer_size); //Start iDMA
-}
-
-//Pattern Dialog-to-Dialog
-void flex_dma_async_pattern_dialog_to_dialog(uint32_t local_offset, uint32_t remote_offset, size_t transfer_size){
-    FlexPosition pos = get_pos(flex_get_cluster_id());
-    bare_dma_start_1d(local(local_offset),remote_xy(pos.y,pos.x,remote_offset), transfer_size); //Start iDMA
-}
-
+#if ARCH_SHAPE_CATEGORY == 1
+    #include "softhier_dma_pattern_ring.h"
+#elif ARCH_SHAPE_CATEGORY == 2
+    #include "softhier_dma_pattern_2d.h"
+#elif ARCH_SHAPE_CATEGORY == 3
+    #include "softhier_dma_pattern_3d.h"
+#elif ARCH_SHAPE_CATEGORY == 4
+    #include "softhier_dma_pattern_hexa.h"
+#else
+    #error "ARCH_SHAPE_CATEGORY not defined or unsupported in softhier_arch.py"
+#endif
 
 #endif

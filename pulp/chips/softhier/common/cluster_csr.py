@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2024 ETH Zurich and University of Bologna
+# Copyright (C) 2020 GreenWaves Technologies, SAS, ETH Zurich and University of Bologna
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,18 +16,24 @@
 
 import gvsoc.systree
 
-class SoftHierCtrl(gvsoc.systree.Component):
+class ClusterCSR(gvsoc.systree.Component):
 
-    def __init__(self, parent: gvsoc.systree.Component, name: str, num_cluster: int, num_core_per_cluster: int):
+    def __init__(self, parent, name, nb_cores=1, cluster_id=0):
+        super(ClusterCSR, self).__init__(parent, name)
 
-        super().__init__(parent, name)
-
-        self.add_sources(['pulp/chips/softhier/softhier_ctrl.cpp'])
+        self.add_sources(['pulp/chips/softhier/common/cluster_csr.cpp'])
 
         self.add_properties({
-            'num_cluster': num_cluster,
-            'num_core_per_cluster': num_core_per_cluster,
+            'nb_cores': nb_cores,
+            'cluster_id': cluster_id,
         })
+
+    def o_EXTERNAL_IRQ(self, core: int, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind(f'external_irq_{core}', itf, signature='wire<bool>')
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')
+
+    def i_BARRIER_ACK(self, core: int) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'barrier_req_{core}', signature='wire<bool>')
+
