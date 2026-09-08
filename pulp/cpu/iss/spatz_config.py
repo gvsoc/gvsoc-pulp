@@ -64,3 +64,13 @@ class SpatzConfig(RiscvConfig):
         "its scalar path being 64-bit end to end; the default of 4 is the "
         "historical behaviour, kept for the other users of this core."
     ))
+    muldiv_offload: bool = cfg_field(default=False, dump=True, desc=(
+        "Charge the scalar M-extension instructions (mul, mulh*, div*, "
+        "rem*) as the offload to the vector unit's integer lanes they are "
+        "on Snitch: the destination register stays pending 5 cycles for a "
+        "multiply and 7 plus the serial divider's iterations for a divide, "
+        "results returning in order, the core itself not stalling "
+        "(SpatzEvents, calibrated by tests/calibration/targets/spatz/muldiv). "
+        "The spatz_v3 cluster turns it on; the default keeps the single-cycle "
+        "behaviour the other users of this core were calibrated with."
+    ))

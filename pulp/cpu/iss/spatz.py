@@ -36,6 +36,19 @@ from gvsoc.signature import IoV2SingleReq
 
 isa_instances: dict[str,Isa] = {}
 
+class SpatzEvent(IssModule):
+    """Timing events of the Snitch + Spatz pair: the scalar mul / div
+    offload (see cpu/iss_v2/include/cores/spatz/events.hpp)."""
+    @override
+    def gen(self, iss: RiscvCommon):
+        iss.isa.add_define('CONFIG_GVSOC_ISS_EVENT', 'SpatzEvents')
+        iss.isa.add_define('CONFIG_GVSOC_ISS_SPATZ_MULDIV_OFFLOAD', '1')
+        iss.isa.add_include('<cpu/iss_v2/include/cores/spatz/events.hpp>')
+        iss.add_sources(['cpu/iss_v2/src/event/event.cpp'])
+        iss.isa.add_implem_include('<cpu/iss_v2/include/cores/spatz/events_implem.hpp>')
+        iss.add_sources(['cpu/iss_v2/src/cores/spatz/events.cpp'])
+
+
 class Spatz(RiscvCommon):
 
     def __init__(self,
@@ -48,6 +61,10 @@ class Spatz(RiscvCommon):
         # so cores differing only by vlsu_v2 cannot share an Isa instance —
         # key and name the ISA per flavour.
         isa_key = f"{config.isa}_iov2" if config.vlsu_v2 else config.isa
+        # The M-extension offload timing is compiled into the ISS (a per-core
+        # events class), so cores with and without it need distinct ISAs.
+        if config.muldiv_offload:
+            isa_key += '_muldiv'
         isa_instance: Isa | None = isa_instances.get(isa_key)
 
         if isa_instance is None:
@@ -68,6 +85,8 @@ class Spatz(RiscvCommon):
             'offload': Offload(),
             'irq': IrqExternal() if config.irq == 'external' else Irq()
         }
+        if config.muldiv_offload:
+            modules['event'] = SpatzEvent()
 
         # The io_v2 VLSU variant pulls io_v2.hpp into the whole ISS translation
         # unit (see types.hpp), so the scalar data LSU has to switch to its v2

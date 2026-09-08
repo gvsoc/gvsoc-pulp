@@ -202,7 +202,7 @@ class SnitchCluster(gvsoc.systree.Component):
                 htif=True, nb_lanes=arch.spatz_nb_lanes, lane_width=8,
                 vlsu_v2=True, nb_outstanding_reqs=arch.spatz_nb_outstanding_reqs,
                 lsu_nb_outstanding=5, lsu_width=8,
-                nb_ipus=1)
+                nb_ipus=1, muldiv_offload=True)
             cores.append(Spatz(self, f'pe{core_id}', config=config))
             # Per-core demux (RTL reqrsp_demux in spatz_cc): TCDM accesses
             # go straight to the crossbar, everything else exits on the
