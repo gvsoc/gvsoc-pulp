@@ -135,6 +135,13 @@ class Cluster(st.Component):
         if dma_model not in ['mchan', 'idma']:
             raise RuntimeError(f'Unknown cluster DMA model: {dma_model}')
 
+        # How many bank ports each TCDM direction is split over, as mem_to_banks does in the
+        # RTL. Descriptions that do not say anything get the two banks of dmac_wrap.
+        dma_tcdm_banks = cluster_conf.get_property('peripherals/dma/nb_tcdm_banks')
+        if dma_tcdm_banks is None:
+            dma_tcdm_banks = 2
+        dma_tcdm_banks = int(dma_tcdm_banks)
+
         #
         # Components
         #
@@ -175,6 +182,7 @@ class Cluster(st.Component):
                 # Streams are the two transfer directions, as picked by the runtime from the
                 # destination protocol
                 nb_streams=2,
+                nb_tcdm_banks=dma_tcdm_banks,
                 loc_base=cluster_conf.get_property('l1/mapping/base', int) + self.cluster_offset,
                 loc_size=cluster_conf.get_property('l1/mapping/size', int),
                 tcdm_width=4)
@@ -286,11 +294,11 @@ class Cluster(st.Component):
             self.bind(dma, 'axi_read', cluster_ico, 'input')
             self.bind(dma, 'axi_write', cluster_ico, 'input')
 
-            # Four TCDM ports as in dmac_wrap: two banks for the write channel and two for the
-            # read one, each direction splitting its accesses the way mem_to_banks does.
-            for i in range(0, 2):
+            # As in dmac_wrap, each direction is split over its own bank ports: with two banks
+            # this gives the four tcdm_master ports, driving dma_in_0..3.
+            for i in range(0, dma_tcdm_banks):
                 self.bind(dma, 'tcdm_write_%d' % i, l1, 'dma_in_%d' % i)
-                self.bind(dma, 'tcdm_read_%d' % i, l1, 'dma_in_%d' % (2 + i))
+                self.bind(dma, 'tcdm_read_%d' % i, l1, 'dma_in_%d' % (dma_tcdm_banks + i))
 
             # Completion is broadcast to every core, and no interrupt is raised, so dma_1 stays
             # unbound. The peripheral event stands in for the mchan external interrupt, which is
