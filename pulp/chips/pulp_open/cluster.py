@@ -22,6 +22,7 @@ from pulp.chips.pulp_open.l1_subsystem import L1_subsystem
 from pulp.event_unit.event_unit_v3 import Event_unit
 from interco.router import Router
 from pulp.mchan.mchan_v7 import Mchan
+from pulp.idma.pulp_open_dma import PulpOpenDma
 from pulp.timer.timer_v2 import Timer
 from pulp.cluster.cluster_control_v2 import Cluster_control
 from pulp.ne16.ne16 import Ne16
@@ -62,6 +63,13 @@ class ClusterConf(st.Component):
 class ClusterConfig(Config):
     has_redmule: bool = cfg_field(default=False, read=True, write=True, desc=(
         "Enable Redmule"
+    ))
+
+    dma_model: str = cfg_field(default='', read=True, write=True, desc=(
+        "Cluster DMA model, either mchan or idma. Overrides peripherals/dma/kind from the chip "
+        "description when set. idma models the dmac_wrap that pulp_cluster compiles with the idma "
+        "bender target, and is programmed through the reg32_3d register map instead of the mchan "
+        "command register."
     ))
 
 
@@ -108,6 +116,25 @@ class Cluster(st.Component):
         else:
             has_redmule = self.get_property('has_redmule')
 
+        # Which DMA this chip has is part of its description. Older descriptions do not say, and
+        # mchan is what they meant, so fall back to it.
+        dma_model = cluster_conf.get_property('peripherals/dma/kind')
+        if dma_model is None:
+            dma_model = 'mchan'
+
+        # The attribute overrides the chip description, which is what makes it possible to run the
+        # same chip with both models and compare them.
+        if os.environ.get('USE_GVRUN') is None:
+            dma_model = self.declare_user_property(
+                name='dma_model', value=dma_model, cast=str,
+                description='Cluster DMA model, either mchan or idma'
+            )
+        else:
+            dma_model = self.get_property('dma_model') or dma_model
+
+        if dma_model not in ['mchan', 'idma']:
+            raise RuntimeError(f'Unknown cluster DMA model: {dma_model}')
+
         #
         # Components
         #
@@ -135,8 +162,24 @@ class Cluster(st.Component):
         # Demux periph interconnect
         demux_periph_ico = Router(self, 'demux_periph_ico')
 
-        # MCHAN
-        mchan = Mchan(self, 'dma', nb_channels=nb_pe+1)
+        # Cluster DMA. mchan is the historical model. idma matches the dmac_wrap that
+        # pulp_cluster compiles with the idma bender target, where the per-core control ports and
+        # the four TCDM ports are the same but the transfers are programmed through the reg32_3d
+        # register map.
+        if dma_model == 'idma':
+            dma = PulpOpenDma(self, 'dma',
+                nb_cores=nb_pe,
+                # A single peripheral port, mirroring the one channel mchan reserves for the
+                # cluster peripheral interconnect
+                nb_pe_ports=1,
+                # Streams are the two transfer directions, as picked by the runtime from the
+                # destination protocol
+                nb_streams=2,
+                loc_base=cluster_conf.get_property('l1/mapping/base', int) + self.cluster_offset,
+                loc_size=cluster_conf.get_property('l1/mapping/size', int),
+                tcdm_width=4)
+        else:
+            dma = Mchan(self, 'dma', nb_channels=nb_pe+1)
 
         # Timer
         timer = Timer(self, 'timer')
@@ -162,8 +205,9 @@ class Cluster(st.Component):
 
         # L1 subsystem
         for i in range(0, nb_pe):
-            self.bind(l1, 'dma_%d' % i, mchan, 'in_%d' % i)
-            self.bind(l1, 'dma_alias_%d' % i, mchan, 'in_%d' % i)
+            dma_port = 'ctrl_%d' % i if dma_model == 'idma' else 'in_%d' % i
+            self.bind(l1, 'dma_%d' % i, dma, dma_port)
+            self.bind(l1, 'dma_alias_%d' % i, dma, dma_port)
             self.bind(l1, 'event_unit_%d' % i, event_unit, 'demux_in_%d' % i)
             self.bind(l1, 'event_unit_alias_%d' % i, event_unit, 'demux_in_%d' % i)
 
@@ -227,7 +271,7 @@ class Cluster(st.Component):
         self.bind(periph_ico, 'timer', timer, 'input')
 
         periph_ico.add_mapping('dma', **self._reloc_mapping(cluster_conf.get_property('peripherals/dma/mapping')))
-        self.bind(periph_ico, 'dma', mchan, 'in_%d' % nb_pe)
+        self.bind(periph_ico, 'dma', dma, ('ctrl_%d' if dma_model == 'idma' else 'in_%d') % nb_pe)
 
         if has_ne16:
             periph_ico.add_mapping('ne16', **self._reloc_mapping(cluster_conf.get_property('peripherals/ne16/mapping')))
@@ -237,17 +281,37 @@ class Cluster(st.Component):
             periph_ico.add_mapping('redmule', **self._reloc_mapping(cluster_conf.get_property('peripherals/redmule/mapping')))
             self.bind(periph_ico, 'redmule', redmule, 'input')
 
-        # MCHAN
-        self.bind(mchan, 'ext_irq_itf', self, 'dma_irq')
-        self.bind(mchan, 'ext_itf', cluster_ico, 'input')
+        # Cluster DMA
+        if dma_model == 'idma':
+            self.bind(dma, 'axi_read', cluster_ico, 'input')
+            self.bind(dma, 'axi_write', cluster_ico, 'input')
 
-        for i in range(0, 4):
-            self.bind(mchan, 'loc_itf_%d' % i, l1, 'dma_in_%d' % i)
+            # The hardware has four TCDM ports, the backend model drives a single one. Transfers
+            # are correct but the L1 contention is optimistic compared to mchan.
+            self.bind(dma, 'tcdm_read', l1, 'dma_in_0')
+            self.bind(dma, 'tcdm_write', l1, 'dma_in_0')
 
-        for i in range(0, nb_pe):
-            self.bind(mchan, 'event_itf_%d' % i, event_unit, 'in_event_%d_pe_%d' % (dma_irq_0, i))
-            self.bind(mchan, 'irq_itf_%d' % i, event_unit, 'in_event_%d_pe_%d' % (dma_irq_1, i))
-            self.bind(mchan, 'ext_irq_itf', event_unit, 'in_event_%d_pe_%d' % (dma_irq_ext, i))
+            # Completion is broadcast to every core, and no interrupt is raised, so dma_1 stays
+            # unbound. The peripheral event stands in for the mchan external interrupt, which is
+            # what the SoC interrupt controller is wired to.
+            for i in range(0, nb_pe):
+                self.bind(dma, 'event_%d' % i, event_unit,
+                    'in_event_%d_pe_%d' % (dma_irq_0, i))
+                self.bind(dma, 'event_pe_0', event_unit,
+                    'in_event_%d_pe_%d' % (dma_irq_ext, i))
+
+            self.bind(dma, 'event_pe_0', self, 'dma_irq')
+        else:
+            self.bind(dma, 'ext_irq_itf', self, 'dma_irq')
+            self.bind(dma, 'ext_itf', cluster_ico, 'input')
+
+            for i in range(0, 4):
+                self.bind(dma, 'loc_itf_%d' % i, l1, 'dma_in_%d' % i)
+
+            for i in range(0, nb_pe):
+                self.bind(dma, 'event_itf_%d' % i, event_unit, 'in_event_%d_pe_%d' % (dma_irq_0, i))
+                self.bind(dma, 'irq_itf_%d' % i, event_unit, 'in_event_%d_pe_%d' % (dma_irq_1, i))
+                self.bind(dma, 'ext_irq_itf', event_unit, 'in_event_%d_pe_%d' % (dma_irq_ext, i))
 
         # Timer
         self.bind(self, 'ref_clock', timer, 'ref_clock')
