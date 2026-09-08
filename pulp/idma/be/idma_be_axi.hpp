@@ -70,6 +70,8 @@ private:
     // Once a read burst is finished, it can be enqueued with this function so that it is
     // notified after the latency has elapsed
     void read_handle_req_end(vp::IoReq *req);
+    // Forward a ready response when the destination releases its previous chunk.
+    void forward_read_data();
     // Called when a write requests is finish to handle it
     void write_handle_req_end(vp::IoReq *req);
     // Send the pending read burst to AXI
@@ -99,6 +101,7 @@ private:
     std::queue<vp::IoReq *> read_bursts_waiting_ack;
     // List of timestamps for each burst where they can be considered as finished
     std::vector<int64_t> read_timestamps;
+    int64_t last_read_forward_cycle = -1;
 
     // Queue of pending bursts. This contains both read and write bursts. This is mostly used
     // to process them in order. The front burst is removed from the queue once it is fully

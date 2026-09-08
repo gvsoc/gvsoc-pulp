@@ -82,6 +82,7 @@ void IDmaBeAxi::reset(bool active)
 {
     if (active)
     {
+        this->last_read_forward_cycle = -1;
         // Since requests are here and there in various queues, we need to first
         // clear all the queues
         while(this->free_bursts.size() > 0)
@@ -242,6 +243,11 @@ void IDmaBeAxi::write_data_ack(uint8_t *data)
     // Since a new request is now free, notify the backend in case it was waiting for it
     this->be->update();
     this->fsm_event.enqueue();
+
+    // The next buffered row may start on the edge acknowledging the last beat
+    // of this row. Waiting for another FSM tick inserts a bubble at every row
+    // boundary even though both the source and destination are ready.
+    this->forward_read_data();
 }
 
 
@@ -381,32 +387,45 @@ void IDmaBeAxi::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         _this->send_read_burst_to_axi();
     }
 
+    _this->forward_read_data();
+}
+
+void IDmaBeAxi::forward_read_data()
+{
+    // A synchronous destination can acknowledge recursively. Limit forwarding
+    // to one response per cycle, including calls from write_data_ack().
+    if (this->last_read_forward_cycle == this->clock.get_cycles())
+    {
+        this->fsm_event.enqueue();
+        return;
+    }
     // In case we have pending read bursts waiting for pushing data, only do it if the backend
     // is ready to accept the data in case the destination is not ready
-    if (_this->read_waiting_bursts.size() != 0 &&
-        _this->be->is_ready_to_accept_data((IdmaTransfer *)*_this->read_waiting_bursts.front()->arg_get(0)))
+    if (this->read_waiting_bursts.size() != 0 &&
+        this->be->is_ready_to_accept_data((IdmaTransfer *)*this->read_waiting_bursts.front()->arg_get(0)))
     {
-        vp::IoReq *req = _this->read_waiting_bursts.front();
+        vp::IoReq *req = this->read_waiting_bursts.front();
 
         // Push the data only once the timestamp has expired to take into account the latency
         // returned when the data was read
-        if (_this->read_timestamps[req->id] <= _this->clock.get_cycles())
+        if (this->read_timestamps[req->id] <= this->clock.get_cycles())
         {
             // Move the burst to a different queue so that we can free the request when it is
             // acknowledge
-            _this->read_waiting_bursts.pop();
-            _this->read_bursts_waiting_ack.push(req);
+            this->read_waiting_bursts.pop();
+            this->read_bursts_waiting_ack.push(req);
+            this->last_read_forward_cycle = this->clock.get_cycles();
 
             // Send the data
-            _this->be->write_data((IdmaTransfer *)*req->arg_get(0), req->get_data(), req->get_size());
+            this->be->write_data((IdmaTransfer *)*req->arg_get(0), req->get_data(), req->get_size());
 
             // Trigger again the FSM since we may continue with another transfer
-            _this->fsm_event.enqueue();
+            this->fsm_event.enqueue();
         }
         else
         {
             // Otherwise check again when timetamp is reached
-            _this->fsm_event.enqueue(_this->read_timestamps[req->id] - _this->clock.get_cycles());
+            this->fsm_event.enqueue(this->read_timestamps[req->id] - this->clock.get_cycles());
         }
     }
 }

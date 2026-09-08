@@ -21,14 +21,15 @@ import regmap.regmap_c_header
 
 class ClusterRegisters(gvsoc.systree.Component):
 
-    def __init__(self, parent, name, boot_addr=0, nb_cores=1, binary=None):
+    def __init__(self, parent, name, boot_addr=0, nb_cores=1, binary=None, eoc=False):
         super(ClusterRegisters, self).__init__(parent, name)
 
         self.add_sources(['pulp/snitch/snitch_cluster/spatz/cluster_registers.cpp'])
 
         self.add_properties({
             'boot_addr': boot_addr,
-            'nb_cores': nb_cores
+            'nb_cores': nb_cores,
+            'eoc': eoc,
         })
 
     def gen(self, builddir, installdir):

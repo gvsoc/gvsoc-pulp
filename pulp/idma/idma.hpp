@@ -48,6 +48,12 @@ public:
     // Transfer config
     uint64_t config;
 
+    // Indexed gather extension: configuration is captured at launch, not read
+    // from frontend registers while another descriptor is executing.
+    uint64_t index_addr = 0;
+    uint32_t index_width = 0; // log2(index bytes), as encoded by DMIDX
+    uint32_t transfer_id = 0;
+
     // Free rom for additional information
     std::vector<uint64_t> data;
 

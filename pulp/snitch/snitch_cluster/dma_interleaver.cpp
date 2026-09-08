@@ -96,6 +96,7 @@ vp::IoReqStatus DmaInterleaver::req(vp::Block *__this, vp::IoReq *req)
         bank_req.set_data(data);
         bank_req.set_second_data(second_data); //needed for amo
         bank_req.set_is_write(is_write);
+        bank_req.set_debug(req->is_debug());
         bank_req.set_opcode(opcode); //needed for amo
         _this->trace.msg(vp::Trace::LEVEL_TRACE, "Forwarding bank request to bank %d (req x%p, offset: 0x%llx, size: 0x%llx)\n", bank_id, &bank_req, bank_offset, bank_size);
         _this->output_ports[bank_id].req_forward(&bank_req);

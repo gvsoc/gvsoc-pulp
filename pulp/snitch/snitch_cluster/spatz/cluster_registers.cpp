@@ -53,6 +53,7 @@ private:
     uint32_t bootaddr;
     uint32_t status;
     int nb_cores;
+    bool eoc_enabled;
     vp::reg_32 barrier_status;
 
     std::vector<vp::WireSlave<bool>> barrier_req_itf;
@@ -74,6 +75,8 @@ ClusterRegisters::ClusterRegisters(vp::ComponentConf &config)
 
     this->bootaddr = this->get_js_config()->get("boot_addr")->get_int();
     this->nb_cores = this->get_js_config()->get("nb_cores")->get_int();
+    auto eoc = this->get_js_config()->get("eoc");
+    this->eoc_enabled = eoc && eoc->get_bool();
 
     this->in.set_req_meth(&ClusterRegisters::req);
     this->new_slave_port("input", &this->in);
@@ -117,6 +120,18 @@ vp::IoReqStatus ClusterRegisters::core_req(vp::Block *__this, vp::IoReq *req, in
     uint8_t *data = req->get_data();
 
     _this->core_access = id;
+
+    if (_this->eoc_enabled && offset == 0x60 && size == 4 && is_write)
+    {
+        uint32_t value = 0;
+        for (unsigned i = 0; i < 4; ++i) value |= uint32_t(data[i]) << (8*i);
+        if (value & 1)
+        {
+            printf("[EOC] retval=%u cycle=%lld\n", value >> 1, _this->clock.get_cycles());
+            _this->time.get_engine()->quit(value >> 1);
+        }
+        return vp::IO_REQ_OK;
+    }
 
     _this->trace.msg("Received IO req (offset: 0x%llx, size: 0x%llx, is_write: %d)\n", offset, size, is_write);
 

@@ -46,7 +46,8 @@ class SnitchDma(gvsoc.systree.Component):
             burst_size: int=0,
             loc_base: int=0,
             loc_size: int=0,
-            tcdm_width: int=0):
+            tcdm_width: int=0,
+            gather_enable: bool=False):
 
         super().__init__(parent, name)
 
@@ -66,6 +67,7 @@ class SnitchDma(gvsoc.systree.Component):
             "loc_base": loc_base,
             "loc_size": loc_size,
             "tcdm_width": tcdm_width,
+            "gather_enable": gather_enable,
         })
 
     def i_OFFLOAD(self) -> gvsoc.systree.SlaveItf:
@@ -118,3 +120,11 @@ class SnitchDma(gvsoc.systree.Component):
         """
         self.itf_bind('tcdm_read', itf, signature='io')
         self.itf_bind('tcdm_write', itf, signature='io')
+
+    def o_INDEX(self, itf: gvsoc.systree.SlaveItf):
+        """Bind the dedicated 64-bit, read-only gather index port.
+
+        Requires gather_enable=True. Addresses are absolute; the target maps
+        this port onto an independent narrow TCDM input, as in the RTL.
+        """
+        self.itf_bind('index', itf, signature='io')

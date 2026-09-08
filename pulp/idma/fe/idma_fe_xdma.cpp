@@ -30,6 +30,8 @@ IDmaFeXdma::IDmaFeXdma(vp::Component *idma, IdmaTransferConsumer *me)
     src_stride(*this, "src_stride", 32),
     dst_stride(*this, "dst_stride", 32),
     reps(*this, "reps", 32),
+    index_addr(*this, "index_addr", 32, true, 0),
+    index_width(*this, "index_width", 2, true, 0),
     next_transfer_id(*this, "next_transfer_id", 32, true, 2),
     completed_id(*this, "completed_id", 32, true, 1),
     do_transfer_grant(*this, "do_transfer_grant", 1)
@@ -86,6 +88,13 @@ void IDmaFeXdma::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *insn)
             _this->trace.msg(vp::Trace::LEVEL_TRACE, "Received dmrep operation (reps: 0x%lx)\n", insn->arg_a);
             _this->reps.set(insn->arg_a);
             break;
+        case 0b0001000:
+            _this->index_addr.set(insn->arg_a);
+            _this->index_width.set((insn->opcode >> 20) & 3);
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,
+                "DMIDX addr=0x%x index_bits=%u\n", insn->arg_a,
+                8U << _this->index_width.get());
+            break;
         case 0b0000011:
             _this->trace.msg(vp::Trace::LEVEL_TRACE, "Received dmcpy operation (config: 0x%lx, size: 0x%lx)\n",
                 insn->arg_b, insn->arg_a);
@@ -131,6 +140,7 @@ uint32_t IDmaFeXdma::enqueue_copy(uint32_t config, uint32_t size, bool &granted)
     // Allocate transfer ID
     uint32_t transfer_id = this->next_transfer_id.get();
     this->next_transfer_id.set(transfer_id + 1);
+    this->issued_ids.push_back(transfer_id);
 
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Allocated transfer ID (id: %d)\n", transfer_id);
 
@@ -143,6 +153,14 @@ uint32_t IDmaFeXdma::enqueue_copy(uint32_t config, uint32_t size, bool &granted)
     transfer->dst_stride = this->dst_stride.get();
     transfer->reps = this->reps.get();
     transfer->config = config;
+    transfer->index_addr = this->index_addr.get();
+    transfer->index_width = this->index_width.get();
+    transfer->transfer_id = transfer_id;
+
+    this->trace.msg(vp::Trace::LEVEL_INFO,
+        "DMA_BEGIN id=%u cycle=%lld src=0x%llx dst=0x%llx size=%llu reps=%llu config=%u\n",
+        transfer_id, this->clock.get_cycles(), transfer->src, transfer->dst,
+        transfer->size, transfer->reps, config);
 
     this->trace.msg(vp::Trace::LEVEL_INFO, "Enqueuing transfer (id: %d, src: %llx, dst: %llx, "
         "size: %llx, src_stride: %llx, dst_stride: %llx, reps: %llx, config: %llx)\n",
@@ -151,7 +169,7 @@ uint32_t IDmaFeXdma::enqueue_copy(uint32_t config, uint32_t size, bool &granted)
 
     // In case size is 0 or reps is 0 with 2d transfer, directly terminate the transfer.
     // This could be done few cycles after to better match HW.
-    if (size == 0 || ((transfer->config >> 1) & 1) && transfer->reps == 0)
+    if (size == 0 || ((transfer->config & 6) && transfer->reps == 0))
     {
         this->ack_transfer(transfer);
         return transfer_id;
@@ -182,7 +200,14 @@ uint32_t IDmaFeXdma::enqueue_copy(uint32_t config, uint32_t size, bool &granted)
 // Called by middle-end when a transfer is done
 void IDmaFeXdma::ack_transfer(IdmaTransfer *transfer)
 {
-    this->completed_id.inc(1);
+    this->trace.msg(vp::Trace::LEVEL_INFO, "DMA_END id=%u cycle=%lld\n",
+        transfer->transfer_id, this->clock.get_cycles());
+    this->finished_ids.insert(transfer->transfer_id);
+    while (!this->issued_ids.empty() && this->finished_ids.erase(this->issued_ids.front()))
+    {
+        this->completed_id.set(this->issued_ids.front());
+        this->issued_ids.pop_front();
+    }
     delete transfer;
 }
 
@@ -200,6 +225,7 @@ void IDmaFeXdma::update()
         this->trace.msg(vp::Trace::LEVEL_TRACE, "Middle-end got ready, unblocking transfer\n");
 
         IdmaTransfer *transfer = this->stalled_transfer;
+        this->stalled_transfer = nullptr;
 
         IssOffloadInsnGrant<uint32_t> offload_grant = {
             .result=this->next_transfer_id.get() - 1
@@ -213,4 +239,11 @@ void IDmaFeXdma::update()
 
 void IDmaFeXdma::reset(bool active)
 {
+    if (active)
+    {
+        this->issued_ids.clear();
+        this->finished_ids.clear();
+        delete this->stalled_transfer;
+        this->stalled_transfer = nullptr;
+    }
 }

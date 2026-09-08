@@ -24,6 +24,8 @@
 #include <cpu/iss/include/offload.hpp>
 #include <vp/register.hpp>
 #include <vp/signal.hpp>
+#include <deque>
+#include <unordered_set>
 #include "../idma.hpp"
 
 /**
@@ -73,6 +75,8 @@ private:
     vp::Register<uint64_t> dst_stride;
     // Register holding replication
     vp::Register<uint32_t> reps;
+    vp::Register<uint32_t> index_addr;
+    vp::Register<uint32_t> index_width;
     // Transfer ID of the next transfer
     vp::Register<uint32_t> next_transfer_id;
     // Transfer ID of the last completed ID
@@ -81,5 +85,9 @@ private:
     // send a grant to the core to unblock it
     vp::Signal<bool> do_transfer_grant;
     // In case a transfer was blocked, gives the transfer which was blocked
-    IdmaTransfer *stalled_transfer;
+    IdmaTransfer *stalled_transfer = nullptr;
+    // Empty descriptors can finish before older memory traffic. DMSTAT must
+    // expose the last contiguous completed ID, not the number of callbacks.
+    std::deque<uint32_t> issued_ids;
+    std::unordered_set<uint32_t> finished_ids;
 };
