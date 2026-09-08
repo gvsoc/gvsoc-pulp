@@ -145,8 +145,14 @@ class Soc(gvsoc.systree.Component):
         # HBM. The memory itself answers immediately in the RTL testbench,
         # but the AXI path to it (registered crossbars, IW/DW converters,
         # axi_to_reg) costs ~8 cycles — carried by the board memory latency.
+        # The testbench memory (tb_memory_axi) serialises everything behind
+        # an axi_riscv_atomics wrapper that accepts 2 read and 2 write
+        # transactions at a time: a third master (an icache refill while the
+        # iDMA streams) waits for one in-flight burst to complete before its
+        # request is taken, rather than slipping between the beats.
         wide_axi.o_MAP(self.i_HBM(),
-            RouterMapping(base=arch.hbm.base, size=arch.hbm.size), name='hbm')
+            RouterMapping(base=arch.hbm.base, size=arch.hbm.size, max_pending_bursts=2),
+            name='hbm')
 
         # ROM sits on the wide crossbar (RTL BootROM slave).
         wide_axi.o_MAP(rom.i_INPUT(),

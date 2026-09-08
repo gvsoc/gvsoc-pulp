@@ -22,8 +22,22 @@
  *   - a core loading HW_BARRIER before the barrier is reached gets
  *     IO_REQ_GRANTED; the response is sent through the core's own slave
  *     port once the last core reaches the barrier.
+ *
+ * Barrier timing. In the RTL the barrier (spatz_barrier.sv) is a filter on
+ * each core's data port, in front of the cluster crossbar: a load to
+ * HW_BARRIER is held at the core's port until every core has one held, then
+ * all of them are released together and each travels the normal path to the
+ * peripheral and back (the register itself reads 0). So after the barrier is
+ * taken every core still pays the full round trip to the peripheral, and the
+ * cores released together serialise on the peripheral's request bus. Here the
+ * held requests have already reached the peripheral, so on release they are
+ * answered after the same latency the last arriver is charged, plus the
+ * serialisation behind the requests released ahead of them (measured on the
+ * Verilator RTL by tests/calibration/targets/spatz/barrier: last arriver 10
+ * cycles from issue to retire, the waiting core 3 more).
  */
 
+#include <deque>
 #include <vector>
 #include <vp/vp.hpp>
 #include <vp/itf/io_v2.hpp>
@@ -51,6 +65,16 @@ private:
     void cl_clint_set_req(uint64_t reg_offset, int size, uint8_t *value, bool is_write);
     void cl_clint_clear_req(uint64_t reg_offset, int size, uint8_t *value, bool is_write);
     void hw_barrier_req(uint64_t reg_offset, int size, uint8_t *value, bool is_write);
+    static void release_handler(vp::Block *__this, vp::ClockEvent *event);
+    void schedule_release();
+
+    // Latency of a peripheral access as seen by the core (issue to retire),
+    // charged inline on every access and again to the held barrier loads
+    // once they are released.
+    static constexpr int64_t ACCESS_LATENCY = 11;
+    // Extra cycles per request released behind another one: the requests
+    // released together serialise on the crossbar and the register bus.
+    static constexpr int64_t RELEASE_SERIAL = 3;
 
     vp::Trace     trace;
 
@@ -69,10 +93,21 @@ private:
     uint32_t waiting_cores;
 
     std::vector<vp::IoReq *> waiting_reqs;
+
+    // Held barrier loads released, waiting for their round trip to elapse.
+    struct PendingRelease
+    {
+        int core;
+        vp::IoReq *req;
+        int64_t due;
+    };
+    std::deque<PendingRelease> releases;
+    vp::ClockEvent release_event;
 };
 
 ClusterRegisters::ClusterRegisters(vp::ComponentConf &config)
-: vp::Component(config), regmap(*this, "regmap")
+: vp::Component(config), regmap(*this, "regmap"),
+  release_event(this, &ClusterRegisters::release_handler)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
 
@@ -116,12 +151,13 @@ vp::IoReqStatus ClusterRegisters::core_req(vp::Block *__this, vp::IoReq *req, in
 
     _this->regmap.access(offset, size, data, is_write);
 
-    // Barrier insert 10 cycle stall even for last one to wake-up, seem the request go through AXI
-    req->inc_latency(11);
+    // Round trip through the cluster crossbar and the register bus
+    req->inc_latency(ACCESS_LATENCY);
     req->set_resp_status(vp::IO_RESP_OK);
 
     if (_this->stall_core)
     {
+        // Held until the barrier is taken; answered from release_handler
         _this->waiting_reqs[id] = req;
         _this->stall_core = false;
         return vp::IO_REQ_GRANTED;
@@ -158,6 +194,7 @@ void ClusterRegisters::reset(bool active)
     {
         this->waiting_cores = 0;
         this->stall_core = false;
+        this->releases.clear();
     }
 }
 
@@ -187,21 +224,27 @@ void ClusterRegisters::hw_barrier_req(uint64_t reg_offset, int size, uint8_t *va
 
             this->barrier_status.set(0);
 
+            // The last arriver's load is answered inline with ACCESS_LATENCY.
+            // The held loads are released now and pay the same round trip,
+            // each one RELEASE_SERIAL cycles behind the request released
+            // before it (the last arriver's being the first).
+            int64_t now = this->clock.get_cycles();
+            int rank = 1;
             for (int i=0; i<this->nb_cores; i++)
             {
                 if ((this->waiting_cores >> i) & 1)
                 {
-                    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Wakeup core waiting on barrier (core: %d)\n",
-                        i);
-                    // Barrier insert 10 cycle stall even for last one to wake-up, seem the request go through AXI
-                    vp::IoReq *waiting_req = this->waiting_reqs[i];
+                    int64_t due = now + ACCESS_LATENCY + RELEASE_SERIAL * rank;
+                    this->trace.msg(vp::Trace::LEVEL_DEBUG,
+                        "Releasing core waiting on barrier (core: %d, due: %ld)\n", i, due);
+                    this->releases.push_back({i, this->waiting_reqs[i], due});
                     this->waiting_reqs[i] = NULL;
-                    waiting_req->inc_latency(11);
-                    this->cores_in[i].resp(waiting_req);
+                    rank++;
                 }
             }
 
             this->waiting_cores = 0;
+            this->schedule_release();
         }
         else
         {
@@ -216,6 +259,33 @@ void ClusterRegisters::hw_barrier_req(uint64_t reg_offset, int size, uint8_t *va
 
     this->stall_core = false;
     return;
+}
+
+void ClusterRegisters::schedule_release()
+{
+    if (this->releases.empty() || this->release_event.is_enqueued())
+    {
+        return;
+    }
+    int64_t delay = this->releases.front().due - this->clock.get_cycles();
+    this->release_event.enqueue(delay > 0 ? delay : 1);
+}
+
+void ClusterRegisters::release_handler(vp::Block *__this, vp::ClockEvent *event)
+{
+    ClusterRegisters *_this = (ClusterRegisters *)__this;
+    int64_t now = _this->clock.get_cycles();
+
+    while (!_this->releases.empty() && _this->releases.front().due <= now)
+    {
+        PendingRelease release = _this->releases.front();
+        _this->releases.pop_front();
+        _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Wakeup core waiting on barrier (core: %d)\n",
+            release.core);
+        _this->cores_in[release.core].resp(release.req);
+    }
+
+    _this->schedule_release();
 }
 
 void ClusterRegisters::cl_clint_clear_req(uint64_t reg_offset, int size, uint8_t *value, bool is_write)
