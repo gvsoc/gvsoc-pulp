@@ -62,11 +62,13 @@ class Soc(gvsoc.systree.Component):
 
         drv = driver.Driver(self, 'driver', targets=targets, transfer_size=TRANSFER_SIZE, packet_size=PACKET_SIZE)
 
-        # TODO: instantiate a Generator for every (x, y) cluster, connect its
-        # output to the mesh's cluster input at (x, y), and connect its
-        # control port to the driver (drv.o_GENERATOR(index, ...)). Iterate
-        # in the same (x outer, y inner) order used to build `targets` above
-        # so index i lines up with generator (x, y).
+        index = 0
+        for x in range(NB_CLUSTER_X):
+            for y in range(NB_CLUSTER_Y):
+                generator = interco.traffic.generator.Generator(self, f'generator_{x}_{y}')
+                generator.o_OUTPUT(noc.i_CLUSTER_NARROW_INPUT(x, y))
+                drv.o_GENERATOR(index, generator.i_CONTROL())
+                index += 1
 
 
 # Wraps the SoC with its clock generator, like a normal gvsoc chip
