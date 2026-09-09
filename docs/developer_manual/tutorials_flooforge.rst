@@ -637,48 +637,120 @@ consumption, and access-driven dynamic power.
    Each line has the shape
    ``Trace path; Dynamic power (W); Leakage power (W); Total (W); Percentage``.
 
-   To see it as a VCD trace instead:
-
-   .. code-block:: bash
-
-      $ make run runner_args="--power --vcd --event=.*"
-
 
 F - An array of components on the original FlooNoC
 .............................................................
 Folder: ``F_array_of_components_floonoc``
 
-Move from a single component to a small **array** of them, connected through
-GVSoC's original FlooNoC model: a fixed-shape 2D mesh
-(``pulp.FlooNoC.FlooNoC.FlooNoCClusterGridNarrowWide``). This section is a
-standalone gvsoc system (no RISC-V core/ISS): it is built and run directly.
+We will now move to a demonstration of the original FlooNoC 2D-mesh model, 
+and how to instantiate multiple components and connect them to it. 
+To make it simpler, this section is a standalone gvsoc system (without RISC-V core/ISS),
+but real examples of FlooNoC usage can be found in the PULP targets 
+(e.g. ``gvsoc/pulp/pulp/chips/softhier`` or ``gvsoc/pulp/magia``).
 
 .. admonition:: Information - the mesh grid
    :class: explanation
 
-   A ``FlooNoCClusterGridNarrowWide(parent, name, wide_width, narrow_width, nb_x_clusters, nb_y_clusters, ...)``
+   A ``FlooNocClusterGridNarrowWide(parent, name, wide_width, narrow_width, nb_x_clusters, nb_y_clusters, ...)``
    instantiates an ``(nb_x_clusters+2) x (nb_y_clusters+2)`` grid: one
    interior "cluster" node per ``(x, y)``, plus a one-tile border all around
-   for external targets. A cluster injects traffic via
-   ``noc.i_CLUSTER_NARROW_INPUT(x, y)``; a target is attached with
-   ``noc.o_NARROW_MAP(itf, base, size, x, y, rm_base=True)``.
+   for external targets. A cluster can send memory requests to others by binding its output to the port
+   ``noc.i_CLUSTER_NARROW_INPUT(x, y)``. Similarly, a cluster can be reached by binding and mapping
+   its input port to the mesh with ``noc.o_NARROW_MAP(itf, base, size, x, y, rm_base=True)``.
 
-``my_system.py`` builds a 2x2 array of dummy traffic generators
-(``interco.traffic.generator.Generator``) around the mesh, all targeting one
-shared ``Memory`` sitting on a border node. Since a ``Generator`` only starts
-once told to over its ``wire<TrafficGeneratorConfig>`` control port, a small
-custom component, ``driver.cpp``/``driver.py``, fires a fixed dummy write
-burst on every generator at reset and polls them until they are all done,
-then stops the simulation.
+The purpose of ``my_system.py`` is to build a 3x3 array of tiles: 
+each cluster can send requests to and receive responses from a distinct target. To do
+so, they are each composed of traffic generator (``interco.traffic.generator.Generator``)
+and a local memory. We will instantiate the generators later.
 
-.. admonition:: Task - F.1 Read through the wiring
+.. admonition:: Information - the SoC so far
+   :class: explanation
+
+   .. code-block:: python
+
+      noc = pulp.floonoc.floonoc.FlooNocClusterGridNarrowWide(
+          self, 'noc', wide_width=8, narrow_width=8,
+          nb_x_clusters=NB_CLUSTER_X, nb_y_clusters=NB_CLUSTER_Y,
+          ni_outstanding_reqs=32)
+
+      for x in range(NB_CLUSTER_X):
+          for y in range(NB_CLUSTER_Y):
+              mem = Memory(self, f'mem_{x}_{y}', size=TILE_MEM_SIZE)
+              noc.o_NARROW_MAP(mem.i_INPUT(), _tile_base(x, y), TILE_MEM_SIZE, x + 1, y + 1, rm_base=True)
+
+      targets = []
+      for x in range(NB_CLUSTER_X):
+          for y in range(NB_CLUSTER_Y):
+              targets.append(_tile_base(*_mirror(x, y)))
+
+      drv = driver.Driver(self, 'driver', targets=targets, transfer_size=TRANSFER_SIZE, packet_size=PACKET_SIZE)
+
+   For this tutorial we will only use the narrow channel (``wide_width``/``narrow_width``
+   are the bytes routed per cycle on each). Every cluster's local memory is
+   mapped to the output of the mesh at ``(x+1, y+1)``, while the generators will be mapped to the 
+   input ports. ``drv`` is the driver component that will trigger the generators, 
+   with one distinct target address per generator. We have selected a traffic pattern where
+   each generator accesses its mirror node. For this purpose, `_mirror(x, y)`` returns 
+   ``(NB_CLUSTER_X-1-x, NB_CLUSTER_Y-1-y)``, which isthe point-symmetric tile across the grid's center. 
+
+.. admonition:: Information - the driver component
+   :class: explanation
+
+   ``interco.traffic.generator.Generator`` only produces traffic once
+   triggered over a ``wire<TrafficGeneratorConfig>`` control port
+   (``TrafficGeneratorConfigMaster::start(address, size, packet_size, sync, do_write, check)``).
+   ``driver.cpp``/``driver.py`` are thus added to trigger every
+   generator with its own target address, then poll them:
+
+   .. code-block:: cpp
+
+      void Driver::reset(bool active)
+      {
+          if (!active)
+          {
+              for (int i = 0; i < this->nb_generators; i++)
+              {
+                  this->generator_itf[i].start(this->targets[i], this->transfer_size, this->packet_size,
+                      &this->sync, true, false);
+              }
+
+              // trigger the transfers until sync.start() is called.
+              this->sync.start();
+
+              this->check_event.enqueue(100);
+          }
+      }
+
+   ``reset(false)`` fires once, right when the simulation's reset is
+   deasserted. ``targets`` passes the list of target addresses to the driver.
+   Each ``start()`` call registers its generator, and then the driver calls
+   ``sync.start()`` to start the transfers. After that, ``check_handler``
+   polls ``is_finished()`` on each generator at a short, fixed interval and
+   calls ``this->time.get_engine()->quit(0)`` once they are all done to
+   finish the simulation - the interval matters: too coarse, and generators
+   finishing only a few cycles apart get lumped into the same poll and look
+   like they finished simultaneously.
+
+.. admonition:: Task - F.1 Instantiate the generators and wire them in
    :class: task
 
-   Open ``my_system.py``: identify where the mesh is created, where the
-   shared memory is mapped onto a border node, and where each generator's
-   output is bound to its cluster's input port. Then open ``driver.cpp`` and
-   find the ``TrafficGeneratorConfigMaster::start()`` call that kicks each
-   generator off.
+   In ``Soc.__init__``, where the ``TODO`` is, instantiate a
+   ``interco.traffic.generator.Generator`` for every ``(x, y)`` cluster,
+   connect its output to the mesh's cluster input at ``(x, y)``, and connect
+   its control port to the driver.
+
+   .. code-block:: python
+
+      index = 0
+      for x in range(NB_CLUSTER_X):
+          for y in range(NB_CLUSTER_Y):
+              generator = interco.traffic.generator.Generator(self, f'generator_{x}_{y}')
+              generator.o_OUTPUT(noc.i_CLUSTER_NARROW_INPUT(x, y))
+              drv.o_GENERATOR(index, generator.i_CONTROL())
+              index += 1
+
+   Each generator's data output goes into its cluster's mesh input, and each
+   generator's *control* port goes to the driver.
 
 .. admonition:: Verify - F.1
    :class: solution
@@ -688,10 +760,69 @@ then stops the simulation.
       $ make gvsoc
       $ make run runner_args=--trace=driver
 
-   You should see the driver announce it started 4 generators, then "All
-   generators finished, stopping simulation". Try
-   ``make run runner_args="--vcd --event=.*"`` and look at the generators'
-   ``req_addr``/``busy`` signals in GTKWave to see the traffic pattern.
+   You should see the driver announce it started 9 generators, then "All
+   generators finished, stopping simulation".
+
+.. admonition:: Information - GVSoC's stats engine
+   :class: explanation
+
+   Separate from traces/VCD/power, GVSoC has a lightweight counter/bandwidth
+   framework: any component can declare a ``vp::StatScalar`` (a counter) or
+   ``vp::StatBw`` (a bandwidth), and register it with
+   ``this->stats.register_stat(&stat, "name", "description")``. Enabled with ``--stats``,
+   GVSoC dumps ``stats.txt`` at the end of the run.
+
+.. admonition:: Task - F.2 Check memory bandwidth
+   :class: task
+
+   .. code-block:: bash
+
+      $ make run runner_args=--stats
+
+   You should see``memory.memory.Memory`` registers
+   ``reads``/``writes``/``bytes_read``/``bytes_written``/``read_bandwidth``/``write_bandwidth``
+   internally. Open ``stats.txt`` and find any
+   ``/soc/mem_x_y`` block: this is the actual measured bandwidth its
+   point-symmetric partner's generator drove into it through the mesh (the
+   center tile's ``/soc/mem_1_1`` sees only its own, purely local traffic).
+
+.. admonition:: Information - the driver already tracks aggregate bandwidth
+   :class: explanation
+
+   ``driver.cpp`` (given) also declares and registers a couple of stats of
+   its own:
+
+   .. code-block:: cpp
+
+      vp::StatScalar stat_bytes_issued;
+      vp::StatBw stat_bandwidth;
+
+   .. code-block:: cpp
+
+      this->stats.register_stat(&this->stat_bytes_issued, "bytes_issued", "Total bytes injected into the NoC");
+      this->stats.register_stat(&this->stat_bandwidth, "bandwidth", "Average injected bandwidth");
+      this->stat_bandwidth.set_source(&this->stat_bytes_issued);
+
+   .. code-block:: cpp
+
+      this->stat_bytes_issued += this->transfer_size;
+
+   The last line runs inside the ``reset()`` loop, once per generator
+   started. ``set_source`` is what turns the raw byte count into a
+   bandwidth stat - the engine divides by the measured window's duration
+   automatically, the same mechanism ``memory.memory.Memory`` uses
+   internally.
+
+.. admonition:: Verify - F
+   :class: solution
+
+   .. code-block:: bash
+
+      $ make run runner_args=--stats
+
+   ``stats.txt`` should now show both the per-tile ``/soc/mem_x_y`` blocks
+   (bandwidth delivered to each tile) and ``/soc/driver``
+   (aggregate bandwidth demanded across all 9 generators).
 
 G - The flexible FlooNoC: a 3D mesh from a floogen config
 ....................................................................
@@ -740,33 +871,80 @@ timing that a config file controls instead of a hardcoded formula.
    be a uniform color (latency 1) and every Z link should stand out
    (latency 8).
 
-.. admonition:: Task - G.2 Instantiate the flexible NoC
-   :class: task
+.. admonition:: Information - the flexible NoC, instantiated
+   :class: explanation
 
-   Open ``my_system.py``. Note the differences from section F:
+   ``my_system.py`` already instantiates the NoC and, for every cluster, a
+   local memory mapped onto that cluster's own node - the same hybrid
+   compute+memory tile design as section F, just addressed differently:
+
+   .. code-block:: python
+
+      clusters = [(x, y, z)
+          for z in range(DIM_Z) for y in range(DIM_Y) for x in range(DIM_X)]
+
+      for (x, y, z) in clusters:
+          node_id = noc.id_map[_ni_name(x, y, z)]
+          mem = Memory(self, f'mem_{x}_{y}_{z}', size=TILE_MEM_SIZE)
+          noc.o_NARROW_MAP(mem.i_INPUT(), _tile_base(x, y, z), TILE_MEM_SIZE, node_id, rm_base=True)
+
+      targets = [_tile_base(*_mirror(x, y, z)) for (x, y, z) in clusters]
+      drv = driver.Driver(self, 'driver', targets=targets, transfer_size=TRANSFER_SIZE, packet_size=PACKET_SIZE)
+
+   Differences from section F:
 
    - Nodes are addressed by an integer ``node_id``, looked up by generated
      name in ``noc.id_map`` (e.g. ``noc.id_map['cluster_0_0_0_ni']``) rather
      than by ``(x, y)``.
-   - ``FlooNoCFlex(..., network_path=..., routing_path=..., link_latencies_path=...)``
+   - ``FlooNocFlex(..., network_path=..., routing_path=..., link_latencies_path=...)``
      loads and validates the three YAML files at construction time.
-   - One cluster, ``(0, 0, 0)``, plays the shared-memory target; every other
-     cluster's generator sends dummy traffic to it, so half of them cross the
-     slow Z link to get there.
+   - ``_mirror(x, y, z)`` returns ``(1-x, 1-y, 1-z)``. Since ``DIM_Z`` is
+     only 2, the ``z`` coordinate always flips between a tile and its
+     mirror - unlike F's 2D case, there is no self-mirroring center tile
+     here, and **every** generator's traffic is forced to cross the slow
+     Z-axis link at least once to reach its target.
 
-.. admonition:: Verify - G.2
+.. admonition:: Task - G.2 Instantiate the generators and wire them in
+   :class: task
+
+   In ``Soc.__init__``, where the ``TODO`` is: instantiate a generator for
+   every cluster in ``clusters``, connect its output to the NoC at that
+   cluster's ``node_id``, and connect its control port to the driver.
+
+   .. code-block:: python
+
+      for index, (x, y, z) in enumerate(clusters):
+          node_id = noc.id_map[_ni_name(x, y, z)]
+          generator = interco.traffic.generator.Generator(self, f'generator_{x}_{y}_{z}')
+          generator.o_OUTPUT(noc.i_NARROW_INPUT(node_id))
+          drv.o_GENERATOR(index, generator.i_CONTROL())
+
+   Structurally identical to section F's task - the only difference is
+   addressing the NoC by ``node_id`` via ``noc.id_map`` instead of by
+   ``(x, y)``, since a flexible-topology node has no fixed grid coordinate.
+   Iterating ``clusters`` in the same order used to build ``targets`` above
+   (which ``enumerate`` does automatically here) is what keeps index ``i``
+   matched to the right generator. The finished version is under
+   ``solution/``.
+
+.. admonition:: Verify - G
    :class: solution
 
    .. code-block:: bash
 
+      $ cp solution/* .
       $ make gvsoc
       $ make run runner_args=--trace=driver
 
-   Same completion message as section F. If time allows, compare a run with
-   ``--z-link-latency 1`` (regenerate the topology first) against one with
-   ``--z-link-latency 64`` and look at how much longer the generators
-   crossing the Z axis take to finish - the flexible model's whole point is
-   that this is a config change, not a code change.
+   Same completion message as section F - all 8 generators finish, each
+   having crossed the slow Z link at least once. If time allows, compare a
+   run with ``--z-link-latency 1`` (regenerate the topology first) against
+   one with ``--z-link-latency 64`` and look at how much longer every
+   generator takes to finish - since every single transfer now crosses Z,
+   this comparison is even starker than in the shared-target version: the
+   whole system's completion time scales directly with the Z-link latency.
+   The flexible model's whole point is that this is a config change, not a
+   code change.
 
 Wrap-up
 .......
