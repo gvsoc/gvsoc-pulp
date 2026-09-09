@@ -70,7 +70,7 @@ def main():
         is_z_link = z0 != z1
         ax.plot([x0, x1], [y0, y1], [z0, z1],
             color=color_for(latency),
-            linewidth=4 if is_z_link else 1.5,
+            linewidth=3,
             solid_capstyle='round')
 
     routers = {(x, y, z) for (x, y, z), _, _ in edges} | {xyz for _, xyz, _ in edges}
@@ -80,7 +80,7 @@ def main():
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
-    ax.set_title(f'{args.name}: link latency (thick = Z axis)')
+    ax.set_title(f'{args.name}: link latency')
 
     mappable = cm.ScalarMappable(cmap=cmap)
     mappable.set_array(all_latencies)

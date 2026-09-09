@@ -4,10 +4,7 @@ Generates a small 3D-mesh FlooGen topology for the flexible FlooNoc tutorial.
 
 This is a trimmed, standalone version of the topology generator used for the
 real SoftHier chip (pulp/pulp/chips/softhier/topologies/gen_floogen_topology.py),
-kept to the single 3D-mesh case and extended with a *separate* Z-axis link
-latency, to make the point that floogen's own schema has no per-link timing
-field: GVSoC's flexible FlooNoc model (FlooNocFlex) reads per-link latencies
-from a side file (<name>.link_latencies.yml) that this script also produces.
+kept to the single 3D-mesh case and extended with a separate Z-axis link latency.
 
 It writes three files under --out-dir:
     <name>.floogen.yml           the floogen network description (nodes, links, routing algo)
@@ -15,7 +12,7 @@ It writes three files under --out-dir:
     <name>.link_latencies.yml    precomputed {src: {dst: latency}} per-link latencies
 
 Usage:
-    python3 gen_topology.py --dim-x 2 --dim-y 2 --dim-z 2 \\
+    python3 gen_topology.py --dim-x 3 --dim-y 3 --dim-z 2 \\
         --link-latency 1 --z-link-latency 8 --out-dir generated --name mesh3d
 """
 
