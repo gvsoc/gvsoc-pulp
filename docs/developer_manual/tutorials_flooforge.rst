@@ -822,17 +822,18 @@ and a local memory. We will instantiate the generators later.
 
    ``stats.txt`` should now show both the per-tile ``/soc/mem_x_y`` blocks
    (bandwidth delivered to each tile) and ``/soc/driver``
-   (aggregate bandwidth demanded across all 9 generators).
+   (aggregate bandwidth demanded across all 9 generators). Don't include ``--trace=``
+   or ``--vcd`` here, as they activate debug mode and stop the stats engine from working.
 
 G - The flexible FlooNoC: a 3D mesh from a floogen config
 ....................................................................
 Folder: ``G_flexible_floonoc_floogen``
 
 The original FlooNoC's shape (2D mesh, uniform link latency) is hardcoded in
-its Python generator. The flexible FlooNoC model,
-``pulp.FlooNoC_flex.FlooNoC_flex.FlooNoCFlex``, instead loads its whole
-topology from a `floogen <https://pypi.org/project/floogen/>`_ YAML
-description - any graph floogen can express, with per-link routing and
+the GVSoC model. Instead, the flexible FlooNoC model,
+``pulp.FlooNoC_flex.FlooNoC_flex.FlooNoCFlex`` loads the topology description
+from a `floogen <https://pypi.org/project/floogen/>`_ YAML
+description. With this, you can describe any graph floogen can express, with per-link routing and
 timing that a config file controls instead of a hardcoded formula.
 
 .. admonition:: Information - floogen configuration files
@@ -840,43 +841,38 @@ timing that a config file controls instead of a hardcoded formula.
 
    Three YAML files describe a flexible-FlooNoC topology:
 
-   - ``<name>.floogen.yml`` - floogen's own schema: routers, network
+   - ``<name>.floogen.yml``: floogen's own schema defining routers, network
      interfaces ("endpoints"), connections, and a routing algorithm
      (``XY``/``YX``/``ID``/...).
-   - ``<name>.routing.yml`` - explicit ``{src: {dst: next_hop}}`` routing
+   - ``<name>.routing.yml``: explicit ``{src: {dst: next_hop}}`` routing
      tables, used when ``route_algo: ID``.
-   - ``<name>.link_latencies.yml`` - a **GVSoC-only side file**,
-     ``{src: {dst: latency}}``, because floogen's own schema has no per-link
-     timing field. Any link not listed there falls back to a single uniform
-     default latency.
+   - ``<name>.link_latencies.yml``: describes the latency of each link in the network as
+     ``{src: {dst: latency}}``. Any link not listed there default to a single-cycle latency.
 
    ``gen_topology.py`` in this folder is a trimmed, standalone generator for
    a 3D mesh (adapted from the real one used for the SoftHier chip,
    ``pulp/pulp/chips/softhier/topologies/gen_floogen_topology.py``), extended
-   with a **separate Z-axis latency** - e.g. modeling a slower inter-die/TSV
-   hop compared to the in-die X/Y mesh links - to show that per-link timing
-   is data, not code.
+   with a separate Z-axis latency.
 
 .. admonition:: Task - G.1 Generate the topology and plot it
    :class: task
 
    .. code-block:: bash
 
-      $ python3 gen_topology.py --dim-x 2 --dim-y 2 --dim-z 2 \
+      $ python3 gen_topology.py --dim-x 3 --dim-y 3 --dim-z 2 \
             --link-latency 1 --z-link-latency 8 --out-dir generated --name mesh3d
       $ python3 plot_latency.py --dir generated --name mesh3d
 
    Open ``generated/mesh3d.png``: the mesh is drawn in 3D, with every link
-   colored by its latency and Z-axis links drawn thick. The X/Y links should
+   colored by its latency. The X/Y links should
    be a uniform color (latency 1) and every Z link should stand out
    (latency 8).
 
 .. admonition:: Information - the flexible NoC, instantiated
    :class: explanation
 
-   ``my_system.py`` already instantiates the NoC and, for every cluster, a
-   local memory mapped onto that cluster's own node - the same hybrid
-   compute+memory tile design as section F, just addressed differently:
+   ``my_system.py`` instantiates the NoC and, for every cluster, a traffic generator
+   and a local memory mapped onto that cluster's own node.
 
    .. code-block:: python
 
@@ -894,20 +890,17 @@ timing that a config file controls instead of a hardcoded formula.
    Differences from section F:
 
    - Nodes are addressed by an integer ``node_id``, looked up by generated
-     name in ``noc.id_map`` (e.g. ``noc.id_map['cluster_0_0_0_ni']``) rather
-     than by ``(x, y)``.
+     name in ``noc.id_map`` (e.g. ``noc.id_map['cluster_0_0_0_ni']``).
    - ``FlooNocFlex(..., network_path=..., routing_path=..., link_latencies_path=...)``
      loads and validates the three YAML files at construction time.
    - ``_mirror(x, y, z)`` returns ``(1-x, 1-y, 1-z)``. Since ``DIM_Z`` is
      only 2, the ``z`` coordinate always flips between a tile and its
-     mirror - unlike F's 2D case, there is no self-mirroring center tile
-     here, and **every** generator's traffic is forced to cross the slow
-     Z-axis link at least once to reach its target.
+     mirror.
 
 .. admonition:: Task - G.2 Instantiate the generators and wire them in
    :class: task
 
-   In ``Soc.__init__``, where the ``TODO`` is: instantiate a generator for
+   In ``Soc.__init__``, where the ``TODO`` is, instantiate a generator for
    every cluster in ``clusters``, connect its output to the NoC at that
    cluster's ``node_id``, and connect its control port to the driver.
 
@@ -919,38 +912,33 @@ timing that a config file controls instead of a hardcoded formula.
           generator.o_OUTPUT(noc.i_NARROW_INPUT(node_id))
           drv.o_GENERATOR(index, generator.i_CONTROL())
 
-   Structurally identical to section F's task - the only difference is
-   addressing the NoC by ``node_id`` via ``noc.id_map`` instead of by
+   The NoC is addressed by ``node_id`` via ``noc.id_map`` instead of by
    ``(x, y)``, since a flexible-topology node has no fixed grid coordinate.
    Iterating ``clusters`` in the same order used to build ``targets`` above
    (which ``enumerate`` does automatically here) is what keeps index ``i``
-   matched to the right generator. The finished version is under
-   ``solution/``.
+   matched to the right generator.
 
 .. admonition:: Verify - G
    :class: solution
 
    .. code-block:: bash
 
-      $ cp solution/* .
       $ make gvsoc
       $ make run runner_args=--trace=driver
 
-   Same completion message as section F - all 8 generators finish, each
-   having crossed the slow Z link at least once. If time allows, compare a
-   run with ``--z-link-latency 1`` (regenerate the topology first) against
-   one with ``--z-link-latency 64`` and look at how much longer every
-   generator takes to finish - since every single transfer now crosses Z,
-   this comparison is even starker than in the shared-target version: the
-   whole system's completion time scales directly with the Z-link latency.
-   The flexible model's whole point is that this is a config change, not a
-   code change.
+   You should see all 18 generators finish.
 
-Wrap-up
-.......
-In 30 minutes: a system, a component, traces and a VCD signal, sync/async IO
-timing, power modeling, an array of components on a fixed 2D-mesh NoC, and
-the same array re-wired onto a flexible, floogen-configured 3D mesh with
-per-axis link latency. The natural next step from here is
-``pulp/pulp/chips/softhier`` itself, which is exactly this pattern (clusters
-+ ``FlooNoCFlex``) at real chip scale.
+.. admonition:: Task - G.3 Sweep the Z-axis latency and plot the effect
+   :class: task
+
+   Let's now analyze how the runtime of the simulated system varies when changing the latency
+   of the Z-axis links.
+
+   .. code-block:: bash
+
+      $ make sweep
+
+   This commands regenerates the topology and re-runs the simulation to test Z-axis latency values
+   from 1 to 8 cycles. It produces ``generated/z_latency_sweep.png``, a
+   linespoints plot of completion cycles vs. Z-axis latency. In the image you should see how completion time
+   should scales linearly with Z-axis latency.
