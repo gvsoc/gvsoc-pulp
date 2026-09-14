@@ -54,15 +54,13 @@ class PulpOpenDma(gvsoc.systree.Component):
         Maximum number of outstanding burst requests.
     burst_size: int
         Maximum burst size, in bytes. 0 leaves it unconstrained.
-    nb_tcdm_banks: int
-        Number of bank ports each TCDM direction is split over, as mem_to_banks does in the RTL.
-        Two banks per direction give the four tcdm_master ports of dmac_wrap.
     loc_base: int
         Base address of the local area, used to tell the TCDM backend from the AXI one.
     loc_size: int
         Size of the local area.
     tcdm_width: int
-        Width of the local interconnect, in bytes.
+        Width of one TCDM access, in bytes. The DMA interleaver of the L1 subsystem splits it over
+        the banks, so this is the datapath width rather than the width of a single bank.
     """
 
     def __init__(self, parent: gvsoc.systree.Component, name: str,
@@ -74,7 +72,6 @@ class PulpOpenDma(gvsoc.systree.Component):
             transfer_queue_size: int=8,
             burst_queue_size: int=8,
             burst_size: int=0,
-            nb_tcdm_banks: int=2,
             loc_base: int=0,
             loc_size: int=0,
             tcdm_width: int=0):
@@ -87,7 +84,7 @@ class PulpOpenDma(gvsoc.systree.Component):
             'pulp/idma/me/idma_me_3d.cpp',
             'pulp/idma/be/idma_be.cpp',
             'pulp/idma/be/idma_be_axi.cpp',
-            'pulp/idma/be/idma_be_tcdm_banks.cpp',
+            'pulp/idma/be/idma_be_tcdm.cpp',
         ])
 
         self.nb_cores = nb_cores
@@ -103,7 +100,6 @@ class PulpOpenDma(gvsoc.systree.Component):
             "transfer_queue_size": transfer_queue_size,
             "burst_queue_size": burst_queue_size,
             "burst_size": burst_size,
-            "nb_tcdm_banks": nb_tcdm_banks,
             "loc_base": loc_base,
             "loc_size": loc_size,
             "tcdm_width": tcdm_width,
@@ -185,26 +181,15 @@ class PulpOpenDma(gvsoc.systree.Component):
         self.itf_bind('axi_read', itf, signature='io')
         self.itf_bind('axi_write', itf, signature='io')
 
-    def o_TCDM_READ(self, bank: int, itf: gvsoc.systree.SlaveItf):
-        """Binds one bank port of the TCDM read channel.
+    def o_TCDM(self, itf: gvsoc.systree.SlaveItf):
+        """Binds the TCDM port.
+
+        This port is used for sending line requests to the TCDM memory.\n
 
         Parameters
         ----------
-        bank: int
-            Index of the bank port.
         itf: gvsoc.systree.SlaveItf
             Slave interface
         """
-        self.itf_bind(f'tcdm_read_{bank}', itf, signature='io')
-
-    def o_TCDM_WRITE(self, bank: int, itf: gvsoc.systree.SlaveItf):
-        """Binds one bank port of the TCDM write channel.
-
-        Parameters
-        ----------
-        bank: int
-            Index of the bank port.
-        itf: gvsoc.systree.SlaveItf
-            Slave interface
-        """
-        self.itf_bind(f'tcdm_write_{bank}', itf, signature='io')
+        self.itf_bind('tcdm_read', itf, signature='io')
+        self.itf_bind('tcdm_write', itf, signature='io')
