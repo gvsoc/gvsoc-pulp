@@ -42,6 +42,10 @@ class PulpOpenDma(gvsoc.systree.Component):
         Number of peripheral register file ports, on top of the per-core ones.
     nb_streams: int
         Number of streams, each with its own transfer identifier counters.
+    multireg_count: int
+        Number of entries the register file generator reserves for each of the status, next_id and
+        done_id multiregs. Two for the iDMA the chips-it fork generates, sixteen for v0.6.4; it
+        fixes where next_id and done_id sit, and must match the header the software uses.
     global_queue_depth: int
         Number of transfers which can be accepted before the middle-end takes them over.
     transfer_queue_size: int
@@ -65,6 +69,7 @@ class PulpOpenDma(gvsoc.systree.Component):
             nb_cores: int=8,
             nb_pe_ports: int=2,
             nb_streams: int=2,
+            multireg_count: int=2,
             global_queue_depth: int=8,
             transfer_queue_size: int=8,
             burst_queue_size: int=8,
@@ -93,6 +98,7 @@ class PulpOpenDma(gvsoc.systree.Component):
             # The front-end sees one flat set of register file ports, the per-core ones first
             "nb_ports": nb_cores + nb_pe_ports,
             "nb_streams": nb_streams,
+            "multireg_count": multireg_count,
             "global_queue_depth": global_queue_depth,
             "transfer_queue_size": transfer_queue_size,
             "burst_queue_size": burst_queue_size,
