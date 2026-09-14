@@ -75,19 +75,19 @@ vp::IoReqStatus IDmaFeReg32_3dPort::req(vp::Block *__this, vp::IoReq *req)
     // stream is derived from the offset since the identifier registers are a multireg.
     for (int stream = 0; stream < fe->nb_streams; stream++)
     {
-        if (offset == (uint64_t)IDMA_REG32_3D_NEXT_ID(stream))
+        if (offset == fe->next_id_base + 4 * stream)
         {
             *(uint32_t *)req->get_data() = fe->enqueue_copy(_this, stream);
             return vp::IO_REQ_OK;
         }
 
-        if (offset == (uint64_t)IDMA_REG32_3D_DONE_ID(stream))
+        if (offset == fe->done_id_base + 4 * stream)
         {
             *(uint32_t *)req->get_data() = fe->streams[stream]->done_id.get();
             return vp::IO_REQ_OK;
         }
 
-        if (offset == (uint64_t)IDMA_REG32_3D_STATUS(stream))
+        if (offset == fe->status_base + 4 * stream)
         {
             *(uint32_t *)req->get_data() = fe->streams[stream]->pending > 0;
             return vp::IO_REQ_OK;
@@ -156,11 +156,18 @@ IDmaFeReg32_3d::IDmaFeReg32_3d(vp::Component *idma, IdmaTransferConsumer *me)
     this->nb_streams = config->get_int("nb_streams");
     this->nb_cores = config->get_int("nb_cores");
     this->global_queue_depth = config->get_int("global_queue_depth");
+    this->multireg_count = config->get_int("multireg_count");
 
-    if (this->nb_streams > IDMA_REG32_3D_MULTIREG_COUNT)
+    // The three multiregs sit back to back, each holding multireg_count entries
+    this->status_base = IDMA_REG32_3D_MULTIREG_BASE;
+    this->next_id_base = this->status_base + 4 * this->multireg_count;
+    this->done_id_base = this->next_id_base + 4 * this->multireg_count;
+
+    if (this->nb_streams > this->multireg_count)
     {
         this->trace.force_warning("Too many streams for the generated register map "
-            "(nb_streams: %d, max: %d)\n", this->nb_streams, IDMA_REG32_3D_MULTIREG_COUNT);
+            "(nb_streams: %d, entries per multireg: %d)\n",
+            this->nb_streams, this->multireg_count);
     }
 
     // One independent register file per requester

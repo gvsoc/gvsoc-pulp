@@ -34,23 +34,18 @@
 /*
  * Register map of the idma_reg32_3d front-end.
  *
- * The register file reserves IDMA_REG32_3D_MULTIREG_COUNT entries for each of the status, next_id
- * and done_id multiregs. The count is fixed in the generator template, not derived from the number
- * of streams the wrapper instantiates, so the descriptor block always starts at the same offset.
+ * The register file reserves a fixed number of entries for each of the status, next_id and done_id
+ * multiregs, so the descriptor block always starts at the same offset whatever the number of
+ * streams the wrapper instantiates. That number is fixed in the generator template and differs
+ * between iDMA versions, so it is a parameter here: the chips-it fork used by PULP Open generates
+ * two entries, putting next_id at 0xc, while iDMA v0.6.4 generates sixteen, putting it at 0x44.
+ * Check it against the generated idma_reg32_3d_reg_pkg.sv of the version being modelled, and
+ * against the header the software is compiled with.
  *
- * These values come from the generated idma_reg32_3d_reg_pkg.sv and match the map the software is
- * compiled against, see pulp-sdk rtos/pulpos/pulp_archi/include/archi/dma/idma_v2.h. Beware that
- * pulp-runtime carries a stale copy of that header, generated from an older iDMA with sixteen
- * entries per multireg, which puts next_id at 0x44 and done_id at 0x84 instead.
+ * The descriptor offsets below do not depend on it.
  */
-#define IDMA_REG32_3D_MULTIREG_COUNT 2
-
 #define IDMA_REG32_3D_CONF 0x000
-#define IDMA_REG32_3D_STATUS(stream) (0x004 + 4 * (stream))
-#define IDMA_REG32_3D_NEXT_ID(stream) \
-    (0x004 + 4 * (IDMA_REG32_3D_MULTIREG_COUNT + (stream)))
-#define IDMA_REG32_3D_DONE_ID(stream) \
-    (0x004 + 4 * (2 * IDMA_REG32_3D_MULTIREG_COUNT + (stream)))
+#define IDMA_REG32_3D_MULTIREG_BASE 0x004
 
 #define IDMA_REG32_3D_DST_ADDR 0x0d0
 #define IDMA_REG32_3D_SRC_ADDR 0x0d8
@@ -176,6 +171,11 @@ private:
         Stream(vp::Block &parent, int id);
     };
 
+    // Offsets of the first entry of each multireg, derived from the entry count
+    uint64_t status_base;
+    uint64_t next_id_base;
+    uint64_t done_id_base;
+
     // Build a transfer from the registers of a port and push it to the middle-end. Returns the
     // allocated identifier, or 0 if the transfer was rejected.
     uint32_t enqueue_copy(IDmaFeReg32_3dPort *port, int stream);
@@ -192,6 +192,8 @@ private:
     int nb_ports;
     // Number of streams, each with its own identifier counters
     int nb_streams;
+    // Number of entries reserved for each multireg by the register file generator
+    int multireg_count;
     // Number of cores receiving the completion event
     int nb_cores;
     // Maximum number of transfers waiting to be handed over to the middle-end
