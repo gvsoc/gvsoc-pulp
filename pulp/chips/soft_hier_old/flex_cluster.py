@@ -29,6 +29,7 @@ from pulp.chips.soft_hier_old.ctrl_registers import CtrlRegisters
 from pulp.chips.soft_hier_old.flex_cluster_arch import FlexClusterArch
 from pulp.chips.soft_hier_old.flex_mesh_noc import FlexMeshNoC
 from pulp.chips.soft_hier_old.hbm_ctrl import hbm_ctrl
+from pulp.chips.soft_hier_old.power_models import SUPPORTED_POWER_PROFILES
 import memory.dramsys
 import math
 
@@ -62,14 +63,18 @@ class FlexClusterSystem(gvsoc.systree.Component):
         preload_binary = None
         has_preload_binary = 0
         core_model = None
+        power_profile = None
         if parser is not None:
             parser.add_argument("--preload", type=str, help="Path to the HBM preload binary file")
             parser.add_argument("--core-model", choices=["fast", "accurate"],
                 help="SoftHier legacy core model to use")
+            parser.add_argument("--power-profile", choices=SUPPORTED_POWER_PROFILES,
+                help="Component leakage model profile")
             [args, otherArgs] = parser.parse_known_args()
             binary = args.binary
             preload_binary = args.preload
             core_model = args.core_model
+            power_profile = args.power_profile
             if preload_binary is not None:
                 has_preload_binary = 1
 
@@ -85,7 +90,9 @@ class FlexClusterSystem(gvsoc.systree.Component):
         if not hasattr(arch, 'hbm_ctrl_red_scrambling'): arch.hbm_ctrl_red_scrambling = 0
         if not hasattr(arch, 'tech_node'): arch.tech_node = "5nm"
         if not hasattr(arch, 'core_model'): arch.core_model = "fast"
+        if not hasattr(arch, 'power_profile'): arch.power_profile = "constant"
         if core_model is not None: arch.core_model = core_model
+        if power_profile is not None: arch.power_profile = power_profile
 
         #############
         # Assertion #
@@ -153,7 +160,8 @@ class FlexClusterSystem(gvsoc.systree.Component):
                                         data_bandwidth      =   arch.noc_link_width/8,
                                         multi_idma_enable   =   arch.multi_idma_enable,
                                         core_model          =   arch.core_model,
-                                        tech_node           =   arch.tech_node)
+                                        tech_node           =   arch.tech_node,
+                                        power_profile       =   arch.power_profile)
             cluster_list.append(ClusterUnit(self,f'cluster_{cluster_id}', cluster_arch, binary))
             pass
 

@@ -17,53 +17,10 @@
 # Author: Chi Zhang <chizhang@iis.ee.ethz.ch>
 
 import gvsoc.systree
-
-def get_gemm_tile_pJ(num_tile_mac, tech_node):
-    gemm_tile_pJ ={
-        "22nm" : {
-            "25": {
-                "0.6": {
-                    "any": 1.4 * num_tile_mac
-                },
-                "1.0": {
-                    "any": 4 * num_tile_mac
-                }
-            }
-        },
-        "12nm" : {
-            "25": {
-                "0.6": {
-                    "any": 1.1 * num_tile_mac
-                },
-                "0.9": {
-                    "any": 2.4 * num_tile_mac
-                }
-            }
-        },
-        "7nm" : {
-            "25": {
-                "0.6": {
-                    "any": 0.9 * num_tile_mac
-                },
-                "0.8": {
-                    "any": 1.6 * num_tile_mac
-                }
-            }
-        },
-        "5nm" : {
-            "25": {
-                "0.6": {
-                    "any": 0.8 * num_tile_mac
-                },
-                "0.7": {
-                    "any": 1.2 * num_tile_mac
-                }
-            }
-        }
-    }
-
-    return gemm_tile_pJ[tech_node]
-    pass
+from pulp.chips.soft_hier_old.power_models import (
+    light_redmule_power_source,
+    validate_power_profile,
+)
 
 class LightRedmule(gvsoc.systree.Component):
 
@@ -78,11 +35,14 @@ class LightRedmule(gvsoc.systree.Component):
                 ce_pipe: int,
                 queue_depth: int=128,
                 fold_tiles_mapping: int=0,
-                tech_node: str="5nm"):
+                tech_node: str="5nm",
+                power_profile: str="constant"):
 
         super().__init__(parent, name)
 
         self.add_sources(['pulp/chips/soft_hier_old/light_redmule.cpp'])
+
+        power_profile = validate_power_profile(power_profile)
 
         self.add_properties({
             'tcdm_bank_width'   : tcdm_bank_width,
@@ -93,23 +53,23 @@ class LightRedmule(gvsoc.systree.Component):
             'ce_pipe'           : ce_pipe,
             'queue_depth'       : queue_depth,
             'fold_tiles_mapping': fold_tiles_mapping,
+            'tech_node'         : tech_node,
+            'power_profile'     : power_profile,
         })
 
         self.LOCAL_BUFFER_H    = ce_height;
         self.LOCAL_BUFFER_N    = tcdm_bank_width * tcdm_bank_number // elem_size;
         self.LOCAL_BUFFER_W    = ce_width * (ce_pipe + 1);
         self.num_mac_per_tile  = self.LOCAL_BUFFER_H * self.LOCAL_BUFFER_W * self.LOCAL_BUFFER_N;
+        self.redmule_kge       = 100 + ce_height * ce_width * 8.59
 
         self.add_properties({
-            "gemm_tile_energy": {
-                "dynamic": {
-                    "type": "linear",
-                    "unit": "pJ",
-                    "values": get_gemm_tile_pJ(
-                        self.num_mac_per_tile, 
-                        tech_node),
-                }
-            }
+            "gemm_tile_energy": light_redmule_power_source(
+                num_tile_mac=self.num_mac_per_tile,
+                redmule_kge=self.redmule_kge,
+                tech_node=tech_node,
+                profile=power_profile,
+            )
         })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:

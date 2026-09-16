@@ -306,6 +306,8 @@ LightRedmule::LightRedmule(vp::ComponentConf &config)
 
     //Power
     this->power.new_power_source("gemm_tile_energy", &this->gemm_tile_energy, this->get_js_config()->get("**/gemm_tile_energy"));
+    // Both selectable profiles provide an always-on leakage table.
+    this->gemm_tile_energy.leakage_power_start();
 
     this->trace.msg("[LightRedmule] Model Initialization Done!\n");
 }
