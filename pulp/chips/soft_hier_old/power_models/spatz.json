@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "component": "spatz",
+  "provenance": "FP64 add/mul/FMA arithmetic and VRF reference from Fig. 11, https://arxiv.org/pdf/2309.10137v2. Other classes and lower-precision factors are estimates. Excludes scalar-core and TCDM energy.",
+  "reference": {"technology_node": "12nm", "voltage_v": 0.8, "temperature_c": 25, "function_units": 4, "vrf_bytes": 2048, "vlsu_ports": 4},
+  "area_kge": {"fpu_per_unit": 142.0, "ipu": 126.0, "vrf_per_2kib": 169.0, "vlsu_per_4ports": 46.0, "controller": 76.0},
+  "arithmetic_pj_per_fp64_element": {"alu": 12.5, "multiply": 16.2, "fma": 18.1, "divide": 72.4, "exponential": 90.5, "reduce": 14.0, "permute": 2.0},
+  "precision_factors": {"8": 0.14, "16": 0.24, "32": 0.48, "64": 1.0},
+  "events_pj": {"issue": 1.0, "vrf_byte": 0.20833333333333334, "vlsu_byte": 0.15},
+  "background_mw_at_1ghz": 2.0,
+  "background_assumption": "Residual clock power scaled with area; operation energy includes active datapath switching. FP16 custom exp/div are uncalibrated estimates."
+}

@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "component": "transpose",
+  "provenance": "Engineering estimate for address/control and local buffering only; TCDM reads/writes counted by memory model. No silicon calibration.",
+  "reference": {"technology_node": "12nm", "voltage_v": 0.8, "temperature_c": 25},
+  "area_kge": {"control": 10.0, "per_buffer_byte": 0.01},
+  "events_pj": {"operation": 5.0, "byte": 0.15},
+  "background_mw_at_1ghz": 0.05
+}

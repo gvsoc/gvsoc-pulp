@@ -128,11 +128,36 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
 // - When an interface receives a call to the response callback
 // In both cases, the requests is accounted on the initiator burst, in the network interface
 void process_collective_operations(vp::IoReq *parent, vp::IoReq *req);
+void FlooNoc::account_power_hop(vp::IoReq *req, Router *router)
+{
+    if (!this->power.is_enabled()) return;
+    router->account_power(req, false);
+    this->power_routes[req].hops.push_back(router);
+}
+
+void FlooNoc::account_power_merge(vp::IoReq *req, Router *router)
+{
+    if (this->power.is_enabled()) this->power_routes[req].merge_router = router;
+}
+
 void FlooNoc::handle_request_end(vp::IoReq *req)
 {
+    // Responses are functionally returned directly. Account their actual
+    // request route without adding timing events or charging shared tree
+    // prefixes once per child. Each request owns only its own route segment.
+    auto route = this->power_routes.find(req);
+    if (route != this->power_routes.end())
+    {
+        for (Router *router : route->second.hops) router->account_power(req, true);
+        this->power_routes.erase(route);
+    }
     if (*req->arg_get(FlooNoc::REQ_PARENT) != NULL)
     {
         vp::IoReq * parent = *(vp::IoReq **)req->arg_get(FlooNoc::REQ_PARENT);
+        auto merge = this->power_routes.find(parent);
+        if (parent->get_int(FlooNoc::REQ_COLL_TYPE) > 1 &&
+            merge != this->power_routes.end() && merge->second.merge_router != nullptr)
+            merge->second.merge_router->account_reduction(req->get_size());
         process_collective_operations(parent, req);
         delete req->get_data();
         delete req;
@@ -196,6 +221,7 @@ void FlooNoc::grant(vp::Block *__this, vp::IoReq *req)
 
 void FlooNoc::reset(bool active)
 {
+    if (active) this->power_routes.clear();
 }
 
 

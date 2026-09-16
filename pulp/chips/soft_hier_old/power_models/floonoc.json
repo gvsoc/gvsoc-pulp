@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "component": "floonoc",
+  "provenance": "0.15 pJ/B/hop and 168 kGE router + 28 kGE NI at 512-bit wide data links from https://arxiv.org/pdf/2409.17606v2. Fixed control, NI energy, buffer-depth scaling, and collective arithmetic are estimates.",
+  "reference": {"technology_node": "12nm", "voltage_v": 0.8, "temperature_c": 25, "data_width_bits": 512, "buffer_stages": 2},
+  "area_kge": {"router_fixed": 16.0, "router_datapath": 152.0, "ni_fixed": 12.0, "ni_datapath": 16.0},
+  "router_events_pj": {"payload_byte": 0.15, "control_packet": 0.6, "reduction_byte": 1.5},
+  "ni_events_pj": {"payload_byte": 0.004, "control_packet": 0.2},
+  "router_background_mw_at_1ghz": 0.1,
+  "ni_background_mw_at_1ghz": 0.02,
+  "scope": "Router-plus-adjacent-wire lumped per-hop budget; no second wire-energy charge. Wider links change beat count and area, not payload bytes twice. Simulation request queues are not physical flit buffers."
+}

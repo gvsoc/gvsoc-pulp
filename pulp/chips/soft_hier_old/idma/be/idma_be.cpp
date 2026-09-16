@@ -43,6 +43,13 @@ IDmaBe::IDmaBe(vp::Component *idma, IdmaTransferProducer *me,
     // Get the local area description to differentiate local and remote backend protocols
     this->loc_base = idma->get_js_config()->get_int("loc_base");
     this->loc_size = idma->get_js_config()->get_int("loc_size");
+    // Register on the DMA root: the thermal domain covers its full subtree.
+    idma->power.new_power_source("background", &this->background_power, idma->get_js_config()->get("power_models/background"));
+    idma->power.new_power_source("transfer", &this->transfer_power, idma->get_js_config()->get("power_models/transfer"));
+    idma->power.new_power_source("burst", &this->burst_power, idma->get_js_config()->get("power_models/burst"));
+    idma->power.new_power_source("byte", &this->byte_power, idma->get_js_config()->get("power_models/byte"));
+    this->background_power.leakage_power_start();
+    this->background_power.dynamic_power_start();
 }
 
 
@@ -60,6 +67,8 @@ IdmaBeConsumer *IDmaBe::get_be_consumer(uint64_t base, uint64_t size, bool is_re
 // no active transfer
 void IDmaBe::enqueue_transfer(IdmaTransfer *transfer)
 {
+    // One legalized 1D transfer; each row of a 2D transfer has its own setup.
+    this->transfer_power.account_energy_quantum();
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Queueing burst (burst: %p, src: 0x%llx, dst: 0x%llx, size: 0x%x) | regulation_queue depth = %d\n",
         transfer, transfer->src, transfer->dst, transfer->size,  this->regulation_queue.size());
 
@@ -160,6 +169,7 @@ void IDmaBe::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         // Legalize the burst. We choose a burst that fits both backend protocols
         uint64_t burst_size = _this->current_transfer_src_be->get_burst_size(src, size);
         burst_size = _this->current_transfer_dst_be->get_burst_size(dst, burst_size);
+        _this->burst_power.account_energy_quantum();
 
         _this->prev_transfer_src_be = _this->current_transfer_src_be;
 
@@ -209,6 +219,7 @@ bool IDmaBe::is_ready_to_accept_data()
 // This is called by the source backend protocol to push a data chunk to the destination
 void IDmaBe::write_data(uint8_t *data, uint64_t size)
 {
+    this->byte_power.account_energy_quantum(size);
     // Get back the first transfer from the queue to know where to send the data
     IdmaTransfer *transfer = this->transfer_queue.front();
     // Get destination backend

@@ -188,3 +188,130 @@ def component_model_metadata(component: str, tech_node: str) -> Dict[str, Any]:
     """Return a copy of one node's normalized data for reports/tests."""
 
     return json.loads(json.dumps(_node_spec(component, tech_node)))
+
+
+def model_spec(component: str) -> Dict[str, Any]:
+    """Return independent, serializable provenance and reference coefficients."""
+    return json.loads(json.dumps(_load_spec(component)))
+
+
+def technology_spec(tech_node: str) -> Dict[str, Any]:
+    return dict(_node_spec("technology", tech_node))
+
+
+def logic_area_kge(component: str, **parameters: Any) -> float:
+    """Single area estimate shared by instantiated sources and the floorplan."""
+    fields = {"core": (), "spatz": ("function_units", "vrf_bytes", "vlsu_ports"),
+              "idma": ("outstanding", "data_width_bits"), "floonoc": ("data_width_bits",),
+              "transpose": ("buffer_bytes",)}
+    if component not in fields:
+        raise ValueError(f"no logic area model for {component}")
+    for name in fields[component]:
+        value = float(parameters[name])
+        if not math.isfinite(value) or value <= 0 or not value.is_integer():
+            raise ValueError(f"{component}.{name} must be a positive integer")
+    area = _load_spec(component)["area_kge"]
+    if component == "core":
+        return area["integer_core"] + area["scalar_fpu"]
+    if component == "spatz":
+        return (area["controller"] + area["ipu"]
+                + area["fpu_per_unit"] * parameters["function_units"]
+                + area["vrf_per_2kib"] * parameters["vrf_bytes"] / 2048
+                + area["vlsu_per_4ports"] * parameters["vlsu_ports"] / 4)
+    if component == "idma":
+        return (area["control"] + area["per_outstanding"] * parameters["outstanding"]
+                + area["per_32bit_datapath"] * parameters["data_width_bits"] / 32)
+    if component == "floonoc":
+        part = parameters["part"]
+        if part not in ("router", "ni"):
+            raise ValueError(f"invalid NoC part {part!r}")
+        return area[f"{part}_fixed"] + area[f"{part}_datapath"] * parameters["data_width_bits"] / 512
+    if component == "transpose":
+        return area["control"] + area["per_buffer_byte"] * parameters["buffer_bytes"]
+    raise ValueError(f"no logic area model for {component}")
+
+
+def _estimated_source(energy_pj: float, tech_node: str) -> Dict[str, Any]:
+    tech = technology_spec(tech_node)
+    voltages = sorted({0.6, min(0.8, tech["nominal_voltage_v"]), tech["nominal_voltage_v"]})
+    values = {_key(v): float(energy_pj) * tech["capacitance_scale"] * (v / 0.8) ** 2
+              for v in voltages}
+    return {"dynamic": _linear_table("pJ", _single_temperature_values(values, 1.0))}
+
+
+def logic_power_sources(component: str, *, tech_node: str, profile: str,
+                        frequency_hz: float = 1.0e9, estimate_scale: float = 1.0,
+                        **parameters: Any) -> Dict[str, Any]:
+    """Resolve event energies and residual clock/leakage power for one instance.
+
+    Background power is specified at the configured fixed frequency. Event
+    energies must NOT also be multiplied by frequency. The estimate multiplier
+    supports controlled sensitivity runs and does not affect area or timing.
+    """
+    profile = validate_power_profile(profile)
+    if not math.isfinite(estimate_scale) or estimate_scale <= 0:
+        raise ValueError("estimate_scale must be finite and positive")
+    if not math.isfinite(frequency_hz) or frequency_hz <= 0:
+        raise ValueError("frequency_hz must be finite and positive")
+    spec = _load_spec(component)
+    gate_count = logic_area_kge(component, **parameters)
+    reference_parameters = dict(spec.get("reference", {}))
+    if component == "floonoc":
+        part = parameters["part"]
+        events = spec[f"{part}_events_pj"]
+        clock_mw = spec[f"{part}_background_mw_at_1ghz"]
+        reference_parameters["part"] = part
+    else:
+        events = dict(spec["events_pj"])
+        clock_mw = spec["background_mw_at_1ghz"]
+    if component == "transpose":
+        reference_parameters["buffer_bytes"] = 4096
+    reference_area = logic_area_kge(component, **reference_parameters)
+    sources = {name: _estimated_source(value * estimate_scale, tech_node)
+               for name, value in events.items()}
+    if component == "spatz":
+        for operation, energy in spec["arithmetic_pj_per_fp64_element"].items():
+            for precision, factor in spec["precision_factors"].items():
+                sources[f"{operation}_{precision}"] = _estimated_source(
+                    energy * factor * estimate_scale, tech_node)
+    # Convert pJ/cycle at 1 GHz to W at the fixed architecture frequency.
+    background = _estimated_source(clock_mw * gate_count / reference_area * estimate_scale, tech_node)
+    background["dynamic"]["unit"] = "W"
+    for voltages in background["dynamic"]["values"].values():
+        for frequencies in voltages.values():
+            frequencies["any"] *= frequency_hz * 1.0e-12
+    node = _node_spec("light_redmule", tech_node)
+    background["leakage"] = _linear_table("W", _profiled_leakage_values(
+        node["leakage_uw_per_kge_at_25c"], gate_count * 1.0e-6 * estimate_scale,
+        node["leakage_doubling_temperature_c"], profile))
+    sources["background"] = background
+    return sources
+
+
+def core_instruction_group(label: str) -> int:
+    """Stable groups shared by the generated decoder and instruction tables."""
+    name = label[2:] if label.startswith("c.") else label
+    if name.startswith("v"):
+        return 6
+    if name.startswith(("div", "rem")):
+        return 4
+    if name.startswith("mul"):
+        return 3
+    if name in ("flw", "fld", "flh", "flb", "fsw", "fsd", "fsh", "fsb"):
+        return 1
+    if name.startswith("f") and not name.startswith(("fence", "frep")):
+        return 5
+    if name.startswith(("lb", "lh", "lw", "ld", "sb", "sh", "sw", "sd", "amo", "lr.", "sc.")):
+        return 1
+    if name.startswith(("b", "j")):
+        return 2
+    if name.startswith(("csr", "wfi", "ecall", "ebreak", "dm", "frep")):
+        return 7
+    return 0
+
+
+def core_power_sources(**kwargs: Any) -> Dict[str, Any]:
+    sources = logic_power_sources("core", **kwargs)
+    sources["insn_groups"] = [sources[name] for name in _load_spec("core")["instruction_groups"]]
+    sources["separate_scalar_domain"] = True
+    return sources

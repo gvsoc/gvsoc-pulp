@@ -32,6 +32,8 @@ from pulp.chips.soft_hier_old.hbm_ctrl import hbm_ctrl
 from pulp.chips.soft_hier_old.power_models import SUPPORTED_POWER_PROFILES
 import memory.dramsys
 import math
+import importlib.util
+import os
 
 GAPY_TARGET = True
 
@@ -52,7 +54,16 @@ class FlexClusterSystem(gvsoc.systree.Component):
         # Configuration #
         #################
 
-        arch            = FlexClusterArch()
+        # The co-simulation provider selects an immutable run-local architecture
+        # without overwriting the tracked default preset or installed generators.
+        architecture_file = os.environ.get('SOFTHIER_ARCH_FILE')
+        if architecture_file:
+            spec = importlib.util.spec_from_file_location('softhier_run_arch', architecture_file)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            arch = module.FlexClusterArch()
+        else:
+            arch = FlexClusterArch()
         num_clusters    = arch.num_cluster_x * arch.num_cluster_y
         noc_outstanding = (arch.num_cluster_x + arch.num_cluster_y) + arch.noc_outstanding
         num_hbm_ctrl_x  = arch.num_cluster_x // arch.num_node_per_ctrl
@@ -91,6 +102,7 @@ class FlexClusterSystem(gvsoc.systree.Component):
         if not hasattr(arch, 'tech_node'): arch.tech_node = "5nm"
         if not hasattr(arch, 'core_model'): arch.core_model = "fast"
         if not hasattr(arch, 'power_profile'): arch.power_profile = "constant"
+        if not hasattr(arch, 'power_estimate_scale'): arch.power_estimate_scale = 1.0
         if core_model is not None: arch.core_model = core_model
         if power_profile is not None: arch.power_profile = power_profile
 
@@ -161,7 +173,8 @@ class FlexClusterSystem(gvsoc.systree.Component):
                                         multi_idma_enable   =   arch.multi_idma_enable,
                                         core_model          =   arch.core_model,
                                         tech_node           =   arch.tech_node,
-                                        power_profile       =   arch.power_profile)
+                                        power_profile       =   arch.power_profile,
+                                        power_estimate_scale = arch.power_estimate_scale)
             cluster_list.append(ClusterUnit(self,f'cluster_{cluster_id}', cluster_arch, binary))
             pass
 
@@ -173,6 +186,7 @@ class FlexClusterSystem(gvsoc.systree.Component):
 
         #Synchronization bus
         sync_bus = FlexMeshNoC(self, 'sync_bus', width=4,
+                tech_node=arch.tech_node, power_profile=arch.power_profile, power_estimate_scale=arch.power_estimate_scale,
                 nb_x_clusters=arch.num_cluster_x, nb_y_clusters=arch.num_cluster_y,
                 ni_outstanding_reqs=noc_outstanding, router_input_queue_size=noc_outstanding * num_clusters, atomics=1, collective=1)
 
@@ -224,6 +238,7 @@ class FlexClusterSystem(gvsoc.systree.Component):
 
         #NoC
         data_noc = FlexMeshNoC(self, 'data_noc', width=arch.noc_link_width/8,
+                tech_node=arch.tech_node, power_profile=arch.power_profile, power_estimate_scale=arch.power_estimate_scale,
                 nb_x_clusters=arch.num_cluster_x, nb_y_clusters=arch.num_cluster_y,
                 ni_outstanding_reqs=noc_outstanding, router_input_queue_size=noc_outstanding * num_clusters, collective=1,
                 edge_node_alias=arch.hbm_node_aliase, edge_node_alias_start_bit=arch.hbm_node_aliase_start_bit)

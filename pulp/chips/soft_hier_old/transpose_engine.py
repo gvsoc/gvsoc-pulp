@@ -17,6 +17,7 @@
 # Author: Chi Zhang <chizhang@iis.ee.ethz.ch>
 
 import gvsoc.systree
+from pulp.chips.soft_hier_old.power_models import logic_power_sources
 
 class TransposeEngine(gvsoc.systree.Component):
 
@@ -26,13 +27,20 @@ class TransposeEngine(gvsoc.systree.Component):
                 tcdm_bank_width: int,
                 tcdm_bank_number: int,
                 queue_depth: int=16,
-                buffer_dim: int=32):
+                buffer_dim: int=32,
+                tech_node: str='5nm', power_profile: str='constant',
+                power_estimate_scale: float=1.0):
 
         super().__init__(parent, name)
 
         self.add_sources(['pulp/chips/soft_hier_old/transpose_engine.cpp'])
 
         self.add_properties({
+            # The large host scratch arrays are functional storage, not an RTL
+            # SRAM declaration. Assume one bandwidth-sized local staging buffer.
+            'power_models': logic_power_sources('transpose', tech_node=tech_node,
+                profile=power_profile, estimate_scale=power_estimate_scale,
+                buffer_bytes=tcdm_bank_width * tcdm_bank_number),
             'tcdm_bank_width'   : tcdm_bank_width,
             'tcdm_bank_number'  : tcdm_bank_number,
             'queue_depth'       : queue_depth,

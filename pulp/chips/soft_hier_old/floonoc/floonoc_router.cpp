@@ -38,6 +38,12 @@ Router::Router(FlooNoc *noc, int x, int y, int queue_size)
     this->x = x;
     this->y = y;
     this->queue_size = queue_size;
+    this->power.new_power_source("background", &this->background_power, noc->get_js_config()->get("power_models/router/background"));
+    this->power.new_power_source("payload_byte", &this->payload_power, noc->get_js_config()->get("power_models/router/payload_byte"));
+    this->power.new_power_source("control_packet", &this->control_power, noc->get_js_config()->get("power_models/router/control_packet"));
+    this->power.new_power_source("reduction_byte", &this->reduction_power, noc->get_js_config()->get("power_models/router/reduction_byte"));
+    this->background_power.leakage_power_start();
+    this->background_power.dynamic_power_start();
 
     for (int i=0; i<5; i++)
     {
@@ -46,6 +52,19 @@ Router::Router(FlooNoc *noc, int x, int y, int queue_size)
         this->collective_generated_queues[i] = new std::queue<vp::IoReq*>();
         this->stalled_queues[i] = false;
     }
+}
+
+void Router::account_power(vp::IoReq *req, bool response)
+{
+    this->control_power.account_energy_quantum();
+    // Writes carry payload outbound; reads carry it on the return path.
+    if (req->get_is_write() != response)
+        this->payload_power.account_energy_quantum(req->get_size());
+}
+
+void Router::account_reduction(unsigned int bytes)
+{
+    this->reduction_power.account_energy_quantum(bytes);
 }
 
 
@@ -181,6 +200,8 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             }
 
             // Now send to the next position
+            if (next_x != _this->x || next_y != _this->y)
+                _this->noc->account_power_hop(req, _this);
             if (to_x == _this->x && to_y == _this->y)
             {
                 // If next position is the same as the current one, it means it arrived to
@@ -237,6 +258,8 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             int queue_id = _this->get_req_queue(next_x, next_y);
             if (_this->stalled_queues[queue_id]) continue;
             queue->pop();
+            if (next_x != _this->x || next_y != _this->y)
+                _this->noc->account_power_hop(req, _this);
             if (to_x == _this->x && to_y == _this->y)
             {
                 _this->send_to_target(req, _this->x, _this->y);
@@ -419,6 +442,7 @@ void Router::collective_analyze(vp::IoReq * req, std::queue<int> * queue, int ro
 
 void Router::collective_generate(vp::IoReq * req, std::queue<int> * queue, int router_x, int router_y)
 {
+    this->noc->account_power_merge(req, this);
     int num_req = queue->size();
     for (int i = 0; i < num_req; ++i)
     {
@@ -571,4 +595,3 @@ void Router::reset(bool active)
         this->current_queue = 0;
     }
 }
-

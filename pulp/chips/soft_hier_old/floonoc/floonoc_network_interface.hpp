@@ -47,6 +47,7 @@ public:
     void unstall_queue(int from_x, int from_y);
 
 private:
+    vp::PowerSource background_power, payload_power, control_power;
     // Input method called when a burst is received from the local initiator
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
     // FSM event handler called when something happened and queues need to be checked to see

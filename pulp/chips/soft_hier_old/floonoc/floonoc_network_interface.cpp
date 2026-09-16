@@ -34,6 +34,11 @@ NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y)
     this->noc = noc;
     this->x = x;
     this->y = y;
+    this->power.new_power_source("background", &this->background_power, noc->get_js_config()->get("power_models/ni/background"));
+    this->power.new_power_source("payload_byte", &this->payload_power, noc->get_js_config()->get("power_models/ni/payload_byte"));
+    this->power.new_power_source("control_packet", &this->control_power, noc->get_js_config()->get("power_models/ni/control_packet"));
+    this->background_power.leakage_power_start();
+    this->background_power.dynamic_power_start();
 
     traces.new_trace("trace", &trace, vp::DEBUG);
 
@@ -261,6 +266,8 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             // Noe that the router may not grant tje request if its input queue is full.
             // In this case we must stall the network interface
             Router *router = _this->noc->get_router(_this->x, _this->y);
+            _this->control_power.account_energy_quantum();
+            if (req->get_is_write()) _this->payload_power.account_energy_quantum(size);
             _this->stalled = router->handle_request(req, _this->x, _this->y);
         }
 
@@ -274,6 +281,8 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
 void NetworkInterface::handle_response(vp::IoReq *req)
 {
+    this->control_power.account_energy_quantum();
+    if (!req->get_is_write()) this->payload_power.account_energy_quantum(req->get_size());
     // This gets called by the routers when an internal request has been handled
     // First extract the corresponding burst from the request so that we can update the burst.
     vp::IoReq *burst = *(vp::IoReq **)req->arg_get(1);

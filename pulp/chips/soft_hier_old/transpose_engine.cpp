@@ -100,6 +100,7 @@ public:
     uint8_t *           access_buffer;
     uint8_t *           scratch_buffer;
     uint8_t *           transposed_buffer;
+    vp::PowerSource     background_power, operation_power, byte_power;
 };
 
 extern "C" vp::Component *gv_new(vp::ComponentConf &config)
@@ -122,6 +123,11 @@ TransposeEngine::TransposeEngine(vp::ComponentConf &config)
     this->queue_depth       = get_js_config()->get("queue_depth")->get_int();
     this->buffer_dim        = get_js_config()->get("buffer_dim")->get_int();
     this->bandwidth         = this->tcdm_bank_width * this->tcdm_bank_number;
+    this->power.new_power_source("background", &this->background_power, get_js_config()->get("power_models/background"));
+    this->power.new_power_source("operation", &this->operation_power, get_js_config()->get("power_models/operation"));
+    this->power.new_power_source("byte", &this->byte_power, get_js_config()->get("power_models/byte"));
+    this->background_power.leakage_power_start();
+    this->background_power.dynamic_power_start();
     this->m_size            = 0;
     this->n_size            = 0;
     this->x_addr            = 0;
@@ -220,6 +226,7 @@ vp::IoReqStatus TransposeEngine::req(vp::Block *__this, vp::IoReq *req)
         //Trigger FSM
         _this->state.set(START);
         _this->event_enqueue(_this->fsm_event, 1);
+        _this->operation_power.account_energy_quantum();
 
     } else if ((is_write == 0) && (offset == 24) && (_this->core_query == NULL) && (_this->state.get() != IDLE)){
         /*************************
@@ -357,6 +364,7 @@ void TransposeEngine::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 _this->tcdm_req->set_data(_this->access_buffer);
                 _this->tcdm_req->set_is_write(1);
                 _this->tcdm_req->set_size(_this->n_col_per_tile * _this->elem_size);
+                _this->byte_power.account_energy_quantum(_this->n_col_per_tile * _this->elem_size);
 
                 //Process Data
                 std::memcpy(_this->access_buffer, &(_this->transposed_buffer[_this->tile_dim * _this->fsm_counter * _this->elem_size]), _this->n_col_per_tile * _this->elem_size);

@@ -85,6 +85,8 @@ public:
     // Can be called to notify that an asynchronous response to a request was received. The noc
     // will then call the initiating network interface so that it is handled by the burst.
     void handle_request_end(vp::IoReq *req);
+    void account_power_hop(vp::IoReq *req, Router *router);
+    void account_power_merge(vp::IoReq *req, Router *router);
 
     // Internal router information is stored inside the requests.
     // These constants give the indices where the information is stored in the requests data.
@@ -147,6 +149,11 @@ public:
     int dim_y;
 
 private:
+    struct PowerRoute {
+        std::vector<Router *> hops;
+        Router *merge_router = nullptr;
+    };
+    std::map<vp::IoReq *, PowerRoute> power_routes;
     // Callback called when a target request is asynchronously granted after a denied error was
     // reported
     static void grant(vp::Block *__this, vp::IoReq *req);

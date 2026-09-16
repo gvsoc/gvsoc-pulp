@@ -15,6 +15,7 @@
 #
 
 import gvsoc.systree
+from pulp.chips.soft_hier_old.power_models import logic_power_sources
 
 class SnitchDma(gvsoc.systree.Component):
     """
@@ -45,7 +46,9 @@ class SnitchDma(gvsoc.systree.Component):
             burst_queue_size: int=8,
             loc_base: int=0,
             loc_size: int=0,
-            tcdm_width: int=0):
+            tcdm_width: int=0,
+            data_width_bits: int=512, tech_node: str='5nm',
+            power_profile: str='constant', power_estimate_scale: float=1.0):
 
         super().__init__(parent, name)
 
@@ -59,6 +62,9 @@ class SnitchDma(gvsoc.systree.Component):
         ])
 
         self.add_properties({
+            "power_models": logic_power_sources('idma', tech_node=tech_node,
+                profile=power_profile, estimate_scale=power_estimate_scale,
+                outstanding=transfer_queue_size, data_width_bits=data_width_bits),
             "transfer_queue_size": transfer_queue_size,
             "burst_queue_size": burst_queue_size,
             "loc_base": loc_base,

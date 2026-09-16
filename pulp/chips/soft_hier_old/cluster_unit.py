@@ -85,7 +85,7 @@ class ClusterArch:
                         spatz_vlsu_bw,      spatz_vreg_gather_eff,
                         data_bandwidth,     auto_fetch=False,   multi_idma_enable=0,
                         core_model="fast",  tech_node="5nm",
-                        power_profile="constant"):
+                        power_profile="constant", power_estimate_scale=1.0):
 
         self.nb_core                = nb_core_per_cluster
         self.base                   = base
@@ -126,6 +126,7 @@ class ClusterArch:
         self.num_cluster_y          = num_cluster_y
         self.tech_node              = tech_node
         self.power_profile          = power_profile
+        self.power_estimate_scale   = power_estimate_scale
 
     class Tcdm:
         def __init__(self, base, nb_masters, tcdm_size, nb_tcdm_banks, tcdm_bank_width, sync_itlv, sync_special_mem, tech_node, power_profile):
@@ -247,7 +248,10 @@ class ClusterUnit(gvsoc.systree.Component):
                     spatz_nb_lanes=arch.spatz_num_vlsu,
                     spatz_lane_width=arch.spatz_vlsu_bw,
                     vlen=arch.spatz_num_vlsu * arch.spatz_vlsu_bw,
-                    ssr=True, sequencer=True))
+                    ssr=True, sequencer=True,
+                    tech_node=arch.tech_node, power_profile=arch.power_profile,
+                    spatz_function_units=arch.spatz_num_fu,
+                    power_estimate_scale=getattr(arch, 'power_estimate_scale', 1.0)))
             else:
                 cores.append(iss.Snitch(self, f'pe{core_id}', isa=core_isa,
                     fetch_enable=arch.auto_fetch, boot_addr=boot_addr,
@@ -288,6 +292,8 @@ class ClusterUnit(gvsoc.systree.Component):
 
         #Transpose Engine
         transpose_engine = TransposeEngine(self, f'transpose_engine',
+                                    tech_node=arch.tech_node, power_profile=arch.power_profile,
+                                    power_estimate_scale=arch.power_estimate_scale,
                                     tcdm_bank_width     = arch.tcdm.bank_width,
                                     tcdm_bank_number    = arch.tcdm.nb_tcdm_banks,
                                     buffer_dim          = arch.tcdm.nb_tcdm_banks * arch.tcdm.bank_width)
@@ -300,10 +306,12 @@ class ClusterUnit(gvsoc.systree.Component):
             idma_list = []
             for x in range(arch.nb_core):
                 idma_list.append(SnitchDma(self, f'idma_{x}', loc_base=arch.tcdm.area.base, loc_size=arch.tcdm.area.size + data_dumpper_input_size,
+                data_width_bits=int(arch.data_bandwidth * 8), tech_node=arch.tech_node, power_profile=arch.power_profile, power_estimate_scale=arch.power_estimate_scale,
                 tcdm_width=(arch.tcdm.nb_tcdm_banks * arch.tcdm.bank_width), transfer_queue_size=arch.idma_outstand_txn, burst_queue_size=arch.idma_outstand_burst))
                 pass
         else:
             idma = SnitchDma(self, 'idma', loc_base=arch.tcdm.area.base, loc_size=arch.tcdm.area.size + data_dumpper_input_size,
+                data_width_bits=int(arch.data_bandwidth * 8), tech_node=arch.tech_node, power_profile=arch.power_profile, power_estimate_scale=arch.power_estimate_scale,
                 tcdm_width=(arch.tcdm.nb_tcdm_banks * arch.tcdm.bank_width), transfer_queue_size=arch.idma_outstand_txn, burst_queue_size=arch.idma_outstand_burst)
             pass
 

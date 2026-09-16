@@ -15,6 +15,7 @@
 #
 
 import gvsoc.systree
+from pulp.chips.soft_hier_old.power_models import logic_power_sources
 
 class FlooNoc2dMesh(gvsoc.systree.Component):
     """FlooNoc instance for a 2D mesh
@@ -49,7 +50,8 @@ class FlooNoc2dMesh(gvsoc.systree.Component):
     def __init__(self, parent: gvsoc.systree.Component, name, width: int,
             dim_x: int, dim_y:int, ni_outstanding_reqs: int=8, router_input_queue_size: int=2, atomics: int=0, collective: int=0,
             edge_node_alias: int=0, edge_node_alias_start_bit: int=48,
-            interleave_enable: int=0, interleave_region_base: int=0, interleave_region_size: int=0, interleave_granularity: int=0, interleave_bit_start: int=0, interleave_bit_width: int=0):
+            interleave_enable: int=0, interleave_region_base: int=0, interleave_region_size: int=0, interleave_granularity: int=0, interleave_bit_start: int=0, interleave_bit_width: int=0,
+            tech_node: str='5nm', power_profile: str='constant', power_estimate_scale: float=1.0):
         super(FlooNoc2dMesh, self).__init__(parent, name)
 
         self.add_sources([
@@ -59,6 +61,11 @@ class FlooNoc2dMesh(gvsoc.systree.Component):
         ])
 
         self.add_property('mappings', {})
+        self.add_property('power_models', {
+            part: logic_power_sources('floonoc', tech_node=tech_node,
+                profile=power_profile, estimate_scale=power_estimate_scale,
+                part=part, data_width_bits=int(width) * 8)
+            for part in ('router', 'ni')})
         self.add_property('routers', [])
         self.add_property('network_interfaces', [])
         self.add_property('ni_outstanding_reqs', ni_outstanding_reqs)
@@ -185,4 +192,3 @@ class FlooNocClusterGrid(FlooNoc2dMesh):
             The slave interface
         """
         return self.i_INPUT(x+1, y+1)
-

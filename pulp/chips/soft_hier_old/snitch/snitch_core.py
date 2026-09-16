@@ -25,6 +25,7 @@ import gvsoc.systree
 import os
 import pulp.ara.ara
 from pulp.snitch.snitch_core_config import SnitchCoreConfig
+from pulp.chips.soft_hier_old.power_models import core_instruction_group, core_power_sources, logic_power_sources
 
 def add_latencies(isa, is_fast=False, use_spatz=False):
 
@@ -211,7 +212,9 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             single_regfile: bool=False,
             ssr: bool=True,
             sequencer: bool=True,
-            config: SnitchCoreConfig | None=None
+            config: SnitchCoreConfig | None=None,
+            tech_node: str='5nm', power_profile: str='constant',
+            spatz_function_units: int=4, power_estimate_scale: float=1.0
         ):
 
         if config is not None:
@@ -260,6 +263,15 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             modules=modules, config=config)
 
         self.inc_spatz = inc_spatz
+        for instruction in isa_instance.get_insns():
+            instruction.set_power_group(core_instruction_group(instruction.label))
+        self.add_property('power_models', core_power_sources(
+            tech_node=tech_node, profile=power_profile, estimate_scale=power_estimate_scale))
+        if inc_spatz:
+            self.add_property('spatz_power_models', logic_power_sources(
+                'spatz', tech_node=tech_node, profile=power_profile,
+                estimate_scale=power_estimate_scale, function_units=spatz_function_units,
+                vrf_bytes=32 * int(vlen) // 8, vlsu_ports=spatz_nb_lanes))
 
         if pulp_v2:
             self.add_c_flags([f'-DCONFIG_GVSOC_ISS_SNITCH_PULP_V2=1'])

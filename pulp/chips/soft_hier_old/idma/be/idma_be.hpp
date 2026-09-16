@@ -237,6 +237,7 @@ public:
 #endif //ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
 
 private:
+    vp::PowerSource background_power, transfer_power, burst_power, byte_power;
     // FSM handler, called to check if any action should be taken after something was updated
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
     static void transfer_regulation_handler(vp::Block *__this, vp::ClockEvent *event);

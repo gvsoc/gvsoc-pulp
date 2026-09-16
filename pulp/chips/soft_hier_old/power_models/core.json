@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "component": "core",
+  "provenance": "Engineering instruction-energy estimates; bare Snitch 25 kGE and FPU 142 kGE anchored to Spatz Fig. 9, https://arxiv.org/pdf/2309.10137v2. Assume a separate scalar FPU per core, including vector-attached cores.",
+  "reference": {"technology_node": "12nm", "voltage_v": 0.8, "temperature_c": 25},
+  "area_kge": {"integer_core": 25.0, "scalar_fpu": 142.0},
+  "instruction_groups": ["integer", "load_store", "branch", "multiply", "divide", "scalar_fp", "vector_issue", "system"],
+  "events_pj": {"integer": 2.0, "load_store": 3.0, "branch": 1.5, "multiply": 6.0, "divide": 20.0, "scalar_fp": 10.0, "vector_issue": 1.0, "system": 1.5, "stall_first": 0.1, "stall_next": 0.1},
+  "background_mw_at_1ghz": 0.5,
+  "background_assumption": "Ungated residual clock power while the modeled core exists. Instruction and stall energy are additional; idle is not power-off."
+}

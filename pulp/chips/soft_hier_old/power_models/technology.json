@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "component": "technology",
+  "description": "Exploratory scaling, not foundry characterization. Capacitance and cell area scale separately; voltages match existing RedMulE/SRAM tables.",
+  "reference_voltage_v": 0.8,
+  "reference_frequency_hz": 1000000000,
+  "technology_nodes": {
+    "22nm": {"nominal_voltage_v": 1.0, "capacitance_scale": 1.6, "cell_um2_per_kge": 200.0},
+    "12nm": {"nominal_voltage_v": 0.9, "capacitance_scale": 1.0, "cell_um2_per_kge": 120.0},
+    "7nm": {"nominal_voltage_v": 0.8, "capacitance_scale": 0.8, "cell_um2_per_kge": 60.0},
+    "5nm": {"nominal_voltage_v": 0.7, "capacitance_scale": 0.65, "cell_um2_per_kge": 30.0}
+  }
+}

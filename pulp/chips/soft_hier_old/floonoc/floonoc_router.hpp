@@ -42,8 +42,11 @@ public:
     bool handle_request(vp::IoReq *req, int from_x, int from_y);
     // This gets called by the top noc to grant a a request denied by a target
     void grant(vp::IoReq *req);
+    void account_power(vp::IoReq *req, bool response);
+    void account_reduction(unsigned int bytes);
 
 private:
+    vp::PowerSource background_power, payload_power, control_power, reduction_power;
     // FSM event handler called when something happened and queues need to be checked to see
     // if a request should be handled.
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
