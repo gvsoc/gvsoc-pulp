@@ -60,3 +60,5 @@ class Softex(st.Component):
     def o_IRQ(self, itf: gvsoc.systree.SlaveItf):
         """Raised when a job completes (mirrors evt_o / FINISHED in the RTL)."""
         self.itf_bind('irq', itf, signature='wire<bool>')
+
+# CODEOWNERS test, do not merge
