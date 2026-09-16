@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "component": "light_redmule",
+  "normalization": {
+    "dynamic": "pJ per MAC",
+    "leakage": "uW per kGE at 25 C"
+  },
+  "technology_nodes": {
+    "22nm": {
+      "dynamic_pj_per_mac": {"0.6": 1.4, "1.0": 4.0},
+      "leakage_uw_per_kge_at_25c": {"0.6": 0.5, "1.0": 1.2},
+      "leakage_doubling_temperature_c": 30.0
+    },
+    "12nm": {
+      "dynamic_pj_per_mac": {"0.6": 1.1, "0.9": 2.4},
+      "leakage_uw_per_kge_at_25c": {"0.6": 0.9, "0.9": 1.8},
+      "leakage_doubling_temperature_c": 27.0
+    },
+    "7nm": {
+      "dynamic_pj_per_mac": {"0.6": 0.9, "0.8": 1.6},
+      "leakage_uw_per_kge_at_25c": {"0.6": 1.5, "0.8": 2.6},
+      "leakage_doubling_temperature_c": 24.0
+    },
+    "5nm": {
+      "dynamic_pj_per_mac": {"0.6": 0.8, "0.7": 1.2},
+      "leakage_uw_per_kge_at_25c": {"0.6": 2.2, "0.7": 3.4},
+      "leakage_doubling_temperature_c": 22.0
+    }
+  }
+}

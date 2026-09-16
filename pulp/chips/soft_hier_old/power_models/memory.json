@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "component": "memory",
+  "normalization": {
+    "dynamic": "pJ per accessed byte",
+    "leakage": "W per MiB at 25 C"
+  },
+  "technology_nodes": {
+    "22nm": {
+      "dynamic_pj_per_access_byte": {"0.6": 0.29, "1.0": 0.80},
+      "leakage_w_per_mib_at_25c": {"0.6": 0.006, "1.0": 0.012},
+      "leakage_doubling_temperature_c": 35.0
+    },
+    "12nm": {
+      "dynamic_pj_per_access_byte": {"0.6": 0.28, "0.9": 0.48},
+      "leakage_w_per_mib_at_25c": {"0.6": 0.008, "0.9": 0.015},
+      "leakage_doubling_temperature_c": 32.0
+    },
+    "7nm": {
+      "dynamic_pj_per_access_byte": {"0.6": 0.25, "0.8": 0.32},
+      "leakage_w_per_mib_at_25c": {"0.6": 0.010, "0.8": 0.017},
+      "leakage_doubling_temperature_c": 29.0
+    },
+    "5nm": {
+      "dynamic_pj_per_access_byte": {"0.6": 0.15, "0.7": 0.20},
+      "leakage_w_per_mib_at_25c": {"0.6": 0.012, "0.7": 0.020},
+      "leakage_doubling_temperature_c": 27.0
+    }
+  }
+}

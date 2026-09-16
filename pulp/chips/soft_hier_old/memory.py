@@ -15,96 +15,10 @@
 #
 
 import gvsoc.systree
-
-access_byte_pJ ={
-    "22nm" : {
-        "25": {
-            "0.6": {
-                "any": 0.29
-            },
-            "1.0": {
-                "any": 0.80
-            }
-        }
-    },
-    "12nm" : {
-        "25": {
-            "0.6": {
-                "any": 0.28
-            },
-            "0.9": {
-                "any": 0.48
-            }
-        }
-    },
-    "7nm" : {
-        "25": {
-            "0.6": {
-                "any": 0.25
-            },
-            "0.8": {
-                "any": 0.32
-            }
-        }
-    },
-    "5nm" : {
-        "25": {
-            "0.6": {
-                "any": 0.15
-            },
-            "0.7": {
-                "any": 0.20
-            }
-        }
-    }
-}
-
-def get_leakage_byte_W(bytes, tech_node):
-    leakage_byte_W ={
-        "22nm" : {
-            "25": {
-                "0.9": {
-                    "any": 100 * 1e-11 * bytes
-                },
-                "1.0": {
-                    "any": 120 * 1e-11 * bytes
-                }
-            }
-        },
-        "12nm" : {
-            "25": {
-                "0.8": {
-                    "any": 60 * 1e-11 * bytes
-                },
-                "0.9": {
-                    "any": 80 * 1e-11 * bytes
-                }
-            }
-        },
-        "7nm" : {
-            "25": {
-                "0.6": {
-                    "any": 40 * 1e-11 * bytes
-                },
-                "0.8": {
-                    "any": 50 * 1e-11 * bytes
-                }
-            }
-        },
-        "5nm" : {
-            "25": {
-                "0.6": {
-                    "any": 35 * 1e-11 * bytes
-                },
-                "0.7": {
-                    "any": 40 * 1e-11 * bytes
-                }
-            }
-        }
-    }
-
-    return leakage_byte_W[tech_node]
-    pass
+from pulp.chips.soft_hier_old.power_models import (
+    memory_power_sources,
+    validate_power_profile,
+)
 
 class Memory(gvsoc.systree.Component):
     """Memory array
@@ -150,7 +64,8 @@ class Memory(gvsoc.systree.Component):
     def __init__(self, parent: gvsoc.systree.Component, name: str, size: int, width_log2: int=2,
             stim_file: str=None, power_trigger: bool=False,
             align: int=0, atomics: bool=False, latency=0, memcheck_id: int=-1, memcheck_base: int=0,
-            memcheck_virtual_base: int=0, memcheck_expansion_factor: int=5, tech_node: str="5nm"):
+            memcheck_virtual_base: int=0, memcheck_expansion_factor: int=5, tech_node: str="5nm",
+            power_profile: str="constant"):
 
         super().__init__(parent, name)
 
@@ -161,6 +76,8 @@ class Memory(gvsoc.systree.Component):
         # if both memories with and without atomics are instantiated.
         if atomics:
             self.add_c_flags(['-DCONFIG_ATOMICS=1'])
+
+        power_profile = validate_power_profile(power_profile)
 
         self.add_properties({
             'size': size,
@@ -173,40 +90,15 @@ class Memory(gvsoc.systree.Component):
             'memcheck_base': memcheck_base,
             'memcheck_virtual_base': memcheck_virtual_base,
             'memcheck_expansion_factor': memcheck_expansion_factor,
-            'tech_node': tech_node
+            'tech_node': tech_node,
+            'power_profile': power_profile,
         })
 
-        self.add_properties({
-            "background": {
-                "dynamic": {
-                    "type": "linear",
-                    "unit": "W",
-                    "values": {
-                        "25": {
-                            "0.6": {
-                                "any": 0.00000
-                            },
-                            "1.0": {
-                                "any": 0.00000
-                            }
-                        }
-                    }
-                },
-                "leakage": {
-                    "type": "linear",
-                    "unit": "W",
-
-                    "values": get_leakage_byte_W(size, tech_node)
-                },
-            },
-            "access_byte": {
-                "dynamic": {
-                    "type": "linear",
-                    "unit": "pJ",
-                    "values": access_byte_pJ[tech_node],
-                }
-            }
-        })
+        self.add_properties(memory_power_sources(
+            size_bytes=size,
+            tech_node=tech_node,
+            profile=power_profile,
+        ))
 
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:

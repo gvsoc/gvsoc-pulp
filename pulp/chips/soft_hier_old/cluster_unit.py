@@ -84,14 +84,15 @@ class ClusterArch:
                         spatz_core_list,    spatz_num_vlsu,     spatz_num_fu,
                         spatz_vlsu_bw,      spatz_vreg_gather_eff,
                         data_bandwidth,     auto_fetch=False,   multi_idma_enable=0,
-                        core_model="fast",  tech_node="5nm"):
+                        core_model="fast",  tech_node="5nm",
+                        power_profile="constant"):
 
         self.nb_core                = nb_core_per_cluster
         self.base                   = base
         self.cluster_id             = cluster_id
         self.auto_fetch             = auto_fetch
         self.barrier_irq            = 19
-        self.tcdm                   = ClusterArch.Tcdm(base, self.nb_core + len(spatz_core_list)*spatz_num_vlsu, tcdm_size, nb_tcdm_banks, tcdm_bank_width, sync_itlv, sync_special_mem, tech_node)
+        self.tcdm                   = ClusterArch.Tcdm(base, self.nb_core + len(spatz_core_list)*spatz_num_vlsu, tcdm_size, nb_tcdm_banks, tcdm_bank_width, sync_itlv, sync_special_mem, tech_node, power_profile)
         self.stack_area             = Area(stack_base, stack_size)
         self.zomem_area             = Area(zomem_base, zomem_size)
         self.sync_area              = Area(sync_base, sync_itlv + sync_special_mem)
@@ -124,9 +125,10 @@ class ClusterArch:
         self.num_cluster_x          = num_cluster_x
         self.num_cluster_y          = num_cluster_y
         self.tech_node              = tech_node
+        self.power_profile          = power_profile
 
     class Tcdm:
-        def __init__(self, base, nb_masters, tcdm_size, nb_tcdm_banks, tcdm_bank_width, sync_itlv, sync_special_mem, tech_node):
+        def __init__(self, base, nb_masters, tcdm_size, nb_tcdm_banks, tcdm_bank_width, sync_itlv, sync_special_mem, tech_node, power_profile):
             self.area = Area( base, tcdm_size)
             self.nb_tcdm_banks = nb_tcdm_banks
             self.bank_width = tcdm_bank_width
@@ -135,6 +137,7 @@ class ClusterArch:
             self.sync_itlv = sync_itlv
             self.sync_special_mem = sync_special_mem
             self.tech_node = tech_node
+            self.power_profile = power_profile
 
 
 class ClusterTcdm(gvsoc.systree.Component):
@@ -146,7 +149,7 @@ class ClusterTcdm(gvsoc.systree.Component):
         prior_arbiters = []
         nb_banks = arch.nb_tcdm_banks
         for i in range(0, nb_banks):
-            banks.append(memory.Memory(self, f'bank_{i}', size=arch.bank_size, atomics=True, width_log2=int(math.log2(arch.bank_width)), tech_node=arch.tech_node))
+            banks.append(memory.Memory(self, f'bank_{i}', size=arch.bank_size, atomics=True, width_log2=int(math.log2(arch.bank_width)), tech_node=arch.tech_node, power_profile=arch.power_profile))
             prior_arbiters.append(PriorityArbiterFilter(self, f'prior_arbiter_{i}', bank_width=arch.bank_width))
 
         interleaver = L1_interleaver(self, 'interleaver', nb_slaves=nb_banks,
@@ -161,7 +164,7 @@ class ClusterTcdm(gvsoc.systree.Component):
         hwpe_interleaver = HWPEInterleaver(self, 'hwpe_interleaver', arch.nb_masters,
             nb_banks, arch.bank_width)
 
-        tcdm_sync_mem = memory.Memory(self, 'sync_mem', size=arch.sync_itlv, atomics=True, width_log2=int(math.log2(arch.bank_width)), tech_node=arch.tech_node)
+        tcdm_sync_mem = memory.Memory(self, 'sync_mem', size=arch.sync_itlv, atomics=True, width_log2=int(math.log2(arch.bank_width)), tech_node=arch.tech_node, power_profile=arch.power_profile)
 
         for i in range(0, nb_banks):
             self.bind(interleaver, 'out_%d' % i, banks[i], 'input')
@@ -213,7 +216,7 @@ class ClusterUnit(gvsoc.systree.Component):
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 
         #Instruction memory
-        instr_mem = memory.Memory(self, 'instr_mem', size=arch.insn_area.size, atomics=True, width_log2=-1, tech_node=arch.tech_node)
+        instr_mem = memory.Memory(self, 'instr_mem', size=arch.insn_area.size, atomics=True, width_log2=-1, tech_node=arch.tech_node, power_profile=arch.power_profile)
 
         #Instruction router
         instr_router = router.Router(self, 'instr_router', bandwidth=8*arch.nb_core)
@@ -266,7 +269,8 @@ class ClusterUnit(gvsoc.systree.Component):
                                     ce_width            = arch.redmule_ce_width,
                                     ce_pipe             = arch.redmule_ce_pipe,
                                     queue_depth         = arch.redmule_queue_depth,
-                                    tech_node           = arch.tech_node)
+                                    tech_node           = arch.tech_node,
+                                    power_profile       = arch.power_profile)
 
         # Cluster peripherals
         cluster_registers = ClusterRegisters(self, 'cluster_registers',
@@ -304,7 +308,7 @@ class ClusterUnit(gvsoc.systree.Component):
             pass
 
         #stack memory
-        stack_mem = memory.Memory(self, 'stack_mem', size=arch.stack_area.size, tech_node=arch.tech_node)
+        stack_mem = memory.Memory(self, 'stack_mem', size=arch.stack_area.size, tech_node=arch.tech_node, power_profile=arch.power_profile)
 
         #zero memory
         zero_mem = ZeroMem(self, 'zero_mem', size=arch.zomem_area.size)
