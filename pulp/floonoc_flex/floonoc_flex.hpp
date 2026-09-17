@@ -18,12 +18,13 @@
 /*
  * Authors: Germain Haugou, ETH (germain.haugou@iis.ee.ethz.ch)
  *          Jonas Martin, ETH (martinjo@student.ethz.ch)
+ *          Siim Rausi, ETH (srausi@student.ethz.ch)
  */
 
 #pragma once
 
 #include <vp/itf/io.hpp>
-#include <vp/vp.hpp>
+#include <vp/signal.hpp>
 
 class Router;
 class NetworkInterface;
@@ -32,9 +33,12 @@ class FloonocNode : public vp::Block
 {
   public:
     FloonocNode(Block *parent, std::string name) : vp::Block(parent, name) {}
-    virtual void unstall_queue(int from_x, int from_y) = 0;
-    virtual bool handle_request(FloonocNode *node, vp::IoReq *req, int from_x,
-                                int from_y) = 0;
+    virtual void unstall_queue(int from_node) = 0;
+    virtual bool handle_request(FloonocNode *node, vp::IoReq *req,
+                                int from_node)
+    {
+        return false;
+    }
 };
 
 /**
@@ -50,12 +54,9 @@ class Entry
     uint64_t base;
     // Size of the entry
     uint64_t size;
-    // X position of the target where requests to this mapping should be
+    // Node ID of the target where requests to this mapping should be
     // forwarded
-    int x;
-    // Y position of the target where requests to this mapping should be
-    // forwarded
-    int y;
+    int node_id;
     // Offset to be removed when request is forwarded
     uint64_t remove_offset;
 };
@@ -99,28 +100,18 @@ class FlooNoc : public vp::Component
     static constexpr int REQ_SRC_NI =
         0; // Pointer to network interface where the request was received
     static constexpr int REQ_BURST = 1; // Burst received from network interface
-    static constexpr int REQ_DEST_X =
-        2; // X coordinate of the destination target
-    static constexpr int REQ_DEST_Y =
-        3; // Y coordinate of the destination target
     static constexpr int REQ_WIDE =
-        4; // Indicates if a request is a wide request
+        2; // Indicates if a request is a wide request
            // or not. 1 for wide, 0 for narrow
     static constexpr int REQ_IS_ADDRESS =
-        5; // Indicates if the request is a AR/AW request or not. 1 for address,
+        3; // Indicates if the request is a AR/AW request or not. 1 for address,
            // 0 for data
     static constexpr int REQ_DEST_ID =
-        6; // Node ID of the destination target for flexible topologies
+        4; // Node ID of the destination target for flexible topologies
+    static constexpr int REQ_INJECT_TIME =
+        5; // Cycle timestamp when the packet was injected into the NoC
     static constexpr int REQ_NB_ARGS =
-        7; // Number of request data required by this model
-
-    // The following constants gives the index in the queue array of the queue
-    // associated to each direction
-    static constexpr int DIR_RIGHT = 0;
-    static constexpr int DIR_LEFT = 1;
-    static constexpr int DIR_UP = 2;
-    static constexpr int DIR_DOWN = 3;
-    static constexpr int DIR_LOCAL = 4;
+        6; // Number of request data required by this model
 
     // Width in bytes of the noc. This is used to split incoming bursts into
     // internal requests of this width so that the bandwidth corresponds to the
@@ -128,18 +119,13 @@ class FlooNoc : public vp::Component
     uint64_t wide_width;
     uint64_t narrow_width;
 
-    // X dimension of the network. This includes both routers but also targets
-    // on the edges
-    int dim_x;
-    // Y dimension of the network. This includes both routers but also targets
-    // on the edges
-    int dim_y;
+    // Properties for generic topology support
+    int nb_nodes;
+    int router_degrees;
+    std::vector<std::vector<int>> links; // source node, dest node, latency
 
   private:
-    FloonocNode *get_router_neighbour(std::vector<Router *> &routers, int x,
-                                      int y);
     void router_init_neighbours(Router *router, std::vector<Router *> &routers);
-    FloonocNode *get_node(std::vector<Router *> &routers, int x, int y);
 
     // This block trace
     vp::Trace trace;

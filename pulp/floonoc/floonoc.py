@@ -55,7 +55,8 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         before the source output queue is stalled.
     """
     def __init__(self, parent: gvsoc.systree.Component, name, narrow_width: int, wide_width:int,
-            dim_x: int, dim_y:int, ni_outstanding_reqs: int=8, router_input_queue_size: int=2):
+            dim_x: int, dim_y:int, ni_outstanding_reqs: int=8, router_input_queue_size: int=2,
+            router_degrees: int=5):
         super().__init__(parent, name)
 
         self.add_sources([
@@ -226,10 +227,6 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
             The slave interface
         """
         return gvsoc.systree.SlaveItf(self, f'wide_input_{x}_{y}', signature='io')
-
-
-
-
 
 class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
     """FlooNoc instance for a grid of clusters
