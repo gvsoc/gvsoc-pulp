@@ -23,4 +23,5 @@ prepare:
 	cp solution/* .
 
 run:
+	mkdir -p $(FULL_BUILDDIR)/work
 	$(FULL_BUILDDIR)/install/bin/gvrun --target-dir=$(CURDIR) --target=my_system --work-dir=$(FULL_BUILDDIR)/work --parameter binary=$(FULL_BUILDDIR)/test/test run $(runner_args)

@@ -465,9 +465,11 @@ its earlier read), showing the changes in the VCD signal.
       $ make run runner_args="--vcd --event=.*"
       $ gtkwave <work-dir>/view.gtkw
    The signal is  visible in GTKWave, found from the SST pane under ``soc -> my_comp``.
-   As you can see, initially the signal is uninitialized ('X') until 
-   writes from 0 to 19. When the value 5 is written, the signal is released and 
+   As you can see, initially the signal is uninitialized ('X') until
+   writes from 0 to 19. When the value 5 is written, the signal is released and
    shows as high-impedance ('Z').
+
+   .. figure:: images/flooforge/C_VCD_Wave.png
 
 D - The IO request interface, sync vs async
 ......................................................
@@ -559,6 +561,14 @@ the incoming requests.
    inline. In practice, real async replies are typically a chain of
    callbacks across several components before the initiator finally sees its
    response.
+
+   Trace of synchronous reply:
+
+   .. figure:: images/flooforge/D_synch_print.png
+
+   Trace of asynchronous reply:
+
+   .. figure:: images/flooforge/D_asynch_print.png
 
 
 E - Add power sources
@@ -868,6 +878,8 @@ timing that a config file controls instead of a hardcoded formula.
    be a uniform color (latency 1) and every Z link should stand out
    (latency 8).
 
+   .. figure:: images/flooforge/mesh3d.png
+
 .. admonition:: Information - the flexible NoC, instantiated
    :class: explanation
 
@@ -942,3 +954,5 @@ timing that a config file controls instead of a hardcoded formula.
    from 1 to 8 cycles. It produces ``generated/z_latency_sweep.png``, a
    linespoints plot of completion cycles vs. Z-axis latency. In the image you should see how completion time
    should scales linearly with Z-axis latency.
+
+   .. figure:: images/flooforge/z_latency_sweep.png
