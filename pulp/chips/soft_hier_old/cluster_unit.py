@@ -83,7 +83,7 @@ class ClusterArch:
                         spatz_core_list,    spatz_num_vlsu,     spatz_num_fu,
                         spatz_vlsu_bw,      spatz_vreg_gather_eff,
                         data_bandwidth,     auto_fetch=False,   multi_idma_enable=0,
-                        core_model="fast",  tech_node="5nm"):
+                        core_model="fast",  tech_node="5nm", idma_gather_enable=False):
 
         self.nb_core                = nb_core_per_cluster
         self.base                   = base
@@ -117,6 +117,7 @@ class ClusterArch:
         self.idma_outstand_burst    = idma_outstand_burst
         self.data_bandwidth         = data_bandwidth
         self.multi_idma_enable      = multi_idma_enable
+        self.idma_gather_enable     = bool(idma_gather_enable)
         self.core_model             = core_model
 
         #Global Information
@@ -292,11 +293,13 @@ class ClusterUnit(gvsoc.systree.Component):
             idma_list = []
             for x in range(arch.nb_core):
                 idma_list.append(SnitchDma(self, f'idma_{x}', loc_base=arch.tcdm.area.base, loc_size=arch.tcdm.area.size + data_dumpper_input_size,
-                tcdm_width=(arch.tcdm.nb_tcdm_banks * arch.tcdm.bank_width), transfer_queue_size=arch.idma_outstand_txn, burst_queue_size=arch.idma_outstand_burst))
+                tcdm_width=(arch.tcdm.nb_tcdm_banks * arch.tcdm.bank_width), transfer_queue_size=arch.idma_outstand_txn, burst_queue_size=arch.idma_outstand_burst,
+                gather_enable=arch.idma_gather_enable))
                 pass
         else:
             idma = SnitchDma(self, 'idma', loc_base=arch.tcdm.area.base, loc_size=arch.tcdm.area.size + data_dumpper_input_size,
-                tcdm_width=(arch.tcdm.nb_tcdm_banks * arch.tcdm.bank_width), transfer_queue_size=arch.idma_outstand_txn, burst_queue_size=arch.idma_outstand_burst)
+                tcdm_width=(arch.tcdm.nb_tcdm_banks * arch.tcdm.bank_width), transfer_queue_size=arch.idma_outstand_txn, burst_queue_size=arch.idma_outstand_burst,
+                gather_enable=arch.idma_gather_enable)
             pass
 
         #stack memory
@@ -449,14 +452,24 @@ class ClusterUnit(gvsoc.systree.Component):
         data_dumpper_arbiter = router.Router(self, 'data_dumpper_arbiter')
         data_dumpper_arbiter.o_MAP(tcdm.i_DMA_INPUT())
         data_dumpper_arbiter.o_MAP(data_dumpper.i_INPUT(), base=data_dumpper_input_base, size=data_dumpper_input_size, rm_base=True)
+        if arch.idma_gather_enable:
+            # The gather index port carries absolute addresses and reads one
+            # 64-bit word. Use the real banked TCDM and its DMA priority path.
+            index_router = router.Router(self, 'idma_index_router', bandwidth=8, latency=0)
+            index_router.o_MAP(tcdm.i_DMA_INPUT(), base=arch.tcdm.area.base,
+                size=arch.tcdm.area.size, rm_base=True)
         if arch.multi_idma_enable:
             for x in range(arch.nb_core):
                 idma_list[x].o_TCDM(data_dumpper_arbiter.i_INPUT())
                 idma_list[x].o_AXI(wide_axi_from_idma.i_INPUT())
+                if arch.idma_gather_enable:
+                    idma_list[x].o_INDEX(index_router.i_INPUT())
                 pass
         else:
             idma.o_TCDM(data_dumpper_arbiter.i_INPUT())
             idma.o_AXI(wide_axi_from_idma.i_INPUT())
+            if arch.idma_gather_enable:
+                idma.o_INDEX(index_router.i_INPUT())
             pass
 
     def i_WIDE_INPUT(self) -> gvsoc.systree.SlaveItf:

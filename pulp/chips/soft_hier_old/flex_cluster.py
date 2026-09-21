@@ -79,6 +79,8 @@ class FlexClusterSystem(gvsoc.systree.Component):
         if not hasattr(arch, 'spatz_vlsu_port_width'): arch.spatz_vlsu_port_width = 32
         if not hasattr(arch, 'spatz_vreg_gather_eff'): arch.spatz_vreg_gather_eff = 100
         if not hasattr(arch, 'multi_idma_enable'): arch.multi_idma_enable = 0
+        if not hasattr(arch, 'idma_gather_enable'): arch.idma_gather_enable = 0
+        if not hasattr(arch, 'hbm_type'): arch.hbm_type = 'hbm4-emu-example.json'
         if not hasattr(arch, 'hbm_node_aliase'): arch.hbm_node_aliase = 1
         if not hasattr(arch, 'hbm_node_aliase_start_bit'): arch.hbm_node_aliase_start_bit = 48
         if not hasattr(arch, 'hbm_ctrl_xor_scrambling'): arch.hbm_ctrl_xor_scrambling = 0
@@ -152,6 +154,7 @@ class FlexClusterSystem(gvsoc.systree.Component):
                                         spatz_vreg_gather_eff = arch.spatz_vreg_gather_eff,
                                         data_bandwidth      =   arch.noc_link_width/8,
                                         multi_idma_enable   =   arch.multi_idma_enable,
+                                        idma_gather_enable  =   arch.idma_gather_enable,
                                         core_model          =   arch.core_model,
                                         tech_node           =   arch.tech_node)
             cluster_list.append(ClusterUnit(self,f'cluster_{cluster_id}', cluster_arch, binary))
@@ -171,22 +174,22 @@ class FlexClusterSystem(gvsoc.systree.Component):
         #HBM channels
         hbm_chan_list_west = []
         for hbm_ch in range(arch.hbm_chan_placement[0]):
-            hbm_chan_list_west.append(memory.dramsys.Dramsys(self, f'west_hbm_chan_{hbm_ch}', dram_type='hbm4-emu-example.json'))
+            hbm_chan_list_west.append(memory.dramsys.Dramsys(self, f'west_hbm_chan_{hbm_ch}', dram_type=arch.hbm_type))
             pass
 
         hbm_chan_list_north = []
         for hbm_ch in range(arch.hbm_chan_placement[1]):
-            hbm_chan_list_north.append(memory.dramsys.Dramsys(self, f'north_hbm_chan_{hbm_ch}', dram_type='hbm4-emu-example.json'))
+            hbm_chan_list_north.append(memory.dramsys.Dramsys(self, f'north_hbm_chan_{hbm_ch}', dram_type=arch.hbm_type))
             pass
 
         hbm_chan_list_east = []
         for hbm_ch in range(arch.hbm_chan_placement[2]):
-            hbm_chan_list_east.append(memory.dramsys.Dramsys(self, f'east_hbm_chan_{hbm_ch}', dram_type='hbm4-emu-example.json'))
+            hbm_chan_list_east.append(memory.dramsys.Dramsys(self, f'east_hbm_chan_{hbm_ch}', dram_type=arch.hbm_type))
             pass
 
         hbm_chan_list_south = []
         for hbm_ch in range(arch.hbm_chan_placement[3]):
-            hbm_chan_list_south.append(memory.dramsys.Dramsys(self, f'south_hbm_chan_{hbm_ch}', dram_type='hbm4-emu-example.json'))
+            hbm_chan_list_south.append(memory.dramsys.Dramsys(self, f'south_hbm_chan_{hbm_ch}', dram_type=arch.hbm_type))
             pass
 
         #HBM controllers
