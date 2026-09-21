@@ -92,4 +92,12 @@ public:
 
     /// True while a split is issued or a response is outstanding.
     virtual bool busy() = 0;
+
+    /// Splits accepted whose word has not gone out yet. A protocol without an
+    /// address channel (OBI) only takes a split when the word is really
+    /// written, so the legalizer must not finish a 1D request while more than
+    /// the one split its address register holds is still waiting; that is what
+    /// keeps the lines of an ND transfer from overlapping on the hardware.
+    /// Protocols that accept addresses ahead of the data leave this at 0.
+    virtual int aw_unissued() { return 0; }
 };

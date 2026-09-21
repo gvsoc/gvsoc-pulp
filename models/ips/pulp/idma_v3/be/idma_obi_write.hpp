@@ -60,6 +60,7 @@ public:
     bool aw_ready() override;
     void issue_aw(const IdmaSplit &split) override;
     bool tick(int64_t now) override;
+    int aw_unissued() override;
     bool busy() override;
 
     // IdmaObiClient (see idma_obi_port_group.hpp)

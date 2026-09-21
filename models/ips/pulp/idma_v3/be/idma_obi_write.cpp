@@ -163,6 +163,14 @@ void IdmaObiWrite::obi_word_done(void *token)
 
 
 
+// Splits taken but not written yet (see IdmaWriteManager::aw_unissued).
+int IdmaObiWrite::aw_unissued()
+{
+    return this->aw_fifo.size();
+}
+
+
+
 bool IdmaObiWrite::tick(int64_t now)
 {
     // The port group decides when the word goes out; tell it a word may be
