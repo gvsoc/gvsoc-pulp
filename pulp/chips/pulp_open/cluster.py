@@ -94,6 +94,37 @@ class Cluster(st.Component):
         cluster_conf = ClusterConf(config_file)
         self.conf = cluster_conf
 
+        # Which DMA this chip has is part of its description. Older descriptions do not say, and
+        # mchan is what they meant, so fall back to it.
+        dma_model = cluster_conf.get_property('peripherals/dma/kind')
+        if dma_model is None:
+            dma_model = 'mchan'
+
+        # The attribute overrides the chip description, which is what makes it possible to run the
+        # same chip with both models and compare them.
+        if os.environ.get('USE_GVRUN') is None:
+            dma_model = self.declare_user_property(
+                name='dma_model', value=dma_model, cast=str,
+                description='Cluster DMA model, either mchan or idma'
+            )
+        else:
+            dma_model = self.get_property('dma_model') or dma_model
+
+        if dma_model not in ['mchan', 'idma']:
+            raise RuntimeError(f'Unknown cluster DMA model: {dma_model}')
+
+        # The Deeploy flow the iDMA is used for needs a larger L1 and a cluster window wide
+        # enough to hold it. The chip description keeps the sizes PULP Open ships with, and they
+        # are enlarged here only when iDMA is selected, so the default platform is untouched.
+        if dma_model == 'idma':
+            cluster_conf.add_properties({
+                'mapping': {'size': '0x00C00000'},
+                'l1': {
+                    'mapping': {'size': '0x00040000'},
+                    'ts_mapping': {'size': '0x00040000'},
+                },
+            })
+
         nb_pe               = cluster_conf.get_property('nb_pe', int)
         cluster_size        = cluster_conf.get_property('mapping/size', int)
         self.cluster_offset = cluster_size * cid
@@ -116,25 +147,6 @@ class Cluster(st.Component):
         else:
             has_redmule = self.get_property('has_redmule')
 
-        # Which DMA this chip has is part of its description. Older descriptions do not say, and
-        # mchan is what they meant, so fall back to it.
-        dma_model = cluster_conf.get_property('peripherals/dma/kind')
-        if dma_model is None:
-            dma_model = 'mchan'
-
-        # The attribute overrides the chip description, which is what makes it possible to run the
-        # same chip with both models and compare them.
-        if os.environ.get('USE_GVRUN') is None:
-            dma_model = self.declare_user_property(
-                name='dma_model', value=dma_model, cast=str,
-                description='Cluster DMA model, either mchan or idma'
-            )
-        else:
-            dma_model = self.get_property('dma_model') or dma_model
-
-        if dma_model not in ['mchan', 'idma']:
-            raise RuntimeError(f'Unknown cluster DMA model: {dma_model}')
-
         # How many banks one TCDM access of the DMA spans, as mem_to_banks does in the RTL. The
         # DMA interleaver of the L1 subsystem takes care of the split, so here it only sets the
         # width of the access. Descriptions that do not say anything get the two of dmac_wrap.
@@ -148,7 +160,7 @@ class Cluster(st.Component):
         #
 
         # L1 subsystem
-        l1 = L1_subsystem(self, 'l1', self, cluster_conf)
+        l1 = L1_subsystem(self, 'l1', self, cluster_conf, dma_model=dma_model)
 
         # Cores
         pes = []
