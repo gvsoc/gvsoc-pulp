@@ -53,8 +53,11 @@ private:
     bool pcmr_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     void check_perf_config_change(unsigned int pcer, unsigned int pcmr);
     void update_external_pccr(unsigned int pcer, unsigned int pcmr, int id);
+    bool absent_counter_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
 
     CsrReg pccr[32];
     CsrReg pcer;
     CsrReg pcmr;
+    CsrReg cycleh;
+    CsrReg mcycleh;
 };

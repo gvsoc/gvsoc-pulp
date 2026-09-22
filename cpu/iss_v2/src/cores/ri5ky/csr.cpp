@@ -23,6 +23,26 @@ Ri5kyCsr::Ri5kyCsr(Iss &iss)
     this->declare_csr(&this->pcmr, "pcmr", 0xCC1);
     this->pcmr.register_callback(std::bind(&Ri5kyCsr::pcmr_access, this, std::placeholders::_1,
         std::placeholders::_2, std::placeholders::_3));
+
+    // The RI5CY RTL has no cycle/mcycle CSRs (its only cycle counter is PCCR[0]). An unknown CSR
+    // reads as 0 and ignores writes without trapping, so the generic counters are overridden to
+    // behave the same. This callback runs after the generic one and overwrites its value.
+    this->cycle.register_callback(std::bind(&Ri5kyCsr::absent_counter_access, this,
+        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+    this->mcycle.register_callback(std::bind(&Ri5kyCsr::absent_counter_access, this,
+        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+    // The high halves are not in the generic CSR table, declare them so that they also read as 0.
+    this->declare_csr(&this->cycleh, "cycleh", 0xC80, 0, 0);
+    this->declare_csr(&this->mcycleh, "mcycleh", 0xB80, 0, 0);
+}
+
+bool Ri5kyCsr::absent_counter_access(iss_insn_t *insn, bool is_write, iss_reg_t &value)
+{
+    if (!is_write)
+    {
+        value = 0;
+    }
+    return false;
 }
 
 bool Ri5kyCsr::pccr_access(iss_insn_t *insn, bool is_write, iss_reg_t &value, int id)
