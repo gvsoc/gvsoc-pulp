@@ -79,15 +79,16 @@ bool IdmaLegalizer::take_request(int64_t now)
         return false;
     }
 
-    // The write side of the previous request may still hold one split in its
-    // address register, no more: on a protocol without an address channel the
-    // hardware only takes a split when the word is written, so a request with
-    // several words is not finished until its data is there. This is what
-    // costs one read latency per line of an ND transfer into the TCDM
-    // (measured on the RTL: a 2D transfer of 64-byte lines issues the next
-    // line's read one cycle after the previous line's last beat, while lines
-    // of one word pipeline).
-    if (this->wm != nullptr && this->wm->aw_unissued() > 1)
+    // The write side of the previous requests may still hold two splits, no
+    // more: on a protocol without an address channel the hardware only takes a
+    // split when the word is written, so a request with several words is not
+    // finished until its data is there. This is what costs one read latency
+    // per line of an ND transfer into the TCDM. Measured on the RTL: an ND
+    // transfer of one-word lines keeps three lines in flight (three read
+    // addresses in a row, the next three once the first is written), and one
+    // of 64-byte lines issues the next line's read before the previous line's
+    // last beat.
+    if (this->wm != nullptr && this->wm->aw_unissued() > 2)
     {
         return false;
     }
