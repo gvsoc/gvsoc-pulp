@@ -282,6 +282,23 @@ class TensorpoolSystem(st.Component):
 
         redmule_config = RedmuleParam()
         #synchronous for now, since async has problems with the burst tcdm messaging system.
-        soc = System(self, 'mempool_soc', parser, async_l1_interco=False, redmule_config=redmule_config, tensorpool=True, terapool=False, nb_redmule_tiles=16, nb_cores_per_tile=4, nb_sub_groups_per_group=4, nb_groups=4, total_cores=256, bank_factor=8, bank_size=2048, axi_data_width=64, nb_axi_masters_per_group=4, nb_dmas_per_group=4, l2_size=0x400000, nb_l2_banks=4, redmule_bandwidth=64)
+        soc = System(self, 'mempool_soc', parser, 
+        	async_l1_interco=False, 
+        	redmule_config=redmule_config, 
+        	tensorpool=True, 
+        	terapool=False, 
+        	nb_redmule_tiles=32, 
+        	nb_cores_per_tile=4, 
+        	nb_sub_groups_per_group=4, 
+        	nb_groups=4, 
+        	total_cores=512, 
+        	bank_factor=8, 
+        	bank_size=2048, 
+        	axi_data_width=64, 
+        	nb_axi_masters_per_group=4, 
+        	nb_dmas_per_group=4, 
+        	l2_size=0x400000, 
+        	nb_l2_banks=4, 
+        	redmule_bandwidth=64)
 
         self.bind(clock, 'out', soc, 'clock')
