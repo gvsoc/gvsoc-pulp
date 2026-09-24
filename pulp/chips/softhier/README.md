@@ -60,7 +60,11 @@ its `TOPOLOGIES` dict. At `make sh-config` time,
 generates the FlooGen topology (`.floogen.yml`), routing table
 (`.routing.yml`) and per-link latencies (`.link_latencies.yml`) for the
 selected topology straight from its `TOPOLOGIES` entry, and writes them to
-`topologies/generated/`.
+`topologies/generated/`. The model itself also regenerates them at
+simulation-configuration time, from the actual arch including any
+`--config-opt` override, into `softhier_topologies/` under the working
+directory, so the target runs from any directory (this needs the `floogen`
+Python package, see [`requirements.txt`](../../../requirements.txt)).
 The same command also regenerates the C headers consumed by the SoftHier
 runtime (`common/sw/runtime/include/softhier_arch.h`/`.inc`).
 

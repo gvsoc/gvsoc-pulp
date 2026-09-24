@@ -137,12 +137,13 @@ class SoftHierSystem(gvsoc.systree.Component):
                                       num_core_per_cluster=arch.num_core_per_cluster)
 
         # --- FlooNoC Flex Initialization & Topology Building ---
-        # floogen.yml/routing.yml/link_latencies.yml are generated at
-        # `make sh-config` time by
-        # pulp/pulp/chips/softhier/topologies/gen_floogen_topology.py
+        # floogen.yml/routing.yml/link_latencies.yml are generated here from
+        # the actual arch (including --config-opt overrides) into the working
+        # directory, so that the target runs from any directory.
+        from pulp.chips.softhier.topologies.gen_floogen_topology import GENERATORS
 
-        topologies_dir = os.path.join(os.getcwd(), 'pulp', 'pulp', 'chips',
-                                       'softhier', 'topologies', 'generated')
+        topologies_dir = os.path.join(os.getcwd(), 'softhier_topologies')
+        GENERATORS[topology](arch, topologies_dir, topology)
         floogen_path = os.path.join(topologies_dir, f'{topology}.floogen.yml')
         routing_path = os.path.join(topologies_dir, f'{topology}.routing.yml')
         link_latencies_path = os.path.join(topologies_dir, f'{topology}.link_latencies.yml')
