@@ -46,7 +46,8 @@ if os.environ.get('USE_GVRUN') is None:
 
 
     class ClusterArch:
-        def __init__(self, properties, base, first_hartid, auto_fetch=False, boot_addr=0x0000_1000):
+        def __init__(self, properties, base, first_hartid, auto_fetch=False, boot_addr=0x0000_1000,
+                alias_base=None):
             self.nb_core = properties.nb_core_per_cluster
             self.base = base
             self.first_hartid = first_hartid
@@ -61,6 +62,14 @@ if os.environ.get('USE_GVRUN') is None:
             self.tcdm          = ClusterArch.Tcdm(base, nb_masters)
             self.peripheral    = Area( base + 0x0002_0000, 0x0001_0000)
             self.zero_mem      = Area( base + 0x0003_0000, 0x0001_0000)
+            # Optional alias region (AliasRegionEnable/AliasRegionBase in snitch_cluster.sv):
+            # the cluster-local TCDM, peripherals and zero memory are also reachable at a
+            # fixed cluster-independent address, so that the same code can run on any cluster.
+            self.alias_base = alias_base
+            if alias_base is not None:
+                self.tcdm_alias       = Area( alias_base + 0x0000_0000, 0x0002_0000)
+                self.peripheral_alias = Area( alias_base + 0x0002_0000, 0x0001_0000)
+                self.zero_mem_alias   = Area( alias_base + 0x0003_0000, 0x0001_0000)
             self.core_type = properties.core_type
             self.use_spatz = properties.use_spatz
             self.spatz_nb_lanes = properties.spatz_nb_lanes
@@ -80,7 +89,7 @@ else:
     class ClusterArch(Tree):
         def __init__(self, parent, name, base, first_hartid, auto_fetch=False,
                 boot_addr=0x0000_1000, nb_core_per_cluster=None, spatz=False, spatz_nb_lanes=4,
-                core_type='accurate', isa=None):
+                core_type='accurate', isa=None, alias_base=None):
             super().__init__(parent, name)
 
             if nb_core_per_cluster is None:
@@ -103,6 +112,14 @@ else:
             self.tcdm          = ClusterArch.Tcdm(self, 'tcdm', base, nb_masters)
             self.peripheral    = Area( self, 'peripheral', base + 0x0002_0000, 0x0001_0000, 'peripheral range')
             self.zero_mem      = Area( self, 'zero_mem', base + 0x0003_0000, 0x0001_0000, 'zero mem range')
+            # Optional alias region (AliasRegionEnable/AliasRegionBase in snitch_cluster.sv):
+            # the cluster-local TCDM, peripherals and zero memory are also reachable at a
+            # fixed cluster-independent address, so that the same code can run on any cluster.
+            self.alias_base = alias_base
+            if alias_base is not None:
+                self.tcdm_alias       = Area( self, 'tcdm_alias', alias_base + 0x0000_0000, 0x0002_0000, 'TCDM alias range')
+                self.peripheral_alias = Area( self, 'peripheral_alias', alias_base + 0x0002_0000, 0x0001_0000, 'peripheral alias range')
+                self.zero_mem_alias   = Area( self, 'zero_mem_alias', alias_base + 0x0003_0000, 0x0001_0000, 'zero mem alias range')
             self.core_type = core_type
             self.use_spatz = spatz
             self.spatz_nb_lanes = spatz_nb_lanes
@@ -257,6 +274,9 @@ class SnitchCluster(gvsoc.systree.Component):
 
         # Remote Access to TCDM
         wide_axi.o_MAP(tcdm.i_DMA_INPUT(), base=arch.tcdm.area.base, size=arch.tcdm.area.size, rm_base=True)
+        if arch.alias_base is not None:
+            wide_axi.o_MAP(tcdm.i_DMA_INPUT(), name='tcdm_alias', base=arch.tcdm_alias.base,
+                size=arch.tcdm_alias.size, rm_base=True)
 
         # Cores
         cores[dma_core].o_OFFLOAD(idma.i_OFFLOAD())
@@ -274,6 +294,9 @@ class SnitchCluster(gvsoc.systree.Component):
             cores[core_id].o_DATA(cores_ico[core_id].i_INPUT())
             cores_ico[core_id].o_MAP(tcdm.i_INPUT(tcdm_port), base=arch.tcdm.area.base,
                 size=arch.tcdm.area.size, rm_base=True)
+            if arch.alias_base is not None:
+                cores_ico[core_id].o_MAP(tcdm.i_INPUT(tcdm_port), name='tcdm_alias',
+                    base=arch.tcdm_alias.base, size=arch.tcdm_alias.size, rm_base=True)
             tcdm_port += 1
 
             if arch.use_spatz:
@@ -321,6 +344,9 @@ class SnitchCluster(gvsoc.systree.Component):
         # Cluster peripherals
         narrow_axi.o_MAP(cluster_registers.i_INPUT(), base=arch.peripheral.base,
             size=arch.peripheral.size, rm_base=True)
+        if arch.alias_base is not None:
+            narrow_axi.o_MAP(cluster_registers.i_INPUT(), name='peripheral_alias',
+                base=arch.peripheral_alias.base, size=arch.peripheral_alias.size, rm_base=True)
         for core_id in range(0, arch.nb_core):
             self.bind(cluster_registers, f'barrier_ack', cores[core_id], 'barrier_ack')
         for core_id in range(0, arch.nb_core):
@@ -341,6 +367,11 @@ class SnitchCluster(gvsoc.systree.Component):
         # Zero mem
         wide_axi.o_MAP(zero_mem.i_INPUT(), base=arch.zero_mem.base, size=arch.zero_mem.size, rm_base=True)
         narrow_axi.o_MAP(wide_axi.i_INPUT(), name='zero_mem', base=arch.zero_mem.base, size=arch.zero_mem.size, rm_base=False)
+        if arch.alias_base is not None:
+            wide_axi.o_MAP(zero_mem.i_INPUT(), name='zero_mem_alias', base=arch.zero_mem_alias.base,
+                size=arch.zero_mem_alias.size, rm_base=True)
+            narrow_axi.o_MAP(wide_axi.i_INPUT(), name='zero_mem_alias', base=arch.zero_mem_alias.base,
+                size=arch.zero_mem_alias.size, rm_base=False)
 
         self.cores = cores
 

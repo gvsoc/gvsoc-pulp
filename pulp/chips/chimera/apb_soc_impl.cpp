@@ -58,6 +58,8 @@ private:
   uint32_t core_status;
   uint32_t bootaddr;
   int bootsel;
+  // Frequency of the RTC driving the CLINT mtime, exposed in CHESHIRE_RTC_FREQ
+  uint32_t rtc_freq;
 
   vp::reg_32     jtag_reg_ext;
 };
@@ -89,6 +91,7 @@ apb_soc_ctrl::apb_soc_ctrl(vp::ComponentConf &config)
   core_status = 0;
   this->bootsel = 0;
   this->jtag_reg_ext.set(0);
+  this->rtc_freq = this->get_js_config()->get_child_int("rtc_freq");
 
 
 }
@@ -153,6 +156,14 @@ vp::IoReqStatus apb_soc_ctrl::req(vp::Block *__this, vp::IoReq *req)
     {
       *(uint32_t *)data = _this->jtag_reg_ext.get() << APB_SOC_JTAG_REG_EXT_BIT;
     }
+  }
+  else if (offset == 0x44)
+  {
+      // CHESHIRE_RTC_FREQ register
+      if (!is_write)
+      {
+          *(uint32_t *)data = _this->rtc_freq;
+      }
   }
   else if (offset == 0x4c)
   {

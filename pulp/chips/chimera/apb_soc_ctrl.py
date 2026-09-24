@@ -18,14 +18,15 @@ import gvsoc.systree as st
 
 class Apb_soc_ctrl(st.Component):
 
-    def __init__(self, parent, name, soc):
+    def __init__(self, parent, name, soc, rtc_freq=32768):
         super(Apb_soc_ctrl, self).__init__(parent, name)
 
         self.add_sources(['pulp/chips/chimera/apb_soc_impl.cpp'])
 
         self.add_properties({
             'cluster_power_event': soc.get_property('soc_events/soc_evt_cluster_pok'),
-            'cluster_clock_gate_event': soc.get_property('soc_events/soc_evt_cluster_cg_ok')
+            'cluster_clock_gate_event': soc.get_property('soc_events/soc_evt_cluster_cg_ok'),
+            'rtc_freq': rtc_freq,
         })
 
         self.add_properties(soc.get_property('peripherals/soc_ctrl/config'))

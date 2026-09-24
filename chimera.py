@@ -10,7 +10,6 @@ import gvsoc.systree
 
 import pulp.chips.chimera.apb_soc_ctrl as apb_soc_ctrl
 import pulp.chips.chimera.chimera_reg_top as chimera_reg_top
-import pulp.cpu.iss.pulp_cores as iss
 import memory.memory as memory
 from vp.clock_domain import Clock_domain
 import interco.router as router
@@ -22,6 +21,7 @@ from utils.clock_generator import Clock_generator
 import pulp.soc_eu.soc_eu_v2 as soc_eu_module
 import pulp.itc.itc_v1 as itc
 import cpu.clint
+import cpu.iss.riscv
 from pulp.snitch.snitch_cluster.snitch_cluster import ClusterArch, SnitchCluster
 if os.environ.get('USE_GVRUN') is None:
     from pulp.chips.snitch.snitch import SnitchArchProperties
@@ -51,9 +51,15 @@ class SnitchClusterGroup(gvsoc.systree.Component):
         # Wide 512 bits router
         self.wide_axi = router.Router(self, 'wide_axi', bandwidth=64)
 
+        # Cluster i is mapped at 0x4000_0000 + i * 0x20_0000 and owns harts
+        # 1 + 9*i .. 9 + 9*i (chimera_pkg.sv ClusterRegionStart, soc_addr_map.h).
         cluster_start_addr = [
-            0x40800000, 0x40600000, 0x40400000, 0x40200000, 0x40000000
+            0x40000000, 0x40200000, 0x40400000, 0x40600000, 0x40800000
         ]
+        # Cluster-local alias region (snitch_cluster.hjson alias_region_enable,
+        # ALIAS_TCDM_BASE_ADDR in the SDK): every cluster sees its own TCDM,
+        # peripherals and zero memory at this cluster-independent address.
+        alias_base = 0x18000000
 
         # With the legacy gvsoc launcher, the cluster arch comes from the legacy snitch
         # properties. With gvrun, it is rooted in an attribute tree.
@@ -68,13 +74,15 @@ class SnitchClusterGroup(gvsoc.systree.Component):
                                            base=cluster_start_addr[id],
                                            first_hartid=(id * 9) + 1,
                                            auto_fetch=True,
-                                           boot_addr=0x30000000)
+                                           boot_addr=0x30000000,
+                                           alias_base=alias_base)
             else:
                 cluster_arch = ClusterArch(attr_parent, 'cluster',
                                            cluster_start_addr[id],
                                            (id * 9) + 1,
                                            auto_fetch=True,
-                                           boot_addr=0x30000000)
+                                           boot_addr=0x30000000,
+                                           alias_base=alias_base)
             self.clusters.append(
                 SnitchCluster(self, f'cluster_{id}', cluster_arch,
                               entry=entry))
@@ -113,6 +121,12 @@ class SnitchClusterGroup(gvsoc.systree.Component):
                                   base=cluster_start_addr[id],
                                   size=0x00200000,
                                   rm_base=False)
+            # Let a cluster DMA target another cluster's TCDM through the
+            # wide interconnect.
+            self.wide_axi.o_MAP(self.clusters[id].i_WIDE_INPUT(),
+                                base=cluster_start_addr[id],
+                                size=0x00200000,
+                                rm_base=False)
 
             # self.bind(self.narrow_axi, "mem_island", self, "mem_island_ext")
 
@@ -167,7 +181,9 @@ class SafetyIsland(gvsoc.systree.Component):
             'soc_eu',
             ref_clock_event=soc_events['soc_evt_ref_clock'],
             **self.get_property('peripherals/soc_eu/config'))
-        soc_ctrl = apb_soc_ctrl.Apb_soc_ctrl(self, 'soc_ctrl', self)
+        # RTC driving the CLINT mtime counter (30518 ns period in the chimera testbench)
+        rtc_freq = 32768
+        soc_ctrl = apb_soc_ctrl.Apb_soc_ctrl(self, 'soc_ctrl', self, rtc_freq=rtc_freq)
 
         fll_soc = Fll(self, 'fll_soc')
         fll_periph = Fll(self, 'fll_periph')
@@ -201,7 +217,7 @@ class SafetyIsland(gvsoc.systree.Component):
             size=0x1000,
             stim_file=self.get_file_path('pulp/chips/chimera/bootrom.bin'))
 
-        clint = cpu.clint.Clint(self, 'clint', nb_cores=47)
+        clint = cpu.clint.Clint(self, 'clint', nb_cores=47, frequency=rtc_freq)
 
         stdout = Stdout(self, 'stdout')
 
@@ -222,8 +238,10 @@ class SafetyIsland(gvsoc.systree.Component):
         # sn_cluster_cfgregs = memory.Memory(self, 'cluster_cfgregs', size=config["obi_ico"]["cfgreg"]["size"])
         reg_top = chimera_reg_top.chimera_reg_top(self, 'reg_top')
 
-        # Setup host and loader connections
-        host = iss.FcCore(self, 'fc', cluster_id=0, boot_addr=0x02000000)
+        # Setup host and loader connections. The host is a CVA6 in RV32 mode with standard
+        # RISC-V interrupts driven by the CLINT (msip / mtimecmp), so use the generic
+        # riscv core rather than a PULP core with an ITC.
+        host = cpu.iss.riscv.Riscv(self, 'fc', isa='rv32imc', boot_addr=0x02000000)
 
         host.o_FETCH(l2_tcdm_ico.i_INPUT())
         host.o_DATA(l2_tcdm_ico.i_INPUT())
@@ -287,6 +305,9 @@ class SafetyIsland(gvsoc.systree.Component):
                           size=0x0100_0000,
                           rm_base=False)
 
+        # Hart 0 is the host, harts 1..45 are the snitch cluster cores
+        clint.o_SW_IRQ(0, host.i_IRQ(3))
+        clint.o_TIMER_IRQ(0, host.i_IRQ(7))
         for i in range(0, 46):
             clint.o_SW_IRQ(i + 1, snitch_cluster_group.i_SW_IRQ(i))
 
