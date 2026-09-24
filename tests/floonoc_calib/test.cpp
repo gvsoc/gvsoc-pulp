@@ -36,12 +36,16 @@
 
 // Model-vs-RTL acceptance threshold.
 #define CYCLES_ERROR 0.15f
+// Acceptance threshold of the model regression values (graph topologies).
+#define GRAPH_TOL 0.01f
 
 // Mesh node numbering: node (x, y) has flat index x*4+y and owns the range
 // [index * NODE_SIZE, ...+NODE_SIZE), like the RTL job generator.
 #define MESH_NODE(x, y) ((x) * 4 + (y))
 #define NODE_SIZE 0x10000
 #define MESH_BASE(x, y) ((uint64_t)MESH_NODE(x, y) * NODE_SIZE)
+// Graph topologies: node n owns [n * NODE_SIZE, ...+NODE_SIZE).
+#define GRAPH_BASE(n) ((uint64_t)(n) * NODE_SIZE)
 
 class Testbench : public vp::Component
 {
@@ -156,6 +160,45 @@ Testbench::Testbench(vp::ComponentConf &config)
                 {{0, n1, 3688}, {1, 0, 3688}}},
             {"bidir_write", true,  8192, 128, FAST_SLAVE,
                 {{0, n1, 3655}, {1, 0, 3655}}},
+        };
+    }
+    else if (this->topology.rfind("graph_", 0) == 0)
+    {
+        // Graph topologies the mesh cannot express. No RTL golden: the
+        // expected values are model regression values, checked tightly
+        // (GRAPH_TOL). They follow the per-hop costs calibrated on the mesh:
+        // a zero-load round trip costs 4 cycles per router (ring near = 2
+        // routers: 17, far = 4 routers: 25; tree near = 1 router: 13, far
+        // across the root = 3 routers: 21), and every link pipeline stage
+        // adds one cycle per direction (staged ring: +2 stages x links x 2,
+        // near 21, far 37). Bandwidth is unaffected by the hop count and the
+        // stages. Only write bandwidth is covered: see the mesh read
+        // scenarios for the read bandwidth.
+        // Expected cycles per topology: {graph_ring, graph_ring_stages,
+        // graph_tree}.
+        int t = this->topology == "graph_ring" ? 0 :
+            this->topology == "graph_ring_stages" ? 1 : 2;
+        auto e = [t](int64_t ring, int64_t ring_stages, int64_t tree) {
+            int64_t values[] = {ring, ring_stages, tree};
+            return values[t];
+        };
+        this->scenarios = {
+            {"zl_near_read",   false, 8, 8, FAST_SLAVE,
+                {{0, GRAPH_BASE(1), e(17, 21, 13), GRAPH_TOL}}},
+            {"zl_near_write",  true,  8, 8, FAST_SLAVE,
+                {{0, GRAPH_BASE(1), e(17, 21, 13), GRAPH_TOL}}},
+            {"zl_far_read",    false, 8, 8, FAST_SLAVE,
+                {{0, GRAPH_BASE(3), e(25, 37, 21), GRAPH_TOL}}},
+            {"zl_far_write",   true,  8, 8, FAST_SLAVE,
+                {{0, GRAPH_BASE(3), e(25, 37, 21), GRAPH_TOL}}},
+            {"bw_write",       true,  8192, 128, FAST_SLAVE,
+                {{0, GRAPH_BASE(3), e(3708, 3720, 3704), GRAPH_TOL}}},
+            {"cross_write",    true,  8192, 128, FAST_SLAVE,
+                {{0, GRAPH_BASE(3), e(3709, 3721, 3705), GRAPH_TOL},
+                 {3, GRAPH_BASE(0), e(3708, 3720, 3704), GRAPH_TOL}}},
+            {"hotspot2_write", true,  8192, 128, FAST_SLAVE,
+                {{0, GRAPH_BASE(1) + 0x0000, e(7331, 7335, 7326), GRAPH_TOL},
+                 {2, GRAPH_BASE(1) + 0x2000, e(7387, 7391, 7386), GRAPH_TOL}}},
         };
     }
     else

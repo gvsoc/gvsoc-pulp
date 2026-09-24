@@ -24,11 +24,37 @@
 /**
  * Shared definitions of the v2 FlooNoC model.
  *
- * The mesh is assembled by the Python generator (pulp/floonoc_v2/floonoc_v2.py):
- * routers and network interfaces are standalone components bound together with
- * 'floonoc_link' ports (see floonoc_link_v2.hpp). This header only carries what
- * travels or is shared between them.
+ * The network is assembled by the Python generator
+ * (pulp/floonoc_v2/floonoc_v2.py): routers and network interfaces are
+ * standalone components bound together with 'floonoc_link' ports (see
+ * floonoc_link_v2.hpp). This header only carries what travels or is shared
+ * between them.
+ *
+ * Nodes are identified by an integer node ID, carried in every flit like the
+ * dst_id field of the RTL flit header. How a router turns it into an output
+ * port depends on its routing algorithm (see RouterV2):
+ * - XY routing (2D mesh): the ID packs the mesh position, see
+ *   floonoc_xy_node_id(). Negative IDs are the FlooNocV2Direction values
+ *   (-4..-1) of targets reached by leaving the mesh in one direction.
+ * - ID table: the ID is an opaque index into the router's routing table.
  */
+
+// Pack a mesh position into an XY-routing node ID. Must match
+// xy_node_id() in floonoc_v2.py.
+static inline int floonoc_xy_node_id(int x, int y)
+{
+    return (y << 16) | x;
+}
+
+static inline int floonoc_xy_node_x(int node_id)
+{
+    return node_id & 0xffff;
+}
+
+static inline int floonoc_xy_node_y(int node_id)
+{
+    return node_id >> 16;
+}
 
 /**
  * Subclass of v2 vp::IoReq used to carry per-mesh metadata that the v1 model
@@ -38,14 +64,12 @@
 class FloonocReqV2 : public vp::IoReq
 {
 public:
-    // Destination position in the mesh
-    int dest_x;
-    int dest_y;
-    // Source NI position in the mesh. On the request path the destination NI
-    // uses it to route the response back; on the response path it is the
-    // position the response is coming back to.
-    int src_x;
-    int src_y;
+    // Node ID of the destination (see the node ID note at the top).
+    int dest_id;
+    // Node ID of the source NI. On the request path the destination NI uses
+    // it to route the response back; on the response path it is the node the
+    // response is coming back to.
+    int src_id;
     // True if the request is travelling on the response path (back to the
     // source NI), false on the request path (towards the target).
     bool is_rsp;
@@ -149,7 +173,7 @@ public:
         req->is_address = false;
         req->wide = false;
         req->initiator_addr = 0;
-        req->dest_x = req->dest_y = req->src_x = req->src_y = 0;
+        req->dest_id = req->src_id = 0;
         return req;
     }
 
@@ -179,14 +203,13 @@ private:
 
 
 /**
- * Memory-map entry: range -> target position on the mesh.
+ * Memory-map entry: range -> destination node.
  */
 class EntryV2
 {
 public:
     uint64_t base;
     uint64_t size;
-    int x;
-    int y;
+    int node_id;
     uint64_t remove_offset;
 };

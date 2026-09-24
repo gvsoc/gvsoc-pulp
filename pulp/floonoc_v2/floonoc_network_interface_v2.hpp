@@ -22,6 +22,7 @@
 #include <map>
 #include "floonoc_v2.hpp"
 #include "floonoc_link_v2.hpp"
+#include <pulp/floonoc_v2/floonoc_v2/floonoc_network_interface_v2_config.hpp>
 
 class NetworkInterfaceV2;
 
@@ -61,7 +62,7 @@ private:
  * v2 FlooNoC network interface.
  *
  * Standalone component instantiated by the generator: entry/exit point of the
- * mesh. External ports speak the v2 io protocol (burst beats with is_first /
+ * network, identified by its node ID. External ports speak the v2 io protocol (burst beats with is_first /
  * is_last / burst_id, plus the retry() deny handshake). Mesh traversal uses
  * FloonocReqV2 over 'floonoc_link' ports bound to the local (or, for border
  * NIs, nearest) routers of the three physical networks.
@@ -116,17 +117,17 @@ private:
     int get_rsp_nw(bool is_wide, bool is_write);
     EntryV2 *get_entry(uint64_t base, uint64_t size);
 
+    FloonocNetworkInterfaceV2Config cfg;
+
     int ni_outstanding_reqs;
     // Max input burst size / boundary a burst may not cross (AXI 4KB rule); 0
     // disables the burst-legality checks.
     uint64_t max_burst_size;
-    int x;
-    int y;
     uint64_t narrow_width;
     uint64_t wide_width;
 
-    // Memory map, address range -> mesh position. Every NI holds the full
-    // table (same 'mappings' property on each).
+    // Memory map, address range -> destination node. Every NI holds the full
+    // table.
     std::vector<EntryV2> entries;
 
     vp::IoMaster wide_output_itf;

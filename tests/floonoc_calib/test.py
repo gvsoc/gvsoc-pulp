@@ -14,12 +14,14 @@
 # limitations under the License.
 #
 
+import os
 import gvsoc.systree
 import gvsoc.runner
 
 import vp.clock_domain
 from pulp.floonoc_v2.floonoc_v2 import FloonocNetworkInterfaceV2, FloonocRouterV2, \
-    FlooNocV22dMeshNarrowWide, DIR_LEFT, DIR_RIGHT
+    FlooNocV22dMeshNarrowWide, FloonocNetworkInterfaceV2Config, FloonocRouterV2Config, \
+    FlooNocV2Graph, DIR_LEFT, DIR_RIGHT, xy_node_id
 from interco.traffic.generator_v2 import GeneratorV2
 from interco.traffic.receiver_v2 import ReceiverV2
 from gvrun.parameter import TargetParameter
@@ -29,6 +31,10 @@ NARROW_WIDTH = 8
 WIDE_WIDTH = 64
 NODE_SIZE = 0x10000
 MESH_DIM = 4
+# Graph topologies: number of nodes (NIs) and pipeline stages of the
+# router-to-router links of the staged ring.
+GRAPH_NODES = 6
+RING_STAGES = 2
 
 
 class FloonocCalibTest(gvsoc.systree.Component):
@@ -67,6 +73,18 @@ class Testbench(gvsoc.systree.Component):
     - 'mesh': the 4x4 mesh with one router+NI per position (RTL
       tb_floo_axi_mesh, without the border HBM). Node (x, y) owns
       [(x*4+y) * NODE_SIZE, ...+NODE_SIZE) like the RTL job generator.
+    - 'floogen_xy' / 'floogen_id': the same RTL mesh, loaded from the FlooGen
+      description the RTL is generated from (floogen/axi_mesh_*.yml, with
+      its border HBM NIs left idle) into the ID-table routed graph NoC, with
+      XY-equivalent tables or FlooGen's own ID tables.
+    - 'graph_ring', 'graph_ring_stages', 'graph_tree': topologies the mesh
+      cannot express, on the graph NoC (no RTL golden, model regression
+      values): a ring of GRAPH_NODES routers with one NI each and up/down
+      routing (the shortest paths of a ring can deadlock), the same ring
+      with RING_STAGES pipeline stages on every router-to-router link, and
+      a two-level tree (a root router over three leaf routers holding two
+      NIs each) with shortest-path routing. Node n owns
+      [n * NODE_SIZE, ...+NODE_SIZE).
     """
 
     def __init__(self, parent, name, topology='direct'):
@@ -74,6 +92,10 @@ class Testbench(gvsoc.systree.Component):
 
         if topology == 'mesh':
             self.__init_mesh()
+        elif topology.startswith('floogen_'):
+            self.__init_floogen(topology.split('_', 1)[1])
+        elif topology.startswith('graph_'):
+            self.__init_graph(topology)
         else:
             self.__init_2nodes(topology)
 
@@ -113,6 +135,54 @@ class Testbench(gvsoc.systree.Component):
                 self.__add_node(test, node, noc.i_NARROW_INPUT(x, y),
                     lambda itf, x=x, y=y: noc.o_NARROW_BIND(itf, x, y))
 
+    def __init_floogen(self, route_algo):
+        noc = FlooNocV2Graph(self, 'noc', narrow_width=NARROW_WIDTH, wide_width=WIDE_WIDTH,
+            ni_outstanding_reqs=32, router_input_queue_size=2)
+        id_map = noc.load_floogen(os.path.join(os.path.dirname(__file__), 'floogen',
+            f'axi_mesh_{route_algo}.yml'))
+
+        test = FloonocCalibTest(self, 'test', MESH_DIM * MESH_DIM, NODE_SIZE,
+            0, f'floogen_{route_algo}')
+
+        for x in range(MESH_DIM):
+            for y in range(MESH_DIM):
+                node = x * MESH_DIM + y
+                ni = id_map[f'cluster_ni_{x}_{y}']
+                noc.o_MAP(node * NODE_SIZE, NODE_SIZE, ni, rm_base=True)
+                self.__add_node(test, node, noc.i_NARROW_INPUT(ni),
+                    lambda itf, ni=ni: noc.o_NARROW_BIND(itf, ni))
+
+    def __init_graph(self, topology):
+        routing = 'shortest_path' if topology == 'graph_tree' else 'up_down'
+        noc = FlooNocV2Graph(self, 'noc', narrow_width=NARROW_WIDTH, wide_width=WIDE_WIDTH,
+            ni_outstanding_reqs=32, router_input_queue_size=2, routing=routing)
+
+        # NIs are nodes 100+n, routers 0..
+        nis = [100 + node for node in range(GRAPH_NODES)]
+        if topology == 'graph_tree':
+            noc.add_router(0, name='root')
+            for leaf in range(3):
+                noc.add_router(1 + leaf, name=f'leaf_{leaf}')
+                noc.add_link(0, 1 + leaf)
+            for node in range(GRAPH_NODES):
+                noc.add_network_interface(nis[node])
+                noc.add_link(1 + node // 2, nis[node])
+        else:
+            stages = RING_STAGES if topology == 'graph_ring_stages' else 0
+            for node in range(GRAPH_NODES):
+                noc.add_router(node)
+                noc.add_network_interface(nis[node])
+                noc.add_link(node, nis[node])
+            for node in range(GRAPH_NODES):
+                noc.add_link(node, (node + 1) % GRAPH_NODES, stages=stages)
+
+        test = FloonocCalibTest(self, 'test', GRAPH_NODES, NODE_SIZE, 0, topology)
+
+        for node in range(GRAPH_NODES):
+            noc.o_MAP(node * NODE_SIZE, NODE_SIZE, nis[node], rm_base=True)
+            self.__add_node(test, node, noc.i_NARROW_INPUT(nis[node]),
+                lambda itf, ni=nis[node]: noc.o_NARROW_BIND(itf, ni))
+
     def __init_2nodes(self, topology):
         use_router = topology == 'router'
         positions = [(0, 0), (2, 0)] if use_router else [(0, 0), (1, 0)]
@@ -121,28 +191,26 @@ class Testbench(gvsoc.systree.Component):
         # Same full memory map in every NI: each node's range points to its
         # mesh position, with the base removed so receivers see zero-based
         # addresses (the fabric's o_MAP(rm_base=True) behavior).
-        mappings = {}
-        for node in range(2):
-            x, y = positions[node]
-            mappings[f'node{node}'] = {'base': x * NODE_SIZE, 'size': NODE_SIZE,
-                'x': x, 'y': y, 'remove_offset': x * NODE_SIZE}
-
         nis = []
         for node in range(2):
             x, y = positions[node]
-            ni = FloonocNetworkInterfaceV2(self, f'ni{node}', x=x, y=y,
+            config = FloonocNetworkInterfaceV2Config(node_id=xy_node_id(x, y),
                 narrow_width=NARROW_WIDTH, wide_width=WIDE_WIDTH,
                 ni_outstanding_reqs=32)
-            ni.add_property('mappings', mappings)
-            nis.append(ni)
+            for map_node in range(2):
+                map_x, map_y = positions[map_node]
+                config.add_mapping(f'node{map_node}', base=map_x * NODE_SIZE,
+                    size=NODE_SIZE, node_id=xy_node_id(map_x, map_y),
+                    remove_offset=map_x * NODE_SIZE)
+            nis.append(FloonocNetworkInterfaceV2(self, f'ni{node}', config=config))
 
         if use_router:
             # One router per physical network at (1, 0), NI0 on its left
             # port, NI1 on its right port. queue_size matches the RTL
             # ChannelFifoDepth.
             for nw, nw_name in enumerate(['req', 'rsp', 'wide']):
-                router = FloonocRouterV2(self, f'{nw_name}_router_1_0', x=1, y=0,
-                    dim_x=dim_x, dim_y=1, queue_size=2)
+                router = FloonocRouterV2(self, f'{nw_name}_router_1_0',
+                    config=FloonocRouterV2Config.xy(1, 0, dim_x, 1, queue_size=2))
                 nis[0].o_LINK(nw, router.i_INPUT(DIR_LEFT))
                 router.o_OUTPUT(DIR_LEFT, nis[0].i_LINK(nw))
                 nis[1].o_LINK(nw, router.i_INPUT(DIR_RIGHT))

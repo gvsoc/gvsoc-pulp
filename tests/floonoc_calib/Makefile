@@ -15,6 +15,12 @@ ifeq ($(CASE),router)
 TARGET := $(TARGET):topology=router
 else ifeq ($(CASE),mesh)
 TARGET := $(TARGET):topology=mesh
+else ifeq ($(CASE),floogen_xy)
+TARGET := $(TARGET):topology=floogen_xy
+else ifeq ($(CASE),floogen_id)
+TARGET := $(TARGET):topology=floogen_id
+else ifneq ($(filter graph_%,$(CASE)),)
+TARGET := $(TARGET):topology=$(CASE)
 endif
 
 include $(GVSOC_ROOT)/gvsoc/core/tests/common.mk

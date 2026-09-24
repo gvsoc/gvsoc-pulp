@@ -14,9 +14,15 @@
 # limitations under the License.
 #
 
+from __future__ import annotations
+
 from enum import IntEnum
+from typing import ClassVar
 import gvsoc.systree
+from config_tree import Config, cfg_field
 from gvsoc.signature import IoV2Beat
+from pulp.floonoc_v2 import floonoc_v2_routing
+from pulp.floonoc_v2.floonoc_v2_floogen import load_floogen
 
 
 class FlooNocV2Direction(IntEnum):
@@ -46,62 +52,168 @@ NW_WIDE = 2
 _NW_NAMES = ['req', 'rsp', 'wide']
 _NW_ROUTER_PREFIXES = ['req_router_', 'rsp_router_', 'wide_router_']
 
+# Router routing algorithms, mirroring the RTL floo_pkg::route_algo_e.
+ROUTE_XY = 'xy'
+ROUTE_ID_TABLE = 'id_table'
+
+
+def xy_node_id(x: int, y: int) -> int:
+    """Node ID of mesh position (x, y) under XY routing.
+
+    Packs the position into the ID like the RTL XY dst_id. Must match
+    floonoc_xy_node_id() in floonoc_v2.hpp.
+    """
+    if not (0 <= x < 0x10000 and 0 <= y < 0x8000):
+        raise RuntimeError(f'Mesh position ({x}, {y}) out of the XY node ID range')
+    return (y << 16) | x
+
+
+class FloonocRouterPortV2(Config):
+    """One port of a router: an input/output 'floonoc_link' pair.
+
+    The config name is the port name, used for the component port names
+    (``input_<name>`` / ``output_<name>``) and the traces.
+    """
+
+    _defer_parent_init: ClassVar[bool] = True
+
+    stages: int = cfg_field(default=0, dump=True, desc=(
+        "Pipeline stages on the link feeding this input: each one adds a cycle "
+        "of latency and a flit of buffering, like a floo_cut register"
+    ))
+
+
+class FloonocRouteV2(Config):
+    """One routing-table entry: destination node ID -> output port."""
+
+    _defer_parent_init: ClassVar[bool] = True
+
+    dest: int = cfg_field(default=0, dump=True, desc="Destination node ID")
+    port: int = cfg_field(default=0, dump=True, desc="Output port index")
+
+
+class FloonocRouterV2Config(Config):
+    """Configuration of one router (one node of one physical network)."""
+
+    route_algo: str = cfg_field(default=ROUTE_XY, dump=True, desc=(
+        "Routing algorithm: 'xy' (2D mesh dimension-order routing, five "
+        "direction ports) or 'id_table' (routing table, any topology)"
+    ))
+    x: int = cfg_field(default=0, dump=True, desc="Mesh X position (XY routing)")
+    y: int = cfg_field(default=0, dump=True, desc="Mesh Y position (XY routing)")
+    dim_x: int = cfg_field(default=0, dump=True, desc="Mesh width (XY routing)")
+    dim_y: int = cfg_field(default=0, dump=True, desc="Mesh height (XY routing)")
+    queue_size: int = cfg_field(default=2, dump=True, desc=(
+        "Input queue size: requests buffered per input before the sender is stalled"
+    ))
+    ports: list[FloonocRouterPortV2] = cfg_field(default_factory=list, init=False, desc=(
+        "Router ports, in port index order"
+    ))
+    routes: list[FloonocRouteV2] = cfg_field(default_factory=list, init=False, desc=(
+        "Routing table (ID-table routing)"
+    ))
+
+    def add_port(self, name: str, stages: int=0) -> int:
+        """Append a port and return its index."""
+        port = FloonocRouterPortV2(name=name, stages=stages)
+        port.adopt(self)
+        self.ports.append(port)
+        return len(self.ports) - 1
+
+    def add_route(self, dest: int, port: int):
+        route = FloonocRouteV2(dest=dest, port=port)
+        route.adopt(self)
+        self.routes.append(route)
+
+    @staticmethod
+    def xy(x: int, y: int, dim_x: int, dim_y: int, queue_size: int=2) -> FloonocRouterV2Config:
+        """Config of an XY-routed mesh router, with the five direction ports."""
+        config = FloonocRouterV2Config(route_algo=ROUTE_XY, x=x, y=y, dim_x=dim_x,
+            dim_y=dim_y, queue_size=queue_size)
+        for name in _DIR_NAMES:
+            config.add_port(name)
+        return config
+
+
+class FloonocMappingV2(Config):
+    """One memory-map entry of an NI: address range -> destination node."""
+
+    _defer_parent_init: ClassVar[bool] = True
+
+    base: int = cfg_field(default=0, fmt="hex", dump=True, desc="Base address")
+    size: int = cfg_field(default=0, fmt="hex", dump=True, desc="Size in bytes")
+    node_id: int = cfg_field(default=0, dump=True, desc="Destination node ID")
+    remove_offset: int = cfg_field(default=0, fmt="hex", dump=True, desc=(
+        "Offset removed from the address of requests forwarded to the target"
+    ))
+
+
+class FloonocNetworkInterfaceV2Config(Config):
+    """Configuration of one network interface."""
+
+    node_id: int = cfg_field(default=0, dump=True, desc="Node ID of this NI")
+    narrow_width: int = cfg_field(default=8, dump=True, desc="Narrow network width in bytes")
+    wide_width: int = cfg_field(default=64, dump=True, desc="Wide network width in bytes")
+    ni_outstanding_reqs: int = cfg_field(default=8, dump=True, desc=(
+        "Maximum number of bursts in flight, like the RTL chimney MaxTxns"
+    ))
+    max_burst_size: int = cfg_field(default=4096, dump=True, desc=(
+        "Largest input burst the NI accepts, and the boundary a burst may not "
+        "cross (the AXI 4 KB rule). Guarantees a burst targets a single node, "
+        "so a wormhole packet is always single-destination. Checked against "
+        "the memory map at construction and against each request at runtime "
+        "(asserts builds). 0 disables the checks"
+    ))
+    mappings: list[FloonocMappingV2] = cfg_field(default_factory=list, init=False, desc=(
+        "Memory map: every NI holds the full table"
+    ))
+
+    def add_mapping(self, name: str, base: int, size: int, node_id: int, remove_offset: int=0):
+        mapping = FloonocMappingV2(name=name, base=base, size=size, node_id=node_id,
+            remove_offset=remove_offset)
+        mapping.adopt(self)
+        self.mappings.append(mapping)
+
 
 class FloonocRouterV2(gvsoc.systree.Component):
-    """One FlooNoC mesh router (one physical network at one tile).
+    """One FlooNoC router (one physical network at one node).
 
-    Five 'floonoc_link' inputs and five outputs, indexed by direction. Ports of
+    One 'floonoc_link' input and output per port of the config. Ports of
     absent neighbours are simply left unbound.
     """
 
-    def __init__(self, parent: gvsoc.systree.Component, name, x: int, y: int,
-            dim_x: int, dim_y: int, queue_size: int):
-        super().__init__(parent, name)
+    def __init__(self, parent: gvsoc.systree.Component, name, config: FloonocRouterV2Config):
+        super().__init__(parent, name, config=config)
 
         self.add_sources(['pulp/floonoc_v2/floonoc_router_v2.cpp'])
 
-        self.add_property('x', x)
-        self.add_property('y', y)
-        self.add_property('dim_x', dim_x)
-        self.add_property('dim_y', dim_y)
-        self.add_property('router_input_queue_size', queue_size)
+        self.router_config = config
 
-    def i_INPUT(self, dir: int) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, f'input_{_DIR_NAMES[dir]}', signature='floonoc_link')
+    def i_INPUT(self, port: int) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'input_{self.router_config.ports[port].name}',
+            signature='floonoc_link')
 
-    def o_OUTPUT(self, dir: int, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind(f'output_{_DIR_NAMES[dir]}', itf, signature='floonoc_link')
+    def o_OUTPUT(self, port: int, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind(f'output_{self.router_config.ports[port].name}', itf,
+            signature='floonoc_link')
 
 
 class FloonocNetworkInterfaceV2(gvsoc.systree.Component):
-    """One FlooNoC network interface (mesh entry/exit point at one position).
+    """One FlooNoC network interface (network entry/exit point at one node).
 
     External ports speak the v2 io protocol; three 'floonoc_link' output ports
     inject into the routers of the req/rsp/wide networks and three input ports
     receive what they deliver.
     """
 
-    def __init__(self, parent: gvsoc.systree.Component, name, x: int, y: int,
-            narrow_width: int, wide_width: int, ni_outstanding_reqs: int,
-            max_burst_size: int=4096):
-        super().__init__(parent, name)
+    def __init__(self, parent: gvsoc.systree.Component, name,
+            config: FloonocNetworkInterfaceV2Config):
+        super().__init__(parent, name, config=config)
 
         self.add_sources(['pulp/floonoc_v2/floonoc_network_interface_v2.cpp'])
 
-        self.narrow_width = narrow_width
-        self.wide_width = wide_width
-
-        self.add_property('x', x)
-        self.add_property('y', y)
-        self.add_property('narrow_width', narrow_width)
-        self.add_property('wide_width', wide_width)
-        self.add_property('ni_outstanding_reqs', ni_outstanding_reqs)
-        # Largest input burst the NI accepts, and the boundary a burst may not
-        # cross (the AXI 4 KB rule). Guarantees a burst targets a single mesh
-        # position, so a wormhole packet is always single-destination. Checked
-        # against the memory map at construction and against each request at
-        # runtime (asserts builds). 0 disables the checks.
-        self.add_property('max_burst_size', max_burst_size)
+        self.narrow_width = config.narrow_width
+        self.wide_width = config.wide_width
 
     def i_NARROW_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'narrow_input', signature=IoV2Beat(self.narrow_width))
@@ -197,6 +309,16 @@ class FlooNocV2MeshFabric:
         self.mappings[name] = {'base': base, 'size': size, 'x': x, 'y': y,
             'remove_offset': remove_offset}
 
+    def _router_config(self, x: int, y: int) -> FloonocRouterV2Config:
+        return FloonocRouterV2Config.xy(x, y, self.dim_x, self.dim_y,
+            queue_size=self.router_input_queue_size)
+
+    def _ni_config(self, x: int, y: int) -> FloonocNetworkInterfaceV2Config:
+        return FloonocNetworkInterfaceV2Config(node_id=xy_node_id(x, y),
+            narrow_width=self.narrow_width, wide_width=self.wide_width,
+            ni_outstanding_reqs=self.ni_outstanding_reqs,
+            max_burst_size=self.max_burst_size)
+
     def _get_tile(self, name: str, x: int, y: int) -> FloonocTileV2:
         tile = self._tiles.get(name)
         if tile is None:
@@ -216,18 +338,16 @@ class FlooNocV2MeshFabric:
 
         if tile is None:
             self._routers[(x, y)] = [
-                FloonocRouterV2(self.container, f'{_NW_ROUTER_PREFIXES[nw]}{x}_{y}', x=x, y=y,
-                    dim_x=self.dim_x, dim_y=self.dim_y,
-                    queue_size=self.router_input_queue_size)
+                FloonocRouterV2(self.container, f'{_NW_ROUTER_PREFIXES[nw]}{x}_{y}',
+                    config=self._router_config(x, y))
                 for nw in range(len(_NW_NAMES))
             ]
             return
 
         tile_comp = self._get_tile(tile, x, y)
         routers = [
-            FloonocRouterV2(tile_comp, f'{_NW_NAMES[nw]}_router', x=x, y=y,
-                dim_x=self.dim_x, dim_y=self.dim_y,
-                queue_size=self.router_input_queue_size)
+            FloonocRouterV2(tile_comp, f'{_NW_NAMES[nw]}_router',
+                config=self._router_config(x, y))
             for nw in range(len(_NW_NAMES))
         ]
         self._routers[(x, y)] = routers
@@ -255,15 +375,10 @@ class FlooNocV2MeshFabric:
                 'the same tile')
 
         if tile_comp is None:
-            ni = FloonocNetworkInterfaceV2(self.container, f'ni_{x}_{y}', x=x, y=y,
-                narrow_width=self.narrow_width, wide_width=self.wide_width,
-                ni_outstanding_reqs=self.ni_outstanding_reqs,
-                max_burst_size=self.max_burst_size)
+            ni = FloonocNetworkInterfaceV2(self.container, f'ni_{x}_{y}',
+                config=self._ni_config(x, y))
         else:
-            ni = FloonocNetworkInterfaceV2(tile_comp, 'ni', x=x, y=y,
-                narrow_width=self.narrow_width, wide_width=self.wide_width,
-                ni_outstanding_reqs=self.ni_outstanding_reqs,
-                max_burst_size=self.max_burst_size)
+            ni = FloonocNetworkInterfaceV2(tile_comp, 'ni', config=self._ni_config(x, y))
             tile_comp.ni = ni
 
             # Chain the NI's external ports through the tile.
@@ -373,9 +488,16 @@ class FlooNocV2MeshFabric:
     def finalize(self):
         # Every NI holds the full memory map so it can translate addresses to
         # mesh positions on its own. Distributed here so callers can keep
-        # adding mappings after construction.
+        # adding mappings after construction. Entries are sorted by name: the
+        # NI takes the first matching one, and callers rely on this order.
+        # A negative x is a FlooNocV2Direction: the target is reached by
+        # leaving the mesh in that direction.
         for ni, _tile in self._nis.values():
-            ni.add_property('mappings', self.mappings)
+            for name, mapping in sorted(self.mappings.items()):
+                x, y = mapping['x'], mapping['y']
+                node_id = x if x < 0 else xy_node_id(x, y)
+                ni.get_config().add_mapping(name, base=mapping['base'], size=mapping['size'],
+                    node_id=node_id, remove_offset=mapping['remove_offset'])
 
         # Router meshes: bind each router's directional outputs to the
         # matching input of the neighbouring router of the same network.
@@ -551,3 +673,288 @@ class FlooNocV2ClusterGridNarrowWide(FlooNocV22dMeshNarrowWide):
 
     def i_CLUSTER_WIDE_INPUT(self, x: int, y: int) -> gvsoc.systree.SlaveItf:
         return self.i_WIDE_INPUT(x+1, y+1)
+
+
+class FlooNocV2GraphFabric:
+    """FlooNoC v2 builder for an arbitrary topology.
+
+    Plain helper (not a component), like FlooNocV2MeshFabric: instantiates
+    the routers and NIs as children of ``container`` and binds them in
+    finalize(), which the container must call from its own finalize() hook.
+
+    Nodes are routers and NIs sharing one integer node ID space. Links are
+    bidirectional; each router gets one port per link, in link order, named
+    after the node on the other side. Routers use ID-table routing (the RTL
+    IdTable): the tables come from a routing algorithm of
+    floonoc_v2_routing, run on the topology at finalize() time, and are
+    checked for unreachable destinations, loops and deadlocks (see
+    floonoc_v2_routing.check_routes).
+
+    Parameters
+    ----------
+    routing: str | dict | callable
+        Routing algorithm: a floonoc_v2_routing.GENERATORS name
+        ('shortest_path', 'up_down', 'multi_tree', 'dimension_order',
+        'hexamesh'), an explicit next-hop table {router: {dest: next_node}}
+        (IDs or names), or a callable taking the Topology and returning the
+        next-hop tables.
+    routing_args: dict
+        Extra keyword arguments of the routing algorithm (e.g. order='yx'
+        for dimension_order).
+    allow_deadlock: bool
+        Accept tables whose channel dependency graph has cycles. For
+        exploration only: such a network can deadlock under load.
+    """
+
+    def __init__(self, container: gvsoc.systree.Component, narrow_width: int, wide_width: int,
+            ni_outstanding_reqs: int=8, router_input_queue_size: int=2,
+            max_burst_size: int=4096, routing='shortest_path', routing_args: dict=None,
+            allow_deadlock: bool=False):
+        self.container = container
+        self.narrow_width = narrow_width
+        self.wide_width = wide_width
+        self.ni_outstanding_reqs = ni_outstanding_reqs
+        self.router_input_queue_size = router_input_queue_size
+        self.max_burst_size = max_burst_size
+        self.routing = routing
+        self.routing_args = routing_args if routing_args is not None else {}
+        self.allow_deadlock = allow_deadlock
+
+        self.topology = floonoc_v2_routing.Topology()
+        # node ID -> [req, rsp, wide] routers / NI
+        self._routers = {}
+        self._nis = {}
+        # (src, dst) -> pipeline stages of the link direction src -> dst
+        self._link_stages = {}
+        self.mappings = {}
+        # Every NI-to-NI route, filled by finalize(), for inspection.
+        self.routes = None
+
+    def add_router(self, node_id: int, name: str=None, coord: tuple=None):
+        """Add a router node (one router per physical network).
+
+        coord gives the router coordinates used by the coordinate-based
+        routing algorithms (dimension_order, hexamesh).
+        """
+        if name is None:
+            name = f'router_{node_id}'
+        self.topology.add_router(node_id, name, coord)
+        self._routers[node_id] = [
+            FloonocRouterV2(self.container, f'{_NW_NAMES[nw]}_{name}',
+                config=FloonocRouterV2Config(route_algo=ROUTE_ID_TABLE,
+                    queue_size=self.router_input_queue_size))
+            for nw in range(len(_NW_NAMES))
+        ]
+
+    def add_network_interface(self, node_id: int, name: str=None):
+        """Add an NI node. It must be linked to exactly one router."""
+        if name is None:
+            name = f'ni_{node_id}'
+        self.topology.add_ni(node_id, name)
+        self._nis[node_id] = FloonocNetworkInterfaceV2(self.container, name,
+            config=FloonocNetworkInterfaceV2Config(node_id=node_id,
+                narrow_width=self.narrow_width, wide_width=self.wide_width,
+                ni_outstanding_reqs=self.ni_outstanding_reqs,
+                max_burst_size=self.max_burst_size))
+
+    def add_link(self, node_a: int, node_b: int, stages: int=0, stages_back: int=None):
+        """Link two nodes in both directions.
+
+        stages adds pipeline stages on the link from node_a to node_b, and
+        stages_back from node_b to node_a (same as stages if None). Stages
+        are only modelled on links into a router: a link direction ending in
+        an NI must have none.
+        """
+        if stages_back is None:
+            stages_back = stages
+        self.topology.add_link(node_a, node_b)
+        for src, dst, nb_stages in ((node_a, node_b, stages), (node_b, node_a, stages_back)):
+            if nb_stages < 0:
+                raise RuntimeError(f'Negative stages on link {src} -> {dst}')
+            if nb_stages > 0 and dst in self._nis:
+                raise RuntimeError(f'Link {self.topology.name(src)} -> '
+                    f'{self.topology.name(dst)}: pipeline stages on a link into an NI '
+                    'are not modelled')
+            self._link_stages[(src, dst)] = nb_stages
+
+    def set_port_order(self, node_id: int, neighbours: list[int]):
+        """Set the port order of a router (default: link order).
+
+        The port order is the round-robin arbitration order, so it matters
+        when mirroring an RTL router. neighbours lists the node IDs of all
+        the router's neighbours.
+        """
+        self.topology.set_port_order(node_id, neighbours)
+
+    def add_mapping(self, name: str, base: int, size: int, node_id: int, remove_offset: int=0):
+        """Route the address range [base, base+size) to NI node_id."""
+        self.mappings[name] = {'base': base, 'size': size, 'node_id': node_id,
+            'remove_offset': remove_offset}
+
+    def i_NARROW_INPUT(self, node_id: int) -> gvsoc.systree.SlaveItf:
+        return self._nis[node_id].i_NARROW_INPUT()
+
+    def i_WIDE_INPUT(self, node_id: int) -> gvsoc.systree.SlaveItf:
+        return self._nis[node_id].i_WIDE_INPUT()
+
+    def o_NARROW_BIND(self, itf: gvsoc.systree.SlaveItf, node_id: int):
+        self._nis[node_id].o_NARROW_OUTPUT(itf)
+
+    def o_WIDE_BIND(self, itf: gvsoc.systree.SlaveItf, node_id: int):
+        self._nis[node_id].o_WIDE_OUTPUT(itf)
+
+    def compute_routing(self) -> dict:
+        """Run the routing algorithm and return the next-hop tables."""
+        topo = self.topology
+        if isinstance(self.routing, str):
+            generator = floonoc_v2_routing.GENERATORS.get(self.routing)
+            if generator is None:
+                raise RuntimeError(f'Unknown routing algorithm {self.routing!r}, available: '
+                    f'{list(floonoc_v2_routing.GENERATORS)}')
+            return generator(topo, **self.routing_args)
+        if isinstance(self.routing, dict):
+            return floonoc_v2_routing.next_hops(topo, self.routing)
+        return self.routing(topo, **self.routing_args)
+
+    def finalize(self):
+        topo = self.topology
+        topo.check()
+        tables = self.compute_routing()
+        self.routes = floonoc_v2_routing.check_routes(topo, tables,
+            allow_deadlock=self.allow_deadlock)
+
+        for node_id, ni in self._nis.items():
+            for name, mapping in sorted(self.mappings.items()):
+                if mapping['node_id'] not in self._nis:
+                    raise RuntimeError(f'Mapping {name} targets node {mapping["node_id"]}, '
+                        'which is not an NI')
+                ni.get_config().add_mapping(name, base=mapping['base'], size=mapping['size'],
+                    node_id=mapping['node_id'], remove_offset=mapping['remove_offset'])
+
+        # One port per link, in link order, named after the neighbour. The
+        # table maps each destination NI to the port facing its next hop.
+        for node_id, routers in self._routers.items():
+            neighbours = topo.adj[node_id]
+            for router in routers:
+                config = router.router_config
+                for neighbour in neighbours:
+                    config.add_port(topo.name(neighbour),
+                        stages=self._link_stages[(neighbour, node_id)])
+                for dest, next_node in tables[node_id].items():
+                    config.add_route(dest, neighbours.index(next_node))
+
+        for node_id, routers in self._routers.items():
+            for port, neighbour in enumerate(topo.adj[node_id]):
+                if neighbour in self._routers:
+                    peer_port = topo.adj[neighbour].index(node_id)
+                    for nw in range(len(_NW_NAMES)):
+                        routers[nw].o_OUTPUT(port, self._routers[neighbour][nw].i_INPUT(peer_port))
+                else:
+                    ni = self._nis[neighbour]
+                    for nw in range(len(_NW_NAMES)):
+                        routers[nw].o_OUTPUT(port, ni.i_LINK(nw))
+                        ni.o_LINK(nw, routers[nw].i_INPUT(port))
+
+
+class FlooNocV2Graph(gvsoc.systree.Component):
+    """FlooNoC v2 instance for an arbitrary topology.
+
+    Composite wrapping a FlooNocV2GraphFabric, exposing per-NI external ports
+    and the address-map API, like FlooNocV22dMeshNarrowWide does for the 2D
+    mesh. The topology is either built with add_router() /
+    add_network_interface() / add_link(), or loaded from a FlooGen
+    description with load_floogen().
+
+    See FlooNocV2GraphFabric for the routing parameters.
+    """
+
+    def __init__(self, parent: gvsoc.systree.Component, name, narrow_width: int, wide_width: int,
+            ni_outstanding_reqs: int=8, router_input_queue_size: int=2,
+            max_burst_size: int=4096, routing='shortest_path', routing_args: dict=None,
+            allow_deadlock: bool=False):
+        super().__init__(parent, name)
+
+        self.narrow_width = narrow_width
+        self.wide_width = wide_width
+        self._fabric = FlooNocV2GraphFabric(self, narrow_width=narrow_width,
+            wide_width=wide_width, ni_outstanding_reqs=ni_outstanding_reqs,
+            router_input_queue_size=router_input_queue_size, max_burst_size=max_burst_size,
+            routing=routing, routing_args=routing_args, allow_deadlock=allow_deadlock)
+        # Node name -> node ID, filled by load_floogen().
+        self.id_map = {}
+
+    @property
+    def fabric(self) -> FlooNocV2GraphFabric:
+        return self._fabric
+
+    def add_router(self, node_id: int, name: str=None, coord: tuple=None):
+        self._fabric.add_router(node_id, name=name, coord=coord)
+
+    def add_network_interface(self, node_id: int, name: str=None):
+        self._fabric.add_network_interface(node_id, name=name)
+
+        # External port pass-throughs at noc level, registered eagerly so the
+        # composite-level virtual ports are part of the generated ports list.
+        self.itf_bind(f'narrow_input_{node_id}', self._fabric.i_NARROW_INPUT(node_id),
+            signature=IoV2Beat(self.narrow_width), composite_bind=True)
+        self.itf_bind(f'wide_input_{node_id}', self._fabric.i_WIDE_INPUT(node_id),
+            signature=IoV2Beat(self.wide_width), composite_bind=True)
+        self._fabric.o_NARROW_BIND(gvsoc.systree.SlaveItf(self, f'ni_narrow_{node_id}',
+            signature=IoV2Beat(self.narrow_width)), node_id)
+        self._fabric.o_WIDE_BIND(gvsoc.systree.SlaveItf(self, f'ni_wide_{node_id}',
+            signature=IoV2Beat(self.wide_width)), node_id)
+
+    def add_link(self, node_a: int, node_b: int, stages: int=0, stages_back: int=None):
+        self._fabric.add_link(node_a, node_b, stages=stages, stages_back=stages_back)
+
+    def set_port_order(self, node_id: int, neighbours: list[int]):
+        self._fabric.set_port_order(node_id, neighbours)
+
+    def load_floogen(self, network_path: str, routing_path: str=None,
+            link_latencies_path: str=None, default_link_latency: int=1) -> dict:
+        """Build the topology from a FlooGen network description.
+
+        See floonoc_v2_floogen.load_floogen() for the parameters. Returns (and keeps in
+        id_map) the node name -> node ID map.
+        """
+        self.id_map = load_floogen(self, network_path, routing_path=routing_path,
+            link_latencies_path=link_latencies_path,
+            default_link_latency=default_link_latency)
+        return self.id_map
+
+    def o_MAP(self, base: int, size: int, node_id: int, name: str=None,
+            rm_base: bool=False, remove_offset: int=0):
+        """Route the address range [base, base+size) to NI node_id."""
+        if name is None:
+            name = f'ni_{node_id}_{base:x}'
+        if rm_base and remove_offset == 0:
+            remove_offset = base
+        self._fabric.add_mapping(name, base=base, size=size, node_id=node_id,
+            remove_offset=remove_offset)
+
+    def o_NARROW_MAP(self, itf: gvsoc.systree.SlaveItf, base: int, size: int, node_id: int,
+            name: str=None, rm_base: bool=False, remove_offset: int=0):
+        """Route an address range to NI node_id and bind its narrow output to itf."""
+        if name is None:
+            name = itf.component.name
+        self.o_MAP(base, size, node_id, name=f'narrow_{name}', rm_base=rm_base,
+            remove_offset=remove_offset)
+        self.o_NARROW_BIND(itf, node_id)
+
+    def o_NARROW_BIND(self, itf: gvsoc.systree.SlaveItf, node_id: int):
+        self.itf_bind(f'ni_narrow_{node_id}', itf, signature=IoV2Beat(self.narrow_width))
+
+    def o_WIDE_BIND(self, itf: gvsoc.systree.SlaveItf, node_id: int):
+        self.itf_bind(f'ni_wide_{node_id}', itf, signature=IoV2Beat(self.wide_width))
+
+    def i_NARROW_INPUT(self, node_id: int) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'narrow_input_{node_id}',
+            signature=IoV2Beat(self.narrow_width))
+
+    def i_WIDE_INPUT(self, node_id: int) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'wide_input_{node_id}',
+            signature=IoV2Beat(self.wide_width))
+
+    def finalize(self):
+        self._fabric.finalize()
+
