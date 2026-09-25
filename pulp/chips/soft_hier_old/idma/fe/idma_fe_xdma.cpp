@@ -40,6 +40,8 @@ IDmaFeXdma::IDmaFeXdma(vp::Component *idma, IdmaTransferConsumer *me)
     this->me = me;
     auto gather = idma->get_js_config()->get("gather_enable");
     this->gather_enable = gather && gather->get_bool();
+    auto collective = idma->get_js_config()->get("collective_enable");
+    this->collective_enable = !collective || collective->get_bool();
 
     // Declare our own trace so that we can individually activate traces
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
@@ -149,6 +151,8 @@ uint32_t IDmaFeXdma::get_status(uint32_t status)
 
 uint32_t IDmaFeXdma::enqueue_copy(uint32_t config, uint32_t size, bool &granted, uint32_t collective_type)
 {
+    if (collective_type && !this->collective_enable && !(this->gather_enable && (config & 4)))
+        this->trace.fatal("Collective DMA requires the legacy SoftHier data_noc backend\n");
     // Allocate transfer ID
     uint32_t transfer_id = this->next_transfer_id.get();
     this->next_transfer_id.set(transfer_id + 1);

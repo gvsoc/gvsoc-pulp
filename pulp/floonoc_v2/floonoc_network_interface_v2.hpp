@@ -20,6 +20,7 @@
 #include <vp/vp.hpp>
 #include <list>
 #include <map>
+#include <deque>
 #include "floonoc_v2.hpp"
 #include "floonoc_link_v2.hpp"
 
@@ -97,6 +98,11 @@ private:
     static void wide_retry(vp::Block *__this, vp::IoRetryChannel);
     static vp::IoRespAck narrow_response(vp::Block *__this, vp::IoReq *req);
     static void narrow_retry(vp::Block *__this, vp::IoRetryChannel);
+    static void wide_response_retry(vp::Block *, vp::IoRetryChannel);
+    static void narrow_response_retry(vp::Block *, vp::IoRetryChannel);
+    void retry_target(bool wide);
+    void retry_response(bool wide);
+    bool deliver_response(bool wide, vp::IoReq *req, int nw);
     static vp::IoReqStatus narrow_req(vp::Block *__this, vp::IoReq *req);
     static vp::IoReqStatus wide_req(vp::Block *__this, vp::IoReq *req);
     vp::IoReqStatus handle_req(vp::IoReq *req, bool wide);
@@ -202,20 +208,12 @@ private:
     bool owes_retry_narrow_input;
 
     // When a downstream target returns DENIED, v2 requires the master (this
-    // NI) to hold the req and re-send it on the target's retry(). One slot
-    // per output port. Holds whatever make_target_req built: the flit itself
-    // for reads/atomics, or the encapsulated external write beat for write
-    // data flits (the flit then stays reachable via beat->initiator).
-    // nullptr-initialized here (not just in reset()) because reset() itself
-    // inspects them to recycle a held pool write beat.
-    vp::IoReq *wide_target_stalled_req = nullptr;
-    vp::IoReq *narrow_target_stalled_req = nullptr;
-    // Link input (NW_* index) to unstall when a target retry frees the
-    // corresponding output, -1 when none. This is the link the denied request
-    // ARRIVED on, which is not implied by its wide flag (a wide read AR
-    // travels on the req network).
-    int wide_stalled_link_nw;
-    int narrow_stalled_link_nw;
+    // NI) to hold it and resend synchronously on retry. Each entry records
+    // the arriving physical link, which stays stalled until acceptance.
+    // AR and W can arrive on different links of the same wide output port.
+    std::deque<std::pair<vp::IoReq *, int>> target_pending[2];
+    // Likewise retain refused response beats and stall their mesh links.
+    std::deque<std::pair<vp::IoReq *, int>> response_pending[2];
 
     // Synchronous responses are pushed here so they fire after the latency
     // annotation expires.

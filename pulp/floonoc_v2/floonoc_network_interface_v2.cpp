@@ -61,7 +61,7 @@ void NetworkQueueV2::unstall()
 
 void NetworkQueueV2::handle_req(vp::IoReq *req, bool wide)
 {
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received %s burst from initiator (burst: %p, offset: 0x%x, size: 0x%x, is_write: %d, op: %d)\n",
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received %s burst from initiator (burst: %p, offset: 0x%lx, size: 0x%lx, is_write: %d, op: %d)\n",
                      wide ? "wide" : "narrow", req, req->get_addr(), req->get_size(), req->get_is_write(), req->get_opcode());
 
     // wide here is the EXTERNAL burst's wide flag (which port it came in on),
@@ -149,7 +149,7 @@ void NetworkQueueV2::enqueue_router_req(vp::IoReq *req, bool is_address, bool wi
 
         if (entry == NULL)
         {
-            this->trace.msg(vp::Trace::LEVEL_ERROR, "No entry found for base 0x%x\n", burst_base);
+            this->trace.msg(vp::Trace::LEVEL_ERROR, "No entry found for base 0x%lx\n", burst_base);
             return;
         }
         uint64_t entry_end = entry->base + entry->size;
@@ -157,7 +157,7 @@ void NetworkQueueV2::enqueue_router_req(vp::IoReq *req, bool is_address, bool wi
         size = std::min(max_size, size);
 
         this->trace.msg(vp::Trace::LEVEL_TRACE,
-            "Enqueue request to router (req: %p, base: 0x%x, size: 0x%x, "
+            "Enqueue request to router (req: %p, base: 0x%lx, size: 0x%lx, "
             "destination: (%d, %d))\n",
             router_req, burst_base, size, entry->x, entry->y);
 
@@ -196,6 +196,10 @@ void NetworkQueueV2::enqueue_router_req(vp::IoReq *req, bool is_address, bool wi
         prev_dest_x = entry->x;
         prev_dest_y = entry->y;
 
+        this->trace.msg(vp::Trace::LEVEL_DEBUG,
+            "NOC_V2_INJECT req=%p addr=0x%lx bytes=%lu src=(%d,%d) dst=(%d,%d) rsp=0 write=%d nw=%d\n",
+            router_req, burst_base, size, this->ni.x, this->ni.y,
+            router_req->dest_x, router_req->dest_y, req->get_is_write(), this->nw);
         this->queue.push(router_req);
 
         burst_base += size;
@@ -260,6 +264,10 @@ void NetworkQueueV2::enqueue_router_rsp(FloonocReqV2 *req, bool is_address)
     router_req->set_second_data(req->get_second_data());
     router_req->set_resp_status(req->get_resp_status());
 
+    this->trace.msg(vp::Trace::LEVEL_DEBUG,
+        "NOC_V2_INJECT req=%p addr=0x%lx bytes=%lu src=(%d,%d) dst=(%d,%d) rsp=1 write=%d nw=%d\n",
+        router_req, router_req->initiator_addr, router_req->get_size(), this->ni.x, this->ni.y,
+        router_req->dest_x, router_req->dest_y, req->get_is_write(), this->nw);
     this->queue.push(router_req);
     this->ni.fsm_event.enqueue();
 }
@@ -292,7 +300,7 @@ void NetworkQueueV2::send_router_req()
         }
     }
 
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Injecting flit (req: %p, base: 0x%x, size: 0x%x, is_write: %d, op: %d, is_rsp: %d)\n",
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Injecting flit (req: %p, base: 0x%lx, size: 0x%lx, is_write: %d, op: %d, is_rsp: %d)\n",
                     req, req->get_addr(), req->get_size(), req->get_is_write(), req->get_opcode(), req->is_rsp);
 
     this->stalled = this->ni.link_out[this->nw].req(req);
@@ -311,8 +319,8 @@ NetworkInterfaceV2::NetworkInterfaceV2(vp::ComponentConf &config)
     : vp::Component(config),
       wide_output_itf(&NetworkInterfaceV2::wide_retry, &NetworkInterfaceV2::wide_response),
       narrow_output_itf(&NetworkInterfaceV2::narrow_retry, &NetworkInterfaceV2::narrow_response),
-      wide_input_itf(&NetworkInterfaceV2::wide_req),
-      narrow_input_itf(&NetworkInterfaceV2::narrow_req),
+      wide_input_itf(&NetworkInterfaceV2::wide_req, &NetworkInterfaceV2::wide_response_retry),
+      narrow_input_itf(&NetworkInterfaceV2::narrow_req, &NetworkInterfaceV2::narrow_response_retry),
       link_out{{
         FloonocLinkMaster(NW_REQ, &NetworkInterfaceV2::link_unstall),
         FloonocLinkMaster(NW_RSP, &NetworkInterfaceV2::link_unstall),
@@ -476,31 +484,57 @@ FloonocReqV2 *NetworkInterfaceV2::unwrap_response(vp::IoReq *req)
     return self_req;
 }
 
-void NetworkInterfaceV2::wide_retry(vp::Block *__this, vp::IoRetryChannel)
+void NetworkInterfaceV2::wide_retry(vp::Block *block, vp::IoRetryChannel)
 {
-    NetworkInterfaceV2 *_this = (NetworkInterfaceV2 *)__this;
-    // The downstream target is ready again. Re-send the object we were holding
-    // (the flit itself for reads/atomics, our pool write beat for write data)
-    // and unstall the upstream router so further reqs can flow.
-    if (_this->wide_target_stalled_req)
+    static_cast<NetworkInterfaceV2 *>(block)->retry_target(true);
+}
+
+void NetworkInterfaceV2::retry_target(bool wide)
+{
+    auto &pending = this->target_pending[wide];
+    while (!pending.empty())
     {
-        vp::IoReq *held = _this->wide_target_stalled_req;
-        _this->wide_target_stalled_req = NULL;
-
-        if (_this->send_to_target(held, /*wide=*/true))
-        {
-            // Target denied again — hold and wait for next retry.
-            _this->wide_target_stalled_req = held;
-            return;
-        }
-
-        if (_this->wide_stalled_link_nw != -1)
-        {
-            _this->link_in[_this->wide_stalled_link_nw].unstall();
-            _this->wide_stalled_link_nw = -1;
-        }
+        auto held = pending.front();
+        if (this->send_to_target(held.first, wide)) return;
+        pending.pop_front();
+        this->link_in[held.second].unstall();
     }
-    _this->fsm_event.enqueue();
+    this->fsm_event.enqueue();
+}
+
+bool NetworkInterfaceV2::deliver_response(bool wide, vp::IoReq *req, int nw)
+{
+    auto &pending = this->response_pending[wide];
+    vp::IoSlave &port = wide ? this->wide_input_itf : this->narrow_input_itf;
+    if (!pending.empty() || port.resp(req) == vp::IO_RESP_DENIED)
+    {
+        pending.emplace_back(req, nw);
+        return true; // Stop this mesh link until the consumer accepts the beat.
+    }
+    return false;
+}
+
+void NetworkInterfaceV2::retry_response(bool wide)
+{
+    auto &pending = this->response_pending[wide];
+    vp::IoSlave &port = wide ? this->wide_input_itf : this->narrow_input_itf;
+    while (!pending.empty())
+    {
+        auto held = pending.front();
+        if (port.resp(held.first) == vp::IO_RESP_DENIED) return;
+        pending.pop_front();
+        this->link_in[held.second].unstall();
+    }
+}
+
+void NetworkInterfaceV2::wide_response_retry(vp::Block *block, vp::IoRetryChannel)
+{
+    static_cast<NetworkInterfaceV2 *>(block)->retry_response(true);
+}
+
+void NetworkInterfaceV2::narrow_response_retry(vp::Block *block, vp::IoRetryChannel)
+{
+    static_cast<NetworkInterfaceV2 *>(block)->retry_response(false);
 }
 
 vp::IoRespAck NetworkInterfaceV2::narrow_response(vp::Block *__this, vp::IoReq *req)
@@ -510,27 +544,9 @@ vp::IoRespAck NetworkInterfaceV2::narrow_response(vp::Block *__this, vp::IoReq *
     return vp::IO_RESP_ACCEPTED;
 }
 
-void NetworkInterfaceV2::narrow_retry(vp::Block *__this, vp::IoRetryChannel)
+void NetworkInterfaceV2::narrow_retry(vp::Block *block, vp::IoRetryChannel)
 {
-    NetworkInterfaceV2 *_this = (NetworkInterfaceV2 *)__this;
-    if (_this->narrow_target_stalled_req)
-    {
-        vp::IoReq *held = _this->narrow_target_stalled_req;
-        _this->narrow_target_stalled_req = NULL;
-
-        if (_this->send_to_target(held, /*wide=*/false))
-        {
-            _this->narrow_target_stalled_req = held;
-            return;
-        }
-
-        if (_this->narrow_stalled_link_nw != -1)
-        {
-            _this->link_in[_this->narrow_stalled_link_nw].unstall();
-            _this->narrow_stalled_link_nw = -1;
-        }
-    }
-    _this->fsm_event.enqueue();
+    static_cast<NetworkInterfaceV2 *>(block)->retry_target(false);
 }
 
 void NetworkInterfaceV2::reset(bool active)
@@ -559,26 +575,21 @@ void NetworkInterfaceV2::reset(bool active)
         // or reference with them — consistent with reads, where the external
         // master likewise never gets its in-flight burst answered across a
         // reset.
-        for (vp::IoReq *held : {this->wide_target_stalled_req,
-                                this->narrow_target_stalled_req})
+        for (auto &pending : this->target_pending)
         {
-            if (held == NULL)
+            for (auto held : pending)
             {
-                continue;
+                if (held.first->initiator != held.first) held.first->free();
+                else this->flit_allocator->free((FloonocReqV2 *)held.first);
             }
-            if (held->initiator != held)
-            {
-                held->free();
-            }
-            else
-            {
-                this->flit_allocator->free((FloonocReqV2 *)held);
-            }
+            pending.clear();
         }
-        this->wide_target_stalled_req = NULL;
-        this->narrow_target_stalled_req = NULL;
-        this->wide_stalled_link_nw = -1;
-        this->narrow_stalled_link_nw = -1;
+        for (auto &pending : this->response_pending)
+        {
+            for (auto held : pending)
+                if (held.first->allocator) held.first->free();
+            pending.clear();
+        }
         this->wr_bursts[0].clear();
         this->wr_bursts[1].clear();
     }
@@ -617,8 +628,31 @@ vp::IoReqStatus NetworkInterfaceV2::wide_req(vp::Block *__this, vp::IoReq *req)
 
 vp::IoReqStatus NetworkInterfaceV2::handle_req(vp::IoReq *req, bool wide)
 {
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received request from target (req: %p, base: 0x%x, size: 0x%x, wide: %d)\n",
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received request from target (req: %p, base: 0x%lx, size: 0x%lx, wide: %d)\n",
         req, req->get_addr(), req->get_size(), wide);
+
+    // Reject an unmapped or overflowing range before allocating a flit or
+    // consuming an outstanding slot. An accepted request must always complete.
+    uint64_t addr = req->get_addr(), size = req->get_size();
+    bool mapped = size > 0 && addr <= UINT64_MAX - size;
+    uint64_t remaining = size, cursor = addr;
+    while (mapped && remaining > 0)
+    {
+        EntryV2 *entry = this->get_entry(cursor, remaining);
+        if (entry == nullptr)
+        {
+            mapped = false;
+            break;
+        }
+        uint64_t chunk = std::min(remaining, entry->size - (cursor - entry->base));
+        cursor += chunk;
+        remaining -= chunk;
+    }
+    if (!mapped)
+    {
+        req->set_resp_status(vp::IO_RESP_INVALID);
+        return vp::IO_REQ_DONE;
+    }
 
     // AXI burst legality (asserts builds only): a burst must fit in max_burst_size
     // and must not cross a max_burst_size boundary, so it lands in a single page
@@ -868,6 +902,8 @@ bool NetworkInterfaceV2::send_to_target(vp::IoReq *to_send, bool wide)
 bool NetworkInterfaceV2::link_req(vp::Block *__this, FloonocReqV2 *req, int nw)
 {
     NetworkInterfaceV2 *_this = (NetworkInterfaceV2 *)__this;
+    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "NOC_V2_EJECT req=%p at=(%d,%d)\n",
+        req, _this->x, _this->y);
 
     if (req->is_rsp)
     {
@@ -885,7 +921,7 @@ bool NetworkInterfaceV2::link_req(vp::Block *__this, FloonocReqV2 *req, int nw)
         // flit's own is_write/opcode copies: for the B flit of an owns_beat
         // write the beat behind req->burst was consumed and freed by the
         // destination target, so it must not be dereferenced.
-        vp::IoSlave *port = wide ? &_this->wide_input_itf : &_this->narrow_input_itf;
+        bool response_stalled = false;
 
         if (req->get_is_write() && req->get_opcode() != vp::WRITE)
         {
@@ -898,7 +934,7 @@ bool NetworkInterfaceV2::link_req(vp::Block *__this, FloonocReqV2 *req, int nw)
             _this->nb_pending_bursts[wide]--;
 
             burst->set_resp_status(req->get_resp_status());
-            port->resp(burst);
+            response_stalled = _this->deliver_response(wide, burst, nw);
         }
         else if (req->get_is_write())
         {
@@ -959,7 +995,7 @@ bool NetworkInterfaceV2::link_req(vp::Block *__this, FloonocReqV2 *req, int nw)
                 ack->burst_id = -1;
                 ack->initiator = initiator;
                 ack->set_resp_status(error ? vp::IO_RESP_INVALID : vp::IO_RESP_OK);
-                port->resp(ack);
+                response_stalled = _this->deliver_response(wide, ack, nw);
             }
             else
             {
@@ -988,7 +1024,7 @@ bool NetworkInterfaceV2::link_req(vp::Block *__this, FloonocReqV2 *req, int nw)
                     ack->initiator = track.initiator;
                     ack->set_resp_status(track.error ? vp::IO_RESP_INVALID : vp::IO_RESP_OK);
                     _this->wr_bursts[wide].erase(it);
-                    port->resp(ack);
+                    response_stalled = _this->deliver_response(wide, ack, nw);
                 }
             }
         }
@@ -1030,19 +1066,20 @@ bool NetworkInterfaceV2::link_req(vp::Block *__this, FloonocReqV2 *req, int nw)
                 _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Finished burst (burst: %p)\n", burst);
                 _this->nb_pending_bursts[wide]--;
             }
-            port->resp(beat);
+            response_stalled = _this->deliver_response(wide, beat, nw);
         }
 
         _this->fsm_event.enqueue();
 
         _this->flit_allocator->free(req);
+        return response_stalled;
     }
     else
     {
         // Request path: we are the destination NI. Forward to the local target
         // via our external master port.
         _this->trace.msg(vp::Trace::LEVEL_DEBUG,
-            "Received request from router (req: %p, base: 0x%x, size: 0x%x, isaddr: (%d), "
+            "Received request from router (req: %p, base: 0x%lx, size: 0x%lx, isaddr: (%d), "
             "position: (%d, %d)) origin Ni: (%d, %d)\n",
             req, req->get_addr(), req->get_size(), (int)req->is_address, _this->x,
             _this->y, req->src_x, req->src_y);
@@ -1051,27 +1088,17 @@ bool NetworkInterfaceV2::link_req(vp::Block *__this, FloonocReqV2 *req, int nw)
         {
             bool wide = req->wide;
             _this->trace.msg(vp::Trace::LEVEL_DEBUG,
-                "Sending request to target (req: %p, base: 0x%x, size: 0x%x)\n",
+                "Sending request to target (req: %p, base: 0x%lx, size: 0x%lx)\n",
                 req, req->get_addr(), req->get_size());
 
             vp::IoReq *to_send = _this->make_target_req(req);
 
-            if (_this->send_to_target(to_send, wide))
+            auto &pending = _this->target_pending[wide];
+            if (!pending.empty() || _this->send_to_target(to_send, wide))
             {
-                // v2 master holds the denied object and re-sends it from the
-                // target's retry() callback (wide_retry / narrow_retry). The
-                // link the req arrived on is stalled by our return value;
-                // remember it so the retry can unstall it.
-                if (wide)
-                {
-                    _this->wide_target_stalled_req = to_send;
-                    _this->wide_stalled_link_nw = nw;
-                }
-                else
-                {
-                    _this->narrow_target_stalled_req = to_send;
-                    _this->narrow_stalled_link_nw = nw;
-                }
+                // AR and W arrive on different physical networks. Retain
+                // both if one target stalls; never overwrite a denied AR.
+                pending.emplace_back(to_send, nw);
                 return true;
             }
             return false;

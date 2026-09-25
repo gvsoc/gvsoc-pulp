@@ -83,7 +83,8 @@ class ClusterArch:
                         spatz_core_list,    spatz_num_vlsu,     spatz_num_fu,
                         spatz_vlsu_bw,      spatz_vreg_gather_eff,
                         data_bandwidth,     auto_fetch=False,   multi_idma_enable=0,
-                        core_model="fast",  tech_node="5nm", idma_gather_enable=False):
+                        core_model="fast",  tech_node="5nm", idma_gather_enable=False,
+                        idma_collective_enable=True):
 
         self.nb_core                = nb_core_per_cluster
         self.base                   = base
@@ -118,6 +119,7 @@ class ClusterArch:
         self.data_bandwidth         = data_bandwidth
         self.multi_idma_enable      = multi_idma_enable
         self.idma_gather_enable     = bool(idma_gather_enable)
+        self.idma_collective_enable = bool(idma_collective_enable)
         self.core_model             = core_model
 
         #Global Information
@@ -294,12 +296,12 @@ class ClusterUnit(gvsoc.systree.Component):
             for x in range(arch.nb_core):
                 idma_list.append(SnitchDma(self, f'idma_{x}', loc_base=arch.tcdm.area.base, loc_size=arch.tcdm.area.size + data_dumpper_input_size,
                 tcdm_width=(arch.tcdm.nb_tcdm_banks * arch.tcdm.bank_width), transfer_queue_size=arch.idma_outstand_txn, burst_queue_size=arch.idma_outstand_burst,
-                gather_enable=arch.idma_gather_enable))
+                gather_enable=arch.idma_gather_enable, collective_enable=arch.idma_collective_enable))
                 pass
         else:
             idma = SnitchDma(self, 'idma', loc_base=arch.tcdm.area.base, loc_size=arch.tcdm.area.size + data_dumpper_input_size,
                 tcdm_width=(arch.tcdm.nb_tcdm_banks * arch.tcdm.bank_width), transfer_queue_size=arch.idma_outstand_txn, burst_queue_size=arch.idma_outstand_burst,
-                gather_enable=arch.idma_gather_enable)
+                gather_enable=arch.idma_gather_enable, collective_enable=arch.idma_collective_enable)
             pass
 
         #stack memory

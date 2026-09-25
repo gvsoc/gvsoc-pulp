@@ -31,6 +31,7 @@ from pulp.chips.soft_hier_old.flex_mesh_noc import FlexMeshNoC
 from pulp.chips.soft_hier_old.hbm_ctrl import hbm_ctrl
 import memory.dramsys
 import math
+import os
 
 GAPY_TARGET = True
 
@@ -88,6 +89,13 @@ class FlexClusterSystem(gvsoc.systree.Component):
         if not hasattr(arch, 'tech_node'): arch.tech_node = "5nm"
         if not hasattr(arch, 'core_model'): arch.core_model = "fast"
         if core_model is not None: arch.core_model = core_model
+        data_noc_backend = os.environ.get('SOFTHIER_DATA_NOC',
+            getattr(arch, 'data_noc_backend', 'legacy'))
+        if data_noc_backend not in ('legacy', 'floonoc_v2'):
+            raise ValueError('data_noc_backend must be legacy or floonoc_v2')
+        if data_noc_backend == 'floonoc_v2' and arch.hbm_node_aliase != 1:
+            raise ValueError('floonoc_v2 requires hbm_node_aliase=1; use legacy for edge aliases')
+        self.add_property('data_noc_backend', data_noc_backend)
 
         #############
         # Assertion #
@@ -155,6 +163,7 @@ class FlexClusterSystem(gvsoc.systree.Component):
                                         data_bandwidth      =   arch.noc_link_width/8,
                                         multi_idma_enable   =   arch.multi_idma_enable,
                                         idma_gather_enable  =   arch.idma_gather_enable,
+                                        idma_collective_enable = data_noc_backend == 'legacy',
                                         core_model          =   arch.core_model,
                                         tech_node           =   arch.tech_node)
             cluster_list.append(ClusterUnit(self,f'cluster_{cluster_id}', cluster_arch, binary))
@@ -218,7 +227,15 @@ class FlexClusterSystem(gvsoc.systree.Component):
             pass
 
         #NoC
-        data_noc = FlexMeshNoC(self, 'data_noc', width=arch.noc_link_width/8,
+        if data_noc_backend == 'floonoc_v2':
+            from pulp.chips.soft_hier_old.flex_mesh_noc_v2 import FlexMeshNoCV2
+            data_noc = FlexMeshNoCV2(self, 'data_noc', width=arch.noc_link_width//8,
+                nb_x_clusters=arch.num_cluster_x, nb_y_clusters=arch.num_cluster_y,
+                ni_outstanding_reqs=arch.noc_outstanding,
+                router_input_queue_size=getattr(arch, 'noc_router_input_queue_size', 2),
+                narrow_width=getattr(arch, 'noc_narrow_link_width', 64)//8)
+        else:
+            data_noc = FlexMeshNoC(self, 'data_noc', width=arch.noc_link_width/8,
                 nb_x_clusters=arch.num_cluster_x, nb_y_clusters=arch.num_cluster_y,
                 ni_outstanding_reqs=noc_outstanding, router_input_queue_size=noc_outstanding * num_clusters, collective=1,
                 edge_node_alias=arch.hbm_node_aliase, edge_node_alias_start_bit=arch.hbm_node_aliase_start_bit)

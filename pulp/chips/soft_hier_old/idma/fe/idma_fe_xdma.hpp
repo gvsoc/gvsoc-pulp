@@ -96,6 +96,7 @@ private:
     IdmaTransfer *stalled_transfer;
 #ifdef ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION
     // Transfer collective
+    bool collective_enable = true;
     uint16_t collective_row_mask;
     uint16_t collective_col_mask;
 #endif //ENABLE_DMA_SIMPLE_COLLECTIVE_IMPLEMENTATION

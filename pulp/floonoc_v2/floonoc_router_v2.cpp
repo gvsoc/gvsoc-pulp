@@ -81,7 +81,7 @@ bool RouterV2::link_req(vp::Block *__this, FloonocReqV2 *req, int queue_index)
 {
     RouterV2 *_this = (RouterV2 *)__this;
 
-    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Handle request (req: %p, base: 0x%x, size: 0x%x, queue: %d)\n",
+    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Handle request (req: %p, base: 0x%lx, size: 0x%lx, queue: %d)\n",
         req, req->get_addr(), req->get_size(), queue_index);
 
     _this->signal_req.set_and_release(req->initiator_addr);
@@ -177,7 +177,10 @@ void RouterV2::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             // single-flit packet (is_first && is_last) leaves it free.
             _this->output_owner[out_queue_id] = req->is_last ? -1 : in_queue_index;
 
-            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Forwarding request to next router (req: %p, base: 0x%x, size: 0x%x, next_position: (%d, %d), in_queue: %d)\n",
+            _this->trace.msg(vp::Trace::LEVEL_DEBUG,
+                "NOC_V2_HOP req=%p from=(%d,%d) to=(%d,%d)\n",
+                req, _this->x, _this->y, next_x, next_y);
+            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Forwarding request to next router (req: %p, base: 0x%lx, size: 0x%lx, next_position: (%d, %d), in_queue: %d)\n",
                                 req, req->get_addr(), req->get_size(), next_x, next_y, in_queue_index);
             if (_this->output_ports[out_queue_id].req(req))
             {

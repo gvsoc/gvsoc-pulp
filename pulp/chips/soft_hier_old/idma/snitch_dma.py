@@ -48,7 +48,7 @@ class SnitchDma(gvsoc.systree.Component):
             loc_base: int=0,
             loc_size: int=0,
             tcdm_width: int=0,
-            gather_enable: bool=False):
+            gather_enable: bool=False, collective_enable: bool=True):
 
         super().__init__(parent, name)
 
@@ -68,6 +68,7 @@ class SnitchDma(gvsoc.systree.Component):
             "loc_size": loc_size,
             "tcdm_width": tcdm_width,
             "gather_enable": gather_enable,
+            "collective_enable": collective_enable,
         })
 
     def o_INDEX(self, itf: gvsoc.systree.SlaveItf):
