@@ -140,6 +140,24 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             // Get output queue ID from next position
             int out_queue_id = _this->get_req_queue(next_x, next_y);
 
+            // Wormhole arbitration: if this output is locked to another input (a multi-beat burst
+            // is still in flight through it), this input must wait until that burst's last beat
+            // has gone through. This reserves the output for the whole burst, exactly like the RTL
+            // floo_wormhole_arbiter (LockIn=1, valid resampled only at packet boundaries). It is
+            // what gives the closest injector near-full bandwidth: the far traffic holds long
+            // multi-hop paths and arrives in bursts, so the local input wins the idle slots.
+            if (_this->locked_output[out_queue_id] != -1 &&
+                _this->locked_output[out_queue_id] != in_queue_index)
+            {
+                _this->fsm_event.enqueue(); // Retry once the burst releases the output
+                in_queue_index += 1;
+                if (in_queue_index == 5)
+                {
+                    in_queue_index = 0;
+                }
+                continue;
+            }
+
             // Only send one request per cycle to the same output
             if (output_full[out_queue_id])
             {
@@ -170,6 +188,11 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
             // Since we now know, that the request will be propagated, remove it from the queue
             queue->queue.pop();
+
+            // Update the wormhole lock for this output: keep it reserved for this input until the
+            // burst's last beat goes through, then release it so other inputs can compete again.
+            bool is_last = (bool)(long)*req->arg_get(FlooNoc::REQ_IS_LAST);
+            _this->locked_output[out_queue_id] = is_last ? -1 : in_queue_index;
 
             if (queue->queue.size() == _this->queue_size) // Remember we let the source enqueue one more request than what is possible.
             {
@@ -330,6 +353,7 @@ void Router::reset(bool active)
         for (int i = 0; i < 5; i++)
         {
             this->stalled_queues[i] = false;
+            this->locked_output[i] = -1;
         }
     }
 
