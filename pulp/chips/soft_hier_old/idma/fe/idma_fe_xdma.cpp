@@ -152,7 +152,7 @@ uint32_t IDmaFeXdma::get_status(uint32_t status)
 uint32_t IDmaFeXdma::enqueue_copy(uint32_t config, uint32_t size, bool &granted, uint32_t collective_type)
 {
     if (collective_type && !this->collective_enable && !(this->gather_enable && (config & 4)))
-        this->trace.fatal("Collective DMA requires the legacy SoftHier data_noc backend\n");
+        this->trace.fatal("Collective DMA is disabled for this iDMA instance\n");
     // Allocate transfer ID
     uint32_t transfer_id = this->next_transfer_id.get();
     this->next_transfer_id.set(transfer_id + 1);

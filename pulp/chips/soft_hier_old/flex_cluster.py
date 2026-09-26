@@ -163,7 +163,7 @@ class FlexClusterSystem(gvsoc.systree.Component):
                                         data_bandwidth      =   arch.noc_link_width/8,
                                         multi_idma_enable   =   arch.multi_idma_enable,
                                         idma_gather_enable  =   arch.idma_gather_enable,
-                                        idma_collective_enable = data_noc_backend == 'legacy',
+                                        idma_collective_enable = True,
                                         core_model          =   arch.core_model,
                                         tech_node           =   arch.tech_node)
             cluster_list.append(ClusterUnit(self,f'cluster_{cluster_id}', cluster_arch, binary))

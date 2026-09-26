@@ -57,10 +57,16 @@ vp::IoReqStatus NocBridgeLegacy::input(vp::Block *block, vp::IoReq *req)
 {
     auto *self = static_cast<NocBridgeLegacy *>(block);
     if (req->get_opcode() != vp::READ && req->get_opcode() != vp::WRITE)
-        self->trace.fatal("SoftHier data_noc v2 bridge supports unicast reads/writes only\n");
+        self->trace.fatal("SoftHier data_noc v2 bridge supports reads/writes; atomics use sync_bus\n");
     auto *origin = new Origin{req, {req->get_addr(), req->get_size(),
         req->get_data(), req->get_is_write(), false, req->get_full_latency(), nullptr}};
     origin->access.owner = origin;
+    // Preserve the legacy payload ABI: only operation codes 1..7 denote a
+    // collective. Ordinary masters are not required to set any other bytes.
+    uint8_t type = req->get_payload()[0];
+    origin->access.collective.type = type >= 1 && type <= 7 ? type : 0;
+    origin->access.collective.row_mask = req->get_payload()[1];
+    origin->access.collective.col_mask = req->get_payload()[2];
     // The v2 face dispatches on a clock event, after this PENDING returns.
     self->request_out.sync(&origin->access);
     return vp::IO_REQ_PENDING;

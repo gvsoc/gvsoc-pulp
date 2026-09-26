@@ -58,6 +58,7 @@ private:
     vp::IoMaster out;
     vp::IoSlave in;
     vp::WireMaster<SoftHierNocAccess *> request_out, done_out;
+    vp::WireMaster<SoftHierCollective> collective_out;
     vp::WireSlave<SoftHierNocAccess *> request_in, done_in;
     vp::ClockEvent event;
     vp::Trace trace;
@@ -88,6 +89,7 @@ NocBridgeV2::NocBridgeV2(vp::ComponentConf &config)
         new_slave_port("request", &request_in);
         new_master_port("done", &done_out);
         new_master_port("output", &out);
+        new_master_port("collective", &collective_out);
     }
     else
     {
@@ -110,6 +112,9 @@ void NocBridgeV2::request(vp::Block *block, SoftHierNocAccess *access)
 void NocBridgeV2::send_fragment(Fragment *fragment)
 {
     vp::IoReq *req = fragment->req;
+    auto collective = fragment->source->access->collective;
+    collective.request = req;
+    collective_out.sync(collective);
     vp::IoReqStatus status = out.req(req);
     if (status == vp::IO_REQ_DENIED)
         denied = fragment;
@@ -276,7 +281,9 @@ void NocBridgeV2::tick(vp::Block *block, vp::ClockEvent *)
             else
             {
                 uint64_t addr = access->addr + source->submitted;
-                uint64_t boundary = access->write ? self->width : self->max_burst;
+                // One collective fragment is one link beat. This bounds tree
+                // reduction storage and gives every beat its own completion.
+                uint64_t boundary = (access->write || access->collective.type) ? self->width : self->max_burst;
                 uint64_t size = std::min(access->size - source->submitted, boundary - addr % boundary);
                 vp::IoReq *req = self->zero_pool->alloc();
                 req->prepare();

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-"""FlooNoC v2 with explicit legacy IO boundaries for SoftHier unicast DMA."""
+"""SoftHier-local FlooNoC v2 with legacy IO and collective DMA support."""
 import gvsoc.systree as st
 from gvsoc.signature import IoV2Beat
-from pulp.floonoc_v2.floonoc_v2 import FlooNocV2ClusterGridNarrowWide
+from pulp.chips.soft_hier_old.floonoc_v2.floonoc_v2 import FlooNocV2ClusterGridNarrowWide
 
 
 class NocBridge(st.Component):
@@ -24,6 +24,9 @@ class NocBridge(st.Component):
                       signature=self.input_signature, composite_bind=True)
         target.itf_bind('output', st.SlaveItf(self, 'output', signature=self.output_signature),
                         signature=self.output_signature)
+        if legacy_input:
+            faces['v2'].itf_bind('collective', st.SlaveItf(self, 'collective',
+                signature='wire<SoftHierCollective>'), signature='wire<SoftHierCollective>')
 
     @property
     def input_signature(self):
@@ -60,6 +63,9 @@ class FlexMeshNoCV2(FlooNocV2ClusterGridNarrowWide):
             for x in range(nb_x_clusters):
                 bridge = NocBridge(self, f'ingress_{x+1}_{y+1}', width, self.capacity, True)
                 bridge.o_OUTPUT(super().i_CLUSTER_WIDE_INPUT(x, y))
+                bridge.itf_bind('collective', st.SlaveItf(self._fabric._nis[x+1, y+1][0],
+                    'collective', signature='wire<SoftHierCollective>'),
+                    signature='wire<SoftHierCollective>')
                 self.ingress[x, y] = bridge
                 self.itf_bind(f'legacy_input_{x+1}_{y+1}', bridge.i_INPUT(),
                               signature='io', composite_bind=True)
