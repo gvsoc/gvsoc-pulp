@@ -27,7 +27,7 @@ from gvrun.parameter import TargetParameter
 from pulp.chips.softhier.common.cluster_unit import ClusterUnit, ClusterArch
 from pulp.chips.softhier.common.softhier_ctrl import SoftHierCtrl
 from pulp.chips.softhier.common.error_detector import ErrorDetector
-from pulp.chips.softhier.softhier_arch_base import TOPOLOGIES, get_arch_overrides
+from pulp.chips.softhier.softhier_arch_base import TOPOLOGIES, get_arch_overrides, SoftHierAttributes
 from pulp.floonoc_flex.floonoc_flex import FlooNocFlex
 
 
@@ -93,6 +93,9 @@ class SoftHierSystem(gvsoc.systree.Component):
             binary = args.binary
 
         _assert_topology_dimensions(arch)
+
+        # Final arch, with the overrides, published by the platform as attributes
+        self.arch = arch
 
         ##############
         # Components #
@@ -235,3 +238,9 @@ class SoftHierPlatform(gvsoc.systree.Component):
         softhier_system = SoftHierSystem(self, 'system', parser, self.topology)
 
         self.bind(clock, 'out', softhier_system, 'clock')
+
+        # Let the build tools query the architecture (memory map, number of
+        # clusters and cores, ...) and know how to compile for this board
+        # (pulpos.softhier module)
+        self.set_attributes(SoftHierAttributes(self, 'softhier', softhier_system.arch))
+        self.set_target_name('softhier')

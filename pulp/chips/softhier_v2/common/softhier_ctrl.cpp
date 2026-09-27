@@ -27,8 +27,9 @@
 /**
  * SoftHier SoC control registers (32-bit writes):
  * - 0x0:  end of computation, stops the simulation
- * - 0x4:  one core reached its end of computation; the simulation stops once
- *         every core of every cluster did. The core then parks itself (the
+ * - 0x4:  one core reached its end of computation, with its status; the
+ *         simulation stops once every core of every cluster did, with the OR of
+ *         the statuses as exit status. The core then parks itself (the
  *         runtime returns to a WFI loop). Unlike v1, the write is answered: an
  *         io_v2 write left pending would hold the crossbar outputs it went
  *         through and block the other cores of the cluster.
@@ -51,6 +52,9 @@ private:
     vp::IoSlave input_itf{&SoftHierCtrl::req};
     int64_t timer_start;
     int64_t all_eoc_counter;
+    // OR of the values reported with the per-core end of computation, used as
+    // the simulation exit status
+    uint32_t all_eoc_status;
 };
 
 SoftHierCtrl::SoftHierCtrl(vp::ComponentConf &config)
@@ -66,6 +70,7 @@ void SoftHierCtrl::reset(bool active)
     {
         this->timer_start = 0;
         this->all_eoc_counter = 0;
+        this->all_eoc_status = 0;
         std::cout << "[SystemInfo]: num_cluster = " << this->cfg.num_cluster << std::endl;
     }
 }
@@ -91,9 +96,10 @@ vp::IoReqStatus SoftHierCtrl::req(vp::Block *__this, vp::IoReq *req)
         else if (offset == 4)
         {
             _this->all_eoc_counter += 1;
+            _this->all_eoc_status |= value;
             if (_this->all_eoc_counter >= _this->cfg.num_cluster * _this->cfg.num_core_per_cluster)
             {
-                _this->time.get_engine()->quit(0);
+                _this->time.get_engine()->quit(_this->all_eoc_status);
             }
         }
         else if (offset == 8)

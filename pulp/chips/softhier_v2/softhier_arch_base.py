@@ -16,6 +16,9 @@
 
 # Authors: Chi Zhang <chizhang@ethz.ch>, Siim Rausi <srausi@student.ethz.ch>
 
+from gvrun.attribute import Tree
+
+
 def get_arch_overrides(component, arch_cls):
     """
     Read the overrides of the arch attributes, which are all gvrun target
@@ -40,6 +43,18 @@ def get_arch_overrides(component, arch_cls):
         if value != default_value:
             overrides[field_name] = value
     return overrides
+
+
+class SoftHierAttributes(Tree):
+    """
+    Architecture of a SoftHier system as board attributes, from which tools
+    like PulpOS read the memory map and the cluster characteristics.
+    """
+
+    def __init__(self, parent, name, arch):
+        super().__init__(parent, name)
+        for field_name, value in vars(arch).items():
+            setattr(self, field_name, value)
 
 
 class SoftHierArchBase:

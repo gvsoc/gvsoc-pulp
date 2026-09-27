@@ -122,3 +122,22 @@ Ways to change a topology's parameters:
   parameters of the software headers from a custom Python file instead of
   the `TOPOLOGIES` registry. The platform keeps the registry values, so the
   file must not change what the platform depends on.
+
+## PulpOS
+
+Both SoftHier generations can run PulpOS applications (`pulpos/core`,
+`python/pulpos/softhier.py` and `arch/softhier`): the boards declare the
+`softhier` target and describe their architecture in their attributes. Set
+`SOFTHIER_GCC` to the SoftHier toolchain (the `install` directory of
+`third_party/toolchain`), then from an application directory:
+
+```bash
+gvrun --target pulp.chips.softhier_v2.topologies.softhier_2d_mesh_target build run
+```
+
+The same binary runs on every cluster: core 0 of each cluster runs `main`,
+or every core with `--parameter <executable>/pulpos/multicore=true`. The
+simulation stops once every core finished, with the OR of the statuses
+returned by `main` as exit status. `arch/softhier/kernel/softhier.h` gives
+the position of the core, the remote TCDM addresses and the cluster and
+global barriers; the `.l1` section places buffers in the TCDM.
