@@ -52,6 +52,7 @@ Generators:
 
 from __future__ import annotations
 
+import sys
 from collections import deque
 
 
@@ -446,14 +447,15 @@ def check_routes(topo: Topology, tables: dict[int, dict[int, int]],
             for i in range(len(path) - 2):
                 deps.setdefault((path[i], path[i+1]), set()).add((path[i+1], path[i+2]))
 
-    if not allow_deadlock:
-        cycle = _find_cycle(deps)
-        if cycle is not None:
-            channels = ' -> '.join(f'{topo.name(u)}>{topo.name(v)}' for u, v in cycle)
-            raise RoutingError('Routing tables can deadlock (wormhole routing with one '
-                f'virtual channel needs an acyclic channel dependency graph), cycle: '
-                f'{channels}. Use a deadlock-free algorithm (e.g. up_down) or pass '
-                'allow_deadlock=True for exploration')
+    cycle = _find_cycle(deps)
+    if cycle is not None:
+        channels = ' -> '.join(f'{topo.name(u)}>{topo.name(v)}' for u, v in cycle)
+        message = ('Routing tables can deadlock (wormhole routing with one virtual '
+            f'channel needs an acyclic channel dependency graph), cycle: {channels}')
+        if not allow_deadlock:
+            raise RoutingError(f'{message}. Use a deadlock-free algorithm (e.g. up_down) '
+                'or pass allow_deadlock=True for exploration')
+        print(f'WARNING: {message}', file=sys.stderr)
     return routes
 
 
