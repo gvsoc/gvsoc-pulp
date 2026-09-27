@@ -74,3 +74,9 @@ class SpatzConfig(RiscvConfig):
         "The spatz_v3 cluster turns it on; the default keeps the single-cycle "
         "behaviour the other users of this core were calibrated with."
     ))
+    barrier_csr: bool = cfg_field(default=False, dump=True, desc=(
+        "Snitch barrier CSR (0x7C2): reading it notifies the cluster "
+        "barrier unit on barrier_req and stalls the core until barrier_ack. "
+        "Used by clusters whose software synchronizes through the CSR "
+        "(SoftHier); the others use a memory-mapped barrier and leave it out."
+    ))

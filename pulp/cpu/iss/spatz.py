@@ -49,6 +49,14 @@ class SpatzEvent(IssModule):
         iss.add_sources(['cpu/iss_v2/src/cores/spatz/events.cpp'])
 
 
+class SnitchBarrierCsr(IssModule):
+    """Snitch barrier CSR (0x7C2) in the core (see the Spatz class of
+    cpu/iss_v2/include/cores/spatz/spatz.hpp)."""
+    @override
+    def gen(self, iss: RiscvCommon):
+        iss.isa.add_define('CONFIG_GVSOC_ISS_SNITCH_BARRIER_CSR', '1')
+
+
 class Spatz(RiscvCommon):
 
     def __init__(self,
@@ -65,6 +73,9 @@ class Spatz(RiscvCommon):
         # events class), so cores with and without it need distinct ISAs.
         if config.muldiv_offload:
             isa_key += '_muldiv'
+        # The barrier CSR is compiled in too
+        if config.barrier_csr:
+            isa_key += '_barrier'
         isa_instance: Isa | None = isa_instances.get(isa_key)
 
         if isa_instance is None:
@@ -87,6 +98,8 @@ class Spatz(RiscvCommon):
         }
         if config.muldiv_offload:
             modules['event'] = SpatzEvent()
+        if config.barrier_csr:
+            modules['barrier'] = SnitchBarrierCsr()
 
         # The io_v2 VLSU variant pulls io_v2.hpp into the whole ISS translation
         # unit (see types.hpp), so the scalar data LSU has to switch to its v2
@@ -119,7 +132,14 @@ class Spatz(RiscvCommon):
 
 
     def o_BARRIER_REQ(self, itf: gvsoc.systree.SlaveItf):
+        """Notification to the cluster barrier unit, on each barrier CSR read
+        (config.barrier_csr)."""
         self.itf_bind('barrier_req', itf, signature='wire<bool>')
+
+    def i_BARRIER_ACK(self) -> gvsoc.systree.SlaveItf:
+        """Release from the cluster barrier unit, once all the cores arrived
+        (config.barrier_csr)."""
+        return gvsoc.systree.SlaveItf(self, 'barrier_ack', signature='wire<bool>')
 
     def o_VLSU(self, port: int, itf: gvsoc.systree.SlaveItf):
         """Binds the vector data port.
