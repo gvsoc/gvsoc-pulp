@@ -60,6 +60,7 @@
 //     bank_offset = ((addr >> (slave_bits + interleaving_width)) << interleaving_width)
 //                   | (addr & ((1 << interleaving_width) - 1))
 
+#include <algorithm>
 #include <climits>
 #include <memory>
 #include <vector>
@@ -79,6 +80,72 @@ static inline void gui_pulse(vp::Signal<uint64_t> &s, uint64_t v,
 
 
 class SpatzTcdmInterco;
+
+// Bit set of a fixed number of bits, one per master or one per bank. The
+// crossbar has no limit on either count (a SoftHier cluster has 128 banks
+// and more than 64 masters).
+class Mask
+{
+public:
+    void resize(int nb_bits)
+    {
+        this->nb_bits = nb_bits;
+        this->words.assign((nb_bits + 63) / 64, 0);
+    }
+    void clear() { std::fill(this->words.begin(), this->words.end(), 0); }
+    void set(int bit) { this->words[bit >> 6] |= 1ULL << (bit & 63); }
+    void reset(int bit) { this->words[bit >> 6] &= ~(1ULL << (bit & 63)); }
+    bool test(int bit) const { return (this->words[bit >> 6] >> (bit & 63)) & 1; }
+    bool any() const
+    {
+        for (uint64_t word : this->words) if (word) return true;
+        return false;
+    }
+    bool intersects(const Mask &other) const
+    {
+        for (size_t i = 0; i < this->words.size(); i++)
+        {
+            if (this->words[i] & other.words[i]) return true;
+        }
+        return false;
+    }
+    void merge(const Mask &other)
+    {
+        for (size_t i = 0; i < this->words.size(); i++) this->words[i] |= other.words[i];
+    }
+    void copy(const Mask &other) { this->words = other.words; }
+    int count() const
+    {
+        int count = 0;
+        for (uint64_t word : this->words) count += __builtin_popcountll(word);
+        return count;
+    }
+    // First set bit at or after `from`, wrapping around; -1 if none.
+    int first_from(int from) const
+    {
+        int nb_words = (int)this->words.size();
+        int word_id = from >> 6;
+        uint64_t word = this->words[word_id] & (~0ULL << (from & 63));
+        for (int i = 0; i <= nb_words; i++)
+        {
+            if (word)
+            {
+                int bit = (word_id << 6) + __builtin_ctzll(word);
+                if (bit < this->nb_bits) return bit;
+            }
+            word_id = (word_id + 1) % nb_words;
+            word = this->words[word_id];
+            // Back in the start word after wrapping: only the bits below
+            // `from` remain to be scanned.
+            if (i == nb_words - 1) word &= (from & 63) ? ~(~0ULL << (from & 63)) : 0;
+        }
+        return -1;
+    }
+
+private:
+    int nb_bits = 0;
+    std::vector<uint64_t> words;
+};
 
 // One per master input port. Just a thin wrapper around its IoSlave --
 // the crossbar keeps no per-input state in the new design.
@@ -116,7 +183,7 @@ struct BankState
     int id;
     vp::IoMaster itf;
     // Bit i set means input i has a pending (denied) request to this bank.
-    uint64_t pending_mask = 0;
+    Mask pending_mask;
     // Next round-robin scan start (in [0, nb_masters)).
     int rr_next = 0;
     // GUI trace: the address of the access currently served by this bank.
@@ -156,11 +223,8 @@ private:
     uint64_t  decode_offset (uint64_t offset) const;
     // GUI: pulse the bank's address trace and the top-level activity strip.
     void      gui_log_bank  (int bank_id, uint64_t addr);
-    // Find the first set bit at or after `rr_next` in a `nb`-wide mask,
-    // wrapping. Returns the bit index in [0, nb); precondition: mask != 0.
-    int       pick_winner   (uint64_t mask, int rr_next, int nb) const;
-    // Bank claim set of a wide access, one bit per bank.
-    uint64_t  wide_claim_mask(uint64_t addr, uint64_t size) const;
+    // Bank claim set of a wide access, one bit per bank, into `claim`.
+    void      wide_claim_mask(uint64_t addr, uint64_t size, Mask &claim) const;
     // Serve a wide request inline: one granule chunk per spanned bank,
     // all within the current tick. Annotates the request with the worst
     // bank latency.
@@ -183,7 +247,7 @@ private:
     // arrival (see wide_input_req) rather than through a deny/retry round
     // trip, so the banks it takes have to be visible to the arbiter that
     // may run later in the same cycle.
-    uint64_t banks_busy = 0;
+    Mask     banks_busy;
     int64_t  banks_busy_cycle = -1;
     // Cycle in which a wide access was last served. The wide side of the
     // TCDM is fed by a single 512-bit port (`axi_to_mem_interleaved` on the
@@ -196,9 +260,12 @@ private:
     // Scratch request used to slice a wide access into per-bank accesses.
     vp::IoReq wide_chunk_req;
 
-    // Refresh `banks_busy` for the current cycle and return the banks that
-    // are still free.
-    uint64_t banks_free_now();
+    // Refresh `banks_busy` for the current cycle and return it.
+    const Mask &banks_busy_now();
+    // Scratch masks of the wide election: claim set of the wide access being
+    // considered, and the banks already taken this cycle.
+    Mask wide_claim;
+    Mask banks_taken;
 
     // Per-bank backdoor targets, resolved on first debug access through the
     // bank output ports' final bindings. nullptr where the bank component
@@ -262,14 +329,19 @@ SpatzTcdmInterco::SpatzTcdmInterco(vp::ComponentConf &config)
     int nb_slaves  = (int)this->cfg.nb_slaves;
     this->slave_bits = ceil_log2_u((unsigned int)nb_slaves);
 
-    vp_assert_always(nb_masters > 0 && nb_masters <= 64, &this->trace,
-        "nb_masters must be in (0, 64], got %d\n", nb_masters);
+    vp_assert_always(nb_masters > 0, &this->trace,
+        "nb_masters must be positive, got %d\n", nb_masters);
+
+    this->banks_busy.resize(nb_slaves);
+    this->wide_claim.resize(nb_slaves);
+    this->banks_taken.resize(nb_slaves);
 
     this->banks.reserve(nb_slaves);
     for (int i = 0; i < nb_slaves; i++)
     {
         std::string name = "output_" + std::to_string(i);
         auto b = std::make_unique<BankState>(this, i);
+        b->pending_mask.resize(nb_masters);
         this->new_master_port(name, &b->itf);
         this->banks.push_back(std::move(b));
     }
@@ -300,12 +372,12 @@ void SpatzTcdmInterco::reset(bool active)
     {
         this->in_election = false;
         this->wide_retrying = -1;
-        this->banks_busy = 0;
+        this->banks_busy.clear();
         this->banks_busy_cycle = -1;
         this->wide_used_cycle = -1;
         for (auto &b : this->banks)
         {
-            b->pending_mask = 0;
+            b->pending_mask.clear();
             b->rr_next = 0;
         }
         for (auto &w : this->wide_inputs)
@@ -348,28 +420,6 @@ uint64_t SpatzTcdmInterco::decode_offset(uint64_t offset) const
     uint64_t hi_shift = (uint64_t)this->slave_bits + iw;
     return ((offset >> hi_shift) << iw) | (offset & iw_mask);
 }
-
-int SpatzTcdmInterco::pick_winner(uint64_t mask, int rr_next, int nb) const
-{
-    // Valid-bit mask so an over-wide rotation doesn't pull stale bits in.
-    uint64_t valid = (nb == 64) ? ~0ULL : ((1ULL << nb) - 1);
-    mask &= valid;
-
-    // Rotate the mask right by rr_next so the scan start lands at bit 0,
-    // then ctz gives the offset of the first set bit at-or-after rr_next.
-    uint64_t rotated;
-    if (rr_next == 0)
-    {
-        rotated = mask;
-    }
-    else
-    {
-        rotated = ((mask >> rr_next) | (mask << (nb - rr_next))) & valid;
-    }
-    int rel = __builtin_ctzll(rotated);
-    return (rr_next + rel) % nb;
-}
-
 
 //
 // Forward path
@@ -415,24 +465,23 @@ vp::IoReqStatus SpatzTcdmInterco::input_req(vp::Block *__this, vp::IoReq *req, i
         req->get_is_write() ? 1 : 0,
         bank_id);
 
-    _this->banks[bank_id]->pending_mask |= (1ULL << id);
+    _this->banks[bank_id]->pending_mask.set(id);
     _this->fsm_event.enqueue(0);
     return vp::IO_REQ_DENIED;
 }
 
-uint64_t SpatzTcdmInterco::wide_claim_mask(uint64_t addr, uint64_t size) const
+void SpatzTcdmInterco::wide_claim_mask(uint64_t addr, uint64_t size, Mask &claim) const
 {
     uint64_t granule = 1ULL << this->cfg.interleaving_width;
-    uint64_t mask = 0;
+    claim.clear();
     while (size > 0)
     {
-        mask |= 1ULL << this->decode_bank(addr);
+        claim.set(this->decode_bank(addr));
         uint64_t chunk = granule - (addr & (granule - 1));
         if (chunk > size) chunk = size;
         addr += chunk;
         size -= chunk;
     }
-    return mask;
 }
 
 vp::IoReqStatus SpatzTcdmInterco::forward_wide(vp::IoReq *req, int id)
@@ -497,15 +546,15 @@ vp::IoReqStatus SpatzTcdmInterco::forward_wide(vp::IoReq *req, int id)
     return vp::IO_REQ_DONE;
 }
 
-uint64_t SpatzTcdmInterco::banks_free_now()
+const Mask &SpatzTcdmInterco::banks_busy_now()
 {
     int64_t now = this->clock.get_cycles();
     if (this->banks_busy_cycle != now)
     {
         this->banks_busy_cycle = now;
-        this->banks_busy = 0;
+        this->banks_busy.clear();
     }
-    return ~this->banks_busy;
+    return this->banks_busy;
 }
 
 vp::IoReqStatus SpatzTcdmInterco::wide_input_req(vp::Block *__this, vp::IoReq *req, int id)
@@ -532,13 +581,12 @@ vp::IoReqStatus SpatzTcdmInterco::wide_input_req(vp::Block *__this, vp::IoReq *r
     // later in this same cycle, leaves them to the next tick.
     if (!_this->in_election)
     {
-        uint64_t claim = _this->wide_claim_mask(req->get_addr(), req->get_size());
-        uint64_t free_banks = _this->banks_free_now();
-        if ((claim & ~free_banks) == 0 &&
+        _this->wide_claim_mask(req->get_addr(), req->get_size(), _this->wide_claim);
+        if (!_this->wide_claim.intersects(_this->banks_busy_now()) &&
             _this->wide_used_cycle != _this->clock.get_cycles())
         {
             _this->wide_used_cycle = _this->clock.get_cycles();
-            _this->banks_busy |= claim;
+            _this->banks_busy.merge(_this->wide_claim);
             return _this->forward_wide(req, id);
         }
         // Either the wide port has already carried an access this cycle,
@@ -578,13 +626,15 @@ void SpatzTcdmInterco::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     // Each elected wide master reserves all its banks for this tick.
     // Banks taken by a wide access already served inline this cycle (the
     // common case, see wide_input_req) count as reserved too.
-    uint64_t banks_taken = ~_this->banks_free_now();
+    Mask &banks_taken = _this->banks_taken;
+    banks_taken.copy(_this->banks_busy_now());
+    Mask &claim = _this->wide_claim;
     for (auto &w : _this->wide_inputs)
     {
         if (!w->pending) continue;
 
-        uint64_t claim = _this->wide_claim_mask(w->pending_addr, w->pending_size);
-        if ((claim & banks_taken) != 0 ||
+        _this->wide_claim_mask(w->pending_addr, w->pending_size, claim);
+        if (claim.intersects(banks_taken) ||
             _this->wide_used_cycle == _this->clock.get_cycles())
         {
             // Overlaps a wide master already served this tick; try again
@@ -593,14 +643,14 @@ void SpatzTcdmInterco::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             continue;
         }
 
-        banks_taken |= claim;
-        _this->banks_busy |= claim;
+        banks_taken.merge(claim);
+        _this->banks_busy.merge(claim);
         _this->wide_used_cycle = _this->clock.get_cycles();
         w->pending = false;
 
         _this->trace.msg(vp::Trace::LEVEL_DEBUG,
-            "Wide pick (input: %d, claim_mask: 0x%llx)\n",
-            w->id, (unsigned long long)claim);
+            "Wide pick (input: %d, claimed banks: %d)\n",
+            w->id, claim.count());
 
         // Retry runs the master's retry handler synchronously: the master
         // re-issues, wide_input_req forwards inline across the banks.
@@ -612,34 +662,34 @@ void SpatzTcdmInterco::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     _this->in_election = true;
     for (auto &bank : _this->banks)
     {
-        if (bank->pending_mask == 0) continue;
+        if (!bank->pending_mask.any()) continue;
 
         // A bank reserved by a wide master this tick serves no narrow
         // master — the pending bits stay for the next cycle.
-        if ((banks_taken >> bank->id) & 1)
+        if (banks_taken.test(bank->id))
         {
             any_remaining = true;
             continue;
         }
 
-        int winner = _this->pick_winner(bank->pending_mask, bank->rr_next, nb);
-        bank->pending_mask &= ~(1ULL << winner);
+        // Round robin: first pending master at or after rr_next
+        int winner = bank->pending_mask.first_from(bank->rr_next);
+        bank->pending_mask.reset(winner);
         bank->rr_next = (winner + 1) % nb;
         // Committed for this cycle: a wide access arriving later in the
         // same cycle must not take this bank as well.
-        _this->banks_busy |= 1ULL << bank->id;
+        _this->banks_busy.set(bank->id);
 
         _this->trace.msg(vp::Trace::LEVEL_DEBUG,
-            "Round-robin pick (bank: %d, winner: %d, remaining_mask: 0x%llx)\n",
-            bank->id, winner,
-            (unsigned long long)bank->pending_mask);
+            "Round-robin pick (bank: %d, winner: %d, remaining: %d)\n",
+            bank->id, winner, bank->pending_mask.count());
 
         // Retry runs the master's retry handler synchronously: the
         // master re-issues, input_req (with in_election=true) forwards
         // inline to the bank and returns DONE.
         _this->inputs[winner]->itf.retry();
 
-        if (bank->pending_mask != 0) any_remaining = true;
+        if (bank->pending_mask.any()) any_remaining = true;
     }
     _this->in_election = false;
 
