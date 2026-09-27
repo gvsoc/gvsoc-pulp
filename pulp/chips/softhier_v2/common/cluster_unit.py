@@ -80,7 +80,7 @@ class ClusterArch:
         zomem_base,         zomem_size,
         reg_base,           reg_size,
         idma_outstand_txn,  idma_outstand_burst,
-        wide_width,
+        wide_width,         noc_outstanding,
         auto_fetch=False):
 
         self.num_core               = num_core
@@ -103,6 +103,9 @@ class ClusterArch:
         self.idma_outstand_burst    = idma_outstand_burst
         # Width in bytes of the wide plane (iDMA, wide NoC)
         self.wide_width             = wide_width
+        # Transactions in flight per master on the AXI crossbars, as in the NoC
+        # network interfaces
+        self.noc_outstanding        = noc_outstanding
         self.auto_fetch             = auto_fetch
 
     @property
@@ -194,13 +197,17 @@ class ClusterUnit(gvsoc.systree.Component):
             core_demux.append(router_v2.Router(self, f'core_demux_{i}', config=RouterConfig(
                 kind=KIND_UNTIMED)))
 
-        # Narrow crossbar: cluster registers and SoC
+        # Narrow crossbar: cluster registers and SoC. Like the wide one, each
+        # master can have as many transactions in flight as the NoC accepts
+        # (the router default is one, which would serialise the iDMA bursts).
         narrow_axi = router_v2.Router(self, 'narrow_axi', config=RouterConfig(
-            kind=KIND_BEAT, width=NARROW_WIDTH))
+            kind=KIND_BEAT, width=NARROW_WIDTH,
+            max_pending_bursts_per_input=arch.noc_outstanding))
 
         # Wide crossbar: iDMA accesses to the local TCDM and to the SoC
         wide_axi = router_v2.Router(self, 'wide_axi', config=RouterConfig(
-            kind=KIND_BEAT, width=arch.wide_width))
+            kind=KIND_BEAT, width=arch.wide_width,
+            max_pending_bursts_per_input=arch.noc_outstanding))
 
         # Cluster registers and hardware barrier
         csr = ClusterCSR(self, 'csr', config=ClusterCsrConfig(nb_cores=arch.num_core,

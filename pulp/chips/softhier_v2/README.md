@@ -24,6 +24,8 @@ Differences to be aware of:
   except for the topologies setting `noc_allow_deadlock` in
   `softhier_arch_base.py` (`3d_torus`, `ring`, `hierarchical_ring`,
   `folded_hexatorus`), which are built with a warning showing the cycle.
+  `folded_hexatorus` does deadlock when every cluster reads 64 KB from its
+  neighbour with the iDMA (`app_verify`), like SoftHier v1.
 - Arch overrides are gvrun target parameters (see below) instead of
   `--config-opt` options.
 - The platform runs through gvrun (`make sh2-run`): like the other platforms
@@ -137,7 +139,8 @@ gvrun --target pulp.chips.softhier_v2.topologies.softhier_2d_mesh_target build r
 
 The same binary runs on every cluster: core 0 of each cluster runs `main`,
 or every core with `--parameter <executable>/pulpos/multicore=true`. The
-simulation stops once every core finished, with the OR of the statuses
-returned by `main` as exit status. `arch/softhier/kernel/softhier.h` gives
+simulation stops once every core finished. On SoftHier v2 the exit status is
+the OR of the statuses returned by `main`; on SoftHier v1 it is always 0, so
+a test must be checked on its output there. `arch/softhier/kernel/softhier.h` gives
 the position of the core, the remote TCDM addresses and the cluster and
 global barriers; the `.l1` section places buffers in the TCDM.

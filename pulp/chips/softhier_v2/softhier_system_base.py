@@ -137,7 +137,8 @@ class SoftHierSystem(gvsoc.systree.Component):
                                         reg_size=arch.cluster_reg_size,
                                         idma_outstand_txn=arch.idma_outstand_txn,
                                         idma_outstand_burst=arch.idma_outstand_burst,
-                                        wide_width=arch.noc_link_width)
+                                        wide_width=arch.noc_link_width,
+                                        noc_outstanding=arch.noc_outstanding)
             cluster_list.append(ClusterUnit(self, f'cluster_{cluster_id}', cluster_arch, binary))
 
         # Keep the clusters so configure() can push the binary to their loaders when
@@ -190,8 +191,10 @@ class SoftHierSystem(gvsoc.systree.Component):
         for cluster_id in range(arch.num_cluster):
             ni_node_id = noc.id_map[_ni_node_name(arch, cluster_id)]
 
+            # As many transactions in flight as the network interface accepts
             narrow_arbiter = router_v2.Router(self, f'narrow_arbiter_{cluster_id}',
-                config=RouterConfig(kind=KIND_BEAT, width=NARROW_WIDTH))
+                config=RouterConfig(kind=KIND_BEAT, width=NARROW_WIDTH,
+                    max_pending_bursts_per_input=arch.noc_outstanding))
             narrow_arbiter.o_MAP(noc.i_NARROW_INPUT(ni_node_id),
                 RouterMapping(base=remote_base, size=remote_size, remove_base=False),
                 name='noc')
@@ -199,7 +202,8 @@ class SoftHierSystem(gvsoc.systree.Component):
                 name='virtual_interco')
 
             wide_arbiter = router_v2.Router(self, f'wide_arbiter_{cluster_id}',
-                config=RouterConfig(kind=KIND_BEAT, width=arch.noc_link_width))
+                config=RouterConfig(kind=KIND_BEAT, width=arch.noc_link_width,
+                    max_pending_bursts_per_input=arch.noc_outstanding))
             wide_arbiter.o_MAP(noc.i_WIDE_INPUT(ni_node_id),
                 RouterMapping(base=remote_base, size=remote_size, remove_base=False),
                 name='noc')
