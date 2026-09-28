@@ -7,4 +7,4 @@ include solutions.mk
 
 .PHONY: build
 build:
-	$(MAKE) -C $(GVSOC_ROOT) build
+	$(MAKE) -C $(GVSOC_ROOT) GVSOC_ONLY=1 build
