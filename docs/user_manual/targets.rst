@@ -188,3 +188,21 @@ ri5ky_testbench
 ---------------
 
 A minimal core test-bench target used for model bring-up. No bundled example.
+
+cv32e40p_testbench
+------------------
+
+The CV32E40P core with the memory map and the virtual peripherals of the
+core-v-verif CV32E40P UVM testbench, so that its test programs run unchanged.
+Binaries use the flat ``soc/binary`` prefix. The RTL parameters of the core
+are fields of the SoC configuration (``fpu``, ``zfinx``, ``corev_pulp``,
+``corev_cluster`` and ``num_mhpmcounters``), set with target qualifiers::
+
+    gvrun --target cv32e40p_testbench:config.soc/corev_pulp=true:config.soc/fpu=true --param soc/binary=<elf> run
+
+**Example — hello**: the ``hello-world`` program of core-v-verif. ::
+
+    gvrun --target cv32e40p_testbench --param soc/binary=pulp/examples/cv32e40p/hello-world.elf run
+
+The other programs of ``pulp/examples/cv32e40p`` and the configurations they
+run on are listed in its ``README.md``.
