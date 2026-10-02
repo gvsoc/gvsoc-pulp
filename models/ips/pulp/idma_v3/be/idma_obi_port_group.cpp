@@ -33,7 +33,11 @@ IdmaObiPortGroup::IdmaObiPortGroup(vp::Component *idma, std::string name, int nb
     int port_width, uint64_t addr_mask)
 :   Block(idma, name),
     fsm_event(this, &IdmaObiPortGroup::fsm_handler),
-    done_event(this, &IdmaObiPortGroup::done_handler)
+    done_event(this, &IdmaObiPortGroup::done_handler),
+    wait_event(this, &IdmaObiPortGroup::wait_handler),
+    sig_addr(*this, "addr", 32, vp::SignalCommon::ResetKind::HighZ),
+    sig_size(*this, "size", 8, vp::SignalCommon::ResetKind::HighZ),
+    sig_grant_wait(*this, "grant_wait", 1, vp::SignalCommon::ResetKind::HighZ)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
@@ -41,8 +45,11 @@ IdmaObiPortGroup::IdmaObiPortGroup(vp::Component *idma, std::string name, int nb
     this->port_width = port_width;
     this->addr_mask = addr_mask;
 
+    this->sig_port.reserve(nb_ports);
     for (int i = 0; i < nb_ports; i++)
     {
+        this->sig_port.emplace_back(*this, "port_" + std::to_string(i), 32,
+            vp::SignalCommon::ResetKind::HighZ);
         vp::IoMaster *port = new vp::IoMaster(i, &IdmaObiPortGroup::retry_meth,
             &IdmaObiPortGroup::resp_meth);
         idma->new_master_port(name + "_" + std::to_string(i), port, this);
@@ -50,6 +57,7 @@ IdmaObiPortGroup::IdmaObiPortGroup(vp::Component *idma, std::string name, int nb
         this->reqs.push_back(new vp::IoReq());
     }
 
+    this->port_addr.resize(nb_ports);
     this->port_denied.resize(nb_ports);
     this->port_pending.resize(nb_ports);
 
@@ -70,6 +78,7 @@ void IdmaObiPortGroup::reset(bool active)
         this->nb_pending_grants = 0;
         this->next_issue_cycle = 0;
         this->pending_done.clear();
+        this->waiting = false;
         for (int i = 0; i < this->nb_ports; i++)
         {
             this->port_denied[i] = false;
@@ -149,6 +158,9 @@ void IdmaObiPortGroup::send(IdmaObiClient *client, void *token, uint64_t addr, u
         is_write ? "write" : "read", addr, size);
 
     this->issuing = true;
+    this->in_send = true;
+    this->current_addr = addr;
+    this->current_size = size;
     this->current.client = client;
     this->current.token = token;
     this->current.done_cycle = this->clock.get_cycles();
@@ -170,6 +182,7 @@ void IdmaObiPortGroup::send(IdmaObiClient *client, void *token, uint64_t addr, u
         vp::IoReq *req = this->reqs[i];
         req->prepare();
         req->set_addr(lo & this->addr_mask);
+        this->port_addr[i] = lo;
         req->set_size(hi - lo);
         req->set_is_write(is_write);
         req->set_data(data + (lo - addr));
@@ -203,6 +216,41 @@ void IdmaObiPortGroup::send(IdmaObiClient *client, void *token, uint64_t addr, u
             this->trace.fatal("OBI port group expects inline responses (port: %d)\n", i);
         }
     }
+
+    this->in_send = false;
+    if (this->issuing)
+    {
+        // Some ports wait for their grant, which normally comes later in this
+        // cycle: the access only shows as waiting if it still is next cycle
+        this->wait_event.enqueue(1);
+    }
+    else
+    {
+        this->sig_addr.set_and_release(addr);
+        this->sig_size.set_and_release(size);
+    }
+}
+
+
+
+void IdmaObiPortGroup::wait_handler(vp::Block *__this, vp::ClockEvent *event)
+{
+    IdmaObiPortGroup *_this = (IdmaObiPortGroup *)__this;
+    if (!_this->issuing)
+    {
+        return;
+    }
+    _this->waiting = true;
+    _this->sig_addr.set(_this->current_addr);
+    _this->sig_size.set(_this->current_size);
+    _this->sig_grant_wait.set(true);
+    for (int i = 0; i < _this->nb_ports; i++)
+    {
+        if (_this->port_pending[i])
+        {
+            _this->sig_port[i].set(_this->port_addr[i]);
+        }
+    }
 }
 
 
@@ -220,6 +268,7 @@ void IdmaObiPortGroup::port_granted(int id)
     this->port_pending[id] = false;
     this->port_denied[id] = false;
     this->nb_pending_grants--;
+    this->sig_port[id].set_and_release(this->port_addr[id]);
 
     // The word is valid once the slowest port has answered
     int64_t done_cycle = this->clock.get_cycles() + req->get_full_latency();
@@ -231,6 +280,17 @@ void IdmaObiPortGroup::port_granted(int id)
     if (this->nb_pending_grants == 0)
     {
         this->issuing = false;
+        if (!this->in_send)
+        {
+            // The last port was granted on a retry
+            this->sig_addr.set_and_release(this->current_addr);
+            this->sig_size.set_and_release(this->current_size);
+            if (this->waiting)
+            {
+                this->waiting = false;
+                this->sig_grant_wait.release();
+            }
+        }
         this->next_issue_cycle = this->clock.get_cycles() + 1;
         this->pending_done.push_back(this->current);
         this->schedule_done();

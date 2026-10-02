@@ -23,6 +23,7 @@
 #include <deque>
 #include <vector>
 #include <vp/vp.hpp>
+#include <vp/signal.hpp>
 #include <vp/itf/io_v2.hpp>
 #include "../idma.hpp"
 
@@ -179,4 +180,28 @@ private:
     int64_t next_issue_cycle;
     /// Granted accesses waiting for their completion cycle, in order.
     std::deque<Access> pending_done;
+
+    /// Address and size of the access being granted, and whether send() is
+    /// still running (its ports are then granted inline).
+    uint64_t current_addr = 0;
+    uint64_t current_size = 0;
+    bool in_send = false;
+    /// Address each port was given for the access (the request's own address
+    /// is rewritten on its way).
+    std::vector<uint64_t> port_addr;
+    /// Shows an access which is still waiting for a grant the cycle after it
+    /// was issued (an access is normally granted in the cycle it is issued,
+    /// some of its ports at the election of the memory interconnect).
+    static void wait_handler(vp::Block *__this, vp::ClockEvent *event);
+    vp::ClockEvent wait_event;
+    bool waiting = false;
+
+    // GUI signals, high-Z when nothing happens. addr / size pulse when an
+    // access has all its ports granted, and hold from the cycle after it was
+    // issued while it still waits for some of them; port[i] does the same for
+    // the part of the access on one port; grant_wait is up during that wait.
+    vp::Signal<uint32_t> sig_addr;
+    vp::Signal<uint32_t> sig_size;
+    vp::Signal<bool> sig_grant_wait;
+    std::vector<vp::Signal<uint32_t>> sig_port;
 };

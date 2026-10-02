@@ -65,6 +65,11 @@ public:
     bool r_busy() const { return this->r.valid; }
     /// True while the write side still has bytes to split (w_leg_busy).
     bool w_busy() const { return this->w.valid; }
+    /// Address of the next split of each side and bytes it still has to split.
+    uint64_t r_addr() const { return this->r.addr; }
+    uint64_t r_left() const { return this->r.length; }
+    uint64_t w_addr() const { return this->w.addr; }
+    uint64_t w_left() const { return this->w.length; }
 
 private:
     /// One side of the current request (the RTL r_tf_q / w_tf_q register).

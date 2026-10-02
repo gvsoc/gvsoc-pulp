@@ -22,6 +22,7 @@
 
 #include <string>
 #include <vp/vp.hpp>
+#include <vp/signal.hpp>
 #include "../idma.hpp"
 #include "../be/idma_fifo.hpp"
 
@@ -106,4 +107,18 @@ private:
     Idma1dReq *pending = nullptr;
     /// Current cycle of the block's clock domain.
     int64_t cycles() { return this->clock.get_cycles(); }
+
+    /// 1D requests of the current ND transfer handed to the back-end so far.
+    uint64_t nb_handed = 0;
+
+    // GUI signals. queue is the number of ND transfers waiting or being cut;
+    // the others follow the ND transfer being cut, from its first line to its
+    // completion, and are high-Z otherwise: line is the line last handed to
+    // the back-end (from 0), lines_left how many remain, src and dst its
+    // addresses.
+    vp::Signal<uint32_t> sig_queue;
+    vp::Signal<uint32_t> sig_line;
+    vp::Signal<uint32_t> sig_lines_left;
+    vp::Signal<uint32_t> sig_src;
+    vp::Signal<uint32_t> sig_dst;
 };

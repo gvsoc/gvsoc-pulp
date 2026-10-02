@@ -84,6 +84,9 @@ public:
         /// GUI signals: a transfer is in flight, id of the last launch.
         vp::Signal<bool> trace_busy;
         vp::Signal<uint32_t> trace_id;
+        /// Pulses with the identifier of a transfer when it is counted done
+        /// (DONE_ID moves and the completion event is raised).
+        vp::Signal<uint32_t> trace_done;
     };
 
     /// @param top           Owning component; the ports are created on it.

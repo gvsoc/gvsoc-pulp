@@ -28,7 +28,12 @@ IdmaMeNd::IdmaMeNd(vp::Component *top, std::string name, int fifo_depth, int nb_
     fe(fe),
     ready_event(this, &IdmaMeNd::ready_handler),
     nb_dims(nb_dims),
-    queue(fifo_depth > 0 ? fifo_depth : 1)
+    queue(fifo_depth > 0 ? fifo_depth : 1),
+    sig_queue(*this, "queue", 8, true, 0),
+    sig_line(*this, "line", 32, vp::SignalCommon::ResetKind::HighZ),
+    sig_lines_left(*this, "lines_left", 32, vp::SignalCommon::ResetKind::HighZ),
+    sig_src(*this, "src", 32, vp::SignalCommon::ResetKind::HighZ),
+    sig_dst(*this, "dst", 32, vp::SignalCommon::ResetKind::HighZ)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 }
@@ -87,6 +92,7 @@ void IdmaMeNd::push_nd(IdmaNdReq *req, int extra_delay)
         req->reps[0], req->reps[1], extra_delay);
 
     this->queue.push(req, now, extra_delay);
+    this->sig_queue.set(this->queue.size());
 
     if (this->be != nullptr)
     {
@@ -116,6 +122,7 @@ void IdmaMeNd::load(IdmaNdReq *req)
         this->reps[i] = enabled && req->reps[i] != 0 ? req->reps[i] : 1;
         this->idx[i] = 0;
     }
+    this->nb_handed = 0;
 }
 
 
@@ -198,11 +205,18 @@ void IdmaMeNd::take_1d(int64_t now)
         this->pending->parent->id, this->pending->src, this->pending->dst,
         this->pending->length, this->pending->super_last);
 
+    this->sig_line.set(this->nb_handed);
+    this->sig_lines_left.set(this->reps[0] * this->reps[1] - this->nb_handed - 1);
+    this->sig_src.set(this->pending->src);
+    this->sig_dst.set(this->pending->dst);
+    this->nb_handed++;
+
     if (this->pending->super_last)
     {
         // Last 1D handed over: the ND request leaves the FIFO now and its
         // slot is usable from next cycle, when a denied launch is retried
         this->queue.pop(now);
+        this->sig_queue.set(this->queue.size());
         this->current = nullptr;
         this->ready_event.enqueue(1);
     }
@@ -219,6 +233,14 @@ void IdmaMeNd::complete_1d(Idma1dReq *req, bool force_last)
     if (req->super_last || force_last)
     {
         this->trace.msg(vp::Trace::LEVEL_DEBUG, "ND request done (id: %d)\n", parent->id);
+        if (this->current == nullptr)
+        {
+            // No other transfer has started meanwhile
+            this->sig_line.release();
+            this->sig_lines_left.release();
+            this->sig_src.release();
+            this->sig_dst.release();
+        }
         this->fe->complete_nd(parent);
     }
 

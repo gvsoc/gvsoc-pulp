@@ -35,7 +35,13 @@ IdmaBackend::IdmaBackend(vp::Component *top, std::string name, const IdmaBackend
         : params.buffer_depth + params.num_ax_in_flight),
     buffer(params.width, params.buffer_depth),
     buffer_fill(*this, "buffer_fill", 32, vp::SignalCommon::ResetKind::HighZ),
-    busy(*this, "busy", 1, vp::SignalCommon::ResetKind::HighZ)
+    busy(*this, "busy", 1, vp::SignalCommon::ResetKind::HighZ),
+    sig_r_addr(*this, "r_addr", 32, vp::SignalCommon::ResetKind::HighZ),
+    sig_r_left(*this, "r_left", 32, vp::SignalCommon::ResetKind::HighZ),
+    sig_w_addr(*this, "w_addr", 32, vp::SignalCommon::ResetKind::HighZ),
+    sig_w_left(*this, "w_left", 32, vp::SignalCommon::ResetKind::HighZ),
+    sig_buffer_full(*this, "buffer_full", 1, vp::SignalCommon::ResetKind::HighZ),
+    sig_buffer_empty(*this, "buffer_empty", 1, vp::SignalCommon::ResetKind::HighZ)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
@@ -59,6 +65,10 @@ void IdmaBackend::reset(bool active)
         this->buffer.reset();
         this->r_beat_idx = 0;
         this->w_beat_idx = 0;
+        this->shown_full = false;
+        this->shown_empty = false;
+        this->shown_r = false;
+        this->shown_w = false;
     }
 }
 
@@ -336,6 +346,61 @@ void IdmaBackend::tick_handler(vp::Block *__this, vp::ClockEvent *event)
     }
 
     _this->busy.set(_this->is_busy());
+    _this->update_signals(now);
+}
+
+
+
+void IdmaBackend::update_signals(int64_t now)
+{
+    if (this->legalizer.r_busy())
+    {
+        this->sig_r_addr.set(this->legalizer.r_addr());
+        this->sig_r_left.set(this->legalizer.r_left());
+    }
+    else if (this->shown_r)
+    {
+        this->sig_r_addr.release();
+        this->sig_r_left.release();
+    }
+    this->shown_r = this->legalizer.r_busy();
+    if (this->legalizer.w_busy())
+    {
+        this->sig_w_addr.set(this->legalizer.w_addr());
+        this->sig_w_left.set(this->legalizer.w_left());
+    }
+    else if (this->shown_w)
+    {
+        this->sig_w_addr.release();
+        this->sig_w_left.release();
+    }
+    this->shown_w = this->legalizer.w_busy();
+
+    // A response beat is held: no room for it in the buffer
+    bool full = false;
+    for (IdmaReadManager *rm: this->read_manager_list)
+    {
+        full |= rm->holding_beat();
+    }
+    if (full != this->shown_full)
+    {
+        if (full) this->sig_buffer_full.set(true); else this->sig_buffer_full.release();
+        this->shown_full = full;
+    }
+
+    // A write burst is ready to send data which has not come in yet
+    bool empty = false;
+    if (this->w_fifo.head_visible(now))
+    {
+        WriteSlot &slot = this->w_fifo.head();
+        empty = !this->buffer.can_pop(this->beat_mask(slot.split, this->w_beat_idx),
+            slot.split.shift, now);
+    }
+    if (empty != this->shown_empty)
+    {
+        if (empty) this->sig_buffer_empty.set(true); else this->sig_buffer_empty.release();
+        this->shown_empty = empty;
+    }
 }
 
 

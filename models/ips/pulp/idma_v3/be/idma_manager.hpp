@@ -63,6 +63,8 @@ public:
     /// Called by the back-end tick after this cycle's buffer pops: a response
     /// beat held back because the buffer was full may be offered again.
     virtual void retry_held_beat() = 0;
+    /// True while a response beat is held for lack of room in the buffer.
+    virtual bool holding_beat() { return false; }
 
     /// True while a split is issued or a response is outstanding.
     virtual bool busy() = 0;

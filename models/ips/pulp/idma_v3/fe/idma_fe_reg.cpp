@@ -56,7 +56,8 @@ IdmaFeReg::Stream::Stream(IdmaFeReg *top, int id)
     next_id(*this, "next_id", 32, true, FIRST_ID),
     done_id(*this, "done_id", 32, true, FIRST_ID - 1),
     trace_busy(*this, "busy", 1, vp::SignalCommon::ResetKind::HighZ),
-    trace_id(*this, "id", 32, vp::SignalCommon::ResetKind::HighZ)
+    trace_id(*this, "id", 32, vp::SignalCommon::ResetKind::HighZ),
+    trace_done(*this, "done", 32, vp::SignalCommon::ResetKind::HighZ)
 {
 }
 
@@ -403,6 +404,7 @@ void IdmaFeReg::done_handler(vp::Block *__this, vp::ClockEvent *event)
             uint32_t next = stream->done_id.get() + 1;
             if (next < FIRST_ID) next = FIRST_ID;
             stream->done_id.set(next);
+            stream->trace_done.set_and_release(next);
             _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Completion counted (stream: %d, "
                 "done_id: %d)\n", stream->id, next);
         }

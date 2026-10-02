@@ -63,6 +63,7 @@ public:
     bool ar_ready() override;
     void *issue_ar(const IdmaSplit &split) override;
     void retry_held_beat() override;
+    bool holding_beat() override { return !this->held_resp.empty(); }
     bool busy() override;
 
     // IdmaObiClient (see idma_obi_port_group.hpp)

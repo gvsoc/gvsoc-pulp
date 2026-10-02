@@ -25,6 +25,7 @@
 #include <vector>
 #include <vp/vp.hpp>
 #include <vp/itf/io_v2.hpp>
+#include <vp/signal.hpp>
 #include "idma_manager.hpp"
 #include "idma_be.hpp"
 
@@ -131,4 +132,17 @@ private:
     /// Data beat refused by the bus, re-sent on retry, and its burst.
     vp::IoReq *held_beat = nullptr;
     WriteCtx *held_ctx = nullptr;
+
+    // GUI signals, high-Z when nothing happens. w_addr / w_size pulse on every
+    // data beat the bus takes (w_last on the last one of a burst), w_wait is
+    // up while the bus refuses a beat; b pulses with the slot of a burst when
+    // it is acknowledged; burst[slot] holds the address of an outstanding
+    // burst from the legalizer's split to its acknowledgement.
+    vp::Signal<uint32_t> sig_w_addr;
+    vp::Signal<uint32_t> sig_w_size;
+    vp::Signal<bool> sig_w_last;
+    vp::Signal<bool> sig_w_wait;
+    bool w_waiting = false;
+    vp::Signal<uint32_t> sig_b;
+    std::vector<vp::Signal<uint32_t>> sig_burst;
 };

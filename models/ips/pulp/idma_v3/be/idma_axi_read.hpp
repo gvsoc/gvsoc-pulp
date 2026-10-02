@@ -24,6 +24,7 @@
 #include <vector>
 #include <vp/vp.hpp>
 #include <vp/itf/io_v2.hpp>
+#include <vp/signal.hpp>
 #include "idma_manager.hpp"
 #include "idma_be.hpp"
 
@@ -68,6 +69,7 @@ public:
     bool ar_ready() override;
     void *issue_ar(const IdmaSplit &split) override;
     void retry_held_beat() override;
+    bool holding_beat() override { return this->held_resp != nullptr; }
     bool busy() override;
 
 private:
@@ -114,4 +116,21 @@ private:
     vp::IoReq *held_resp = nullptr;
     /// Scratch bus word the beat payload is aligned into.
     std::vector<uint8_t> bus_word;
+
+    /// The address channel has taken a burst (pulses: its address, its beats)
+    void trace_ar(vp::IoReq *req, int beats);
+
+    // GUI signals, high-Z when nothing happens. ar_addr / ar_beats pulse when
+    // a burst is taken by the bus, ar_wait is up while the bus refuses it;
+    // r_addr / r_last pulse on every response beat entering the buffer,
+    // r_wait is up while a beat is held for lack of room in the buffer;
+    // burst[slot] holds the address of an outstanding burst from its request
+    // to its last beat.
+    vp::Signal<uint32_t> sig_ar_addr;
+    vp::Signal<uint32_t> sig_ar_beats;
+    vp::Signal<bool> sig_ar_wait;
+    vp::Signal<uint32_t> sig_r_addr;
+    vp::Signal<bool> sig_r_last;
+    vp::Signal<bool> sig_r_wait;
+    std::vector<vp::Signal<uint32_t>> sig_burst;
 };

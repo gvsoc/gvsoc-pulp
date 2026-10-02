@@ -191,7 +191,25 @@ private:
     std::vector<IdmaReadManager *> read_manager_list;
     std::vector<IdmaWriteManager *> write_manager_list;
 
+    /// Update the GUI signals which follow the state of the pipeline.
+    void update_signals(int64_t now);
+
     /// GUI signals: bytes held in the buffer, back-end busy.
     vp::Signal<int> buffer_fill;
     vp::Signal<bool> busy;
+    /// Where the legalizer is on each side of the 1D request it is cutting:
+    /// address of its next burst and bytes left, high-Z once the side is done.
+    vp::Signal<uint32_t> sig_r_addr;
+    vp::Signal<uint32_t> sig_r_left;
+    vp::Signal<uint32_t> sig_w_addr;
+    vp::Signal<uint32_t> sig_w_left;
+    /// What holds the data path: a response beat waiting for room in the
+    /// buffer, or a data beat waiting for bytes which are not there yet.
+    vp::Signal<bool> sig_buffer_full;
+    vp::Signal<bool> sig_buffer_empty;
+    /// Their current state, so that they are only driven when it changes.
+    bool shown_full = false;
+    bool shown_empty = false;
+    bool shown_r = false;
+    bool shown_w = false;
 };
