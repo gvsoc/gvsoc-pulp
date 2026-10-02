@@ -99,6 +99,7 @@ IdmaFeReg::RegPort::RegPort(IdmaFeReg *top, int id)
 IdmaFeReg::IdmaFeReg(vp::Component *top, int nb_ports, int nb_streams, int nb_events,
     int launch_bubble)
 :   Block(top, "fe"),
+    trace_irq(*this, "irq", 1, vp::SignalCommon::ResetKind::HighZ),
     done_event(this, &IdmaFeReg::done_handler),
     launch_bubble(launch_bubble)
 {
@@ -415,6 +416,7 @@ void IdmaFeReg::done_handler(vp::Block *__this, vp::ClockEvent *event)
     }
 
     _this->trace.msg(vp::Trace::LEVEL_TRACE, "Raising completion event\n");
+    _this->trace_irq.set_and_release(true);
 
     for (vp::WireMaster<bool> *itf: _this->event_itf)
     {

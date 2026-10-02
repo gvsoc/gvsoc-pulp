@@ -153,6 +153,8 @@ private:
     /// Completion events: one per core (event_<n>) and the FC one.
     std::vector<vp::WireMaster<bool> *> event_itf;
     vp::WireMaster<bool> fc_event_itf;
+    /// Pulse of the completion event, as raised on all its outputs.
+    vp::Signal<bool> trace_irq;
     /// Busy wire (cluster power model) and clock gate input.
     vp::WireMaster<bool> busy_itf;
     vp::WireSlave<bool> enable_itf;

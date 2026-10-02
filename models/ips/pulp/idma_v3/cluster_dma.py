@@ -147,6 +147,9 @@ class ClusterDmaV3(gvsoc.systree.Component):
     @override
     def gen_gui(self, parent_signal: Signal):
         dma = Signal(self, parent_signal, name=self.name)
+        # The completion event, raised on the cores and on the FC at once
+        _ = Signal(self, dma, name='irq', path='fe/irq', groups='regmap',
+            display=DisplayPulse())
         for stream in range(2):
             active = Signal(self, dma, name=f'stream{stream}', path=f'fe/stream{stream}/busy',
                 groups='regmap', display=DisplayLogicBox('ACTIVE'))
