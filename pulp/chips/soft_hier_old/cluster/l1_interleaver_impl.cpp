@@ -103,6 +103,31 @@ vp::IoReqStatus interleaver::req(vp::Block *__this, vp::IoReq *req)
   uint64_t size = req->get_size();
   uint8_t *data = req->get_data();
 
+  if (req->is_debug())
+  {
+    // ELF segments may span many banks; scalar requests normally fit one bank word.
+    const uint64_t word_size = 1ULL << _this->interleaving_bits;
+    while (size)
+    {
+      uint64_t chunk = std::min(size, word_size - (offset & (word_size - 1)));
+      int bank_id = (offset >> _this->interleaving_bits) & _this->bank_mask;
+      uint64_t bank_offset = ((offset >> (_this->stage_bits + _this->interleaving_bits))
+        << _this->interleaving_bits) + (offset & (word_size - 1));
+      vp::IoReq child;
+      child.init();
+      child.set_addr(bank_offset);
+      child.set_size(chunk);
+      child.set_data(data);
+      child.set_opcode(req->get_opcode());
+      child.set_debug(true);
+      if (_this->out[bank_id]->req(&child) != vp::IO_REQ_OK) return vp::IO_REQ_INVALID;
+      offset += chunk;
+      data += chunk;
+      size -= chunk;
+    }
+    return vp::IO_REQ_OK;
+  }
+
   _this->trace.msg("Received IO req (offset: 0x%llx, size: 0x%llx, is_write: %d)\n", offset, size, is_write);
  
   int bank_id = (offset >> _this->interleaving_bits) & _this->bank_mask;
@@ -149,5 +174,4 @@ extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new interleaver(config);
 }
-
 

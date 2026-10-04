@@ -1311,33 +1311,16 @@ void matmul_int16(int16_t * z, int16_t * y, int16_t * x, int16_t * w, uint16_t m
 }
 
 
+#include "fp16.hpp"
+
 // Convert float to FP16 (half-precision)
 fp16 float_to_fp16(float value) {
-    FloatBits floatBits;
-    floatBits.f = value;
-
-    uint16_t sign = floatBits.parts.sign << 15;
-    int32_t exponent = floatBits.parts.exponent - 127 + 15; // adjust bias from 127 to 15
-    uint32_t mantissa = floatBits.parts.mantissa >> 13;     // reduce to 10 bits
-
-    if (exponent <= 0) {
-        if (exponent < -10) return sign;   // too small
-        mantissa = (floatBits.parts.mantissa | 0x800000) >> (1 - exponent);
-        return sign | mantissa;
-    } else if (exponent >= 0x1F) {
-        return sign | 0x7C00;  // overflow to infinity
-    }
-    return sign | (exponent << 10) | mantissa;
+    return soft_hier_float_to_fp16(value);
 }
 
 // Convert FP16 to float
 float fp16_to_float(fp16 value) {
-    FloatBits floatBits;
-    floatBits.parts.sign = (value >> 15) & 0x1;
-    int32_t exponent = (value >> 10) & 0x1F;
-    floatBits.parts.exponent = (exponent == 0) ? 0 : exponent + 127 - 15;
-    floatBits.parts.mantissa = (value & 0x3FF) << 13;
-    return floatBits.f;
+    return soft_hier_fp16_to_float(value);
 }
 
 // Fused multiply-add for FP16

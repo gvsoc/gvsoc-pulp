@@ -82,6 +82,8 @@ public:
     // Return the memory-mapped entry corresponding to the specified mapping. Can be used to get
     // destination coordinates associated to an address location.
     Entry *get_entry(uint64_t base, uint64_t size);
+    // Untimed memory access using the same architecture mappings, without network traffic.
+    vp::IoReqStatus debug_req(vp::IoReq *req);
     // Can be called to notify that an asynchronous response to a request was received. The noc
     // will then call the initiating network interface so that it is handled by the burst.
     void handle_request_end(vp::IoReq *req);

@@ -74,7 +74,7 @@ hbm_ctrl::hbm_ctrl(vp::ComponentConf &config)
   xor_scrambling = get_js_config()->get_child_int("xor_scrambling");
   red_scrambling = get_js_config()->get_child_int("red_scrambling");
 
-  if (stage_bits == 0)
+  if (stage_bits == 0 && nb_slaves > 0)
   {
     stage_bits = log2(nb_slaves);
   }
@@ -124,6 +124,7 @@ vp::IoReqStatus hbm_ctrl::req(vp::Block *__this, vp::IoReq *req)
 vp::IoReqStatus hbm_ctrl::req_muxed(vp::Block *__this, vp::IoReq *req, int mux_id)
 {
   hbm_ctrl *_this = (hbm_ctrl *)__this;
+  if (_this->nb_slaves == 0) return vp::IO_REQ_INVALID;
   uint64_t offset = req->get_addr();
   bool is_write = req->get_is_write();
   uint64_t size = req->get_size();
@@ -204,5 +205,4 @@ extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
   return new hbm_ctrl(config);
 }
-
 

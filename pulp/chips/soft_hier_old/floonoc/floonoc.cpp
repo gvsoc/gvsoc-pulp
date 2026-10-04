@@ -226,6 +226,51 @@ void FlooNoc::reset(bool active)
 
 
 
+vp::IoReqStatus FlooNoc::debug_req(vp::IoReq *req)
+{
+    uint64_t address = req->get_addr();
+    uint64_t remaining = req->get_size();
+    uint8_t *data = req->get_data();
+    if (remaining > UINT64_MAX - address) return vp::IO_REQ_INVALID;
+    while (remaining)
+    {
+        uint64_t base = address;
+        uint64_t chunk = std::min(remaining, this->width - (base % this->width));
+        if (this->interleave_enable && base >= this->interleave_region_base &&
+            base - this->interleave_region_base < this->interleave_region_size)
+        {
+            uint64_t mask = (1ULL << this->interleave_bit_width) - 1;
+            uint64_t low = (base >> this->interleave_granularity) & mask;
+            uint64_t high = (base >> this->interleave_bit_start) & mask;
+            uint64_t granule = 1ULL << std::min(this->interleave_granularity,
+                this->interleave_bit_start);
+            chunk = std::min(chunk, granule - (base % granule));
+            base &= ~((mask << this->interleave_granularity) | (mask << this->interleave_bit_start));
+            base |= (low << this->interleave_bit_start) | (high << this->interleave_granularity);
+        }
+        // Edge aliases select equivalent ports of the same HBM controller. No nearest-edge
+        // selection is needed without transport; explicit alias addresses work through entries.
+        Entry *entry = this->get_entry(base, 1);
+        if (!entry) return vp::IO_REQ_INVALID;
+        chunk = std::min(chunk, entry->size - (base - entry->base));
+        vp::IoReq child;
+        child.init();
+        child.set_addr(base - entry->base);
+        child.set_size(chunk);
+        child.set_data(data);
+        child.set_opcode(req->get_opcode());
+        child.set_debug(true);
+        vp::IoReqStatus status = this->get_target(entry->x, entry->y)->req(&child);
+        if (status == vp::IO_REQ_PENDING || status == vp::IO_REQ_DENIED)
+            this->trace.fatal("Asynchronous destination on direct NoC access at 0x%llx\n", base);
+        if (status != vp::IO_REQ_OK) return vp::IO_REQ_INVALID;
+        address += chunk;
+        data += chunk;
+        remaining -= chunk;
+    }
+    return vp::IO_REQ_OK;
+}
+
 Entry *FlooNoc::get_entry(uint64_t base, uint64_t size)
 {
     // For now, we store mapping in a classic array.

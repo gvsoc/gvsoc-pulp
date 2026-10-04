@@ -233,6 +233,16 @@ vp::IoReqStatus Memory::req(vp::Block *__this, vp::IoReq *req)
     uint8_t *data = req->get_data();
     uint64_t size = req->get_size();
 
+    if (req->is_debug())
+    {
+        if (offset > _this->size || size > _this->size - offset) return vp::IO_REQ_INVALID;
+        if (req->get_opcode() == vp::IoReqOpcode::WRITE)
+            return _this->handle_write(offset, size, data, nullptr);
+        if (req->get_opcode() == vp::IoReqOpcode::READ)
+            return _this->handle_read(offset, size, data, nullptr);
+        return vp::IO_REQ_INVALID;
+    }
+
     _this->trace.msg("Memory access (offset: 0x%x, size: 0x%x, is_write: %d, op: %d)\n", offset, size, req->get_is_write(), req->get_opcode());
 
     req->inc_latency(_this->latency);

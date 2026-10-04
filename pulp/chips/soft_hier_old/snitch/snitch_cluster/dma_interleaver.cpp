@@ -93,8 +93,10 @@ vp::IoReqStatus DmaInterleaver::req(vp::Block *__this, vp::IoReq *req)
         bank_req.set_size(bank_size);
         bank_req.set_data(data);
         bank_req.set_is_write(is_write);
+        bank_req.set_debug(req->is_debug());
 
-        _this->output_ports[bank_id].req_forward(&bank_req);
+        vp::IoReqStatus status = _this->output_ports[bank_id].req_forward(&bank_req);
+        if (req->is_debug() && status != vp::IO_REQ_OK) return vp::IO_REQ_INVALID;
 
         offset += bank_size;
         size -= bank_size;

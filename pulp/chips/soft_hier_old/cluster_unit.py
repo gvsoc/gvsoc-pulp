@@ -201,7 +201,7 @@ class ClusterTcdm(gvsoc.systree.Component):
 
 class ClusterUnit(gvsoc.systree.Component):
 
-    def __init__(self, parent, name, arch, binary, entry=0, auto_fetch=True):
+    def __init__(self, parent, name, arch, binary, entry=0, auto_fetch=True, direct_preload=True):
         super().__init__(parent, name)
 
         #
@@ -214,7 +214,7 @@ class ClusterUnit(gvsoc.systree.Component):
             boot_addr = find_binary_entry(binary)
 
         #Loader
-        loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
+        loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, direct=direct_preload)
 
         #Instruction memory
         instr_mem = memory.Memory(self, 'instr_mem', size=arch.insn_area.size, atomics=True, width_log2=-1, tech_node=arch.tech_node, power_profile=arch.power_profile)
@@ -246,7 +246,8 @@ class ClusterUnit(gvsoc.systree.Component):
                     fetch_enable=arch.auto_fetch, boot_addr=boot_addr,
                     core_id=core_id, htif=False, inc_spatz=core_has_spatz,
                     spatz_nb_lanes=arch.spatz_num_vlsu,
-                    spatz_lane_width=arch.spatz_vlsu_bw,
+                    # Architecture widths are in bits; Ara's LSU/compute widths are in bytes.
+                    spatz_lane_width=arch.spatz_vlsu_bw // 8,
                     vlen=arch.spatz_num_vlsu * arch.spatz_vlsu_bw,
                     ssr=True, sequencer=True,
                     tech_node=arch.tech_node, power_profile=arch.power_profile,

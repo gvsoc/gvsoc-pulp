@@ -58,13 +58,16 @@ PriorityArbiterFilter::PriorityArbiterFilter(vp::ComponentConf &config)
 vp::IoReqStatus PriorityArbiterFilter::req(vp::Block *__this, vp::IoReq *req)
 {
     PriorityArbiterFilter *_this = (PriorityArbiterFilter *)__this;
+    if (req->is_debug()) return _this->output_port.req_forward(req);
     uint64_t offset = req->get_addr();
     bool is_write = req->get_is_write();
     uint64_t size = req->get_size();
     uint8_t *data = req->get_data();
-    if (size != _this->bank_width)
+    // DMA tails and FP16 strided cache updates can access part of a bank word.
+    // The interleaver has already split requests at bank boundaries.
+    if (!size || (offset % _this->bank_width) + size > _this->bank_width)
     {
-        _this->trace.fatal("[PriorityArbiterFilter] Received IO req with size %d, but expect %d\n", size, _this->bank_width);
+        _this->trace.fatal("[PriorityArbiterFilter] IO request crosses a bank word (offset: 0x%llx, size: %llu, bank width: %d)\n", offset, size, _this->bank_width);
     }
 
     //Forward Reqeust

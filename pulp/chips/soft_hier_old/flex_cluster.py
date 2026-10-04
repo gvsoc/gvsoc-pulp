@@ -75,8 +75,11 @@ class FlexClusterSystem(gvsoc.systree.Component):
         has_preload_binary = 0
         core_model = None
         power_profile = None
+        preload_mode = getattr(arch, 'preload_mode', 'direct')
         if parser is not None:
             parser.add_argument("--preload", type=str, help="Path to the HBM preload binary file")
+            parser.add_argument("--preload-mode", choices=["direct", "timed"],
+                default=preload_mode, help="ELF loading mode (default: direct, no simulated cycles)")
             parser.add_argument("--core-model", choices=["fast", "accurate"],
                 help="SoftHier legacy core model to use")
             parser.add_argument("--power-profile", choices=SUPPORTED_POWER_PROFILES,
@@ -84,6 +87,7 @@ class FlexClusterSystem(gvsoc.systree.Component):
             [args, otherArgs] = parser.parse_known_args()
             binary = args.binary
             preload_binary = args.preload
+            preload_mode = args.preload_mode
             core_model = args.core_model
             power_profile = args.power_profile
             if preload_binary is not None:
@@ -105,6 +109,9 @@ class FlexClusterSystem(gvsoc.systree.Component):
         if not hasattr(arch, 'power_estimate_scale'): arch.power_estimate_scale = 1.0
         if core_model is not None: arch.core_model = core_model
         if power_profile is not None: arch.power_profile = power_profile
+        if preload_mode not in ('direct', 'timed'):
+            raise ValueError(f"Invalid preload_mode: {preload_mode}")
+        direct_preload = preload_mode == 'direct'
 
         #############
         # Assertion #
@@ -175,14 +182,17 @@ class FlexClusterSystem(gvsoc.systree.Component):
                                         tech_node           =   arch.tech_node,
                                         power_profile       =   arch.power_profile,
                                         power_estimate_scale = arch.power_estimate_scale)
-            cluster_list.append(ClusterUnit(self,f'cluster_{cluster_id}', cluster_arch, binary))
+            cluster_list.append(ClusterUnit(self,f'cluster_{cluster_id}', cluster_arch, binary,
+                direct_preload=direct_preload))
             pass
 
         #Virtual router, just for debugging and non-performance-critical jobs (eg, Printf, EoC, Check HBM stored value)
         virtual_interco = router.Router(self, 'virtual_interco', bandwidth=8)
 
         #Control register
-        csr = CtrlRegisters(self, 'ctrl_registers', num_cluster_x=arch.num_cluster_x, num_cluster_y=arch.num_cluster_y, has_preload_binary=has_preload_binary)
+        csr = CtrlRegisters(self, 'ctrl_registers', num_cluster_x=arch.num_cluster_x,
+            num_cluster_y=arch.num_cluster_y, has_preload_binary=has_preload_binary,
+            direct_preload=direct_preload)
 
         #Synchronization bus
         sync_bus = FlexMeshNoC(self, 'sync_bus', width=4,
@@ -248,7 +258,8 @@ class FlexClusterSystem(gvsoc.systree.Component):
         debug_mem = Memory(self,'debug_mem', size=1)
 
         #HBM Preloader
-        hbm_preloader = utils.loader.loader.ElfLoader(self, 'hbm_preloader', binary=preload_binary)
+        hbm_preloader = utils.loader.loader.ElfLoader(self, 'hbm_preloader',
+            binary=preload_binary, direct=direct_preload)
 
         ############
         # Bindings #

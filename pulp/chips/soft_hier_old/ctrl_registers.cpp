@@ -53,6 +53,7 @@ private:
     uint32_t num_cluster_all;
     uint32_t has_preload_binary;
     uint32_t hbm_preload_done;
+    bool direct_preload;
 };
 
 
@@ -63,6 +64,8 @@ CtrlRegisters::CtrlRegisters(vp::ComponentConf &config)
     this->num_cluster_x = this->get_js_config()->get("num_cluster_x")->get_int();
     this->num_cluster_y = this->get_js_config()->get("num_cluster_y")->get_int();
     this->has_preload_binary = this->get_js_config()->get("has_preload_binary")->get_int();
+    auto *direct_conf = this->get_js_config()->get("direct_preload");
+    this->direct_preload = direct_conf && direct_conf->get_bool();
     this->num_cluster_all = this->num_cluster_x * this->num_cluster_y;
 
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
@@ -91,7 +94,7 @@ void CtrlRegisters::reset(bool active)
         {
             CtrlRegisters::hbm_preload_done_to_cluster_handler(this, this->hbm_preload_done_to_cluster_event);
         }
-        else
+        else if (!this->direct_preload)
         {
             this->event_enqueue(this->hbm_preload_done_to_cluster_event, 300);
         }
@@ -124,6 +127,9 @@ void CtrlRegisters::hbm_preload_done_handler(vp::Block *__this, bool value)
 {
     CtrlRegisters *_this = (CtrlRegisters *)__this;
     _this->hbm_preload_done = 1;
+    if (_this->direct_preload)
+        CtrlRegisters::hbm_preload_done_to_cluster_handler(_this,
+            _this->hbm_preload_done_to_cluster_event);
     _this->trace.msg(vp::Trace::LEVEL_DEBUG, "HBM Preloading Done\n");
 }
 

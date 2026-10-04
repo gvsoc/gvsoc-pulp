@@ -318,6 +318,8 @@ vp::IoReqStatus NetworkInterface::req(vp::Block *__this, vp::IoReq *req)
     // This gets called when a burst is received
     NetworkInterface *_this = (NetworkInterface *)__this;
 
+    if (req->is_debug()) return _this->noc->debug_req(req);
+
     uint64_t offset = req->get_addr();
     uint8_t *data = req->get_data();
     uint64_t size = req->get_size();

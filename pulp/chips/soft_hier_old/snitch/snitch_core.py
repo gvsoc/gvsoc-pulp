@@ -253,8 +253,9 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
 
         modules = []
 
-        if not sequencer or inc_spatz:
-            modules.append(cpu.iss.riscv.ExecInOrder(scoreboard=True))
+        # Scalar HBM reads may complete asynchronously even without Spatz. The FP
+        # sequencer does not interlock integer register consumers in the core.
+        modules.append(cpu.iss.riscv.ExecInOrder(scoreboard=True))
 
         super().__init__(parent, name, isa=isa_instance, misa=misa, core="snitch", scoreboard=True,
             fetch_enable=fetch_enable, boot_addr=boot_addr, core_id=core_id, riscv_exceptions=True,
