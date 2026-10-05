@@ -28,7 +28,7 @@ from pathlib import Path
 
 
 def load_floogen(noc, network_path: str, routing_path: str=None,
-        link_latencies_path: str=None, default_link_latency: int=1) -> dict:
+        link_latencies_path: str=None, default_link_latency: int=1, tiles=None) -> dict:
     """Build a graph FlooNoC from a FlooGen network description.
 
     noc is a FlooNocV2Graph (or anything with its add_router /
@@ -50,6 +50,12 @@ def load_floogen(noc, network_path: str, routing_path: str=None,
     direction), other links take default_link_latency. A latency of L
     cycles adds L-1 pipeline stages to the base link.
 
+    tiles optionally groups the nodes into tiles (see FlooNocV2GraphFabric,
+    noc must then be the fabric): a callable taking a node name and returning
+    the tile of that node, or None. A router linked to exactly one NI goes
+    into the tile of that NI, the other routers into the tile of their own
+    name.
+
     Returns the node name -> node ID map.
     """
     from floogen.config_parser import parse_config
@@ -68,6 +74,24 @@ def load_floogen(noc, network_path: str, routing_path: str=None,
                 for dst_name, latency in dsts.items():
                     link_latencies[(src_name, dst_name)] = latency
 
+    # Tile of each node: a router shares the tile of its only NI
+    node_tiles = {}
+    if tiles is not None:
+        ni_names = [ni_name for ni_name, _ in graph.get_ni_nodes(with_name=True)]
+        router_nis = {}
+        for src_name, dst_name in graph.get_link_edges(with_obj=False, with_name=True):
+            if dst_name in ni_names:
+                router_nis.setdefault(src_name, set()).add(dst_name)
+        for ni_name in ni_names:
+            node_tiles[ni_name] = tiles(ni_name)
+        for rt_name, _ in graph.get_rt_nodes(with_name=True):
+            nis = router_nis.get(rt_name, set())
+            node_tiles[rt_name] = node_tiles[next(iter(nis))] if len(nis) == 1 \
+                else tiles(rt_name)
+
+    def tile_args(name):
+        return {'tile': node_tiles[name]} if tiles is not None else {}
+
     id_map = {}
     route_algo = floo_net.routing.route_algo.name
     for rt_name, rt_node in graph.get_rt_nodes(with_name=True):
@@ -75,10 +99,10 @@ def load_floogen(noc, network_path: str, routing_path: str=None,
         coord = None
         if route_algo == 'XY' and rt_node.id is not None:
             coord = (rt_node.id.x, rt_node.id.y)
-        noc.add_router(id_map[rt_name], name=rt_name, coord=coord)
+        noc.add_router(id_map[rt_name], name=rt_name, coord=coord, **tile_args(rt_name))
     for ni_name, _ in graph.get_ni_nodes(with_name=True):
         id_map[ni_name] = len(id_map)
-        noc.add_network_interface(id_map[ni_name], name=ni_name)
+        noc.add_network_interface(id_map[ni_name], name=ni_name, **tile_args(ni_name))
 
     def link_stages(src_name, dst_name):
         latency = link_latencies.get((src_name, dst_name),

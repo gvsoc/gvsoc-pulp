@@ -679,8 +679,17 @@ class FlooNocV2GraphFabric:
     """FlooNoC v2 builder for an arbitrary topology.
 
     Plain helper (not a component), like FlooNocV2MeshFabric: instantiates
-    the routers and NIs as children of ``container`` and binds them in
-    finalize(), which the container must call from its own finalize() hook.
+    the routers and NIs as children of ``container``, binds them as links are
+    added, and builds the routing tables in finalize(), which the container
+    must call from its own finalize() hook.
+
+    A node can instead be placed in a tile, a composite child of
+    ``container`` given by the caller, which can also hold what the node
+    serves (e.g. a compute cluster with its NI and router): the GUI model view
+    then shows the topology as one box per tile. A tile holds at most one
+    router node and one NI node, named after their network ('req_router', ...,
+    'ni'). Links leaving a tile go through tile-level ports, which the engine
+    flattens away at binding time: the timing is the same as without tiles.
 
     Nodes are routers and NIs sharing one integer node ID space. Links are
     bidirectional; each router gets one port per link, in link order, named
@@ -724,34 +733,65 @@ class FlooNocV2GraphFabric:
         # node ID -> [req, rsp, wide] routers / NI
         self._routers = {}
         self._nis = {}
+        # node ID -> tile of the node, None when directly in the container
+        self._tiles = {}
+        # tile -> kinds of nodes it holds ('router', 'ni')
+        self._tile_kinds = {}
         # (src, dst) -> pipeline stages of the link direction src -> dst
         self._link_stages = {}
         self.mappings = {}
         # Every NI-to-NI route, filled by finalize(), for inspection.
         self.routes = None
 
-    def add_router(self, node_id: int, name: str=None, coord: tuple=None):
+    @property
+    def fabric(self) -> 'FlooNocV2GraphFabric':
+        # load_floogen() takes a FlooNocV2Graph or a fabric
+        return self
+
+    def _node_parent(self, node_id: int, kind: str, tile) -> gvsoc.systree.Component:
+        """Component to create a node in, and record its tile."""
+        self._tiles[node_id] = tile
+        if tile is None:
+            return self.container
+        if tile.parent is not self.container:
+            raise RuntimeError(f'Tile {tile.get_path()} must be a child of the NoC container')
+        kinds = self._tile_kinds.setdefault(tile, set())
+        if kind in kinds:
+            raise RuntimeError(f'Tile {tile.get_path()} already holds a {kind} node')
+        kinds.add(kind)
+        return tile
+
+    def add_router(self, node_id: int, name: str=None, coord: tuple=None, tile=None):
         """Add a router node (one router per physical network).
 
         coord gives the router coordinates used by the coordinate-based
-        routing algorithms (dimension_order, hexamesh).
+        routing algorithms (dimension_order, hexamesh). tile is the
+        composite to create the routers in (see the class description).
         """
         if name is None:
             name = f'router_{node_id}'
         self.topology.add_router(node_id, name, coord)
+        parent = self._node_parent(node_id, 'router', tile)
         self._routers[node_id] = [
-            FloonocRouterV2(self.container, f'{_NW_NAMES[nw]}_{name}',
+            FloonocRouterV2(parent,
+                f'{_NW_NAMES[nw]}_router' if tile is not None else f'{_NW_NAMES[nw]}_{name}',
                 config=FloonocRouterV2Config(route_algo=ROUTE_ID_TABLE,
                     queue_size=self.router_input_queue_size))
             for nw in range(len(_NW_NAMES))
         ]
 
-    def add_network_interface(self, node_id: int, name: str=None):
-        """Add an NI node. It must be linked to exactly one router."""
+    def add_network_interface(self, node_id: int, name: str=None, tile=None):
+        """Add an NI node. It must be linked to exactly one router.
+
+        tile is the composite to create the NI in (see the class
+        description).
+        """
         if name is None:
             name = f'ni_{node_id}'
         self.topology.add_ni(node_id, name)
-        self._nis[node_id] = FloonocNetworkInterfaceV2(self.container, name,
+        parent = self._node_parent(node_id, 'ni', tile)
+        self._nis[node_id] = FloonocNetworkInterfaceV2(parent,
+            'ni' if tile is not None else name,
             config=FloonocNetworkInterfaceV2Config(node_id=node_id,
                 narrow_width=self.narrow_width, wide_width=self.wide_width,
                 ni_outstanding_reqs=self.ni_outstanding_reqs,
@@ -776,6 +816,45 @@ class FlooNocV2GraphFabric:
                     f'{self.topology.name(dst)}: pipeline stages on a link into an NI '
                     'are not modelled')
             self._link_stages[(src, dst)] = nb_stages
+
+        self._bind_link(node_a, node_b)
+        self._bind_link(node_b, node_a)
+
+    def _node_input(self, node_id: int, nw: int, peer: int) -> gvsoc.systree.SlaveItf:
+        """Input of a node, on network nw, of the link coming from peer."""
+        if node_id in self._routers:
+            # Router ports are named after the neighbour (see finalize())
+            return gvsoc.systree.SlaveItf(self._routers[node_id][nw],
+                f'input_{self.topology.name(peer)}', signature='floonoc_link')
+        return self._nis[node_id].i_LINK(nw)
+
+    def _node_output_bind(self, node_id: int, nw: int, peer: int, itf: gvsoc.systree.SlaveItf):
+        """Bind the output of a node, on network nw, of the link going to peer."""
+        if node_id in self._routers:
+            self._routers[node_id][nw].itf_bind(f'output_{self.topology.name(peer)}', itf,
+                signature='floonoc_link')
+        else:
+            self._nis[node_id].o_LINK(nw, itf)
+
+    def _bind_link(self, src: int, dst: int):
+        """Bind the link direction src -> dst on every network, through the
+        tile-level ports of the tiles it leaves and enters."""
+        src_tile, dst_tile = self._tiles[src], self._tiles[dst]
+        for nw in range(len(_NW_NAMES)):
+            input_itf = self._node_input(dst, nw, src)
+            if dst_tile is not None and dst_tile is not src_tile:
+                port = f'{_NW_NAMES[nw]}_in_{self.topology.name(src)}'
+                dst_tile.itf_bind(port, input_itf, signature='floonoc_link',
+                    composite_bind=True)
+                input_itf = gvsoc.systree.SlaveItf(dst_tile, port, signature='floonoc_link')
+
+            if src_tile is not None and src_tile is not dst_tile:
+                port = f'{_NW_NAMES[nw]}_out_{self.topology.name(dst)}'
+                self._node_output_bind(src, nw, dst,
+                    gvsoc.systree.SlaveItf(src_tile, port, signature='floonoc_link'))
+                src_tile.itf_bind(port, input_itf, signature='floonoc_link')
+            else:
+                self._node_output_bind(src, nw, dst, input_itf)
 
     def set_port_order(self, node_id: int, neighbours: list[int]):
         """Set the port order of a router (default: link order).
@@ -831,8 +910,9 @@ class FlooNocV2GraphFabric:
                 ni.get_config().add_mapping(name, base=mapping['base'], size=mapping['size'],
                     node_id=mapping['node_id'], remove_offset=mapping['remove_offset'])
 
-        # One port per link, in link order, named after the neighbour. The
-        # table maps each destination NI to the port facing its next hop.
+        # One port per link, in port order, named after the neighbour (the
+        # links are bound in add_link() through these names). The table maps
+        # each destination NI to the port facing its next hop.
         for node_id, routers in self._routers.items():
             neighbours = topo.adj[node_id]
             for router in routers:
@@ -842,18 +922,6 @@ class FlooNocV2GraphFabric:
                         stages=self._link_stages[(neighbour, node_id)])
                 for dest, next_node in tables[node_id].items():
                     config.add_route(dest, neighbours.index(next_node))
-
-        for node_id, routers in self._routers.items():
-            for port, neighbour in enumerate(topo.adj[node_id]):
-                if neighbour in self._routers:
-                    peer_port = topo.adj[neighbour].index(node_id)
-                    for nw in range(len(_NW_NAMES)):
-                        routers[nw].o_OUTPUT(port, self._routers[neighbour][nw].i_INPUT(peer_port))
-                else:
-                    ni = self._nis[neighbour]
-                    for nw in range(len(_NW_NAMES)):
-                        routers[nw].o_OUTPUT(port, ni.i_LINK(nw))
-                        ni.o_LINK(nw, routers[nw].i_INPUT(port))
 
 
 class FlooNocV2Graph(gvsoc.systree.Component):
