@@ -456,10 +456,12 @@ class Snitch_fp_ss(cpu.iss.riscv.RiscvCommon):
 
         self.add_c_flags([
             "-DCONFIG_ISS_CORE=snitch_fp_ss",
+            "-DCONFIG_GVSOC_ISS_SNITCH_FP_SS=1",
         ])
 
         self.add_sources([
             "cpu/iss/src/snitch/snitch_fp_ss.cpp",
+            "cpu/iss/src/snitch/regfile.cpp",
             "cpu/iss/src/snitch/ssr.cpp",
             "cpu/iss/src/prefetch/prefetch_single_line.cpp",
             "cpu/iss/src/csr.cpp",
