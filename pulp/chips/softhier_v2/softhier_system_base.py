@@ -43,7 +43,9 @@ from pulp.chips.softhier_v2.common.softhier_ctrl import SoftHierCtrl, SoftHierCt
 from pulp.chips.softhier_v2.common.error_detector import ErrorDetector
 from pulp.chips.softhier_v2.softhier_arch_base import TOPOLOGIES, get_arch_overrides, SoftHierAttributes
 from pulp.chips.softhier_v2.topologies.gen_floogen_topology import GENERATORS
-from pulp.floonoc_v2.floonoc_v2 import FlooNocV2Graph
+from gvsoc.signature import IoV2SingleReq
+from pulp.floonoc_v2.floonoc_v2 import FlooNocV2GraphFabric
+from pulp.floonoc_v2.floonoc_v2_floogen import load_floogen
 
 
 def _ni_node_name(arch, cluster_id):
@@ -78,6 +80,19 @@ def _assert_topology_dimensions(arch):
     elif getattr(arch, 'num_rings', None) is not None:
         assert 1 + 3 * arch.num_rings * (arch.num_rings + 1) == arch.num_cluster, \
             "Topology dimensions are mismatched"
+
+
+class SoftHierTile(gvsoc.systree.Component):
+    """One node of the topology, as a pure grouping component.
+
+    A cluster tile holds the cluster, its NoC arbiters and the NI and routers
+    of its node; a tile without cluster holds the routers of a node serving
+    no cluster (e.g. the hubs of a hierarchical ring). The GUI model view
+    then shows the system as the topology itself, one box per node. The
+    engine flattens the tile ports away at binding time: the timing is the
+    same as without tiles.
+    """
+    pass
 
 
 class SoftHierSystem(gvsoc.systree.Component):
@@ -116,9 +131,12 @@ class SoftHierSystem(gvsoc.systree.Component):
         # Components #
         ##############
 
-        # Clusters
+        # Clusters, each in the tile of its NoC node
         cluster_list = []
+        tile_list = []
         for cluster_id in range(arch.num_cluster):
+            tile = SoftHierTile(self, f'tile_{cluster_id}')
+            tile_list.append(tile)
             cluster_arch = ClusterArch(num_core=arch.num_core_per_cluster,
                                         cluster_id=cluster_id,
                                         spatz_num_lane=arch.spatz_num_lane,
@@ -139,7 +157,7 @@ class SoftHierSystem(gvsoc.systree.Component):
                                         idma_outstand_burst=arch.idma_outstand_burst,
                                         wide_width=arch.noc_link_width,
                                         noc_outstanding=arch.noc_outstanding)
-            cluster_list.append(ClusterUnit(self, f'cluster_{cluster_id}', cluster_arch, binary))
+            cluster_list.append(ClusterUnit(tile, 'cluster', cluster_arch, binary))
 
         # Keep the clusters so configure() can push the binary to their loaders when
         # it is provided through a parameter (gvrun flow).
@@ -158,19 +176,30 @@ class SoftHierSystem(gvsoc.systree.Component):
         softhier_ctrl = SoftHierCtrl(self, 'softhier_ctrl', config=SoftHierCtrlConfig(
             num_cluster=arch.num_cluster, num_core_per_cluster=arch.num_core_per_cluster))
 
-        # NoC, built from the FlooGen topology generated for this arch. Routers
-        # buffer 16 flits per input, the NIs keep noc_outstanding bursts in
-        # flight.
-        noc = FlooNocV2Graph(self, 'noc', narrow_width=NARROW_WIDTH,
+        # NoC, built from the FlooGen topology generated for this arch, with no
+        # component of its own: the NI and routers of each node go to the tile
+        # of the cluster they serve, or to a tile of their own for nodes
+        # serving no cluster. Routers buffer 16 flits per input, the NIs keep
+        # noc_outstanding bursts in flight.
+        self.noc = FlooNocV2GraphFabric(self, narrow_width=NARROW_WIDTH,
             wide_width=arch.noc_link_width, ni_outstanding_reqs=arch.noc_outstanding,
             router_input_queue_size=16, allow_deadlock=bool(arch.noc_allow_deadlock))
+        noc = self.noc
+        cluster_tiles = {_ni_node_name(arch, cluster_id): tile
+            for cluster_id, tile in enumerate(tile_list)}
+
+        def node_tile(name):
+            tile = cluster_tiles.get(name)
+            return tile if tile is not None else SoftHierTile(self, name)
+
         with tempfile.TemporaryDirectory() as gen_dir:
             # The generator reports the files it writes, which are temporary
             with contextlib.redirect_stdout(io.StringIO()):
                 GENERATORS[topology](arch, gen_dir, topology)
-            noc.load_floogen(os.path.join(gen_dir, f'{topology}.floogen.yml'),
+            id_map = load_floogen(noc, os.path.join(gen_dir, f'{topology}.floogen.yml'),
                 routing_path=os.path.join(gen_dir, f'{topology}.routing.yml'),
-                link_latencies_path=os.path.join(gen_dir, f'{topology}.link_latencies.yml'))
+                link_latencies_path=os.path.join(gen_dir, f'{topology}.link_latencies.yml'),
+                tiles=node_tile)
 
         ############
         # Bindings #
@@ -189,36 +218,47 @@ class SoftHierSystem(gvsoc.systree.Component):
         remote_size = arch.num_cluster * arch.cluster_tcdm_size
 
         for cluster_id in range(arch.num_cluster):
-            ni_node_id = noc.id_map[_ni_node_name(arch, cluster_id)]
+            ni_node_id = id_map[_ni_node_name(arch, cluster_id)]
+            tile = tile_list[cluster_id]
 
             # As many transactions in flight as the network interface accepts
-            narrow_arbiter = router_v2.Router(self, f'narrow_arbiter_{cluster_id}',
+            narrow_arbiter = router_v2.Router(tile, 'narrow_arbiter',
                 config=RouterConfig(kind=KIND_BEAT, width=NARROW_WIDTH,
                     max_pending_bursts_per_input=arch.noc_outstanding))
             narrow_arbiter.o_MAP(noc.i_NARROW_INPUT(ni_node_id),
                 RouterMapping(base=remote_base, size=remote_size, remove_base=False),
                 name='noc')
-            narrow_arbiter.o_MAP_DEFAULT(virtual_interco.i_INPUT(2 * cluster_id),
-                name='virtual_interco')
+            # The rest goes out of the tile, to the SoC
+            narrow_arbiter.o_MAP_DEFAULT(gvsoc.systree.SlaveItf(tile, 'narrow_soc',
+                signature=IoV2SingleReq()), name='virtual_interco')
+            tile.itf_bind('narrow_soc', virtual_interco.i_INPUT(2 * cluster_id),
+                signature=IoV2SingleReq())
 
-            wide_arbiter = router_v2.Router(self, f'wide_arbiter_{cluster_id}',
+            wide_arbiter = router_v2.Router(tile, 'wide_arbiter',
                 config=RouterConfig(kind=KIND_BEAT, width=arch.noc_link_width,
                     max_pending_bursts_per_input=arch.noc_outstanding))
             wide_arbiter.o_MAP(noc.i_WIDE_INPUT(ni_node_id),
                 RouterMapping(base=remote_base, size=remote_size, remove_base=False),
                 name='noc')
-            wide_arbiter.o_MAP_DEFAULT(virtual_interco.i_INPUT(2 * cluster_id + 1),
-                name='virtual_interco')
+            wide_arbiter.o_MAP_DEFAULT(gvsoc.systree.SlaveItf(tile, 'wide_soc',
+                signature=IoV2SingleReq()), name='virtual_interco')
+            tile.itf_bind('wide_soc', virtual_interco.i_INPUT(2 * cluster_id + 1),
+                signature=IoV2SingleReq())
 
             cluster_list[cluster_id].o_NARROW_SOC(narrow_arbiter.i_INPUT())
             cluster_list[cluster_id].o_WIDE_SOC(wide_arbiter.i_INPUT())
 
             # The cluster TCDM range, seen from the cluster as its local range
             tcdm_base = remote_base + cluster_id * arch.cluster_tcdm_size
-            noc.o_MAP(tcdm_base, arch.cluster_tcdm_size, ni_node_id,
-                name=f'cluster_{cluster_id}', remove_offset=tcdm_base - arch.cluster_tcdm_base)
+            noc.add_mapping(f'cluster_{cluster_id}', base=tcdm_base,
+                size=arch.cluster_tcdm_size, node_id=ni_node_id,
+                remove_offset=tcdm_base - arch.cluster_tcdm_base)
             noc.o_NARROW_BIND(cluster_list[cluster_id].i_NARROW_INPUT(), ni_node_id)
             noc.o_WIDE_BIND(cluster_list[cluster_id].i_WIDE_INPUT(), ni_node_id)
+
+    def finalize(self):
+        # The NoC fabric has no component of its own to run its finalize()
+        self.noc.finalize()
 
     def configure(self):
         # With gvrun the binary is provided through a parameter (set either from the

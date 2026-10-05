@@ -26,6 +26,13 @@ Differences to be aware of:
   `folded_hexatorus`), which are built with a warning showing the cycle.
   `folded_hexatorus` does deadlock when every cluster reads 64 KB from its
   neighbour with the iDMA (`app_verify`), like SoftHier v1.
+- The NoC has no component of its own: each cluster sits in a tile
+  (`system/tile_<cluster id>`) with its NoC arbiters and the network
+  interface and routers of its node (`req_router`, `rsp_router`,
+  `wide_router`, `ni`), and the routers of nodes serving no cluster (the
+  hubs of `hierarchical_ring`) in a tile named after their node. The GUI
+  model view of the system is then the topology, one box per node. The tiles
+  are pure grouping components, the timing is the same as without them.
 - Arch overrides are gvrun target parameters (see below) instead of
   `--config-opt` options.
 - The platform runs through gvrun (`make sh2-run`): like the other platforms
