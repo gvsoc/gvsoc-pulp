@@ -2,3 +2,8 @@
 /pulp/softex/ @AlessandroNadalini
 /softex_tb.py @AlessandroNadalini
 /pulp/floonoc_flex/ @rfamedina
+# CV32E40P core
+/cpu/iss_v2/include/cores/cv32e40p/ @marpac3
+/cpu/iss_v2/src/cores/cv32e40p/ @marpac3
+/pulp/cv32e40p/ @marpac3
+/examples/cv32e40p/ @marpac3
