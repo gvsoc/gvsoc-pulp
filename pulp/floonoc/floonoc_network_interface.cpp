@@ -168,6 +168,11 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address, bool wide
             *router_req->arg_get(FlooNoc::REQ_BURST) = *req->arg_get(FlooNoc::REQ_BURST);
         }
 
+        // Mark the last beat of the burst so that the routers know when to release the output
+        // port they locked for this burst (wormhole arbitration, see Router::fsm_handler).
+        bool is_last = (burst_size - size == 0);
+        *router_req->arg_get(FlooNoc::REQ_IS_LAST) = (void *)(long)is_last;
+
         this->queue.push(router_req);
 
         burst_base += size;

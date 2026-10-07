@@ -91,6 +91,11 @@ private:
     vp::ClockEvent fsm_event;
     // Current queue where next request will be taken from, used for round-robin
     int current_queue;
+    // Wormhole arbitration state: for each output direction, the input queue index that currently
+    // owns it (a multi-beat burst is in flight through that output), or -1 if the output is free.
+    // While an output is locked, only the owning input may use it, until the burst's last beat
+    // has passed. This mirrors the RTL floo_wormhole_arbiter (LockIn=1).
+    int locked_output[5];
     // State of the output queues, true if it is stalled and nothing can be sent to it anymore
     // until it is unstalled.
     std::array<vp::Signal<bool>, 5> stalled_queues;

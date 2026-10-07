@@ -130,8 +130,90 @@ void IDmaBeTcdm::write_data(IdmaTransfer *transfer, uint8_t *data, uint64_t size
     this->write_current_chunk_data_start = data;
     this->write_current_transfer = transfer;
 
-    // Send a line now, the rest will be handled by the FSM
-    this->write_line();
+    if (size > (uint64_t)this->width)
+    {
+        // AXI->TCDM fast path: write the whole chunk in a single cycle.
+        //
+        // A chunk larger than one TCDM line can only come from the AXI backend
+        // handing over a complete read burst (when the producer is another TCDM
+        // backend, data is pushed one line per cycle, so chunks are always
+        // line-sized and take the regular path below).
+        //
+        // For AXI read bursts, the NoC/interconnect model already accounts for
+        // the full streaming time of the burst: the response callback is
+        // received at LAST-beat arrival time (e.g. ~128 cycles after the
+        // request for a 4096B burst on a 32B-wide link). In the RTL, however,
+        // each beat is written to the TCDM one cycle after it arrives on the R
+        // channel, fully pipelined with the beats still in flight. So by the
+        // time the response arrives here, the RTL would have ALREADY written
+        // the whole burst to the TCDM.
+        //
+        // Re-streaming the chunk one line per cycle at this point would
+        // therefore count the burst duration twice (once in the NoC, once
+        // here), adding ~128 cycles per burst, and would also delay the release
+        // of the AXI burst slot, postponing the next AR request by the same
+        // amount. This was measured as ~907 cycles for a 24000B transfer
+        // against ~772 in RTL.
+        //
+        // Instead, issue all the line requests to the TCDM interconnect in the
+        // current cycle and acknowledge the chunk with the latency of the last
+        // line. This frees the burst slot one cycle after the response, so the
+        // next read burst is requested immediately and bursts stream
+        // back-to-back on the NoC, matching the RTL behavior (~772 cycles).
+        // Per-line requests are still issued so TCDM bank accesses remain
+        // visible to the interconnect model.
+        uint64_t max_latency = 0;
+        while (this->write_current_chunk_size > 0)
+        {
+            uint64_t base = this->write_current_chunk_base;
+            uint64_t line_size = this->get_line_size(base, this->write_current_chunk_size);
+
+            vp::IoReq *req = &this->req;
+            req->prepare();
+            req->set_is_write(true);
+            req->set_addr(base - this->loc_base);
+            req->set_size(line_size);
+            req->set_data(this->write_current_chunk_data);
+
+            this->write_current_chunk_base += line_size;
+            this->write_current_chunk_size -= line_size;
+            this->write_current_chunk_data += line_size;
+
+            vp::IoReqStatus status = this->ico_itf.req(req);
+            if (status == vp::IoReqStatus::IO_REQ_INVALID)
+            {
+                trace.force_warning("Invalid access during TCDM write line (base: 0x%lx, size: 0x%lx)\n",
+                    base, line_size);
+            }
+            else if (status != vp::IoReqStatus::IO_REQ_OK)
+            {
+                // For now aynchronous replies are not supported since dma is always passing.
+                // This could be needed if we want to model a more dynamic priority
+                trace.fatal("Asynchronous response is not supported on TCDM backend\n");
+            }
+
+            max_latency = std::max(max_latency, req->get_latency());
+        }
+
+        this->last_line_timestamp = this->clock.get_cycles();
+
+        if (max_latency == 0)
+        {
+            this->remove_chunk_from_current_burst(size);
+            this->write_handle_req_ack();
+        }
+        else
+        {
+            this->write_ack_timestamp = this->clock.get_cycles() + max_latency;
+            this->write_ack_size = size;
+            this->fsm_event.enqueue(max_latency);
+        }
+    }
+    else
+    {
+        // Send a line now, the rest will be handled by the FSM
+        this->write_line();
+    }
 }
 
 
@@ -391,6 +473,16 @@ void IDmaBeTcdm::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 IdmaTransfer *transfer = _this->burst_queue_transfer.front();
                 _this->remove_chunk_from_current_burst(size);
                 _this->be->write_data(transfer, _this->read_pending_line_data, size);
+
+                // Pipeline the next read in the same FSM cycle, mirroring how write_line() is
+                // re-issued immediately after write_ack processing. Without this, each TCDM
+                // read takes 2 cycles (issue + process-in-next-cycle) instead of 1.
+                if (_this->current_burst_size > 0 &&
+                    _this->burst_queue_is_write.size() > 0 &&
+                    !_this->burst_queue_is_write.front())
+                {
+                    _this->read_line();
+                }
             }
             else
             {
