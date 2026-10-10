@@ -39,6 +39,18 @@ Iss::Iss(IssWrapper &top)
       , vector(*this), vu(top, *this)
 #endif
 {
+    // Scalar accesses are unicast. IoReq::init() does not initialize its
+    // protocol payload, while the SoftHier NoCs interpret payload[0:3] as
+    // collective metadata. Clear the reused LSU requests before any access so
+    // heap contents cannot turn a scalar DRAM read into a reduction/broadcast.
+#ifdef CONFIG_GVSOC_ISS_LSU_NB_OUTSTANDING
+    for (vp::IoReq &req : this->lsu.io_req)
+        memset(req.get_payload(), 0, req.get_payload_size());
+#else
+    memset(this->lsu.io_req.get_payload(), 0, this->lsu.io_req.get_payload_size());
+#endif
+    memset(this->fpu_lsu.io_req.get_payload(), 0, this->fpu_lsu.io_req.get_payload_size());
+
     this->csr.declare_csr(&this->csr_fmode, "fmode", 0x800);
     this->csr.declare_csr(&this->barrier,  "barrier",   0x7C2);
     this->barrier.register_callback(std::bind(&Iss::barrier_update, this, std::placeholders::_1,

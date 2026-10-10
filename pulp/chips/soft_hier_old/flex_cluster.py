@@ -66,8 +66,9 @@ class FlexClusterSystem(gvsoc.systree.Component):
             arch = FlexClusterArch()
         num_clusters    = arch.num_cluster_x * arch.num_cluster_y
         noc_outstanding = (arch.num_cluster_x + arch.num_cluster_y) + arch.noc_outstanding
-        num_hbm_ctrl_x  = arch.num_cluster_x // arch.num_node_per_ctrl
-        num_hbm_ctrl_y  = arch.num_cluster_y // arch.num_node_per_ctrl
+        has_hbm = any(arch.hbm_chan_placement)
+        num_hbm_ctrl_x  = arch.num_cluster_x // arch.num_node_per_ctrl if has_hbm else 0
+        num_hbm_ctrl_y  = arch.num_cluster_y // arch.num_node_per_ctrl if has_hbm else 0
 
         # Get Binary
         binary = None
@@ -107,34 +108,58 @@ class FlexClusterSystem(gvsoc.systree.Component):
         if not hasattr(arch, 'core_model'): arch.core_model = "fast"
         if not hasattr(arch, 'power_profile'): arch.power_profile = "constant"
         if not hasattr(arch, 'power_estimate_scale'): arch.power_estimate_scale = 1.0
+        if not hasattr(arch, 'dram3d_enable'): arch.dram3d_enable = 0
+        if not hasattr(arch, 'dram3d_type'): arch.dram3d_type = 'hbm2-example.json'
+        if not hasattr(arch, 'dram3d_addr_base'): arch.dram3d_addr_base = 0x10000000000
+        if not hasattr(arch, 'dram3d_node_space'): arch.dram3d_node_space = 0xc0000000
         if core_model is not None: arch.core_model = core_model
         if power_profile is not None: arch.power_profile = power_profile
         if preload_mode not in ('direct', 'timed'):
             raise ValueError(f"Invalid preload_mode: {preload_mode}")
         direct_preload = preload_mode == 'direct'
 
+        if arch.dram3d_enable:
+            base, size = arch.dram3d_addr_base, arch.dram3d_node_space
+            if not isinstance(base, int) or not isinstance(size, int) or size <= 0 or base < arch.cluster_tcdm_size:
+                raise ValueError('dram3d requires a positive node space and a base above TCDM offsets')
+            if base + size * num_clusters > 1 << 64:
+                raise ValueError('dram3d address range exceeds 64 bits')
+            if not isinstance(arch.dram3d_type, str) or not arch.dram3d_type:
+                raise ValueError('dram3d_type must name a DRAMSys configuration')
+            # Reject overlap with global destinations, including explicit HBM aliases.
+            regions = [(arch.cluster_tcdm_remote, arch.cluster_tcdm_size * num_clusters),
+                       (arch.soc_register_base, arch.soc_register_size)]
+            edge_base = arch.hbm_start_base
+            for channels, nodes in zip(arch.hbm_chan_placement,
+                    (arch.num_cluster_y, arch.num_cluster_x, arch.num_cluster_y, arch.num_cluster_x)):
+                if channels:
+                    for node in range(nodes):
+                        regions.append((edge_base + (node // arch.hbm_node_aliase) *
+                            arch.hbm_node_addr_space * arch.hbm_node_aliase +
+                            (1 << arch.hbm_node_aliase_start_bit) * (node % arch.hbm_node_aliase),
+                            arch.hbm_node_addr_space * arch.hbm_node_aliase))
+                edge_base += nodes * arch.hbm_node_addr_space
+            if any(base < other + length and other < base + size * num_clusters
+                   for other, length in regions):
+                raise ValueError('dram3d address range overlaps another global destination')
+
         #############
         # Assertion #
         #############
-        is_power_of_two("arch.num_node_per_ctrl",arch.num_node_per_ctrl)
-        is_power_of_two("arch.hbm_chan_placement[0]",arch.hbm_chan_placement[0])
-        is_power_of_two("arch.hbm_chan_placement[1]",arch.hbm_chan_placement[1])
-        is_power_of_two("arch.hbm_chan_placement[2]",arch.hbm_chan_placement[2])
-        is_power_of_two("arch.hbm_chan_placement[3]",arch.hbm_chan_placement[3])
-        assert ((arch.num_cluster_x % arch.num_node_per_ctrl) == 0), f"arch.num_node_per_ctrl ({arch.num_node_per_ctrl}) is not suitable for arch.num_cluster_x ({arch.num_cluster_x})"
-        assert (arch.num_cluster_x >= arch.num_node_per_ctrl), f"arch.num_node_per_ctrl ({arch.num_node_per_ctrl}) is smaller than arch.num_cluster_x ({arch.num_cluster_x})"
-        assert ((arch.num_cluster_y % arch.num_node_per_ctrl) == 0), f"arch.num_node_per_ctrl ({arch.num_node_per_ctrl}) is not suitable for arch.num_cluster_y ({arch.num_cluster_y})"
-        assert (arch.num_cluster_y >= arch.num_node_per_ctrl), f"arch.num_node_per_ctrl ({arch.num_node_per_ctrl}) is smaller than arch.num_cluster_y ({arch.num_cluster_y})"
-        assert ((arch.hbm_chan_placement[0] >= num_hbm_ctrl_y) or (arch.hbm_chan_placement[0] == 0)), f"arch.hbm_chan_placement[0] ({arch.hbm_chan_placement[0]}) is smaller than hbm controller on y direction ({num_hbm_ctrl_y})"
-        assert ((arch.hbm_chan_placement[1] >= num_hbm_ctrl_x) or (arch.hbm_chan_placement[1] == 0)), f"arch.hbm_chan_placement[1] ({arch.hbm_chan_placement[1]}) is smaller than hbm controller on x direction ({num_hbm_ctrl_x})"
-        assert ((arch.hbm_chan_placement[2] >= num_hbm_ctrl_y) or (arch.hbm_chan_placement[2] == 0)), f"arch.hbm_chan_placement[2] ({arch.hbm_chan_placement[2]}) is smaller than hbm controller on y direction ({num_hbm_ctrl_y})"
-        assert ((arch.hbm_chan_placement[3] >= num_hbm_ctrl_x) or (arch.hbm_chan_placement[3] == 0)), f"arch.hbm_chan_placement[3] ({arch.hbm_chan_placement[3]}) is smaller than hbm controller on x direction ({num_hbm_ctrl_x})"
-        assert (arch.hbm_node_aliase <= arch.num_node_per_ctrl), f"arch.hbm_node_aliase ({arch.hbm_node_aliase}) is larger than arch.num_node_per_ctrl ({arch.num_node_per_ctrl})"
+        if has_hbm:
+            is_power_of_two("arch.num_node_per_ctrl", arch.num_node_per_ctrl)
+            assert 0 < arch.hbm_node_aliase <= arch.num_node_per_ctrl
+            assert arch.num_cluster_x >= arch.num_node_per_ctrl and arch.num_cluster_x % arch.num_node_per_ctrl == 0
+            assert arch.num_cluster_y >= arch.num_node_per_ctrl and arch.num_cluster_y % arch.num_node_per_ctrl == 0
+            for edge, controllers in enumerate((num_hbm_ctrl_y, num_hbm_ctrl_x, num_hbm_ctrl_y, num_hbm_ctrl_x)):
+                channels = arch.hbm_chan_placement[edge]
+                is_power_of_two(f"arch.hbm_chan_placement[{edge}]", channels)
+                assert channels == 0 or channels >= controllers
 
-        ctrl_chan_west  = arch.hbm_chan_placement[0] // num_hbm_ctrl_y
-        ctrl_chan_north = arch.hbm_chan_placement[1] // num_hbm_ctrl_x
-        ctrl_chan_east  = arch.hbm_chan_placement[2] // num_hbm_ctrl_y
-        ctrl_chan_south = arch.hbm_chan_placement[3] // num_hbm_ctrl_x
+        ctrl_chan_west  = arch.hbm_chan_placement[0] // num_hbm_ctrl_y if has_hbm else 0
+        ctrl_chan_north = arch.hbm_chan_placement[1] // num_hbm_ctrl_x if has_hbm else 0
+        ctrl_chan_east  = arch.hbm_chan_placement[2] // num_hbm_ctrl_y if has_hbm else 0
+        ctrl_chan_south = arch.hbm_chan_placement[3] // num_hbm_ctrl_x if has_hbm else 0
 
         ##############
         # Components #
@@ -181,7 +206,9 @@ class FlexClusterSystem(gvsoc.systree.Component):
                                         core_model          =   arch.core_model,
                                         tech_node           =   arch.tech_node,
                                         power_profile       =   arch.power_profile,
-                                        power_estimate_scale = arch.power_estimate_scale)
+                                        power_estimate_scale = arch.power_estimate_scale,
+                                        dram3d_base         = arch.dram3d_addr_base + cluster_id * arch.dram3d_node_space,
+                                        dram3d_size         = arch.dram3d_node_space if arch.dram3d_enable else 0)
             cluster_list.append(ClusterUnit(self,f'cluster_{cluster_id}', cluster_arch, binary,
                 direct_preload=direct_preload))
             pass
@@ -201,6 +228,12 @@ class FlexClusterSystem(gvsoc.systree.Component):
                 ni_outstanding_reqs=noc_outstanding, router_input_queue_size=noc_outstanding * num_clusters, atomics=1, collective=1)
 
         #HBM channels
+        dram3d_channels = []
+        if arch.dram3d_enable:
+            for cluster_id in range(num_clusters):
+                dram3d_channels.append(memory.dramsys.Dramsys(self,
+                    f'dram3d_chan_{cluster_id}', dram_type=arch.dram3d_type))
+
         hbm_chan_list_west = []
         for hbm_ch in range(arch.hbm_chan_placement[0]):
             hbm_chan_list_west.append(memory.dramsys.Dramsys(self, f'west_hbm_chan_{hbm_ch}', dram_type='hbm4-emu-example.json'))
@@ -223,25 +256,25 @@ class FlexClusterSystem(gvsoc.systree.Component):
 
         #HBM controllers
         hbm_ctrl_list_west = []
-        for hbm_ct in range(num_hbm_ctrl_y):
+        for hbm_ct in range(num_hbm_ctrl_y if ctrl_chan_west else 0):
             nb_slaves=ctrl_chan_west
             hbm_ctrl_list_west.append(hbm_ctrl(self, f'west_hbm_ctrl_{hbm_ct}', nb_slaves=nb_slaves, nb_masters=arch.num_node_per_ctrl, interleaving_bits=int(math.log2(arch.noc_link_width/8)), node_addr_offset=arch.hbm_node_addr_space, hbm_node_aliase=arch.hbm_node_aliase, xor_scrambling=arch.hbm_ctrl_xor_scrambling, red_scrambling=arch.hbm_ctrl_red_scrambling))
             pass
 
         hbm_ctrl_list_north = []
-        for hbm_ct in range(num_hbm_ctrl_x):
+        for hbm_ct in range(num_hbm_ctrl_x if ctrl_chan_north else 0):
             nb_slaves=ctrl_chan_north
             hbm_ctrl_list_north.append(hbm_ctrl(self, f'north_hbm_ctrl_{hbm_ct}', nb_slaves=nb_slaves, nb_masters=arch.num_node_per_ctrl, interleaving_bits=int(math.log2(arch.noc_link_width/8)), node_addr_offset=arch.hbm_node_addr_space, hbm_node_aliase=arch.hbm_node_aliase, xor_scrambling=arch.hbm_ctrl_xor_scrambling, red_scrambling=arch.hbm_ctrl_red_scrambling))
             pass
 
         hbm_ctrl_list_east = []
-        for hbm_ct in range(num_hbm_ctrl_y):
+        for hbm_ct in range(num_hbm_ctrl_y if ctrl_chan_east else 0):
             nb_slaves=ctrl_chan_east
             hbm_ctrl_list_east.append(hbm_ctrl(self, f'east_hbm_ctrl_{hbm_ct}', nb_slaves=nb_slaves, nb_masters=arch.num_node_per_ctrl, interleaving_bits=int(math.log2(arch.noc_link_width/8)), node_addr_offset=arch.hbm_node_addr_space, hbm_node_aliase=arch.hbm_node_aliase, xor_scrambling=arch.hbm_ctrl_xor_scrambling, red_scrambling=arch.hbm_ctrl_red_scrambling))
             pass
 
         hbm_ctrl_list_south = []
-        for hbm_ct in range(num_hbm_ctrl_x):
+        for hbm_ct in range(num_hbm_ctrl_x if ctrl_chan_south else 0):
             nb_slaves=ctrl_chan_south
             hbm_ctrl_list_south.append(hbm_ctrl(self, f'south_hbm_ctrl_{hbm_ct}', nb_slaves=nb_slaves, nb_masters=arch.num_node_per_ctrl, interleaving_bits=int(math.log2(arch.noc_link_width/8)), node_addr_offset=arch.hbm_node_addr_space, hbm_node_aliase=arch.hbm_node_aliase, xor_scrambling=arch.hbm_ctrl_xor_scrambling, red_scrambling=arch.hbm_ctrl_red_scrambling))
             pass
@@ -267,7 +300,12 @@ class FlexClusterSystem(gvsoc.systree.Component):
 
         #Debug memory
         virtual_interco.o_MAP(debug_mem.i_INPUT())
-        virtual_interco.o_MAP(data_noc.i_CLUSTER_INPUT(0, 0), base=arch.hbm_start_base, size=arch.hbm_node_addr_space * 2 * (arch.num_cluster_x + arch.num_cluster_y), rm_base=False)
+        if has_hbm:
+            virtual_interco.o_MAP(data_noc.i_CLUSTER_INPUT(0, 0), base=arch.hbm_start_base, size=arch.hbm_node_addr_space * 2 * (arch.num_cluster_x + arch.num_cluster_y), rm_base=False)
+        if arch.dram3d_enable:
+            virtual_interco.o_MAP(data_noc.i_CLUSTER_INPUT(0, 0),
+                name='dram3d', base=arch.dram3d_addr_base,
+                size=arch.dram3d_node_space * num_clusters, rm_base=False)
 
         #Control register
         virtual_interco.o_MAP(csr.i_INPUT(), base=arch.soc_register_base, size=arch.soc_register_size, rm_base=True)
@@ -289,6 +327,11 @@ class FlexClusterSystem(gvsoc.systree.Component):
             cluster_list[node_id].o_WIDE_SOC(data_noc.i_CLUSTER_INPUT(x_id, y_id))
             cluster_list[node_id].o_SYNC_OUTPUT(sync_bus.i_CLUSTER_INPUT(x_id, y_id))
             data_noc.o_MAP(cluster_list[node_id].i_WIDE_INPUT(), base=arch.cluster_tcdm_remote  + node_id*arch.cluster_tcdm_size,   size=arch.cluster_tcdm_size,    x=x_id+1, y=y_id+1)
+            if arch.dram3d_enable:
+                data_noc.o_MAP(cluster_list[node_id].i_WIDE_INPUT(),
+                    name=f'dram3d_{node_id}', base=arch.dram3d_addr_base + node_id * arch.dram3d_node_space,
+                    size=arch.dram3d_node_space, x=x_id+1, y=y_id+1, rm_base=False)
+                cluster_list[node_id].o_DRAM3D(dram3d_channels[node_id].i_INPUT())
             sync_bus.o_MAP(cluster_list[node_id].i_SYNC_INPUT(), base=arch.sync_base            + node_id*(arch.sync_interleave + arch.sync_special_mem),     size=(arch.sync_interleave + arch.sync_special_mem),      x=x_id+1, y=y_id+1)
             pass
 
@@ -305,7 +348,7 @@ class FlexClusterSystem(gvsoc.systree.Component):
         hbm_edge_start_base = arch.hbm_start_base
 
         ## west
-        for node_id in range(arch.num_cluster_y):
+        for node_id in range(arch.num_cluster_y if ctrl_chan_west else 0):
             ctrl_id = node_id // arch.num_node_per_ctrl
             itf_router = router.Router(self, f'west_{node_id}')
             itf_router.add_mapping('output')
@@ -322,7 +365,7 @@ class FlexClusterSystem(gvsoc.systree.Component):
         hbm_edge_start_base += arch.num_cluster_y*arch.hbm_node_addr_space
 
         ## north
-        for node_id in range(arch.num_cluster_x):
+        for node_id in range(arch.num_cluster_x if ctrl_chan_north else 0):
             ctrl_id = node_id // arch.num_node_per_ctrl
             itf_router = router.Router(self, f'north_{node_id}')
             itf_router.add_mapping('output')
@@ -339,7 +382,7 @@ class FlexClusterSystem(gvsoc.systree.Component):
         hbm_edge_start_base += arch.num_cluster_x*arch.hbm_node_addr_space
 
         ## east
-        for node_id in range(arch.num_cluster_y):
+        for node_id in range(arch.num_cluster_y if ctrl_chan_east else 0):
             ctrl_id = node_id // arch.num_node_per_ctrl
             itf_router = router.Router(self, f'east_{node_id}')
             itf_router.add_mapping('output')
@@ -356,7 +399,7 @@ class FlexClusterSystem(gvsoc.systree.Component):
         hbm_edge_start_base += arch.num_cluster_y*arch.hbm_node_addr_space
 
         ## south
-        for node_id in range(arch.num_cluster_x):
+        for node_id in range(arch.num_cluster_x if ctrl_chan_south else 0):
             ctrl_id = node_id // arch.num_node_per_ctrl
             itf_router = router.Router(self, f'south_{node_id}')
             itf_router.add_mapping('output')

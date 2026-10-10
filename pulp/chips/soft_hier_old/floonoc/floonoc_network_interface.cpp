@@ -252,7 +252,7 @@ void NetworkInterface::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             }
 
             // Store information in the request which will be needed by the routers and the target
-            req->set_addr(base - entry->base);
+            req->set_addr(base - entry->remove_offset);
             *req->arg_get(FlooNoc::REQ_DEST_X) = (void *)(long)entry->x;
             *req->arg_get(FlooNoc::REQ_DEST_Y) = (void *)(long)entry->y;
             *req->arg_get(FlooNoc::REQ_SRC_X) = (void *)(long)_this->x;

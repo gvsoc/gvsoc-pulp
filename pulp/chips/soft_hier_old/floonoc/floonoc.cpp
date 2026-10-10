@@ -24,6 +24,7 @@
 #include "floonoc.hpp"
 #include "floonoc_router.hpp"
 #include "floonoc_network_interface.hpp"
+#include <map>
 
 
 FlooNoc::FlooNoc(vp::ComponentConf &config)
@@ -58,6 +59,7 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
         // to compare to each entry which may be slow when having lots of target.
         // We could optimize it by using a tree.
         this->entries.resize(mappings->get_childs().size());
+        std::map<std::string, vp::IoMaster *> ports;
         int id = 0;
         for (auto& mapping: mappings->get_childs())
         {
@@ -65,15 +67,23 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
             // target
             js::Config *config = mapping.second;
 
-            vp::IoMaster *itf = new vp::IoMaster();
-
-            itf->set_resp_meth(&FlooNoc::response);
-            itf->set_grant_meth(&FlooNoc::grant);
-            this->new_master_port(mapping.first, itf);
+            std::string target = config->get("target") ?
+                config->get("target")->get_str() : mapping.first;
+            vp::IoMaster *&itf = ports[target];
+            if (itf == nullptr)
+            {
+                itf = new vp::IoMaster();
+                itf->set_resp_meth(&FlooNoc::response);
+                itf->set_grant_meth(&FlooNoc::grant);
+                this->new_master_port(target, itf);
+            }
 
             // And we add an entry so that we can turn an address into a target position
             this->entries[id].base = config->get_uint("base");
             this->entries[id].size = config->get_uint("size");
+            this->entries[id].remove_offset =
+                !config->get("rm_base") || config->get("rm_base")->get_bool() ?
+                this->entries[id].base : 0;
             this->entries[id].x = config->get_int("x");
             this->entries[id].y = config->get_int("y");
 
@@ -255,7 +265,7 @@ vp::IoReqStatus FlooNoc::debug_req(vp::IoReq *req)
         chunk = std::min(chunk, entry->size - (base - entry->base));
         vp::IoReq child;
         child.init();
-        child.set_addr(base - entry->base);
+        child.set_addr(base - entry->remove_offset);
         child.set_size(chunk);
         child.set_data(data);
         child.set_opcode(req->get_opcode());

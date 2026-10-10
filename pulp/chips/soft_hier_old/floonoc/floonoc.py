@@ -61,6 +61,7 @@ class FlooNoc2dMesh(gvsoc.systree.Component):
         ])
 
         self.add_property('mappings', {})
+        self._targets = {}
         self.add_property('power_models', {
             part: logic_power_sources('floonoc', tech_node=tech_node,
                 profile=power_profile, estimate_scale=power_estimate_scale,
@@ -83,9 +84,6 @@ class FlooNoc2dMesh(gvsoc.systree.Component):
         self.add_property('interleave_bit_width', interleave_bit_width)
         self.add_property('edge_node_alias', edge_node_alias)
         self.add_property('edge_node_alias_start_bit', edge_node_alias_start_bit)
-
-    def __add_mapping(self, name: str, base: int, size: int, x: int, y: int):
-        self.get_property('mappings')[name] =  {'base': base, 'size': size, 'x': x, 'y': y}
 
     def add_router(self, x: int, y: int):
         """Instantiate a router in the grid.
@@ -115,7 +113,7 @@ class FlooNoc2dMesh(gvsoc.systree.Component):
         self.get_property('network_interfaces').append([x, y])
 
     def o_MAP(self, itf: gvsoc.systree.SlaveItf, base: int, size: int,
-            x: int, y: int):
+            x: int, y: int, name: str=None, rm_base: bool=True):
         """Binds the output of a node to a target, associated to a memory-mapped region.
 
         Parameters
@@ -126,10 +124,27 @@ class FlooNoc2dMesh(gvsoc.systree.Component):
             X position of the target in the grid
         y: int
             Y position of the target in the grid
+        name: str
+            Unique mapping name when several regions share one destination port.
+        rm_base: bool
+            Subtract the region base before delivery (the legacy default). Disable
+            for a destination which must decode the global address itself.
         """
-        name = itf.component.name
-        self.__add_mapping(name, base=base, size=size, x=x, y=y)
-        self.itf_bind(name, itf, signature='io')
+        target = itf.component.name
+        name = name or target
+        if name in self.get_property('mappings'):
+            raise ValueError(f'Duplicate NoC mapping: {name}')
+        endpoint = (itf.component, itf.itf_name)
+        if (x, y) in self._targets:
+            if self._targets[x, y] != endpoint:
+                raise ValueError(f'NoC position ({x}, {y}) already has a different target')
+        else:
+            self._targets[x, y] = endpoint
+            self.itf_bind(target, itf, signature='io')
+        self.get_property('mappings')[name] = {
+            'base': base, 'size': size, 'x': x, 'y': y,
+            'target': target, 'rm_base': rm_base,
+        }
 
     def i_INPUT(self, x: int, y: int) -> gvsoc.systree.SlaveItf:
         """Returns the input port of a node.

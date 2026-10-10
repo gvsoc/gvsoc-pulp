@@ -40,6 +40,9 @@ public:
     uint64_t base;
     // Size of the entry
     uint64_t size;
+    // Address translation is independent of destination selection. Multiple
+    // regions can share a cluster port and be decoded inside that cluster.
+    uint64_t remove_offset;
     // X position of the target where requests to this mapping should be forwarded
     int x;
     // Y position of the target where requests to this mapping should be forwarded

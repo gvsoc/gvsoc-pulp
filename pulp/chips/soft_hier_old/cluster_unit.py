@@ -85,7 +85,8 @@ class ClusterArch:
                         spatz_vlsu_bw,      spatz_vreg_gather_eff,
                         data_bandwidth,     auto_fetch=False,   multi_idma_enable=0,
                         core_model="fast",  tech_node="5nm",
-                        power_profile="constant", power_estimate_scale=1.0):
+                        power_profile="constant", power_estimate_scale=1.0,
+                        dram3d_base=0, dram3d_size=0):
 
         self.nb_core                = nb_core_per_cluster
         self.base                   = base
@@ -98,6 +99,7 @@ class ClusterArch:
         self.sync_area              = Area(sync_base, sync_itlv + sync_special_mem)
         self.reg_area               = Area(reg_base, reg_size)
         self.insn_area              = Area(insn_base, insn_size)
+        self.dram3d_area            = Area(dram3d_base, dram3d_size)
 
         #Spatz
         self.spatz_core_list        = spatz_core_list
@@ -223,7 +225,8 @@ class ClusterUnit(gvsoc.systree.Component):
         instr_router = router.Router(self, 'instr_router', bandwidth=8*arch.nb_core)
 
         # Main router
-        wide_axi_goto_tcdm = router.Router(self, 'wide_axi_goto_tcdm')
+        wide_axi_goto_tcdm = router.Router(self, 'wide_axi_goto_tcdm',
+            bandwidth=arch.data_bandwidth if arch.dram3d_area.size else 0)
         wide_axi_from_idma = router.Router(self, 'wide_axi_from_idma')
         narrow_axi = router.Router(self, 'narrow_axi', bandwidth=8)
 
@@ -378,6 +381,11 @@ class ClusterUnit(gvsoc.systree.Component):
         # Wire router for DMA and instruction caches
         self.o_WIDE_INPUT(wide_axi_goto_tcdm.i_INPUT())
         wide_axi_goto_tcdm.o_MAP(tcdm.i_BUS_INPUT())
+        if arch.dram3d_area.size:
+            # The NoC retains the global DRAM address; remote TCDM still arrives
+            # as a local offset, including NoC broadcasts and reductions.
+            wide_axi_goto_tcdm.o_MAP(self.i_DRAM3D(), base=arch.dram3d_area.base,
+                size=arch.dram3d_area.size, rm_base=True)
         wide_axi_from_idma.o_MAP(self.i_WIDE_SOC())
         wide_axi_from_idma.o_MAP(zero_mem.i_INPUT(), base=arch.zomem_area.base, size=arch.zomem_area.size, rm_base=True)
 
@@ -475,6 +483,12 @@ class ClusterUnit(gvsoc.systree.Component):
             idma.o_TCDM(data_dumpper_arbiter.i_INPUT())
             idma.o_AXI(wide_axi_from_idma.i_INPUT())
             pass
+
+    def o_DRAM3D(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('dram3d', itf, signature='io')
+
+    def i_DRAM3D(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'dram3d', signature='io')
 
     def i_WIDE_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'wide_input', signature='io')

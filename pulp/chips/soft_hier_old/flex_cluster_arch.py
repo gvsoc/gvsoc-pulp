@@ -65,6 +65,12 @@ class FlexClusterArch:
         self.num_node_per_ctrl       = 1
         self.hbm_chan_placement      = [8,0,0,8]
 
+        # Memory-on-logic: one independent, bus-attached DRAM channel per cluster.
+        self.dram3d_enable           = 0
+        self.dram3d_type             = 'hbm2-example.json'
+        self.dram3d_addr_base        = 0x10000000000
+        self.dram3d_node_space       = 0xc0000000
+
         #NoC
         self.noc_outstanding         = 64
         self.noc_link_width          = 1024

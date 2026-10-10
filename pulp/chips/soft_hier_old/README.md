@@ -1,4 +1,70 @@
-# SoftHier legacy ELF loading
+# SoftHier legacy architecture
+
+## Memory on logic
+
+Enable a stacked memory die in an architecture preset:
+
+```python
+self.dram3d_enable = 1
+self.dram3d_type = 'hbm2-example.json'
+self.dram3d_addr_base = 0x10000000000
+self.dram3d_node_space = 0xc0000000
+self.hbm_chan_placement = [0, 0, 0, 0]  # Optional: remove side HBM.
+```
+
+These are Python identifiers; `self.3dmem_enable` is not valid Python syntax.
+Old presets without these fields retain the original architecture. The default
+is `dram3d_enable = 0`.
+
+There are `num_cluster_x * num_cluster_y` independent DRAMSys instances, one
+above each cluster. Channel `cid = y * num_cluster_x + x` occupies the global
+aperture `[dram3d_addr_base + cid * dram3d_node_space,
+dram3d_addr_base + (cid + 1) * dram3d_node_space)`. The aperture is the address
+spacing, **not** the backing DRAM capacity: accesses must also fit the selected
+DRAMSys memspec. The supplied HBM2 configuration provides 2 GiB per instance,
+inside a 3 GiB aperture. Software uses 64-bit DMA addresses on the RV32 cores.
+
+The data path is:
+
+```text
+initiating cluster's iDMA -> data NoC -> owning cluster (x, y)
+                                       -> wide_axi_goto_tcdm address router
+                                          -> local TCDM (remote offset)
+                                          -> F2F bus -> dram3d_chan_cid
+```
+
+The cluster ingress router arbitrates at the NoC link width. The NoC retains
+global addresses for stacked DRAM so that the cluster can decode the aperture
+and remove its base exactly once. Remote TCDM keeps its existing local-offset
+addressing, including broadcast/reduction destinations. Both regions share
+one physical NoC destination port. Local-channel DMA also traverses the local
+NoC router; accesses to another channel traverse the mesh to its owner.
+
+DRAMSys includes the memory controller. There is no logic-side HBM controller,
+channel striping, address alias, or additional PHY/link latency on the F2F bus.
+`hbm_node_aliase` and scrambling affect side HBM only. Side HBM may coexist with
+stacked DRAM; setting all four edge counts to zero creates no edge controllers
+or edge mappings. Overlapping stacked/global address ranges are rejected.
+
+The existing `--preload` ELF64 path supports these high addresses in both
+direct and timed modes, through the same NoC and cluster address decoding.
+
+With the target built **including side HBM** (for the mixed-mode checks), run:
+
+```sh
+python3 pulp/tests/soft_hier_old/dram3d/test_dram3d.py \
+  --cc /path/to/riscv32-unknown-elf-gcc --build-dir build/dram3d-routing
+python3 pulp/tests/soft_hier_old/dram3d/test_config.py
+```
+
+This checks every source/destination pair, channel isolation, unaligned reads
+and writes, a transfer spanning two channel apertures, remote TCDM, and TCDM
+broadcasts. It exercises direct and timed ELF loading with and without aliased
+side HBM. The existing preload regression below covers the disabled/default
+configuration. The separate SDK's `apps_dram3d/` contains stacked-only presets,
+FP16 GEMM kernels, full output validation, and benchmark commands.
+
+## ELF loading
 
 The `pulp.chips.soft_hier_old.flex_cluster` target defaults to direct ELF
 initialization:
