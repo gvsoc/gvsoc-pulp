@@ -1,0 +1,2580 @@
+/*
+ * Copyright (C) 2024 ETH Zurich, University of Bologna, and Fondazione Chips-IT
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/*
+ * Authors: Chi Zhang,       ETH Zurich                       chizhang@iis.ee.ethz.ch
+            Lorenzo Zuolo,   Chips-IT                         lorenzo.zuolo@chips.it
+            Alex Marchioni,  Chips-IT                         alex.marchioni@chips.it
+            Francesco Conti, University of Bologna & Chips-IT f.conti@unibo.it
+            Yinrong Li,      ETH Zurich                       yinrli@student.ethz.ch
+ * Note:
+ *      Here we only support (No Compute/ INT16 / UINT16 / FP16 ) for matrix multiply
+ *
+ * io_v2 port of light_redmule.cpp.
+ *
+ * The engine (tiling, buffers, matmul, HWPE register protocol, FSM and the
+ * request-slot pool with its timing model) is untouched. Only the IO plumbing
+ * changes:
+ *
+ *   - the two register slave ports and the TCDM master port take their
+ *     callbacks at construction; the master's response callback now returns
+ *     vp::IoRespAck (this consumer always accepts, so IO_RESP_ACCEPTED) and its
+ *     retry callback takes the retry channel.
+ *   - status mapping: IO_REQ_OK -> IO_REQ_DONE, IO_REQ_PENDING ->
+ *     IO_REQ_GRANTED. IO_REQ_DENIED is unchanged, and the deny/retry handshake
+ *     keeps the same shape: block further issues until the retry fires.
+ *   - v2 has no per-request argument stack (arg_alloc / arg_get). The slot id a
+ *     response belongs to travels in IoReq::initiator, the field the protocol
+ *     reserves for exactly this (the master's own correlation handle) and never
+ *     touches itself. The v1 second argument (a back-pointer to the component)
+ *     was unused and is gone.
+ *   - request objects are plain vp::IoReq allocated by this component instead of
+ *     IoMaster::req_new(). They live on the non-beat plane (IoV2SingleReq), where
+ *     the target never frees what it is handed, so no IoReqAllocator is needed.
+ *   - the cost of an access is read with get_full_latency() (head latency +
+ *     bandwidth occupancy) instead of get_latency(), so a target that models
+ *     throughput is not silently dropped; on magia's TCDM path (crossbar +
+ *     memory_v3) duration is 0, so the value is the v1 one.
+ *   - v2 has no per-request response port: a parked query would be answered on
+ *     the slave port it came in on (see redmule_query_port).
+ */
+
+#include <vp/vp.hpp>
+#include <vp/itf/io_v2.hpp>
+#include <vp/itf/wire.hpp>
+#include <stdio.h>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <cstring>
+#include <vector>
+#include <list>
+#include <queue>
+#include <stdint.h>
+#include <stdio.h>
+#include <math.h>
+#include <vp/register.hpp>
+#include <climits>
+
+#include <cpu/iss/include/offload.hpp>
+#include <cpu/iss/flexfloat/flexfloat.h>
+
+/****************************************************
+*                   Type Definition                 *
+****************************************************/
+
+// typedef union {
+//     float f;
+//     struct {
+//         uint32_t mantissa : 23;
+//         uint32_t exponent : 8;
+//         uint32_t sign : 1;
+//     } parts;
+// } FloatBits;
+
+typedef uint8_t  fp8e4m3;
+typedef uint16_t fp16;
+
+enum redmule_state {
+    IDLE,
+    PRELOAD,
+    ROUTINE,
+    STORING,
+    FINISHED,
+    ACKNOWLEDGE
+};
+
+// Cycles from the job trigger to the first stream request, as in the RTL:
+// trigger -> start_cfg (1) -> tiler sequential multipliers -> tiler valid (3)
+// -> scheduler IDLE->PRELOAD (2) -> streamer address generators (2).
+static constexpr int JOB_START_LATENCY = 8;
+
+// Rows of W the W stream loads ahead before the computation starts: the HCI
+// load FIFO of the stream (4, redmule_streamer.sv) and i_w_buffer_fifo (4,
+// redmule_top.sv), plus the row in flight (9 rows on the waveforms).
+static constexpr uint32_t W_PREFETCH_ROWS = 9;
+
+// Cycles the z_buffer takes per Y row in the preload: the Y stream feeds it
+// one row every 4 cycles (redmule_streamer.sv, load FIFO: "the consumer has a
+// throughput of 1 packet over 4 cycles"), the X and W accesses taking the
+// cycles in between. The scheduler enters LOAD_W once the z_buffer is loaded,
+// Y_ROW_CYCLES * (Width - 1) + 1 cycles after the first request of the job
+// (29 on the waveforms of test_mm_os, test_mm_os_2 and test_mm_ws, whatever
+// the number of X and W rows of the preload).
+static constexpr int64_t Y_ROW_CYCLES = 4;
+
+enum iter_instruction {
+    INSTR_LOAD_Y,
+    INSTR_LOAD_W,
+    INSTR_LOAD_W_COMPUTE,
+    // Load of a W row the RTL reads beyond N (see get_w_rows()): timing only,
+    // the row is padding the RTL gates to zero
+    INSTR_LOAD_W_PAD,
+    // Y load / Z store of a row past M in the last M tile: the RTL always moves
+    // Width (ce_height) rows (see get_y_z_pad_rows()). The Y load is timing
+    // only, the Z store writes zeroes, as the RTL
+    INSTR_LOAD_Y_PAD,
+    INSTR_STOR_Z_PAD,
+    INSTR_LOAD_X,
+    INSTR_STOR_Z,
+    INSTR_FORWARD_YZ
+};
+
+/********************************************************
+*                   Function Definition                 *
+********************************************************/
+
+void matmul_uint16(uint16_t * z, uint16_t * y, uint16_t * x, uint16_t * w, uint16_t m_size, uint16_t n_size, uint16_t k_size);
+void matmul_int16(int16_t * z, int16_t * y, int16_t * x, int16_t * w, uint16_t m_size, uint16_t n_size, uint16_t k_size);
+void matmul_uint8(uint8_t * z, uint8_t * y, uint8_t * x, uint8_t * w, uint16_t m_size, uint16_t n_size, uint16_t k_size);
+void matmul_int8(int8_t * z, int8_t * y, int8_t * x, int8_t * w, uint16_t m_size, uint16_t n_size, uint16_t k_size);
+void matmul_fp8e4m3(fp8e4m3 * z, fp8e4m3 * y, fp8e4m3 * x, fp8e4m3 * w, uint16_t m_size, uint16_t n_size, uint16_t k_size);
+
+/*****************************************************
+*                   Class Definition                 *
+*****************************************************/
+
+
+class LightRedmule : public vp::Component
+{
+
+public:
+    LightRedmule(vp::ComponentConf &config);
+
+// private: ? why not private?????
+    static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
+    static vp::IoReqStatus req_v2(vp::Block *__this, vp::IoReq *req);
+    // Method for offload interface, called when the core is offloading an instruction
+    static void offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *insn);
+    //static void offload_grant(vp::Block *__this, IssOffloadInsnGrant<iss_reg_t> *result);
+    static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
+
+    uint32_t op_foramt_parser(uint32_t op_format);
+
+    // HWPE control-register protocol (ACQUIRE / COMMIT_TRIGGER / SOFT_CLEAR)
+    int32_t  acquire();
+    void     commit(bool start);
+    void     start_next_job();
+    void     soft_clear(uint32_t value);
+    void init_redmule_meta_data();
+    uint32_t tmp_next_addr();
+    uint32_t next_addr();
+    uint32_t calculate_tile_base_address(uint32_t base, uint32_t stride, uint32_t tile_col, uint32_t tile_row, uint32_t i, uint32_t j);
+    uint32_t inc_addr(uint32_t addr, uint32_t stride, uint32_t tile_row);
+    uint32_t next_iteration();
+    uint32_t get_redmule_array_runtime();
+    uint32_t get_w_rows(uint32_t iter_k);
+    uint32_t get_y_z_pad_rows(uint32_t rows);
+    uint32_t get_routine_access_block_number();
+    uint32_t get_preload_access_block_number();
+    uint32_t get_storing_access_block_number();
+    uint32_t get_routine_to_storing_latency();
+    void     process_iter_instruction();
+    void     process_iter_instruction(uint8_t *buf, uint32_t instr);
+    void     process_compute();
+
+    // TCDM async response / retry callbacks (only fire for GRANTED/DENIED).
+    static vp::IoRespAck tcdm_response(vp::Block *__this, vp::IoReq *req);
+    static void tcdm_retry(vp::Block *__this, vp::IoRetryChannel channel);
+    int  alloc_req_slot();
+    void free_req_slot(int id, int64_t available_at);
+    // Iteration end-condition: all slots reusable at the current cycle.
+    bool all_slots_free();
+    // Issue-side capacity gate mirroring the old queue-size check.
+    bool issue_slot_gate_ok();
+    // Issue one request; returns false only if the slot pool is exhausted.
+    bool issue_request(uint32_t addr, uint32_t instr, bool is_write, uint32_t size);
+    // Shared response handler (sync OK and async paths). free_cycle is when
+    // the slot becomes reusable.
+    void handle_response(int slot_id, int64_t free_cycle);
+    // Apply the data movement using the values captured at issue time.
+    void apply_response_data(uint8_t *buf, uint32_t instr, uint32_t dst_offset, uint32_t cutoff);
+    // Fired when the last W burst lands: run matmul and clear w_buffer.
+    void run_compute_and_drain();
+    void     matmul_fp16(fp16 * z, fp16 * y, fp16 * x, fp16 * w, uint16_t m_size, uint16_t n_size, uint16_t k_size);
+
+    vp::Trace           trace;
+    vp::IoSlave         input_itf{&LightRedmule::req};
+    vp::IoSlave         input_itf_v2{&LightRedmule::req_v2};
+    // Interface from which the instructions are received from the core
+    vp::WireSlave<IssOffloadInsn<uint32_t> *> offload_itf;
+    // Interface for granting previously stalled redmule offload
+    vp::WireMaster<IssOffloadInsnGrant<uint32_t> *> offload_grant_itf;
+    vp::WireMaster<bool> done;
+
+    vp::IoMaster        tcdm_itf{&LightRedmule::tcdm_retry, &LightRedmule::tcdm_response};
+
+    //redmule fsm
+    vp::IoReq *         redmule_query;
+    // Slave port a parked query came in on: v2 replies on the port, not
+    // through a port carried by the request.
+    vp::IoSlave *       redmule_query_port;
+    vp::IoReq*          tcdm_req;
+    vp::ClockEvent *    fsm_event;
+    vp::Register<uint32_t>  reg_fsm_state;
+    vp::Register<uint32_t>  reg_busy;
+    uint32_t            tcdm_block_total;
+    uint32_t            fsm_counter;
+    uint32_t            fsm_timestamp;
+    int64_t             timer_start;
+    int64_t             cycle_start;
+    int64_t             total_runtime;
+    int64_t             num_matmul;
+
+    //HWPE job queue (depth 2, double-buffered)
+    uint8_t             job_id_counter;   //wraps at 256
+    int                 job_state;        //0 = free to acquire, -2 = acquired-not-committed
+    int                 job_pending;      //0..2 committed-but-not-finished jobs
+    int                 cxt_cfg_ptr;      //context slot software is configuring
+    int                 cxt_use_ptr;      //context slot the FSM is executing
+    int                 cxt_job_id[2];    //job id per context slot, -1 = empty
+    int                 running_job_id;   //current/last running job id, -1 = none yet
+    uint8_t             completed_jobs;   //RUNNING_JOB: jobs completed so far (job_running_id_q)
+    uint32_t            cxt_m_size[2];
+    uint32_t            cxt_n_size[2];
+    uint32_t            cxt_k_size[2];
+    uint32_t            cxt_x_addr[2];
+    uint32_t            cxt_w_addr[2];
+    uint32_t            cxt_y_addr[2];
+    uint32_t            cxt_compute_able[2];
+
+    //redmule configuration
+    uint32_t            tcdm_bank_width;
+    uint32_t            tcdm_bank_number;
+    uint32_t            elem_size;
+    uint32_t            ce_height;
+    uint32_t            ce_width;
+    uint32_t            ce_pipe;
+    uint32_t            queue_depth;
+    uint32_t            bandwidth;
+    uint32_t            fold_tiles_mapping;
+    uint64_t            loc_base;
+    uint32_t            compute_able;
+    uint32_t            LOCAL_BUFFER_H;
+    uint32_t            LOCAL_BUFFER_N;
+    uint32_t            LOCAL_BUFFER_W;
+
+    //redmule registers
+    uint32_t            m_size;
+    uint32_t            n_size;
+    uint32_t            k_size;
+    uint32_t            x_addr;
+    uint32_t            w_addr;
+    uint32_t            y_addr;
+    uint32_t            z_addr;
+
+    //redmule meta data
+    uint32_t            x_row_tiles;
+    uint32_t            x_row_lefts;
+    uint32_t            x_col_tiles;
+    uint32_t            x_col_lefts;
+    uint32_t            w_row_tiles;
+    uint32_t            w_row_lefts;
+    uint32_t            w_col_tiles;
+    uint32_t            w_col_lefts;
+    uint32_t            z_row_tiles;
+    uint32_t            z_row_lefts;
+    uint32_t            z_col_tiles;
+    uint32_t            z_col_lefts;
+    uint32_t            iter_i;
+    uint32_t            iter_j;
+    uint32_t            iter_k;
+    uint32_t            iter_x_addr;
+    uint32_t            iter_w_addr;
+    uint32_t            iter_y_addr;
+    uint32_t            iter_z_addr;
+    uint32_t            x_acc_block;
+    uint32_t            w_acc_block;
+    uint32_t            w_pad_block;      // W rows loaded for timing only (get_w_rows())
+    uint32_t            w_rows_later;     // real W rows of the tile left to a later phase
+    uint32_t            w_prefetch_real;  // real W rows of the first tile loaded by the preload
+    uint32_t            w_prefetch_pad;   // padding W rows of the first tile loaded by the preload
+    int64_t             preload_first_issue; // cycle of the first access of the preload
+    uint32_t            y_pad_block;      // Y rows loaded for timing only (get_y_z_pad_rows())
+    uint32_t            z_pad_block;      // Z rows stored for timing only (get_y_z_pad_rows())
+    uint32_t            y_acc_block;
+    uint32_t            z_acc_block;
+    uint32_t            z_store_width;
+    uint32_t            z_store_height;
+    double              ideal_runtime;
+    uint32_t            iter_instruction;
+    uint32_t            iter_x_row_ptr;
+    uint32_t            iter_w_row_ptr;
+    uint32_t            iter_y_row_ptr;
+    uint32_t            iter_z_row_ptr;
+
+    //redmule buffer
+    uint8_t *           access_buffer;
+    uint8_t *           y_buffer_preload;
+    uint8_t *           w_buffer;
+    uint8_t *           x_buffer;       // current k-iter (read by compute)
+    uint8_t *           x_buffer_next;  // next k-iter (written by LOAD_X resp)
+    uint8_t *           z_buffer_compute;
+    uint8_t *           z_buffer_previos;
+
+    // Per-slot outstanding-request state (LSU-style, one field per slot
+    // captures both sync OK latency timing and async PENDING tracking).
+    struct ReqSlot {
+        vp::IoReq *     req;
+        uint8_t *       buf;
+        uint32_t        instr;
+        // Captured at issue time; never read from live FSM state at response
+        // time, so OOO responses are safe.
+        uint32_t        dst_offset;
+        uint32_t        cutoff;
+        // <=now: free. >now (finite): sync OK in-flight until that cycle.
+        // INT64_MAX: async PENDING/DENIED awaiting callback.
+        int64_t         available_at;
+    };
+    std::vector<ReqSlot> req_slots;
+    bool                request_denied;  // last issue was denied, await retry
+    int                 denied_slot;     // slot held by that denied issue (-1 = none)
+    // Compute fires when w_outstanding_count reaches 0 with compute_pending
+    // set. X uses a double-buffer (x_buffer_next), swapped at iter_done.
+    uint32_t            w_outstanding_count;
+    bool                compute_pending;
+
+};
+
+extern "C" vp::Component *gv_new(vp::ComponentConf &config)
+{
+    return new LightRedmule(config);
+}
+
+LightRedmule::LightRedmule(vp::ComponentConf &config)
+    : vp::Component(config),
+    reg_fsm_state(*this, "fsm_state", 32, true, IDLE),
+    reg_busy(*this, "busy", 1, true, 0)
+{
+    //Initialize interface
+    this->traces.new_trace("trace", &this->trace, vp::DEBUG);
+    this->new_slave_port("input", &this->input_itf);
+    this->new_slave_port("input_v2", &this->input_itf_v2);
+    this->new_master_port("tcdm", &this->tcdm_itf);
+
+    // Declare offload slave interface where instructions will be offloaded
+    this->offload_itf.set_sync_meth(&LightRedmule::offload_sync);
+    this->new_slave_port("offload", &this->offload_itf, this);
+
+    // Declare offload master interface for granting blocked transfers
+    //this->offload_grant_itf.set_sync_meth(&LightRedmule::offload_grant);
+    this->new_master_port("offload_grant", &this->offload_grant_itf, this);
+
+    this->new_master_port("done_irq", &this->done, this);
+    
+    
+    //Initialize configuration
+    this->tcdm_bank_width   = get_js_config()->get("tcdm_bank_width")->get_int();
+    this->tcdm_bank_number  = get_js_config()->get("tcdm_bank_number")->get_int();
+    this->elem_size         = get_js_config()->get("elem_size")->get_int();
+    this->ce_height         = get_js_config()->get("ce_height")->get_int();
+    this->ce_width          = get_js_config()->get("ce_width")->get_int();
+    this->ce_pipe           = get_js_config()->get("ce_pipe")->get_int();
+    this->queue_depth       = get_js_config()->get("queue_depth")->get_int();
+    this->fold_tiles_mapping= get_js_config()->get("fold_tiles_mapping")->get_int();
+    this->loc_base          = get_js_config()->get("loc_base")->get_double();
+    this->compute_able      = 0;
+    this->bandwidth         = this->tcdm_bank_width * this->tcdm_bank_number;
+    this->LOCAL_BUFFER_H    = this->ce_height;
+    this->LOCAL_BUFFER_N    = this->bandwidth / this->elem_size;
+    this->LOCAL_BUFFER_W    = this->ce_width * (this->ce_pipe + 1);
+
+    //Initialize registers
+    this->m_size            = 4;
+    this->n_size            = 4;
+    this->k_size            = 4;
+    this->x_addr            = 0;
+    this->w_addr            = 0;
+    this->y_addr            = 0;
+    this->z_addr            = 0;
+
+    //Initialize redmule meta data
+    this->x_row_tiles       = 0;
+    this->x_row_lefts       = 0;
+    this->x_col_tiles       = 0;
+    this->x_col_lefts       = 0;
+    this->w_row_tiles       = 0;
+    this->w_row_lefts       = 0;
+    this->w_col_tiles       = 0;
+    this->w_col_lefts       = 0;
+    this->z_row_tiles       = 0;
+    this->z_row_lefts       = 0;
+    this->z_col_tiles       = 0;
+    this->z_col_lefts       = 0;
+    this->iter_i            = 0;
+    this->iter_j            = 0;
+    this->iter_k            = 0;
+    this->iter_x_addr       = 0;
+    this->iter_w_addr       = 0;
+    this->iter_y_addr       = 0;
+    this->iter_z_addr       = 0;
+    this->x_acc_block       = 0;
+    this->w_acc_block       = 0;
+    this->w_pad_block       = 0;
+    this->w_rows_later      = 0;
+    this->w_prefetch_real   = 0;
+    this->w_prefetch_pad    = 0;
+    this->y_pad_block       = 0;
+    this->z_pad_block       = 0;
+    this->y_acc_block       = 0;
+    this->z_acc_block       = 0;
+    this->z_store_width     = 0;
+    this->z_store_height    = 0;
+    this->ideal_runtime     = 0;
+    this->iter_instruction  = INSTR_LOAD_Y;
+    this->iter_x_row_ptr    = 0;
+    this->iter_w_row_ptr    = 0;
+    this->iter_y_row_ptr    = 0;
+    this->iter_z_row_ptr    = 0;
+
+    // Zero-init buffers (edge-case rows must start clean).
+    this->access_buffer     = new uint8_t [this->bandwidth * 2]();
+    this->y_buffer_preload  = new uint8_t [this->LOCAL_BUFFER_H * this->LOCAL_BUFFER_W * this->elem_size]();
+    this->w_buffer          = new uint8_t [this->LOCAL_BUFFER_N * this->LOCAL_BUFFER_W * this->elem_size]();
+    this->x_buffer          = new uint8_t [this->LOCAL_BUFFER_H * this->LOCAL_BUFFER_N * this->elem_size]();
+    this->x_buffer_next     = new uint8_t [this->LOCAL_BUFFER_H * this->LOCAL_BUFFER_N * this->elem_size]();
+    this->z_buffer_compute  = new uint8_t [this->LOCAL_BUFFER_H * this->LOCAL_BUFFER_W * this->elem_size]();
+    this->z_buffer_previos  = new uint8_t [this->LOCAL_BUFFER_H * this->LOCAL_BUFFER_W * this->elem_size]();
+
+    //Initialize FSM
+    this->reg_fsm_state.set(IDLE);
+    this->reg_busy.set(0);
+    this->redmule_query     = NULL;
+    this->redmule_query_port = NULL;
+    this->tcdm_req          = new vp::IoReq();
+    this->fsm_event         = this->event_new(&LightRedmule::fsm_handler);
+    this->tcdm_block_total  = 0;
+    this->fsm_counter       = 0;
+    this->fsm_timestamp     = 0;
+    this->timer_start       = 0;
+    this->cycle_start       = 0;
+    this->total_runtime     = 0;
+    this->num_matmul        = 0;
+
+    //Initialize HWPE job queue
+    this->job_id_counter    = 0;
+    this->job_state         = 0;
+    this->job_pending       = 0;
+    this->cxt_cfg_ptr       = 0;
+    this->cxt_use_ptr       = 0;
+    this->cxt_job_id[0]     = -1;
+    this->cxt_job_id[1]     = -1;
+    this->running_job_id    = -1;
+    this->completed_jobs    = 0;
+    for (int i = 0; i < 2; i++) {
+        this->cxt_m_size[i]       = 0;
+        this->cxt_n_size[i]       = 0;
+        this->cxt_k_size[i]       = 0;
+        this->cxt_x_addr[i]       = 0;
+        this->cxt_w_addr[i]       = 0;
+        this->cxt_y_addr[i]       = 0;
+        this->cxt_compute_able[i] = 0;
+    }
+
+    // Slot pool: queue_depth+1 entries; each owns an IoReq + bandwidth
+    // buffer. The slot id travels in IoReq::initiator so a response can be
+    // matched back to its slot.
+    this->request_denied      = false;
+    this->denied_slot         = -1;
+    this->w_outstanding_count = 0;
+    this->compute_pending     = false;
+
+    int pool_size = (int)this->queue_depth + 1;
+    this->req_slots.resize(pool_size);
+    for (int i = 0; i < pool_size; i++)
+    {
+        ReqSlot &slot = this->req_slots[i];
+        slot.req          = new vp::IoReq();
+        slot.buf          = new uint8_t[this->bandwidth];
+        slot.instr        = 0;
+        slot.dst_offset   = 0;
+        slot.cutoff       = 0;
+        slot.available_at = 0;
+        slot.req->initiator = (void *)(intptr_t)i;
+    }
+
+    this->trace.msg("[LightRedmule] Model Initialization Done! (slot pool size=%d)\n", pool_size);
+}
+
+void LightRedmule::init_redmule_meta_data(){
+    uint32_t buffer_h = this->ce_height;
+    uint32_t buffer_w = this->ce_width * (this->ce_pipe + 1);
+    uint32_t buffer_n = this->bandwidth / this->elem_size;
+
+    this->x_row_lefts = this->n_size % buffer_n;
+    this->x_row_tiles = this->n_size / buffer_n + (this->x_row_lefts > 0 ? 1 : 0);
+
+    this->x_col_lefts = this->m_size % buffer_h;
+    this->x_col_tiles = this->m_size / buffer_h + (this->x_col_lefts > 0 ? 1 : 0);
+
+    this->w_row_lefts = this->k_size % buffer_w;
+    this->w_row_tiles = this->k_size / buffer_w + (this->w_row_lefts > 0 ? 1 : 0);
+
+    this->w_col_lefts = this->x_row_lefts;
+    this->w_col_tiles = this->x_row_tiles;
+    this->z_row_lefts = this->w_row_lefts;
+    this->z_row_tiles = this->w_row_tiles;
+    this->z_col_lefts = this->x_col_lefts;
+    this->z_col_tiles = this->x_col_tiles;
+
+    this->iter_i = 0;
+    this->iter_j = 0;
+    this->iter_k = 0;
+
+    this->iter_x_addr = this->x_addr;
+    this->iter_w_addr = this->w_addr;
+    this->iter_y_addr = this->y_addr;
+    this->iter_z_addr = this->z_addr;
+
+    this->x_acc_block = 0;
+    this->w_acc_block = 0;
+    this->w_pad_block = 0;
+    this->y_pad_block = 0;
+    this->z_pad_block = 0;
+    this->y_acc_block = 0;
+    this->z_acc_block = 0;
+
+    this->iter_x_row_ptr = 0;
+    this->iter_w_row_ptr = 0;
+    this->iter_y_row_ptr = 0;
+    this->iter_z_row_ptr = 0;
+
+    // Reset per-matmul slot-pool state defensively.
+    this->w_outstanding_count = 0;
+    this->compute_pending     = false;
+    int64_t now = this->clock.get_cycles();
+    for (auto &slot : this->req_slots) slot.available_at = now;
+
+    this->ideal_runtime = 1.0 * (this->m_size * this->n_size * this->k_size)/( 1.0 * this->ce_height * this->ce_width);
+}
+
+uint32_t LightRedmule::next_iteration(){
+    this->iter_k += 1;
+    if (this->iter_k == this->x_row_tiles)
+    {
+        this->iter_k = 0;
+        this->iter_j += 1;
+        if (this->iter_j == this->z_row_tiles)
+        {
+            this->iter_j = 0;
+            this->iter_i += 1;
+            if (this->iter_i == this->z_col_tiles)
+            {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+uint32_t LightRedmule::calculate_tile_base_address(uint32_t base, uint32_t stride, uint32_t tile_col, uint32_t tile_row, uint32_t i, uint32_t j){
+    /*
+    *       ----
+    *   col |  |
+    *       ----
+    *        row
+    */
+    if (this->fold_tiles_mapping)
+    {
+        uint32_t tiles_per_row = (stride + tile_row - 1)/tile_row;
+        return base + (i * tiles_per_row + j) * tile_row * tile_col * this->elem_size;
+    } else {
+        return base + (i * tile_col * stride + j * tile_row) * this->elem_size;
+    }
+}
+
+uint32_t LightRedmule::inc_addr(uint32_t addr, uint32_t stride, uint32_t tile_row){
+    if (this->fold_tiles_mapping)
+    {
+        return addr + tile_row * this->elem_size;
+    } else {
+        return addr + stride * this->elem_size;
+    }
+}
+
+uint32_t LightRedmule::tmp_next_addr(){
+    this->z_addr = (this->z_addr + this->bandwidth) % (this->ce_height * this->bandwidth);
+    return this->z_addr;
+}
+
+uint32_t LightRedmule::next_addr(){
+    uint32_t addr       = 0;
+    uint32_t buffer_h   = this->ce_height;
+    uint32_t buffer_w   = this->ce_width * (this->ce_pipe + 1);
+    uint32_t buffer_n   = this->bandwidth / this->elem_size;
+
+    // Y -> W -> X -> Z
+    if (this->y_acc_block > 0)
+    {
+        addr = this->iter_y_addr;
+        this->iter_y_addr = this->inc_addr(addr, this->k_size, buffer_w);
+        this->y_acc_block -= 1;
+        this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][Address] Y tile at 0x%11x | #Y tile left %d\n", addr, this->y_acc_block);
+        this->tcdm_req->set_is_write(0);
+        this->tcdm_req->set_size(buffer_w * this->elem_size);
+        this->iter_instruction  = INSTR_LOAD_Y;
+    } else if (this->y_pad_block > 0)
+    {
+        // Rows past M, read after the real ones like the RTL does. Timing only.
+        addr = this->iter_y_addr;
+        this->iter_y_addr = this->inc_addr(addr, this->k_size, buffer_w);
+        this->y_pad_block -= 1;
+        this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][Address] Y padding tile at 0x%11x | #Y padding tile left %d\n", addr, this->y_pad_block);
+        this->tcdm_req->set_is_write(0);
+        this->tcdm_req->set_size(buffer_w * this->elem_size);
+        this->iter_instruction  = INSTR_LOAD_Y_PAD;
+    } else if (this->w_pad_block > 0)
+    {
+        // Padding rows first, so that the last real W row still triggers the
+        // compute. Timing only: same row address, nothing stored.
+        addr = this->iter_w_addr;
+        this->w_pad_block -= 1;
+        this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][Address] W padding tile at 0x%11x | #W padding tile left %d\n", addr, this->w_pad_block);
+        this->tcdm_req->set_is_write(0);
+        this->tcdm_req->set_size(buffer_w * this->elem_size);
+        this->iter_instruction  = INSTR_LOAD_W_PAD;
+    } else if (this->w_acc_block > 0)
+    {
+        addr = this->iter_w_addr;
+        this->iter_w_addr = this->inc_addr(addr, this->k_size, buffer_w);
+        this->w_acc_block -= 1;
+        this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][Address] W tile at 0x%11x | #W tile left %d\n", addr, this->w_acc_block);
+        this->tcdm_req->set_is_write(0);
+        this->tcdm_req->set_size(buffer_w * this->elem_size);
+        if (this->w_acc_block == 0 && this->w_rows_later == 0)
+        {
+            this->iter_instruction  = INSTR_LOAD_W_COMPUTE;
+        } else {
+            this->iter_instruction  = INSTR_LOAD_W;
+        }
+    } else if (this->x_acc_block > 0)
+    {
+        addr = this->iter_x_addr;
+        this->iter_x_addr = this->inc_addr(addr, this->n_size, buffer_n);
+        this->x_acc_block -= 1;
+        this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][Address] X tile at 0x%11x | #X tile left %d\n", addr, this->x_acc_block);
+        this->tcdm_req->set_is_write(0);
+        this->tcdm_req->set_size(this->bandwidth);
+        this->iter_instruction  = INSTR_LOAD_X;
+    } else if (this->z_acc_block > 0)
+    {
+        addr = this->iter_z_addr;
+        this->iter_z_addr = this->inc_addr(addr, this->k_size, buffer_w);
+        this->z_acc_block -= 1;
+        this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][Address] Z tile at 0x%11x | #Z tile left %d\n", addr, this->z_acc_block);
+        this->tcdm_req->set_is_write(1);
+        this->tcdm_req->set_size(this->z_store_width * this->elem_size);
+        this->iter_instruction  = INSTR_STOR_Z;
+    } else if (this->z_pad_block > 0)
+    {
+        // Rows past M. The RTL stores them too, with zeroes and all the byte
+        // enables set, overwriting the memory right after Z: done the same
+        // here, so that software sees on the model what the hardware does.
+        addr = this->iter_z_addr;
+        this->iter_z_addr = this->inc_addr(addr, this->k_size, buffer_w);
+        this->z_pad_block -= 1;
+        this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][Address] Z padding tile at 0x%11x | #Z padding tile left %d\n", addr, this->z_pad_block);
+        this->tcdm_req->set_is_write(1);
+        this->tcdm_req->set_size(this->z_store_width * this->elem_size);
+        this->iter_instruction  = INSTR_STOR_Z_PAD;
+    } else {
+        this->trace.fatal("[LightRedmule][Address] INVALID redmule address iteration : No tiles to access\n");
+    }
+
+    return addr;
+}
+
+void LightRedmule::process_compute(){
+    uint32_t buffer_h           = this->ce_height;
+    uint32_t buffer_w           = this->ce_width * (this->ce_pipe + 1);
+    uint32_t buffer_n           = this->bandwidth / this->elem_size;
+
+    if (this->compute_able == 1)
+    {
+        //UINT16
+        matmul_uint16(  (uint16_t *)this->z_buffer_compute,
+                        (uint16_t *)this->z_buffer_compute,
+                        (uint16_t *)this->x_buffer,
+                        (uint16_t *)this->w_buffer,
+                        (uint16_t)buffer_h,
+                        (uint16_t)buffer_n,
+                        (uint16_t)buffer_w);
+    } else
+    if (this->compute_able == 2)
+    {
+        //INT16
+        matmul_int16(   (int16_t *)this->z_buffer_compute,
+                        (int16_t *)this->z_buffer_compute,
+                        (int16_t *)this->x_buffer,
+                        (int16_t *)this->w_buffer,
+                        (uint16_t)buffer_h,
+                        (uint16_t)buffer_n,
+                        (uint16_t)buffer_w);
+    } else
+    if (this->compute_able == 3)
+    {
+        //FP16
+        this->matmul_fp16(    (fp16 *)this->z_buffer_compute,
+                        (fp16 *)this->z_buffer_compute,
+                        (fp16 *)this->x_buffer,
+                        (fp16 *)this->w_buffer,
+                        (uint16_t)buffer_h,
+                        (uint16_t)buffer_n,
+                        (uint16_t)buffer_w);
+    }
+    if (this->compute_able == 5)
+    {
+        //UINT8
+        matmul_uint8(   (uint8_t *)this->z_buffer_compute,
+                        (uint8_t *)this->z_buffer_compute,
+                        (uint8_t *)this->x_buffer,
+                        (uint8_t *)this->w_buffer,
+                        (uint16_t)buffer_h,
+                        (uint16_t)buffer_n,
+                        (uint16_t)buffer_w);
+    }
+    if (this->compute_able == 6)
+    {
+        //UINT8
+        matmul_int8(    (int8_t *)this->z_buffer_compute,
+                        (int8_t *)this->z_buffer_compute,
+                        (int8_t *)this->x_buffer,
+                        (int8_t *)this->w_buffer,
+                        (uint16_t)buffer_h,
+                        (uint16_t)buffer_n,
+                        (uint16_t)buffer_w);
+    }
+    if (this->compute_able == 7)
+    {
+        //UINT8
+        matmul_fp8e4m3(     (fp8e4m3 *)this->z_buffer_compute,
+                        (fp8e4m3 *)this->z_buffer_compute,
+                        (fp8e4m3 *)this->x_buffer,
+                        (fp8e4m3 *)this->w_buffer,
+                        (uint16_t)buffer_h,
+                        (uint16_t)buffer_n,
+                        (uint16_t)buffer_w);
+    }
+
+}
+
+void LightRedmule::process_iter_instruction(){
+    // Sync wrapper: reuse the global access_buffer and the FSM-current
+    // iter_instruction. The async path calls the overload below with a
+    // per-slot buffer and the instruction captured at issue time, since
+    // iter_instruction may have advanced by the time the response fires.
+    this->process_iter_instruction(this->access_buffer, this->iter_instruction);
+}
+
+void LightRedmule::process_iter_instruction(uint8_t *buf, uint32_t instr){
+
+    /*
+                      buffer_w,
+                      k_size,
+                      iter_j
+            buffer_n|------
+            n_size  |  W  |
+            iter_k  |     |
+    buffer_h|--------------
+    m_size  |  X    |  Y/Z|
+    iter_i  |-------|------
+    */
+
+    uint32_t buffer_h_byte = this->ce_height * this->elem_size;
+    uint32_t buffer_n_byte = this->bandwidth;
+    uint32_t buffer_w_byte = this->ce_width * (this->ce_pipe + 1) * this->elem_size;
+
+    uint32_t _k = this->iter_k + 1;
+    if ((_k == this->x_row_tiles) || this->reg_fsm_state.get() == PRELOAD)
+    {
+        _k = 0;
+    }
+    uint32_t x_leftover_byte = this->n_size * this->elem_size - _k * buffer_n_byte;
+    uint32_t x_cutoff = x_leftover_byte < buffer_n_byte ? x_leftover_byte : buffer_n_byte;
+
+    uint32_t w_leftover_byte = this->k_size * this->elem_size - this->iter_j * buffer_w_byte;
+    uint32_t w_cutoff = w_leftover_byte < buffer_w_byte ? w_leftover_byte : buffer_w_byte;
+
+    uint32_t _j = this->iter_j + 1;
+    if ((_j == this->z_row_tiles) || this->reg_fsm_state.get() == PRELOAD)
+    {
+        _j = 0;
+    }
+    uint32_t y_leftover_byte = this->k_size * this->elem_size - _j * buffer_w_byte;
+    uint32_t y_cutoff = y_leftover_byte < buffer_w_byte ? y_leftover_byte : buffer_w_byte;
+
+    uint32_t z_width_leftover_byte = this->k_size * this->elem_size - this->iter_j * buffer_w_byte;
+    uint32_t z_width_cutoff = z_width_leftover_byte < buffer_w_byte ? z_width_leftover_byte : buffer_w_byte;
+    uint32_t z_height_leftover_byte = this->m_size * this->elem_size - this->iter_i * buffer_h_byte;
+    uint32_t z_height_cutoff = z_height_leftover_byte < buffer_h_byte ? z_height_leftover_byte : buffer_h_byte;
+
+    uint32_t buffer_yz_byte = this->ce_height * this->ce_width * (this->ce_pipe + 1) * this->elem_size;
+    switch(instr) {
+        case INSTR_LOAD_Y:
+            if (this->iter_y_row_ptr == 0) {
+                std::memset(this->y_buffer_preload, 0, this->LOCAL_BUFFER_H * this->LOCAL_BUFFER_W * this->elem_size);
+            }
+            std::memcpy(&(this->y_buffer_preload[this->iter_y_row_ptr]), buf, y_cutoff);
+            if (this->y_acc_block == 0)
+            {
+                this->iter_y_row_ptr = 0;
+            } else {
+                this->iter_y_row_ptr += buffer_w_byte;
+            }
+            break;
+        case INSTR_LOAD_W:
+            if (this->iter_w_row_ptr == 0) {
+                std::memset(this->w_buffer, 0, this->LOCAL_BUFFER_N * this->LOCAL_BUFFER_W * this->elem_size);
+            }
+            std::memcpy(&(this->w_buffer[this->iter_w_row_ptr]), buf, w_cutoff);
+            this->iter_w_row_ptr += buffer_w_byte;
+            break;
+        case INSTR_LOAD_W_COMPUTE:
+            if (this->iter_w_row_ptr == 0) {
+                std::memset(this->w_buffer, 0, this->LOCAL_BUFFER_N * this->LOCAL_BUFFER_W * this->elem_size);
+            }
+            std::memcpy(&(this->w_buffer[this->iter_w_row_ptr]), buf, w_cutoff);
+            this->process_compute();
+            this->iter_w_row_ptr = 0;
+            //Clear X and W buffer
+            std::memset(this->x_buffer, 0, this->ce_height * this->bandwidth);
+            std::memset(this->w_buffer, 0, this->ce_width * (this->ce_pipe + 1) * this->bandwidth);
+            break;
+        case INSTR_LOAD_X:
+            if (this->iter_x_row_ptr == 0) {
+                std::memset(this->x_buffer, 0, ce_height * this->bandwidth);
+            }
+            std::memcpy(&(this->x_buffer[this->iter_x_row_ptr]), buf, x_cutoff);
+            if (this->x_acc_block == 0)
+            {
+                this->iter_x_row_ptr = 0;
+            } else {
+                this->iter_x_row_ptr += buffer_n_byte;
+            }
+            break;
+        case INSTR_STOR_Z:
+            std::memcpy(buf, &(this->z_buffer_previos[this->iter_z_row_ptr]), buffer_w_byte);
+            if (this->z_acc_block == 0)
+            {
+                this->iter_z_row_ptr = 0;
+            } else {
+                this->iter_z_row_ptr += buffer_w_byte;
+            }
+            break;
+        case INSTR_FORWARD_YZ:
+            std::memcpy(this->z_buffer_previos, this->z_buffer_compute, buffer_yz_byte);
+            std::memcpy(this->z_buffer_compute, this->y_buffer_preload, buffer_yz_byte);
+            std::memset(this->y_buffer_preload, 0, buffer_yz_byte);
+            this->z_store_width = z_width_cutoff / this->elem_size;
+            this->z_store_height = z_height_cutoff / this->elem_size;
+            break;
+        default:
+            break;
+    }
+}
+
+uint32_t LightRedmule::get_routine_access_block_number(){
+    uint32_t total_blocks       = 0;
+    uint32_t is_last_iteration  = (this->iter_i == (this->z_col_tiles - 1)) && (this->iter_j == (this->z_row_tiles - 1)) && (this->iter_k == (this->x_row_tiles - 1));
+    uint32_t is_first_iteration = (this->iter_i == 0) && (this->iter_j == 0) && (this->iter_k == 0);
+    uint32_t buffer_h           = this->ce_height;
+    uint32_t buffer_w           = this->ce_width * (this->ce_pipe + 1);
+    uint32_t buffer_n           = this->bandwidth / this->elem_size;
+    uint32_t tcdms_bw           = buffer_n;
+
+    this->x_acc_block = 0;
+    this->w_acc_block = 0;
+    this->w_pad_block = 0;
+    this->y_pad_block = 0;
+    this->z_pad_block = 0;
+    this->y_acc_block = 0;
+    this->z_acc_block = 0;
+    
+
+    // W block
+    if (this->iter_k == (this->x_row_tiles - 1) && (this->x_row_lefts > 0))
+    {
+        this->w_acc_block = this->x_row_lefts;
+    } else {
+        this->w_acc_block = tcdms_bw;
+    }
+    total_blocks += this->w_acc_block;
+    this->w_pad_block = this->get_w_rows(this->iter_k) - this->w_acc_block;
+    total_blocks += this->w_pad_block;
+    this->iter_w_addr = this->calculate_tile_base_address(this->w_addr, this->k_size, buffer_n, buffer_w, this->iter_k, this->iter_j);
+    this->w_rows_later = 0;
+    if (is_first_iteration)
+    {
+        // The preload already loaded the first rows of this tile
+        this->w_pad_block -= this->w_prefetch_pad;
+        this->w_acc_block -= this->w_prefetch_real;
+        total_blocks -= this->w_prefetch_pad + this->w_prefetch_real;
+        for (uint32_t i = 0; i < this->w_prefetch_real; i++)
+        {
+            this->iter_w_addr = this->inc_addr(this->iter_w_addr, this->k_size, buffer_w);
+        }
+        this->w_prefetch_pad  = 0;
+        this->w_prefetch_real = 0;
+    }
+
+    // X block
+    if (is_last_iteration == 0)
+    {
+
+        //update x tile base address
+        uint32_t _k = this->iter_k;
+        uint32_t _j = this->iter_j;
+        uint32_t _i = this->iter_i;
+        _k += 1;
+        if (_k == this->x_row_tiles)
+        {
+            _k = 0;
+            _j += 1;
+            if (_j == this->z_row_tiles)
+            {
+                _j = 0;
+                _i += 1;
+            }
+        }
+        this->iter_x_addr = this->calculate_tile_base_address(this->x_addr, this->n_size, buffer_h, buffer_n, _i, _k);
+
+        this->x_acc_block = (this->m_size - _i * this->ce_height) < this->ce_height ? (this->m_size - _i * this->ce_height) : this->ce_height;
+        total_blocks += this->x_acc_block;
+    }
+
+    // Y block
+    if (this->iter_k == (this->x_row_tiles - 1) && (is_last_iteration == 0))
+    {
+        //update y tile base address
+        uint32_t _i = this->iter_i;
+        uint32_t _j = this->iter_j;
+        _j += 1;
+        if (_j == this->z_row_tiles)
+        {
+            _j = 0;
+            _i += 1;
+        }
+        this->iter_y_addr = this->calculate_tile_base_address(this->y_addr, this->k_size, buffer_h, buffer_w, _i, _j);
+
+        this->y_acc_block = (this->m_size - _i * this->ce_height) < this->ce_height ? (this->m_size - _i * this->ce_height) : this->ce_height;
+        this->y_pad_block = this->get_y_z_pad_rows(this->y_acc_block);
+        total_blocks += this->y_acc_block + this->y_pad_block;
+    }
+
+    // Z block
+    if ((this->iter_k == 0) && (is_first_iteration == 0))
+    {
+        this->z_acc_block = this->z_store_height;
+        this->z_pad_block = this->get_y_z_pad_rows(this->z_acc_block);
+        total_blocks += this->z_acc_block + this->z_pad_block;
+
+        //update z tile base address
+        uint32_t _i = this->iter_i;
+        uint32_t _j = this->iter_j;
+        if (_j == 0)
+        {
+            _j = this->z_row_tiles - 1;
+            _i = _i - 1;
+        } else {
+            _j = _j -1;
+        }
+        this->iter_z_addr = this->calculate_tile_base_address(this->z_addr, this->k_size, buffer_h, buffer_w, _i, _j);
+    }
+
+    return total_blocks;
+
+}
+
+// Accesses of the preload, as in the RTL, where the X, W and Y streams start
+// together and the computation waits for the z_buffer to have loaded Y: the
+// first X tile, the first W_PREFETCH_ROWS rows of the first W tile, and the Y
+// rows. They are issued one per cycle, and the computation starts once the
+// z_buffer has loaded Y (Y_ROW_CYCLES), or after the accesses if later. The rest of the first
+// W tile is loaded by the first iteration. The RTL X stream also loads the
+// second X tile before the computation, which the model leaves to the first
+// iteration as for the next tiles.
+uint32_t LightRedmule::get_preload_access_block_number(){
+    uint32_t total_blocks       = 0;
+    uint32_t tcdms_bw           = this->bandwidth / this->elem_size;
+    uint32_t buffer_n           = tcdms_bw;
+    uint32_t buffer_w           = this->ce_width * (this->ce_pipe + 1);
+
+    this->x_acc_block = 0;
+    this->w_acc_block = 0;
+    this->w_pad_block = 0;
+    this->y_pad_block = 0;
+    this->z_pad_block = 0;
+    this->y_acc_block = 0;
+    this->z_acc_block = 0;
+
+    // X & Y block
+    this->x_acc_block = this->m_size < this->ce_height ?  this->m_size : this->ce_height;
+    this->y_acc_block = this->m_size < this->ce_height ?  this->m_size : this->ce_height;
+    this->y_pad_block = this->get_y_z_pad_rows(this->y_acc_block);
+    total_blocks = this->x_acc_block + this->y_acc_block + this->y_pad_block;
+
+    // First rows of the first W tile, padding first as in the iterations
+    uint32_t w_real = (this->x_row_tiles == 1 && this->x_row_lefts > 0) ? this->x_row_lefts : tcdms_bw;
+    uint32_t w_pad = this->get_w_rows(0) - w_real;
+    uint32_t w_rows = std::min(W_PREFETCH_ROWS, w_real + w_pad);
+    this->w_pad_block = std::min(w_rows, w_pad);
+    this->w_acc_block = w_rows - this->w_pad_block;
+    this->w_prefetch_pad = this->w_pad_block;
+    this->w_prefetch_real = this->w_acc_block;
+    this->w_rows_later = w_real - this->w_acc_block;
+    this->iter_w_addr = this->calculate_tile_base_address(this->w_addr, this->k_size, buffer_n, buffer_w, 0, 0);
+    total_blocks += w_rows;
+
+    return total_blocks;
+
+}
+
+uint32_t LightRedmule::get_storing_access_block_number(){
+    uint32_t total_blocks       = 0;
+    uint32_t buffer_h           = this->ce_height;
+    uint32_t buffer_w           = this->ce_width * (this->ce_pipe + 1);
+    uint32_t buffer_n           = this->bandwidth / this->elem_size;
+    uint32_t tcdms_bw           = this->bandwidth / this->elem_size;
+
+    this->x_acc_block = 0;
+    this->w_acc_block = 0;
+    this->w_pad_block = 0;
+    this->y_pad_block = 0;
+    this->z_pad_block = 0;
+    this->y_acc_block = 0;
+    this->z_acc_block = 0;
+
+    // Z block
+    this->z_acc_block = this->z_store_height;
+    this->z_pad_block = this->get_y_z_pad_rows(this->z_acc_block);
+    total_blocks = this->z_acc_block + this->z_pad_block;
+    this->iter_z_addr = this->calculate_tile_base_address(this->z_addr, this->k_size, buffer_h, buffer_w, this->z_col_tiles - 1, this->z_row_tiles - 1);
+
+    return total_blocks;
+
+}
+
+uint32_t LightRedmule::get_routine_to_storing_latency(){
+    return this->ce_width * (this->ce_pipe + 1);
+    // return 0;
+}
+
+uint32_t LightRedmule::get_redmule_array_runtime(){
+    uint32_t tcdms_bw       = this->bandwidth / this->elem_size;
+    uint32_t runtime_unit   = this->ce_width * (this->ce_pipe + 1);
+    uint32_t runtime_pices  = 1;
+    uint32_t runtime        = tcdms_bw * (this->ce_pipe + 1);
+    if (this->iter_k == (this->x_row_tiles - 1) && (this->x_row_lefts > 0))
+    {
+        // The array goes through every W row the RTL loads, padding included
+        runtime = this->get_w_rows(this->iter_k) * (this->ce_pipe + 1);
+    }
+    runtime_pices = (runtime + runtime_unit - 1)/runtime_unit;
+    return runtime_pices * runtime_unit;
+}
+
+// Rows of W the RTL loads and the array processes for the N tile iter_k
+// (redmule_tiler.sv): a job with N <= Height runs as if N were MinimumSizeN
+// (2 * Height), and the W-row loop is rounded up to a multiple of Height. The
+// rows past N are gated to zero, so they cost time but do not change the
+// result. Height is ce_width here (the K tile is ce_width * (ce_pipe + 1)).
+uint32_t LightRedmule::get_w_rows(uint32_t iter_k)
+{
+    uint32_t height  = this->ce_width;
+    uint32_t chunk   = this->bandwidth / this->elem_size;
+    uint32_t n_eff   = (this->n_size <= height) ? 2 * height : this->n_size;
+    uint32_t total   = (n_eff + height - 1) / height * height;
+    uint32_t start   = iter_k * chunk;
+    if (total <= start) return 0;
+    return (total - start) < chunk ? (total - start) : chunk;
+}
+
+// Rows of padding added to a Y load or Z store of `rows` real rows: the RTL
+// streams always Width (ce_height) rows per M tile (redmule_tiler.sv:
+// yz_tot_len = Width * x_rows_iter * w_cols_iter; only the X stream is cut to
+// x_rows_lftovr, in redmule_memory_scheduler.sv).
+uint32_t LightRedmule::get_y_z_pad_rows(uint32_t rows)
+{
+    return rows < this->ce_height ? this->ce_height - rows : 0;
+}
+
+uint32_t LightRedmule::op_foramt_parser(uint32_t op_format) {
+    uint32_t data_format=op_format&0x7;
+    uint32_t operation=(op_format>>3)&0x7;
+    uint32_t compute_able=0;
+    //only GeMM is supported for now
+    //expected compute_able=1 --> matmul_uint16
+    //expected compute_able=2 --> matmul_int16
+    //expected compute_able=3 --> matmul_fp16
+    //expected compute_able=5 --> matmul_uint8
+    //expected compute_able=6 --> matmul_int8
+    //expected compute_able=7 --> matmul_fp8e4m3
+    if ((operation==1) && (data_format==1))
+        compute_able=3;
+    else if ((operation==1) && (data_format==0))
+        compute_able=7;
+    else 
+        this->trace.fatal("[LightRedmule] Selected wrong operation/format combination [op_format=0x%x-data_format=%d-operation=%d]\n",op_format,data_format,operation);
+    return compute_able;
+}
+
+void LightRedmule::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *insn)
+{
+    LightRedmule *_this = (LightRedmule *)__this;
+    uint32_t opc = insn->opcode & 0x7F;
+
+    switch (opc)
+    {
+        case 0b0001011:
+        {
+            if (_this->reg_fsm_state.get() == IDLE) {
+                insn->granted = true; //here we always grant the core as it is just a configuration
+                _this->m_size = insn->arg_a & 0xFFFF;
+                _this->n_size = insn->arg_b;
+                _this->k_size = (insn->arg_a) >> 16;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set MNK size: %d, %d, %d\n", _this->m_size, _this->n_size, _this->k_size);
+            }
+            break;
+        }
+        case 0b0101011:
+        {
+            if (_this->reg_fsm_state.get() == IDLE)
+            {
+                insn->granted = true; //as soon as the operations is triggered we deassert the core
+                _this->x_addr = insn->arg_a;
+                _this->w_addr = insn->arg_b;
+                _this->y_addr = insn->arg_c;
+                _this->z_addr = _this->y_addr;
+                _this->compute_able = _this->op_foramt_parser(insn->arg_d);
+                _this->elem_size = (_this->compute_able < 4)? 2:1;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set XWY addr: 0x%08x, 0x%08x, 0x%08x\n", _this->x_addr, _this->w_addr, _this->y_addr);
+
+                /*************************
+                *  Asynchronize Trigger  *
+                *************************/
+                //Sanity Check
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] redmule configuration (M-N-K): %d, %d, %d\n", _this->m_size, _this->n_size, _this->k_size);
+                if ((_this->m_size == 0)||(_this->n_size == 0)||(_this->k_size == 0))
+                {
+                    _this->trace.fatal("[LightRedmule] INVALID redmule configuration (M-N-K): %d, %d, %d\n", _this->m_size, _this->n_size, _this->k_size);
+                }
+
+                //Initilaize redmule meta data
+                _this->init_redmule_meta_data();
+
+                //Trigger FSM
+                _this->reg_fsm_state.set(PRELOAD);
+                _this->reg_busy.set(1);
+                _this->tcdm_block_total = _this->get_preload_access_block_number();
+                _this->fsm_counter      = 0;
+                _this->fsm_timestamp    = 0;
+                _this->timer_start      = _this->time.get_time();
+                _this->cycle_start      = _this->clock.get_cycles();
+                _this->event_enqueue(_this->fsm_event, JOB_START_LATENCY);
+            }
+            break;
+        }
+    }
+}
+
+/************************************************************
+*  HWPE control-register protocol (ACQUIRE / COMMIT_TRIGGER  *
+*  / STATUS / RUNNING_JOB / SOFT_CLEAR), depth-2 job queue    *
+************************************************************/
+
+//ACQUIRE (0x04, read): assign a new job id and lock the controller
+int32_t LightRedmule::acquire()
+{
+    if (this->job_state != 0) {
+        //Already acquired, not yet committed: re-return the pending id
+        //(checked first to match hwpe_ctrl_target.sv ACQUIRE-state priority over queue-full)
+        return this->job_state;
+    } else if (this->job_pending == 2) {
+        //Queue full
+        return -1;
+    } else {
+        //Free to acquire and room in the queue: hand out a new id
+        int32_t id = (int32_t) this->job_id_counter++;
+        this->cxt_job_id[this->cxt_cfg_ptr] = id;
+        this->job_state = -2;
+        return id;
+    }
+}
+
+//COMMIT_TRIGGER write (ct == 0 commit+start, ct == 1 commit-only)
+void LightRedmule::commit(bool start)
+{
+    if (this->job_state == 0) {
+        //For callers that (improerly) write TRIGGER directly without ever
+        //reading ACQUIRE, the real HW behavior is to not advance the job
+        //id counter, but only the running job counter (which counts retired
+        //jobs). We mirror that here.
+        if (this->job_pending < 2) {
+            this->cxt_job_id[this->cxt_cfg_ptr] = (int32_t) this->job_id_counter;
+            this->job_state = -2;
+        }
+    }
+    if (this->job_state != -2) {
+        //Queue full: drop
+        this->trace.msg(vp::Trace::LEVEL_WARNING,"[LightRedmule] COMMIT_TRIGGER dropped: job queue full (job_pending=%d)\n", this->job_pending);
+        return;
+    }
+
+    //Commit: unlock, queue the job, flip the config pointer
+    this->job_pending++;
+    this->job_state = 0;
+    this->cxt_cfg_ptr = 1 - this->cxt_cfg_ptr;
+
+    if (start && (this->reg_fsm_state.get() == IDLE)) {
+        this->start_next_job();
+    }
+}
+
+//Load the queued job in cxt_use_ptr and kick off the FSM (IDLE -> PRELOAD)
+void LightRedmule::start_next_job()
+{
+    //Load context
+    this->m_size         = this->cxt_m_size[this->cxt_use_ptr];
+    this->n_size         = this->cxt_n_size[this->cxt_use_ptr];
+    this->k_size         = this->cxt_k_size[this->cxt_use_ptr];
+    this->x_addr         = this->cxt_x_addr[this->cxt_use_ptr];
+    this->w_addr         = this->cxt_w_addr[this->cxt_use_ptr];
+    this->y_addr         = this->cxt_y_addr[this->cxt_use_ptr];
+    this->z_addr         = this->y_addr;
+    this->compute_able   = this->cxt_compute_able[this->cxt_use_ptr];
+    this->elem_size      = (this->compute_able < 4) ? 2 : 1;
+    this->running_job_id = this->cxt_job_id[this->cxt_use_ptr];
+
+    //Sanity Check
+    this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] redmule configuration (M-N-K): %d, %d, %d. Compute able is %d\n", this->m_size, this->n_size, this->k_size, this->compute_able);
+    if ((this->m_size == 0)||(this->n_size == 0)||(this->k_size == 0))
+    {
+        this->trace.fatal("[LightRedmule] INVALID redmule configuration (M-N-K): %d, %d, %d\n", this->m_size, this->n_size, this->k_size);
+        return;
+    }
+
+    //Initilaize redmule meta data
+    this->init_redmule_meta_data();
+
+    //Trigger FSM
+    this->reg_fsm_state.set(PRELOAD);
+    this->reg_busy.set(1);
+    this->tcdm_block_total = this->get_preload_access_block_number();
+    this->fsm_counter      = 0;
+    this->fsm_timestamp    = 0;
+    this->timer_start      = this->time.get_time();
+    this->cycle_start      = this->clock.get_cycles();
+    this->event_enqueue(this->fsm_event, JOB_START_LATENCY);
+}
+
+//SOFT_CLEAR write: 0 full clear, 1 clear engine state only, 2 clear regfile+queue only
+void LightRedmule::soft_clear(uint32_t value)
+{
+    if ((value == 0) || (value == 2)) {
+        //Clear job-offload state machine, job queue, ID counters, and buffered
+        //job-dependent config (regfile)
+        this->job_state      = 0;
+        this->job_pending     = 0;
+        this->cxt_job_id[0]   = -1;
+        this->cxt_job_id[1]   = -1;
+        this->running_job_id  = -1;
+        this->completed_jobs  = 0;
+        this->cxt_cfg_ptr     = 0;
+        this->cxt_use_ptr     = 0;
+        this->job_id_counter  = 0;
+        for (int i = 0; i < 2; i++) {
+            this->cxt_m_size[i]       = 0;
+            this->cxt_n_size[i]       = 0;
+            this->cxt_k_size[i]       = 0;
+            this->cxt_x_addr[i]       = 0;
+            this->cxt_w_addr[i]       = 0;
+            this->cxt_y_addr[i]       = 0;
+            this->cxt_compute_able[i] = 0;
+        }
+    }
+    if ((value == 0) || (value == 1)) {
+        //Clear engine state (compute FSM)
+        this->reg_fsm_state.set(IDLE);
+        this->reg_busy.set(0);
+        this->done.sync(false);
+    }
+}
+
+//LightRedmule register interface
+vp::IoReqStatus LightRedmule::req(vp::Block *__this, vp::IoReq *req)
+{
+    LightRedmule *_this = (LightRedmule *)__this;
+
+    uint64_t offset = req->get_addr();
+    uint8_t *data = req->get_data();
+    uint64_t size = req->get_size();
+    bool is_write = req->get_is_write();
+
+    //_this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] access (offset: 0x%x, size: 0x%x, is_write: %d, data:%x)\n", offset, size, is_write, *(uint32_t *)data);
+
+    if (is_write == 1) {
+        uint32_t value = *(uint32_t *)data;
+        switch (offset) {
+            case 0x00: {
+                if ((_this->redmule_query == NULL) && (_this->reg_fsm_state.get() == IDLE)) {
+                    /************************
+                    *  Synchronize Trigger  *
+                    ************************/
+                    //Sanity Check
+                    _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] redmule configuration (M-N-K): %d, %d, %d. Compute able is %d\n", _this->m_size, _this->n_size, _this->k_size,_this->compute_able);
+                    if ((_this->m_size == 0)||(_this->n_size == 0)||(_this->k_size == 0))
+                    {
+                        _this->trace.fatal("[LightRedmule] INVALID redmule configuration (M-N-K): %d, %d, %d\n", _this->m_size, _this->n_size, _this->k_size);
+                        return vp::IO_REQ_DONE;
+                    }
+
+                    //Initialize redmule meta data
+                    _this->init_redmule_meta_data();
+
+                    
+
+                    //Trigger FSM
+                    _this->reg_fsm_state.set(PRELOAD);
+                    _this->reg_busy.set(1);
+                    _this->tcdm_block_total = _this->get_preload_access_block_number();
+                    _this->fsm_counter      = 0;
+                    _this->fsm_timestamp    = 0;
+                    _this->timer_start      = _this->time.get_time();
+                    _this->cycle_start      = _this->clock.get_cycles();
+                    _this->event_enqueue(_this->fsm_event, JOB_START_LATENCY);
+
+                    //Save Query
+                    //_this->redmule_query = req;
+                    //_this->redmule_query_port = &_this->input_itf;
+                }
+                break;
+            }
+            case 0x40: {
+                _this->x_addr = value;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set X addr 0x%x)\n", _this->x_addr);
+                break;
+            }
+            case 0x44: {
+                _this->w_addr = value;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set W addr 0x%x)\n", _this->w_addr);
+                break;
+            }
+            case 0x48: {
+                _this->y_addr = value;
+                _this->z_addr = _this->y_addr;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set Y addr 0x%x, Set Z addr 0x%x)\n", _this->y_addr,_this->z_addr);
+                break;
+            }
+            case 0x4C: { //REDMULE_MCFG0_PTR
+                _this->m_size=value & 0xFFFF;
+                _this->k_size=value >> 16;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set M size %d, Set K size %d)\n", _this->m_size,_this->k_size);
+                break;
+            }
+            case 0x50: { //REDMULE_MCFG1_PTR
+                _this->n_size=value & 0xFFFF;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set N size %d)\n", _this->n_size);
+                break;
+            }
+            case 0x54: {
+                _this->compute_able = _this->op_foramt_parser((value == 0x480)? 9:0); //the marith mapping between reg-if and offload-if is different... WHY?
+                _this->elem_size = (_this->compute_able < 4)? 2:1;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] marith 0x%x, compute_able 0x%x, elem_size %d)\n", value,_this->compute_able,_this->elem_size);
+                break;
+            }
+            default:
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] write to INVALID address\n");
+        }
+    }
+    else {
+        switch (offset) {
+            case 0x00:
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] read to INVALID address\n");
+                break;
+            case 0x0C: {
+                int32_t done_id_r;
+                if ((_this->redmule_query == NULL) && (_this->reg_fsm_state.get() == IDLE)) {
+                    done_id_r =  0x00;
+                    memcpy((void *)data, (void *)&done_id_r, size);
+                }
+                else {
+                    done_id_r =  0x01;
+                    memcpy((void *)data, (void *)&done_id_r, size);
+                }
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] read status reg 0x%x\n",done_id_r);
+                break;
+            }
+            default:
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] read to INVALID address\n");
+        }
+    }
+    return vp::IO_REQ_DONE;
+}
+
+vp::IoReqStatus LightRedmule::req_v2(vp::Block *__this, vp::IoReq *req)
+{
+    LightRedmule *_this = (LightRedmule *)__this;
+
+    uint64_t offset = req->get_addr();
+    uint8_t *data = req->get_data();
+    uint64_t size = req->get_size();
+    bool is_write = req->get_is_write();
+
+    if (is_write == 1) {
+        uint32_t value = *(uint32_t *)data;
+        switch (offset) {
+            case 0x00: { //REDMULE_TRIGGER / hwpe_commit_trigger
+                uint32_t ct = value & 0x3;
+                if (ct == 2) {
+                    //Trigger-only: start whatever is already queued, no new commit
+                    if ((_this->job_pending > 0) && (_this->reg_fsm_state.get() == IDLE)) {
+                        _this->start_next_job();
+                    }
+                } else if (ct == 3) {
+                    //Neither bit is 0: no-op
+                } else {
+                    //ct == 0: commit + start; ct == 1: commit only (deferred start)
+                    _this->commit(ct == 0);
+                }
+                break;
+            }
+            case 0x20: { //REDMULE_MCFG0_PTR
+                _this->cxt_m_size[_this->cxt_cfg_ptr] = value & 0xFFFF;
+                _this->cxt_k_size[_this->cxt_cfg_ptr] = value >> 16;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set mcfg_reg0 -- M size %d, Set K size %d)\n", _this->cxt_m_size[_this->cxt_cfg_ptr],_this->cxt_k_size[_this->cxt_cfg_ptr]);
+                break;
+            }
+            case 0x24: { //REDMULE_MCFG1_PTR
+                _this->cxt_n_size[_this->cxt_cfg_ptr] = value & 0xFFFF;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set mcfg_reg1 -- N size %d)\n", _this->cxt_n_size[_this->cxt_cfg_ptr]);
+                break;
+            }
+            case 0x28: { //REDMULE_MCFG2_PTR
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set mcfg_reg2 -- currently not used\n");
+                break;
+            }
+            case 0x2C: {
+                _this->cxt_x_addr[_this->cxt_cfg_ptr] = value;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set X addr 0x%x)\n", _this->cxt_x_addr[_this->cxt_cfg_ptr]);
+                break;
+            }
+            case 0x30: {
+                _this->cxt_w_addr[_this->cxt_cfg_ptr] = value;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set W addr 0x%x)\n", _this->cxt_w_addr[_this->cxt_cfg_ptr]);
+                break;
+            }
+            case 0x34: {
+                _this->cxt_y_addr[_this->cxt_cfg_ptr] = value;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set Y addr 0x%x)\n", _this->cxt_y_addr[_this->cxt_cfg_ptr]);
+                break;
+            }
+            case 0x14: { //REDMULE_SOFT_CLEAR
+                _this->soft_clear(value);
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] SOFT_CLEAR 0x%x\n", value);
+                break;
+            }
+            case 0x54: {
+                _this->cxt_compute_able[_this->cxt_cfg_ptr] = _this->op_foramt_parser((value == 0x480)? 9:0); //the marith mapping between reg-if and offload-if is different... WHY?
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] marith 0x%x, compute_able 0x%x)\n", value,_this->cxt_compute_able[_this->cxt_cfg_ptr]);
+                break;
+            }
+            default:
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] write to INVALID address\n");
+        }
+    }
+    else {
+        switch (offset) {
+            case 0x04: { //REDMULE_ACQUIRE
+                int32_t id = _this->acquire();
+                memcpy((void *)data, (void *)&id, size);
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] ACQUIRE -> job id %d\n", id);
+                break;
+            }
+            case 0x0C: { //REDMULE_STATUS - per-slot busy bitfield (bit0 slot0, bit8 slot1)
+                uint32_t status = (_this->cxt_job_id[0] >= 0 ? 0x1 : 0) | (_this->cxt_job_id[1] >= 0 ? 0x100 : 0);
+                memcpy((void *)data, (void *)&status, size);
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] read status reg 0x%x\n",status);
+                break;
+            }
+            case 0x10: { //REDMULE_RUNNING_JOB
+                //Number of jobs completed so far, as job_running_id_q in
+                //hwpe_ctrl_target.sv (incremented on each job_done, cleared
+                //by the soft clear), not the id of the job last started
+                uint32_t running_job = (uint32_t) _this->completed_jobs;
+                memcpy((void *)data, (void *)&running_job, size);
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] RUNNING_JOB -> %d\n", running_job);
+                break;
+            }
+            default:
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] read to INVALID address\n");
+        }
+    }
+    return vp::IO_REQ_DONE;
+}
+
+// LSU-style slot allocation. A slot is considered free when its available_at
+// timestamp has elapsed; scan the pool and grab the first such slot, marking
+// it as in-flight (available_at = INT64_MAX) so it can't be reallocated until
+// either the sync OK path or the async response callback installs a real
+// completion timestamp.
+int LightRedmule::alloc_req_slot()
+{
+    int64_t now = this->clock.get_cycles();
+    int     best_id = -1;
+    int64_t best_cycle = INT64_MAX;
+    for (size_t i = 0; i < this->req_slots.size(); i++)
+    {
+        int64_t at = this->req_slots[i].available_at;
+        if (at <= now && at < best_cycle)
+        {
+            best_id    = (int)i;
+            best_cycle = at;
+        }
+    }
+    if (best_id >= 0)
+    {
+        // Reserve until free_req_slot() installs the real completion cycle.
+        this->req_slots[best_id].available_at = INT64_MAX;
+    }
+    return best_id;
+}
+
+void LightRedmule::free_req_slot(int id, int64_t available_at)
+{
+    this->req_slots[id].available_at = available_at;
+}
+
+bool LightRedmule::all_slots_free()
+{
+    int64_t now = this->clock.get_cycles();
+    for (auto &slot : this->req_slots)
+    {
+        if (slot.available_at > now) return false;
+    }
+    return true;
+}
+
+// Mirror the old `pending_req_queue.size() <= queue_depth` issue gate: a slot
+// maturing at `now` still counts as busy here (`>= now`) vs the `<= now` reuse
+// test in alloc_req_slot()/all_slots_free(), so the next alloc cannot fail.
+bool LightRedmule::issue_slot_gate_ok()
+{
+    int64_t now = this->clock.get_cycles();
+    uint32_t outstanding = 0;
+    for (auto &slot : this->req_slots)
+    {
+        if (slot.available_at >= now) outstanding++;
+    }
+    return outstanding <= this->queue_depth;
+}
+
+// Memcpy using the captured (dst_offset, cutoff). OOO-safe because no FSM
+// state is touched.
+void LightRedmule::apply_response_data(uint8_t *buf, uint32_t instr, uint32_t dst_offset, uint32_t cutoff)
+{
+    switch (instr)
+    {
+        case INSTR_LOAD_Y:
+            std::memcpy(&(this->y_buffer_preload[dst_offset]), buf, cutoff);
+            break;
+        case INSTR_LOAD_W:
+        case INSTR_LOAD_W_COMPUTE:
+            std::memcpy(&(this->w_buffer[dst_offset]), buf, cutoff);
+            break;
+        case INSTR_LOAD_X:
+            // Double-buffer: write to x_buffer_next (compute reads x_buffer).
+            std::memcpy(&(this->x_buffer_next[dst_offset]), buf, cutoff);
+            break;
+        case INSTR_STOR_Z:
+            // Data was serialized into slot.buf at issue time.
+            break;
+        default:
+            break;
+    }
+}
+
+void LightRedmule::run_compute_and_drain()
+{
+    this->process_compute();
+    std::memset(this->w_buffer, 0, this->ce_width * (this->ce_pipe + 1) * this->bandwidth);
+    this->compute_pending = false;
+}
+
+void LightRedmule::handle_response(int slot_id, int64_t free_cycle)
+{
+    ReqSlot &slot = this->req_slots[slot_id];
+
+    if (this->compute_able != 0)
+    {
+        this->apply_response_data(slot.buf, slot.instr, slot.dst_offset, slot.cutoff);
+    }
+
+    if (slot.instr == INSTR_LOAD_W || slot.instr == INSTR_LOAD_W_COMPUTE)
+    {
+        if (this->w_outstanding_count > 0) this->w_outstanding_count -= 1;
+        if (this->compute_pending && this->w_outstanding_count == 0)
+        {
+            this->run_compute_and_drain();
+        }
+    }
+
+    this->free_req_slot(slot_id, free_cycle);
+}
+
+vp::IoRespAck LightRedmule::tcdm_response(vp::Block *__this, vp::IoReq *req)
+{
+    LightRedmule *_this = (LightRedmule *)__this;
+    int slot_id = (int)(intptr_t)req->initiator;
+    uint32_t instr = _this->req_slots[slot_id].instr;
+
+    _this->handle_response(slot_id, _this->clock.get_cycles());
+
+    _this->trace.msg(vp::Trace::LEVEL_TRACE, "[LightRedmule][Resp] slot=%d instr=%d (w_out=%d, compute_pending=%d)\n",
+        slot_id, instr, _this->w_outstanding_count, (int)_this->compute_pending);
+
+    // This consumer never back-pressures the response channel.
+    return vp::IO_RESP_ACCEPTED;
+}
+
+// DENIED -> retry. The held request MUST be re-sent from inside this callback,
+// in the same cycle: a bank-arbitrating TCDM interconnect (SpatzTcdmInterco,
+// log_ico_v2) only keeps its election window open for the duration of this
+// call, so a master that defers the re-send to the next cycle is denied again
+// forever. See vp/itf/io_v2.hpp (IoSlave::retry) and the io_v2 manual,
+// "Retry must be serviced synchronously".
+void LightRedmule::tcdm_retry(vp::Block *__this, vp::IoRetryChannel channel)
+{
+    LightRedmule *_this = (LightRedmule *)__this;
+
+    _this->trace.msg(vp::Trace::LEVEL_TRACE, "[LightRedmule][Retry] received, re-issuing\n");
+
+    if (!_this->request_denied || _this->denied_slot < 0)
+    {
+        // Nothing held: the retry is for someone else (the interconnect does not
+        // track who it denied), just resume issuing.
+        _this->request_denied = false;
+        return;
+    }
+
+    int slot_id = _this->denied_slot;
+    ReqSlot &slot = _this->req_slots[slot_id];
+
+    // prepare() resets only the per-send fields (latency, duration, status);
+    // addr / size / data / initiator still describe the same access.
+    slot.req->prepare();
+    vp::IoReqStatus err = _this->tcdm_itf.req(slot.req);
+
+    if (err == vp::IO_REQ_DENIED)
+    {
+        // Still refused: keep holding it and wait for the next retry.
+        return;
+    }
+
+    _this->request_denied = false;
+    _this->denied_slot    = -1;
+
+    if (err == vp::IO_REQ_DONE)
+    {
+        int64_t free_cycle = _this->clock.get_cycles() +
+            (int64_t)slot.req->get_full_latency();
+        _this->handle_response(slot_id, free_cycle);
+    }
+    else if (err != vp::IO_REQ_GRANTED)
+    {
+        _this->trace.fatal("[LightRedmule] Unexpected IoReq status %d on retry\n", (int)err);
+    }
+    // GRANTED: the slot stays reserved, tcdm_response will free it.
+}
+
+// Issue one request. Captures iter-dependent state (dst_offset, cutoff) at
+// issue time so OOO responses don't race against an advancing FSM. Returns
+// false only if the slot pool is exhausted.
+bool LightRedmule::issue_request(uint32_t addr, uint32_t instr, bool is_write, uint32_t size)
+{
+    int slot_id = this->alloc_req_slot();
+    if (slot_id < 0)
+    {
+        return false;
+    }
+
+    ReqSlot &slot = this->req_slots[slot_id];
+    slot.instr = instr;
+
+    uint32_t buffer_n_byte = this->bandwidth;
+    uint32_t buffer_w_byte = this->ce_width * (this->ce_pipe + 1) * this->elem_size;
+
+    // Cutoff (valid bytes); mirrors process_iter_instruction.
+    uint32_t cutoff = 0;
+    if (instr == INSTR_LOAD_X)
+    {
+        uint32_t _k = this->iter_k + 1;
+        if ((_k == this->x_row_tiles) || this->reg_fsm_state.get() == PRELOAD) _k = 0;
+        uint32_t x_leftover_byte = this->n_size * this->elem_size - _k * buffer_n_byte;
+        cutoff = (x_leftover_byte < buffer_n_byte) ? x_leftover_byte : buffer_n_byte;
+    }
+    else if (instr == INSTR_LOAD_W || instr == INSTR_LOAD_W_COMPUTE)
+    {
+        uint32_t w_leftover_byte = this->k_size * this->elem_size - this->iter_j * buffer_w_byte;
+        cutoff = (w_leftover_byte < buffer_w_byte) ? w_leftover_byte : buffer_w_byte;
+    }
+    else if (instr == INSTR_LOAD_Y)
+    {
+        uint32_t _j = this->iter_j + 1;
+        if ((_j == this->z_row_tiles) || this->reg_fsm_state.get() == PRELOAD) _j = 0;
+        uint32_t y_leftover_byte = this->k_size * this->elem_size - _j * buffer_w_byte;
+        cutoff = (y_leftover_byte < buffer_w_byte) ? y_leftover_byte : buffer_w_byte;
+    }
+    else if (instr == INSTR_STOR_Z)
+    {
+        cutoff = buffer_w_byte;
+    }
+    slot.cutoff = cutoff;
+
+    // Capture row offset, advance iter_*_row_ptr at issue (mirrors the sync
+    // handler's pointer arithmetic).
+    if (instr == INSTR_LOAD_Y)
+    {
+        slot.dst_offset = this->iter_y_row_ptr;
+        if (slot.dst_offset == 0)
+        {
+            // FORWARD_YZ consumes y_buffer_preload only after all_slots_free.
+            std::memset(this->y_buffer_preload, 0,
+                this->LOCAL_BUFFER_H * this->LOCAL_BUFFER_W * this->elem_size);
+        }
+        if (this->y_acc_block == 0) this->iter_y_row_ptr = 0;
+        else                        this->iter_y_row_ptr += buffer_w_byte;
+    }
+    else if (instr == INSTR_LOAD_W || instr == INSTR_LOAD_W_COMPUTE)
+    {
+        slot.dst_offset = this->iter_w_row_ptr;
+        if (slot.dst_offset == 0)
+        {
+            // Compute fires only after all W responses are in.
+            std::memset(this->w_buffer, 0,
+                this->LOCAL_BUFFER_N * this->LOCAL_BUFFER_W * this->elem_size);
+        }
+        this->iter_w_row_ptr += buffer_w_byte;
+        this->w_outstanding_count += 1;
+        if (instr == INSTR_LOAD_W_COMPUTE)
+        {
+            this->compute_pending  = true;
+            this->iter_w_row_ptr   = 0;
+        }
+    }
+    else if (instr == INSTR_LOAD_X)
+    {
+        // LOAD_X writes to x_buffer_next; iter_done's swap+memset keeps it clean.
+        slot.dst_offset = this->iter_x_row_ptr;
+        if (this->x_acc_block == 0) this->iter_x_row_ptr = 0;
+        else                        this->iter_x_row_ptr += buffer_n_byte;
+    }
+    else if (instr == INSTR_STOR_Z)
+    {
+        // Snapshot Z row into slot.buf now — z_buffer_previos may be
+        // overwritten by FORWARD_YZ before this write finishes.
+        slot.dst_offset = this->iter_z_row_ptr; // src_offset for stores
+        if (this->compute_able != 0)
+        {
+            std::memcpy(slot.buf, &(this->z_buffer_previos[slot.dst_offset]), buffer_w_byte);
+        }
+        if (this->z_acc_block == 0) this->iter_z_row_ptr = 0;
+        else                        this->iter_z_row_ptr += buffer_w_byte;
+    }
+    else if (instr == INSTR_STOR_Z_PAD)
+    {
+        // Padding row: the RTL stores zeroes
+        std::memset(slot.buf, 0, size);
+    }
+
+    // prepare() resets the per-send fields (latency, duration, status) and
+    // leaves initiator - i.e. the slot id - alone.
+    slot.req->prepare();
+    slot.req->set_addr(addr);
+    slot.req->set_size(size);
+    slot.req->set_is_write(is_write);
+    slot.req->set_data(slot.buf);
+
+    vp::IoReqStatus err = this->tcdm_itf.req(slot.req);
+
+    if (err == vp::IO_REQ_DONE)
+    {
+        // Inline answer: data is back, but the port was busy for the
+        // annotated number of cycles.
+        int64_t free_cycle = this->clock.get_cycles() + (int64_t)slot.req->get_full_latency();
+        this->handle_response(slot_id, free_cycle);
+    }
+    else if (err == vp::IO_REQ_GRANTED)
+    {
+        // Slot stays reserved (INT64_MAX); tcdm_response will free it.
+    }
+    else if (err == vp::IO_REQ_DENIED)
+    {
+        // Hold this slot's request and stop issuing new ones. The TCDM
+        // interconnect will call tcdm_retry(), where it is re-sent — inside the
+        // callback, same cycle, as the io_v2 retry contract demands. Everything
+        // the access needs is already captured in the slot (addr / size / data
+        // in the request object, instr / dst_offset / cutoff in the slot), so
+        // the re-send is a plain re-issue of the same object and the FSM state
+        // stays consistent.
+        this->request_denied = true;
+        this->denied_slot    = slot_id;
+    }
+    else
+    {
+        this->trace.fatal("[LightRedmule] Unexpected IoReq status %d\n", (int)err);
+        return false;
+    }
+
+    return true;
+}
+
+void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
+{
+    LightRedmule *_this = (LightRedmule *)__this;
+
+    _this->fsm_timestamp += 1;
+
+    switch (_this->reg_fsm_state.get()) {
+        case IDLE:
+            _this->done.sync(false); //clear irq
+            //Auto-continue: start the next queued job, if any (depth-2 pipelining).
+            //Happens after done is deasserted.
+            if (_this->job_pending > 0) {
+                _this->start_next_job();
+            }
+            break;
+
+        case PRELOAD: {
+            // Gate issue on slot capacity before next_addr() advances state.
+            bool can_issue = (_this->fsm_counter < _this->tcdm_block_total)
+                && !_this->request_denied
+                && _this->issue_slot_gate_ok();
+
+            if (can_issue)
+            {
+                uint32_t temp_addr = _this->next_addr() - _this->loc_base;
+                bool is_w = _this->tcdm_req->get_is_write();
+                uint32_t sz = (uint32_t)_this->tcdm_req->get_size();
+                if (_this->issue_request(temp_addr, _this->iter_instruction, is_w, sz))
+                {
+                    _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][Preload] Send TCDM req #%d [addr=0x%08x]\n",
+                        _this->fsm_counter, temp_addr);
+                    if (_this->fsm_counter == 0)
+                    {
+                        _this->preload_first_issue = _this->clock.get_cycles();
+                    }
+                    _this->fsm_counter += 1;
+                }
+            }
+
+            bool iter_done = (_this->fsm_counter >= _this->tcdm_block_total)
+                          && _this->all_slots_free();
+            int64_t latency = 1;
+            if (iter_done)
+            {
+                // The computation starts once Y is through the z_buffer
+                int64_t start = _this->preload_first_issue
+                    + Y_ROW_CYCLES * (_this->ce_height - 1) + 1;
+                int64_t now = _this->clock.get_cycles();
+                if (start > now + 1) latency = start - now;
+
+                _this->tcdm_block_total = _this->get_routine_access_block_number();
+                _this->fsm_counter      = 0;
+                _this->fsm_timestamp    = 0;
+                _this->reg_fsm_state.set(ROUTINE);
+                _this->reg_busy.set(1);
+
+                // Promote PRELOAD's X(k=0) into x_buffer for ROUTINE's compute.
+                std::swap(_this->x_buffer, _this->x_buffer_next);
+                std::memset(_this->x_buffer_next, 0, _this->ce_height * _this->bandwidth);
+
+                if (_this->compute_able != 0)
+                {
+                    _this->iter_instruction = INSTR_FORWARD_YZ;
+                    _this->process_iter_instruction();
+                }
+            } else {
+                _this->reg_fsm_state.set(PRELOAD);
+                _this->reg_busy.set(1);
+            }
+
+            _this->event_enqueue(_this->fsm_event, latency);
+            break;
+        }
+        case ROUTINE: {
+            auto issue_one = [_this]() {
+                bool can_issue = (_this->fsm_counter < _this->tcdm_block_total)
+                    && !_this->request_denied
+                    && _this->issue_slot_gate_ok();
+
+                if (can_issue)
+                {
+                    uint32_t temp_addr = _this->next_addr() - _this->loc_base;
+                    bool is_w = _this->tcdm_req->get_is_write();
+                    uint32_t sz = (uint32_t)_this->tcdm_req->get_size();
+                    if (_this->issue_request(temp_addr, _this->iter_instruction, is_w, sz))
+                    {
+                        _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][ROUTINE-ijk: %0d-%0d-%0d] Send TCDM req #%d [addr=0x%08x]\n",
+                            _this->iter_i, _this->iter_j, _this->iter_k, _this->fsm_counter, temp_addr);
+                        _this->fsm_counter += 1;
+                    }
+                }
+            };
+
+            issue_one();
+
+            bool iter_done = (_this->fsm_counter >= _this->tcdm_block_total)
+                          && _this->all_slots_free();
+            if (iter_done)
+            {
+                int modeled_runtime = _this->get_redmule_array_runtime();
+                int64_t latency = 1;
+
+                // Compensation
+                if (_this->fsm_timestamp >= modeled_runtime)
+                {
+                    _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][ROUTINE-ijk: %0d-%0d-%0d] TCDM Access Time(%d) > Model Time(%d)\n", _this->iter_i, _this->iter_j, _this->iter_k, _this->fsm_timestamp, modeled_runtime);
+                    latency = 1;
+                } else {
+                    _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][ROUTINE-ijk: %0d-%0d-%0d] Model Time(%d) > TCDM Access Time(%d)\n",  _this->iter_i, _this->iter_j, _this->iter_k, modeled_runtime, _this->fsm_timestamp);
+                    latency = modeled_runtime - _this->fsm_timestamp + 1;
+                }
+
+                // Next iteration
+                _this->fsm_counter      = 0;
+                _this->fsm_timestamp    = 0;
+
+                // Promote next-iter's X into x_buffer (race-free because
+                // all_slots_free guarantees every X response has landed).
+                std::swap(_this->x_buffer, _this->x_buffer_next);
+                std::memset(_this->x_buffer_next, 0, _this->ce_height * _this->bandwidth);
+
+                // Need Forward YZ
+                if ((_this->compute_able != 0) && (_this->iter_k + 1 == _this->x_row_tiles))
+                {
+                    _this->iter_instruction = INSTR_FORWARD_YZ;
+                    _this->process_iter_instruction();
+                }
+
+                if (_this->next_iteration() == 0)
+                {
+                    _this->tcdm_block_total = _this->get_routine_access_block_number();
+                    _this->reg_fsm_state.set(ROUTINE);
+                    _this->reg_busy.set(1);
+                    if (latency == 1)
+                    {
+                        // Bound by the accesses: the RTL streams go on one
+                        // access per cycle across the iterations, so the next
+                        // one issues in the cycle the last response landed
+                        issue_one();
+                    }
+                } else {
+                    _this->tcdm_block_total = _this->get_storing_access_block_number();
+                    _this->reg_fsm_state.set(STORING);
+                    _this->reg_busy.set(1);
+                    latency += _this->get_routine_to_storing_latency();
+                }
+
+                _this->event_enqueue(_this->fsm_event, latency);
+            } else {
+                _this->reg_fsm_state.set(ROUTINE);
+                _this->reg_busy.set(1);
+                _this->event_enqueue(_this->fsm_event, 1);
+            }
+
+            break;
+        }
+        case STORING: {
+            bool can_issue = (_this->fsm_counter < _this->tcdm_block_total)
+                && !_this->request_denied
+                && _this->issue_slot_gate_ok();
+
+            if (can_issue)
+            {
+                uint32_t temp_addr = _this->next_addr() - _this->loc_base;
+                bool is_w = _this->tcdm_req->get_is_write();
+                uint32_t sz = (uint32_t)_this->tcdm_req->get_size();
+                if (_this->issue_request(temp_addr, _this->iter_instruction, is_w, sz))
+                {
+                    _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][Storing] Send TCDM req #%d [addr=0x%08x]\n",
+                        _this->fsm_counter, temp_addr);
+                    _this->fsm_counter += 1;
+                }
+            }
+
+            bool iter_done = (_this->fsm_counter >= _this->tcdm_block_total)
+                          && _this->all_slots_free();
+            if (iter_done)
+            {
+                _this->tcdm_block_total = 0;
+                _this->fsm_counter      = 0;
+                _this->fsm_timestamp    = 0;
+                _this->reg_fsm_state.set(FINISHED);
+                _this->reg_busy.set(1);
+                _this->event_enqueue(_this->fsm_event, 1);
+
+                //report
+                int64_t start_time_ns   = (_this->timer_start)/1000;
+                int64_t end_time_ns     = (_this->time.get_time())/1000;
+                int64_t period_ns       = end_time_ns - start_time_ns;
+                int64_t period_clk      = _this->clock.get_cycles() - _this->cycle_start;
+                double  period_uti      = (1.0 * _this->ideal_runtime)/(1.0 * period_clk);
+                int64_t gemm_size       = 2 * (_this->m_size * _this->n_size + _this->n_size * _this->k_size + 2 * _this->m_size * _this->k_size);
+                double  redmul_eff      = period_uti * (1.0 * _this->ce_height * _this->ce_width) / (1.0 * gemm_size);
+                _this->total_runtime   += period_ns;
+                _this->num_matmul      += 1;
+                _this->trace.msg("[LightRedmule] Finished : %0d ns ---> %0d ns | period = %0d ns (%0d cyc) | uti = %0.3f | runtime = %0d ns | GEMM id = %0d | FMT = %0d | M-N-K = %0d-%0d-%0d | X-W-Y = 0x%5x-0x%5x-0x%5x\n",
+                    start_time_ns, end_time_ns, period_ns, period_clk, period_uti, _this->total_runtime, _this->num_matmul, _this->compute_able, _this->m_size, _this->n_size, _this->k_size, _this->x_addr, _this->w_addr, _this->y_addr);
+            } else {
+                _this->reg_fsm_state.set(STORING);
+                _this->reg_busy.set(1);
+                _this->event_enqueue(_this->fsm_event, 1);
+            }
+            break;
+        }
+        case FINISHED: {
+            //Retire the job that just finished (no-op for jobs launched via the
+            //offload/custom-instruction path, which never touches job_pending)
+            _this->cxt_job_id[_this->cxt_use_ptr] = -1;
+            _this->cxt_use_ptr = 1 - _this->cxt_use_ptr;
+            _this->completed_jobs++;
+            if (_this->job_pending > 0) {
+                _this->job_pending--;
+            }
+
+            //Reply Stalled Query
+            if (_this->redmule_query == NULL)
+            {
+                _this->done.sync(true); //send interrupt
+                _this->reg_fsm_state.set(IDLE);
+                _this->reg_busy.set(0);
+                // IssOffloadInsnGrant<uint32_t> offload_grant = {
+                //     .result=0x0
+                // };
+                // _this->offload_grant_itf.sync(&offload_grant);
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][FINISHED] GRANT core and Wait for query!\n");
+            } else {
+                _this->reg_fsm_state.set(ACKNOWLEDGE);
+                _this->reg_busy.set(1);
+            }
+            _this->event_enqueue(_this->fsm_event, 1);
+            break;
+        }
+        case ACKNOWLEDGE: {
+            _this->redmule_query_port->resp(_this->redmule_query);
+            _this->redmule_query = NULL;
+            _this->redmule_query_port = NULL;
+            _this->done.sync(true); //send interrupt
+            _this->reg_fsm_state.set(IDLE);
+            _this->reg_busy.set(0);
+            // IssOffloadInsnGrant<uint32_t> offload_grant = {
+            //     .result=0x0
+            // };
+            // _this->offload_grant_itf.sync(&offload_grant);
+            _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][ACKNOWLEDGE] GRANT core and Done!\n");
+            _this->event_enqueue(_this->fsm_event, 1);
+            break;
+        }
+        default:
+            _this->trace.fatal("[LightRedmule] INVALID RedMule Status: %d\n", _this->reg_fsm_state.get());
+    }
+}
+
+
+
+/************************************************************
+*                   Function Implementation                 *
+************************************************************/
+
+void matmul_uint16(uint16_t * z, uint16_t * y, uint16_t * x, uint16_t * w, uint16_t m_size, uint16_t n_size, uint16_t k_size){
+    for (int i = 0; i < m_size; ++i)
+    {
+        for (int j = 0; j < k_size; ++j)
+        {
+            z[i * k_size + j] = y[i * k_size + j];
+            for (int k = 0; k < n_size; ++k)
+            {
+                z[i * k_size + j] += x[i * n_size + k] * w[k * k_size + j];
+            }
+        }
+    }
+}
+
+void matmul_int16(int16_t * z, int16_t * y, int16_t * x, int16_t * w, uint16_t m_size, uint16_t n_size, uint16_t k_size){
+    for (int i = 0; i < m_size; ++i)
+    {
+        for (int j = 0; j < k_size; ++j)
+        {
+            z[i * k_size + j] = y[i * k_size + j];
+            for (int k = 0; k < n_size; ++k)
+            {
+                z[i * k_size + j] += x[i * n_size + k] * w[k * k_size + j];
+            }
+        }
+    }
+}
+
+
+// // Convert float to FP16 (half-precision)
+// fp16 float_to_fp16(float value) {
+//     FloatBits floatBits;
+//     floatBits.f = value;
+
+//     uint16_t sign = floatBits.parts.sign << 15;
+//     int32_t exponent = floatBits.parts.exponent - 127 + 15; // adjust bias from 127 to 15
+//     uint32_t mantissa = floatBits.parts.mantissa >> 13;     // reduce to 10 bits
+
+//     if (exponent <= 0) {
+//         if (exponent < -10) return sign;   // too small
+//         mantissa = (floatBits.parts.mantissa | 0x800000) >> (1 - exponent);
+//         return sign | mantissa;
+//     } else if (exponent >= 0x1F) {
+//         return sign | 0x7C00;  // overflow to infinity
+//     }
+//     return sign | (exponent << 10) | mantissa;
+// }
+
+// // Convert FP16 to float
+// float fp16_to_float(fp16 value) {
+//     FloatBits floatBits;
+//     floatBits.parts.sign = (value >> 15) & 0x1;
+//     int32_t exponent = (value >> 10) & 0x1F;
+//     floatBits.parts.exponent = (exponent == 0) ? 0 : exponent + 127 - 15;
+//     floatBits.parts.mantissa = (value & 0x3FF) << 13;
+//     return floatBits.f;
+// }
+
+// -----------------------------------------------------------------------------
+// Improved FP16 <-> FP32 conversion routines by Lorenzo Zuolo
+//
+// These versions fix several numerical and IEEE-754 compliance issues found
+// in the original naive implementations. The original functions performed
+// a simple bias adjustment and bit shift, which *worked for normalized values*
+// but failed to handle special cases properly.
+//
+// Key improvements over the original versions:
+//
+//  • Correct handling of subnormal (denormalized) numbers
+//    The old float_to_fp16() simply zeroed out very small values,
+//    losing precision for magnitudes near zero. The new version detects
+//    and correctly normalizes them using the implicit leading 1 bit.
+//
+//  • Accurate rounding (round-to-nearest-even)
+//    The old version truncated the mantissa bits directly (>> 13),
+//    introducing systematic downward bias. The improved version applies
+//    IEEE-compliant rounding to preserve statistical neutrality.
+//
+//  • Proper Inf/NaN propagation
+//    The old code treated any large exponent as infinity but did not
+//    propagate NaN payloads correctly. The new one does, matching real
+//    hardware FP16 behavior.
+//
+//  • Safe exponent biasing and shift handling
+//    The previous logic could produce undefined behavior with negative
+//    shifts or overflowed exponents. The new version clamps exponents
+//    safely and handles edge cases explicitly.
+//
+// In short: these functions produce the same results as hardware FP16 units
+// (ARM, NVIDIA, etc.), eliminating subtle rounding and underflow errors
+// that accumulated across multiple conversions (like in FMA loops).
+// -----------------------------------------------------------------------------
+
+// fp16 float_to_fp16(float f)
+// {
+//     uint32_t f_bits;
+//     memcpy(&f_bits, &f, sizeof(f));
+
+//     uint32_t sign = (f_bits >> 16) & 0x8000u;
+//     int32_t  exp  = ((f_bits >> 23) & 0xFF) - 127 + 15;
+//     uint32_t mant = f_bits & 0x007FFFFFu;
+
+//     if (exp <= 0) {
+//         // Subnormal or zero
+//         if (exp < -10) {
+//             // Too small -> underflow to zero
+//             return sign;
+//         }
+//         // Add implicit leading 1 and shift to create subnormal
+//         mant = (mant | 0x00800000u) >> (1 - exp);
+//         // Round-to-nearest-even
+//         if (mant & 0x00001000u)
+//             mant += 0x00002000u;
+//         return sign | (mant >> 13);
+//     } 
+//     else if (exp >= 0x1F) {
+//         // Overflow -> Inf or NaN
+//         if ((f_bits & 0x7FFFFFu) != 0)
+//             return sign | 0x7E00u; // NaN
+//         return sign | 0x7C00u;     // +Inf / -Inf
+//     }
+
+//     // Normal number: add rounding before truncating
+//     mant = mant + 0x00001000u;
+
+//     // Handle rounding overflow in mantissa
+//     if (mant & 0x00800000u) {
+//         mant = 0;
+//         exp += 1;
+//     }
+
+//     // Overflow after rounding -> Inf
+//     if (exp >= 0x1F)
+//         return sign | 0x7C00u;
+
+//     // Compose final 16-bit result
+//     return sign | ((exp & 0x1F) << 10) | (mant >> 13);
+// }
+
+// float fp16_to_float(fp16 h)
+// {
+//     uint16_t h_exp = (h & 0x7C00u);
+//     uint16_t h_sig = (h & 0x03FFu);
+//     uint32_t f_sgn = ((uint32_t)h & 0x8000u) << 16;
+//     uint32_t f_exp;
+//     uint32_t f_sig;
+
+//     if (h_exp == 0x0000u) {
+//         // Zero or subnormal number
+//         if (h_sig == 0) {
+//             // ±0
+//             f_exp = 0;
+//             f_sig = 0;
+//         } else {
+//             // Subnormal -> normalize it
+//             int shift = 0;
+//             while ((h_sig & 0x0400u) == 0) {
+//                 h_sig <<= 1;
+//                 shift++;
+//             }
+//             h_sig &= 0x03FFu;
+//             f_exp = (127 - 15 - shift) << 23;
+//             f_sig = ((uint32_t)h_sig) << 13;
+//         }
+//     } else if (h_exp == 0x7C00u) {
+//         // Inf or NaN
+//         f_exp = 0xFFu << 23;
+//         f_sig = ((uint32_t)h_sig) << 13;
+//     } else {
+//         // Normalized number
+//         uint32_t exp = ((h_exp >> 10) & 0x1Fu);
+//         f_exp = (exp + (127 - 15)) << 23;
+//         f_sig = ((uint32_t)h_sig) << 13;
+//     }
+
+//     uint32_t f_bits = f_sgn | f_exp | f_sig;
+//     float f;
+//     memcpy(&f, &f_bits, sizeof(f));
+//     return f;
+// }
+
+// // Fused multiply-add for FP16
+// fp16 fp16_fma(fp16 a, fp16 b, fp16 c) {
+//     float fa = fp16_to_float(a);
+//     float fb = fp16_to_float(b);
+//     float fc = fp16_to_float(c);
+//     if ((a == 0) || (b == 0))
+//          return c;
+//     else if (c == 0) {
+//         float result = fa * fb;
+//         return float_to_fp16(result);
+//     }
+//     else {
+//         float result = (fa * fb) + fc;
+//         return float_to_fp16(result);
+//     }
+// }
+
+// uint16_t double_to_fp16(double d) {
+//     uint64_t bits;
+//     memcpy(&bits, &d, sizeof(bits)); 
+
+//     uint16_t sign = (bits >> 63) & 0x1;
+//     int64_t exp_d = (bits >> 52) & 0x7FF;
+//     uint64_t frac_d = bits & 0x000FFFFFFFFFFFFFull; // 52 bits
+
+//     uint16_t exp_h, frac_h;
+
+//     // Handle special cases
+//     if (exp_d == 0x7FF) { // Inf or NaN
+//         exp_h = 0x1F;
+//         if (frac_d == 0) { // Infinity
+//             frac_h = 0;
+//         } else { // NaN: preserve quiet NaN bit
+//             // Preserve top 10 bits of FP32 fraction for FP16
+//             // Ensure quiet NaN (set MSB of frac_h)
+//             frac_h = (uint16_t)((frac_d >> (52 - 10)) | 0x200);
+//         }
+//     } else if (exp_d == 0) { // Zero or subnormal in double → zero in half
+//         // All double subnormals are mapped to FP16 zero.
+//         // Some double subnormals might be large enough to become FP16 subnormals.
+//         // This results in a small precision loss.
+//         exp_h = 0;
+//         frac_h = 0;
+//     } else { // Normalized double
+//         int32_t exp_unbiased = (int32_t)exp_d - 1023; // remove double bias
+//         int32_t exp_half = exp_unbiased + 15;         // re-bias for half
+
+//         if (exp_half >= 0x1F) { // Overflow → Infinity
+//             exp_h = 0x1F;
+//             frac_h = 0;
+//         } else if (exp_half <= 0) { // Subnormal or underflow to zero
+//             if (exp_half < -10) { // Too small → underflow to zero
+//                 exp_h = 0;
+//                 frac_h = 0;
+//             } else {
+//                 // Subnormal number
+//                 uint64_t mant = (frac_d | 0x10000000000000ull); // add hidden bit 
+//                 uint8_t shift = 52 + (1 - exp_half) - 10; 
+//                 uint64_t frac = mant >> shift; 
+
+//                 // Round to nearest-even
+//                 uint64_t round_bit = (mant >> (shift - 1)) & 1; 
+//                 uint64_t rest = mant & ((1ull << (shift - 1)) - 1); 
+//                 if (round_bit && (rest || (frac & 1))) 
+//                     frac++;
+
+//                 frac_h = (uint16_t)frac;
+//                 exp_h = 0;
+//             }
+//         } else {
+//             // Normal half-precision number
+//             uint64_t mant = frac_d;
+
+//             // Extract top 10 bits and round
+//             uint64_t frac = mant >> (52 - 10);
+//             uint64_t round_bit = (mant >> (52 - 10 - 1)) & 1;
+//             uint64_t rest = mant & ((1ull << (52 - 10 - 1)) - 1);
+
+//             if (round_bit && (rest || (frac & 1)))
+//                 frac++;
+
+//             if (frac == 0x400) { // mantissa overflow
+//                 frac = 0;
+//                 exp_half++;
+//             }
+
+//             if (exp_half >= 0x1F) {
+//                 // Overflow → Infinity
+//                 exp_h = 0x1F;
+//                 frac_h = 0;
+//             } else {
+//                 exp_h = exp_half & 0x1F;
+//                 frac_h = (uint16_t)(frac & 0x3FF);
+//             }
+//         }
+//     }
+
+//     return (sign << 15) | (exp_h << 10) | frac_h;
+// }
+
+// double fp16_to_double(fp16 h) { 
+//     uint16_t sign = (h >> 15) & 0x1u; 
+//     uint16_t exp = (h >> 10) & 0x1Fu; 
+//     uint16_t frac = h & 0x03FFu; 
+//     uint64_t exp_d = 0; 
+//     uint64_t frac_d = 0; 
+//     if (exp == 0x1F) { // Inf or NaN 
+//         exp_d = 0x7FF; // double exponent all 1s 
+//         frac_d = (frac ? ((uint64_t)frac << (52 - 10)) : 0); // propagate fraction 
+//     } else if (exp == 0) { // Zero or subnormal 
+//         if (frac != 0) { // if Zero, do nothing (exp_d and frac_d are 0) 
+//             // Subnormal: scale fraction up to normalized double 
+//             // FP16 subnormal: value = frac * 2^(-24) (2^-14 / 2^10) 
+//             uint64_t frac_norm = frac; 
+//             int exp_shift = 0; 
+//             while ((frac_norm & 0x400) == 0) { // 0x400 = 1 << 10 (FP16 MSB) 
+//                 frac_norm <<= 1; exp_shift++; 
+//             } 
+//             frac_norm &= 0x3FF; 
+//             frac_d = frac_norm << (52 - 10); 
+//             exp_d = (uint64_t)(1023 - 15 - exp_shift); 
+//         } 
+//     } else { // Normalized number 
+//         frac_d = ((uint64_t)frac) << (52 - 10); // align fraction to 52 bits 
+//         exp_d = (uint64_t)((int32_t)exp - 15 + 1023); // double bias 
+//     } 
+    
+//     // Compose final 64-bit result 
+//     uint64_t d_bits = ((uint64_t)sign << 63) | (exp_d << 52) | frac_d; 
+//     double d; 
+//     memcpy(&d, &d_bits, sizeof(d)); 
+//     return d; 
+// }
+
+// // Fused multiply-add for FP16
+// fp16 fp16_fma(fp16 a, fp16 b, fp16 c) {
+//     double da = fp16_to_double(a);
+//     double db = fp16_to_double(b);
+//     double dc = fp16_to_double(c);
+//     if ((a==0) || (b==0))
+//         return c;
+//     else if (c==0) {
+//         double result = (da * db);
+//         return double_to_fp16(result);
+//     }
+//     else {
+//         double result = (da * db) + dc;
+//         return double_to_fp16(result);
+//     }
+// }
+
+fp16 fp16_fma(fp16 a, fp16 b, fp16 c) {
+    flexfloat_t ff_a, ff_b, ff_c, ff_res; 
+    flexfloat_desc_t env = (flexfloat_desc_t){5, 10}; 
+    ff_init(&ff_a, env); 
+    ff_init(&ff_b, env); 
+    ff_init(&ff_c, env); 
+    ff_init(&ff_res, env); 
+    flexfloat_set_bits(&ff_a, a); 
+    flexfloat_set_bits(&ff_b, b); 
+    flexfloat_set_bits(&ff_c, c);
+    ff_fma(&ff_res, &ff_a, &ff_b, &ff_c); 
+    return (fp16)flexfloat_get_bits(&ff_res);
+}
+
+void LightRedmule::matmul_fp16(fp16 * z, fp16 * y, fp16 * x, fp16 * w, uint16_t m_size, uint16_t n_size, uint16_t k_size){
+    for (int i = 0; i < m_size; ++i)
+    {
+        for (int j = 0; j < k_size; ++j)
+        {
+            z[i * k_size + j] = y[i * k_size + j];
+            //printf("y[%d]=0x%4x\n",i * k_size + j, y[i * k_size + j]);
+            for (int k = 0; k < n_size; ++k)
+            {
+                // this->trace.msg(vp::Trace::LEVEL_TRACE,"[i=%d-j=%d-k=%d] x[%d]=0x%04x w[%d]=0x%04x y[%d]=0x%04x \n",i,
+                //                                                                     j,
+                //                                                                     k,
+                //                                                                     i * n_size + k,
+                //                                                                     x[i * n_size + k],
+                //                                                                     k * k_size + j,
+                //                                                                     w[k * k_size + j],
+                //                                                                     i * k_size + j,
+                //                                                                     y[i * k_size + j]);
+                z[i * k_size + j] = fp16_fma(x[i * n_size + k], w[k * k_size + j], z[i * k_size + j]);
+            }
+            //this->trace.msg(vp::Trace::LEVEL_TRACE,"z[%d]=0x%4x\n",i * k_size + j, z[i * k_size + j]);
+        }
+    }
+}
+
+
+void matmul_uint8(uint8_t * z, uint8_t * y, uint8_t * x, uint8_t * w, uint16_t m_size, uint16_t n_size, uint16_t k_size){
+    for (int i = 0; i < m_size; ++i)
+    {
+        for (int j = 0; j < k_size; ++j)
+        {
+            z[i * k_size + j] = y[i * k_size + j];
+            for (int k = 0; k < n_size; ++k)
+            {
+                z[i * k_size + j] += x[i * n_size + k] * w[k * k_size + j];
+            }
+        }
+    }
+}
+
+void matmul_int8(int8_t * z, int8_t * y, int8_t * x, int8_t * w, uint16_t m_size, uint16_t n_size, uint16_t k_size){
+    for (int i = 0; i < m_size; ++i)
+    {
+        for (int j = 0; j < k_size; ++j)
+        {
+            z[i * k_size + j] = y[i * k_size + j];
+            for (int k = 0; k < n_size; ++k)
+            {
+                z[i * k_size + j] += x[i * n_size + k] * w[k * k_size + j];
+            }
+        }
+    }
+}
+
+// Constants for FP8-E4M3 format
+#define FP8_EXP_MASK  0x78  // 0111 1000
+#define FP8_FRAC_MASK 0x07  // 0000 0111
+#define FP8_SIGN_MASK 0x80  // 1000 0000
+#define FP8_BIAS      7
+
+// Convert FP8 (E4M3) to float
+float fp8e4m3_to_float(fp8e4m3 value) {
+    uint8_t sign = (value & FP8_SIGN_MASK) >> 7;
+    uint8_t exponent = (value & FP8_EXP_MASK) >> 3;
+    uint8_t fraction = value & FP8_FRAC_MASK;
+
+    if (exponent == 0) {
+        // Subnormal number
+        if (fraction == 0) return sign ? -0.0f : 0.0f;
+        return (sign ? -1.0f : 1.0f) * (fraction / 8.0f) * powf(2, -6);
+    } else if (exponent == 15) {
+        // Infinity or NaN
+        return fraction ? NAN : (sign ? -INFINITY : INFINITY);
+    }
+
+    // Normalized number
+    float mantissa = 1.0f + (fraction / 8.0f);
+    float result = mantissa * powf(2, exponent - FP8_BIAS);
+    return sign ? -result : result;
+}
+
+// Convert float to FP8 (E4M3)
+fp8e4m3 float_to_fp8e4m3(float value) {
+    if (isnan(value)) return 0x7F;  // NaN representation
+    if (isinf(value)) return value < 0 ? 0xF8 : 0x78;  // +/-Inf representation
+
+    uint8_t sign = (value < 0) ? 0x80 : 0x00;
+    value = fabsf(value);
+
+    int exponent;
+    float mantissa = frexpf(value, &exponent);
+
+    if (value == 0.0f) return 0;  // Zero representation
+
+    exponent += FP8_BIAS - 1;
+
+    if (exponent < 1) {
+        // Subnormal handling
+        int frac = (int)roundf(value / powf(2, -6) * 8.0f);
+        return sign | (frac & FP8_FRAC_MASK);
+    } else if (exponent > 14) {
+        // Clamp to infinity
+        return sign | 0x78;
+    }
+
+    // Normal number
+    uint8_t frac = (uint8_t)roundf((mantissa - 0.5f) * 16.0f);
+    return sign | ((exponent << 3) & FP8_EXP_MASK) | (frac & FP8_FRAC_MASK);
+}
+
+// Fused Multiply-Add for FP8
+fp8e4m3 fp8e4m3_fma(fp8e4m3 a, fp8e4m3 b, fp8e4m3 c) {
+    float fa = fp8e4m3_to_float(a);
+    float fb = fp8e4m3_to_float(b);
+    float fc = fp8e4m3_to_float(c);
+
+    float result = fa * fb + fc;
+    return float_to_fp8e4m3(result);
+}
+
+void matmul_fp8e4m3(fp8e4m3 * z, fp8e4m3 * y, fp8e4m3 * x, fp8e4m3 * w, uint16_t m_size, uint16_t n_size, uint16_t k_size){
+    for (int i = 0; i < m_size; ++i)
+    {
+        for (int j = 0; j < k_size; ++j)
+        {
+            z[i * k_size + j] = y[i * k_size + j];
+            for (int k = 0; k < n_size; ++k)
+            {
+                z[i * k_size + j] = fp8e4m3_fma(x[i * n_size + k], w[k * k_size + j], z[i * k_size + j]);
+            }
+        }
+    }
+}
