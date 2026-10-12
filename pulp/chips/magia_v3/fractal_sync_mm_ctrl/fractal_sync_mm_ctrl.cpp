@@ -16,10 +16,12 @@
 
 /*
  * Authors: Lorenzo Zuolo, Chips-IT (lorenzo.zuolo@chips.it)
+ *
+ * The memory-mapped slave port is io_v2 and answers inline (IoV2Sync).
  */
 
 #include <vp/vp.hpp>
-#include <vp/itf/io.hpp>
+#include <vp/itf/io_v2.hpp>
 #include <vp/itf/wire.hpp>
 #include <stdio.h>
 #include <iostream>
@@ -81,7 +83,7 @@ protected:
 
     vp::WireMaster<bool> done_irq;
     
-    vp::IoSlave         input_itf;
+    vp::IoSlave         input_itf{&FSync_mm_ctrl::req};
     vp::Trace trace;
 
     vp::reg_32 aggr_reg;
@@ -104,7 +106,6 @@ FSync_mm_ctrl::FSync_mm_ctrl(vp::ComponentConf &config)
     //Initialize interface
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
-    this->input_itf.set_req_meth(&FSync_mm_ctrl::req);
     this->new_slave_port("input", &this->input_itf);
 
     this->fractal_ew_output_port.set_sync_meth_muxed(&FSync_mm_ctrl::fractal_output_method,fractal_directions::EAST_WEST);
@@ -280,6 +281,6 @@ vp::IoReqStatus FSync_mm_ctrl::req(vp::Block *__this, vp::IoReq *req)
     else {
         _this->trace.fatal("[FSync_mm_ctrl] wrong offset\n");
     }
-    return vp::IO_REQ_OK;
+    return vp::IO_REQ_DONE;
 }
 

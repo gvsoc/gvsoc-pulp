@@ -17,8 +17,14 @@
 # Authors: Lorenzo Zuolo, Chips-IT (lorenzo.zuolo@chips.it)
 
 import gvsoc.systree
+from gvsoc.signature import IoV2Sync
 
 class FSync_mm_ctrl(gvsoc.systree.Component):
+    """Memory-mapped controller of the fractal sync network.
+
+    The memory-mapped input port speaks io_v2 and answers inline, hence the
+    IoV2Sync signature.
+    """
 
     def __init__(self,
                 parent: gvsoc.systree.Component,
@@ -29,7 +35,7 @@ class FSync_mm_ctrl(gvsoc.systree.Component):
         self.add_sources(['pulp/chips/magia_v3/fractal_sync_mm_ctrl/fractal_sync_mm_ctrl.cpp'])
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'input', signature='io')
+        return gvsoc.systree.SlaveItf(self, 'input', signature=IoV2Sync())
     
     # Fractal ports
     def o_XIF_2_FRACTAL_EAST_WEST(self, itf: gvsoc.systree.SlaveItf):

@@ -17,61 +17,29 @@
 # Authors: Lorenzo Zuolo, Chips-IT (lorenzo.zuolo@chips.it)
 
 import gvsoc.systree
-import cpu.iss.riscv
-from cpu.iss.isa_gen.isa_smallfloats import *
-from cpu.iss.isa_gen.isa_pulpv2 import *
+from cpu.iss.isa_gen.isa_smallfloats import Xf16, Xf16alt
+from pulp.cv32e40p.cv32e40p import Cv32e40p
+from pulp.cv32e40p.cv32e40p_config import Cv32e40pConfig
 
-# Tentative model of the cv32e40x adapted from pulp_cores.py
-'''
-class CV32CoreTest(cpu.iss.riscv.RiscvCommon):
-    def __init__(self, parent, name, cluster_id: int, core_id: int,
-                 fetch_enable: bool=False, boot_addr: int=0, external_pccr: bool=False):
 
-        fc_isa = self.__build_fc_isa
-        super().__init__(parent, name, isa=fc_isa, riscv_dbg_unit=True,
-                         fetch_enable=fetch_enable, boot_addr=boot_addr,
-                         first_external_pcer=12, debug_handler=0x1a190800,
-                         misa=0x40000000, core="ri5ky", cluster_id=cluster_id,
-                         core_id=core_id, wrapper="pulp/cpu/iss/pulp_iss_wrapper.cpp",
-                         scoreboard=True, timed=True, handle_misaligned=True,
-                         external_pccr=external_pccr)
+class CV32PulpCore(Cv32e40p):
+    """Core of the PULP cluster of the tile.
 
-        self.add_c_flags([
-            "-DPIPELINE_STALL_THRESHOLD=1",
-            "-DCONFIG_ISS_CORE=ri5cy",
-            '-DCONFIG_GVSOC_ISS_NO_MSTATUS_FS=1'
-        ])
+    The core is the CV32E40P of the tile RTL (magia_tile.sv): COREV_PULP and
+    COREV_CLUSTER set (so cv.elw sleeps until the event unit answers), FPU with
+    ZFINX and 29 HPM counters. The SDK builds for zhinxmin on top of it, whose
+    half-precision conversions gvsoc implements in the Xf16 subsets.
 
-    def __build_fc_isa():
-        exts = [ PulpV2(), Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ]
-        isa = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa('fc', 'rv32imc', extensions=exts)
-        return isa
-'''
+    It boots from the address it receives on i_ENTRY once i_FETCHEN is raised,
+    so it starts with fetch disabled.
+    """
+    def __init__(self, parent: gvsoc.systree.Component, name: str, core_id: int=0):
 
-# Basic rv32 core with standard RISC-V exceptions (riscv_exceptions=True → irq_riscv.cpp → mei port)
-class CV32PulpCore(cpu.iss.riscv.RiscvCommon):
-    def __init__(self, parent: gvsoc.systree.Component, name: str, binaries: list=[],
-                 fetch_enable: bool=False, boot_addr: int=0, timed: bool=True,
-                 core_id: int=0):
+        config = Cv32e40pConfig(isa='rv32imfc', zfinx=True, corev_pulp=True,
+            corev_cluster=True, num_mhpmcounters=29, hart_id=core_id,
+            fetch_enable=False, htif=False)
 
-        # Properties
-        isa_str = 'rv32imfc'
-        misa = 0x40000000
-        debug_handler = 0x1a190800
-        fetch_enable = False
-        riscv_exceptions = True
-        zfinx = True
-
-        # Instantiates the ISA from the string.
-        isa = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa('cv32-base', isa_str, extensions=[Xf16alt(), Xf16(), PulpV2(hwloop=True,elw=True)])
-
-        super().__init__(parent, name, isa=isa, misa=misa, core_id=core_id,
-                         debug_handler=debug_handler, fetch_enable=fetch_enable,
-                         riscv_exceptions=riscv_exceptions, zfinx=zfinx)
-
-        # TODO check later
-        self.add_c_flags([
-            "-DPIPELINE_STALL_THRESHOLD=1",
-            "-DCONFIG_ISS_CORE_DIR=pulp/chips/magia_v3/pulp_core",
-            "-DCONFIG_GVSOC_ISS_HWLOOP=1",
-        ])
+        # Xf16 has to come before Xf16alt, whose handlers use the float
+        # helpers rvXf16.hpp includes
+        super().__init__(parent, name, config=config,
+            extra_extensions=[Xf16(), Xf16alt()])

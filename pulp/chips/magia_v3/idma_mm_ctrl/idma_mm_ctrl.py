@@ -17,8 +17,17 @@
 # Authors: Lorenzo Zuolo, Chips-IT (lorenzo.zuolo@chips.it)
 
 import gvsoc.systree
+from gvsoc.signature import IoV2SingleReq
 
 class iDMA_mm_ctrl(gvsoc.systree.Component):
+    """Memory-mapped controller of the two iDMA channels of a tile.
+
+    The RTL idma_obi_ctrl_decoder: the first 0x200 bytes of the window are the
+    idma_reg32_3d registers of the AXI to OBI channel (L2 to L1), the next
+    0x200 the ones of the OBI to AXI channel (L1 to L2). Accesses are forwarded
+    with the offset inside the channel; grants, responses and retries come back
+    unchanged, so the ports are IoV2SingleReq (a launch may be denied).
+    """
 
     def __init__(self,
                 parent: gvsoc.systree.Component,
@@ -29,22 +38,12 @@ class iDMA_mm_ctrl(gvsoc.systree.Component):
         self.add_sources(['pulp/chips/magia_v3/idma_mm_ctrl/idma_mm_ctrl.cpp'])
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'input', signature='io')
+        return gvsoc.systree.SlaveItf(self, 'input', signature=IoV2SingleReq())
 
-    def o_OFFLOAD_iDMA0_AXI2OBI(self, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind('offload_idma0_axi2obi', itf, signature='wire<IssOffloadInsn<uint32_t>*>')
+    def o_AXI2OBI(self, itf: gvsoc.systree.SlaveItf):
+        """Binds the register port of the AXI to OBI channel."""
+        self.itf_bind('axi2obi', itf, signature=IoV2SingleReq())
 
-    def i_OFFLOAD_GRANT_iDMA0_AXI2OBI(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'offload_grant_idma0_axi2obi', signature='wire<IssOffloadInsnGrant<uint32_t>*>')
-    
-    def o_OFFLOAD_iDMA1_OBI2AXI(self, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind('offload_idma1_obi2axi', itf, signature='wire<IssOffloadInsn<uint32_t>*>')
-    
-    def i_OFFLOAD_GRANT_iDMA1_OBI2AXI(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'offload_grant_idma1_obi2axi', signature='wire<IssOffloadInsnGrant<uint32_t>*>')
-    
-    def o_IRQ_DMA0(self, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind('idma0_done_irq', itf, signature='wire<bool>')
-
-    def o_IRQ_DMA1(self, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind('idma1_done_irq', itf, signature='wire<bool>')
+    def o_OBI2AXI(self, itf: gvsoc.systree.SlaveItf):
+        """Binds the register port of the OBI to AXI channel."""
+        self.itf_bind('obi2axi', itf, signature=IoV2SingleReq())

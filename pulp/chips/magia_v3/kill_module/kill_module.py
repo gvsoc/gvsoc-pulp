@@ -17,8 +17,16 @@
 # Authors: Lorenzo Zuolo, Chips-IT (lorenzo.zuolo@chips.it)
 
 import gvsoc.systree
+from gvsoc.signature import IoV2Sync
+
 
 class KillModule(gvsoc.systree.Component):
+    """Kill module: ends the simulation once every tile wrote its exit code.
+
+    The input ports speak io_v2 and answer inline, hence the IoV2Sync
+    signature. There is one port per tile (``i_INPUT(id)``) because an io_v2
+    slave port binds exactly one master.
+    """
 
     def __init__(self,
                 parent: gvsoc.systree.Component,
@@ -26,21 +34,28 @@ class KillModule(gvsoc.systree.Component):
                 kill_addr_base: int,
                 kill_addr_size: int,
                 nb_cores_to_wait: int,
-                done_irq_enable: bool = False):
+                done_irq_enable: bool = False,
+                nb_inputs: int = None):
 
         super().__init__(parent, name)
+
+        # One input port per tile: an io_v2 slave port binds exactly one master.
+        if nb_inputs is None:
+            nb_inputs = nb_cores_to_wait
 
         self.add_properties({
             'kill_addr_base' : kill_addr_base,
             'kill_addr_size' : kill_addr_size,
             'nb_cores_to_wait' : nb_cores_to_wait,
             'done_irq_enable' : done_irq_enable,
+            'nb_inputs' : nb_inputs,
         })
 
         self.add_sources(['pulp/chips/magia_v3/kill_module/kill_module.cpp'])
 
-    def i_INPUT(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'input', signature='io')
+    def i_INPUT(self, id: int = 0) -> gvsoc.systree.SlaveItf:
+        """Input port ``id`` (one per tile)."""
+        return gvsoc.systree.SlaveItf(self, f'input_{id}', signature=IoV2Sync())
 
     def o_IRQ_DONE(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('irq_done', itf, signature='wire<bool>')

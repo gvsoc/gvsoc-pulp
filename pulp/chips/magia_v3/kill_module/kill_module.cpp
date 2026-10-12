@@ -16,12 +16,20 @@
 
 /*
  * Authors: Lorenzo Zuolo, Chips-IT (lorenzo.zuolo@chips.it)
+ *
+ * It counts the kill requests coming from the tiles and quits the engine (or
+ * raises the done irq for the PCIe/VFIO flow) once all of them reported.
+ *
+ * The slaves are io_v2 and answer inline (IoV2Sync). There is one muxed slave
+ * port per tile, since an io_v2 slave port binds exactly one master; the mux
+ * id is only used for tracing, every port behaves the same.
  */
 
 #include <vp/vp.hpp>
-#include <vp/itf/io.hpp>
+#include <vp/itf/io_v2.hpp>
 #include <vp/itf/wire.hpp>
 #include <stdio.h>
+#include <vector>
 
 class KillModule : public vp::Component
 {
@@ -30,13 +38,13 @@ public:
 
   KillModule(vp::ComponentConf &config);
 
-  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
+  static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req, int id);
   static void done_fsm_handler(vp::Block *__this, vp::ClockEvent *event);
 
 private:
 
   vp::Trace     trace;
-  vp::IoSlave in;
+  std::vector<vp::IoSlave *> in;
   vp::WireMaster<bool> irq_done;
 
   uint64_t kill_base_address;
@@ -53,8 +61,6 @@ KillModule::KillModule(vp::ComponentConf &config)
 : vp::Component(config)
 {
   this->traces.new_trace("trace", &trace, vp::DEBUG);
-  this->in.set_req_meth(&KillModule::req);
-  this->new_slave_port("input", &this->in, this);
   this->new_master_port("irq_done", &this->irq_done);
 
   this->kill_base_address = get_js_config()->get("kill_addr_base")->get_int();
@@ -62,6 +68,13 @@ KillModule::KillModule(vp::ComponentConf &config)
   this->nb_cores_to_wait = get_js_config()->get("nb_cores_to_wait")->get_int();
   this->done_irq_enable = get_js_config()->get("done_irq_enable")->get_bool();
   this->irq_done_event = this->event_new(&KillModule::done_fsm_handler);
+
+  int nb_inputs = get_js_config()->get("nb_inputs")->get_int();
+  for (int i=0; i<nb_inputs; i++)
+  {
+    this->in.push_back(new vp::IoSlave(i, &KillModule::req));
+    this->new_slave_port("input_" + std::to_string(i), this->in[i], this);
+  }
 
   this->nb_recv_kill_reqs=0;
 }
@@ -73,7 +86,7 @@ void KillModule::done_fsm_handler(vp::Block *__this, vp::ClockEvent *event) {
     _this->trace.msg("Kill done irq reset\n");
 }
 
-vp::IoReqStatus KillModule::req(vp::Block *__this, vp::IoReq *req)
+vp::IoReqStatus KillModule::req(vp::Block *__this, vp::IoReq *req, int id)
 {
     KillModule *_this = (KillModule *)__this;
 
@@ -84,13 +97,16 @@ vp::IoReqStatus KillModule::req(vp::Block *__this, vp::IoReq *req)
     uint32_t cnf_w = 0;
 
     if ((!is_write) || (size>4))
-      return vp::IO_REQ_INVALID;
+    {
+      req->set_resp_status(vp::IO_RESP_INVALID);
+      return vp::IO_REQ_DONE;
+    }
     else {
 
       if ((offset>=_this->kill_base_address) && (offset<=(_this->kill_base_address)+_this->kill_addr_size)) {
         memcpy((uint8_t*)&cnf_w, data, size);
         _this->nb_recv_kill_reqs++;
-        _this->trace.msg(vp::Trace::LEVEL_TRACE, "Received kill request at address 0x%08lx. Current kill count is %d. Number of cores to wait is %d. Received exit code is %d.\n",offset,_this->nb_recv_kill_reqs,_this->nb_cores_to_wait, cnf_w);
+        _this->trace.msg(vp::Trace::LEVEL_TRACE, "Received kill request from port %d at address 0x%08lx. Current kill count is %d. Number of cores to wait is %d. Received exit code is %d.\n",id,offset,_this->nb_recv_kill_reqs,_this->nb_cores_to_wait, cnf_w);
       }
 
       if (_this->nb_recv_kill_reqs==_this->nb_cores_to_wait) {
@@ -103,7 +119,7 @@ vp::IoReqStatus KillModule::req(vp::Block *__this, vp::IoReq *req)
           _this->time.get_engine()->quit(cnf_w);
         }
       }
-      return vp::IO_REQ_OK;
+      return vp::IO_REQ_DONE;
     }
 }
 

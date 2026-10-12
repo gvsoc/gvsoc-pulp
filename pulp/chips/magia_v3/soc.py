@@ -17,18 +17,18 @@
 # Authors: Lorenzo Zuolo, Chips-IT (lorenzo.zuolo@chips.it)
 
 import gvsoc.systree
-import memory.memory as memory
 import vp.clock_domain
-import utils.loader.loader
+from memory.memory_v3 import Memory, MemoryV3Config
+from interco.router_v2 import Router, RouterConfig, KIND_UNTIMED, KIND_BANDWIDTH
+from utils.loader.loader_v2 import ElfLoader
 
 from pulp.chips.magia_v3.tile import MagiaV3Tile
 from pulp.chips.magia_v3.arch import *
 
-if MagiaArch.ENABLE_PCIE_VFIO:
-    import pulp.pcie_vfio_bridge.pcie_vfio_mem_bridge
-from pulp.floonoc.floonoc import *
+from pulp.floonoc_v2.floonoc_v2 import FlooNocV22dMeshNarrowWide, FlooNocV2Direction
 from pulp.chips.magia_v3.fractal_sync.fractal_sync import *
 from pulp.chips.magia_v3.kill_module.kill_module import *
+from pulp.chips.magia_v3.l2_port.l2_port import L2Port
 from typing import List, Dict
 import math
 
@@ -56,15 +56,19 @@ class MagiaV3Soc(gvsoc.systree.Component):
 
         self.set_attributes(tree)
 
+        if MagiaArch.ENABLE_PCIE_VFIO:
+            # The PCIe/VFIO bridge is an io (v1) model, which cannot bind to the
+            # io_v2 models of the chip
+            raise RuntimeError('ENABLE_PCIE_VFIO is not supported: '
+                'pulp.pcie_vfio_bridge.pcie_vfio_mem_bridge is still an io (v1) model')
+
         # Standard platform level bin Loader
-        if not MagiaArch.ENABLE_PCIE_VFIO:
-            ctrl_core_loader=utils.loader.loader.ElfLoader(self, f'ctrl_core_loader', binary=binary)
-            self.ctrl_core_loader = ctrl_core_loader # this is needed when building the platform as it requires at least one binary
+        ctrl_core_loader=ElfLoader(self, f'ctrl_core_loader', binary=binary)
+        self.ctrl_core_loader = ctrl_core_loader # this is needed when building the platform as it requires at least one binary
 
-
-        # Simulation engine killer
+        # Simulation engine killer, with one input per tile
         killer=KillModule(self,'kill-module',kill_addr_base=MagiaArch.TEST_END_ADDR_START,kill_addr_size=MagiaArch.TEST_END_SIZE,nb_cores_to_wait=tree.nb_clusters,
-                          done_irq_enable=MagiaArch.ENABLE_PCIE_VFIO)
+                          nb_inputs=tree.nb_clusters)
 
         # Single clock domain
         clock = vp.clock_domain.Clock_domain(self, 'tile-clock',
@@ -76,16 +80,18 @@ class MagiaV3Soc(gvsoc.systree.Component):
         for id in range(0,tree.nb_clusters):
             cluster.append(MagiaV3Tile(self, f'magia-tile-{id}', tree, parser, id))
 
-        l2_mem = memory.Memory(self, f'L2-mem', size=MagiaArch.L2_SIZE,latency=MagiaDSE.SOC_L2_LATENCY)
+        # L2. No address truncation: L2_SIZE is not a power of two, and the NoC
+        # already rebases the accesses (rm_base on the L2 mapping).
+        l2_mem = Memory(self, f'L2-mem', config=MemoryV3Config(
+            size=MagiaArch.L2_SIZE, latency=MagiaDSE.SOC_L2_LATENCY, truncate=False))
 
-        if MagiaArch.ENABLE_PCIE_VFIO:
-            pcie_ep = pulp.pcie_vfio_bridge.pcie_vfio_mem_bridge.PCIeVfioMemBridge(
-                     self,
-                     'l2-vfio-bridge',
-                     socket_path='/tmp/gvsoc.sock',
-                     bar0_size=0x1000,
-                     dma_chunk_bytes=16
-                    )
+        # L2 fan-in: the NoC has one narrow and one wide output per row and the
+        # memory has a single input, so the 2*n_tiles_y channels are joined by
+        # an untimed router, which decodes and forwards with no timing of its
+        # own. Each NoC channel reaches it through the beat-to-single-request
+        # adapter the framework inserts.
+        l2_xbar = Router(self, 'L2-xbar', config=RouterConfig(kind=KIND_UNTIMED))
+        l2_xbar.o_MAP_DEFAULT(l2_mem.i_INPUT(), name='L2-mem')
 
         # Create Tile matrix for IDs
         # --------------> X direction
@@ -157,14 +163,25 @@ class MagiaV3Soc(gvsoc.systree.Component):
 
 
         #Connect NoC to tiles and L2    
-        noc = FlooNoc2dMeshNarrowWide(self,
+        # max_burst_size is the 4 KiB AXI page: the NI checks that no target
+        # range splits a page, which holds since the tile L1 windows and the L2
+        # window are whole pages, so a burst always has a single destination.
+        # As in the RTL, the routers have input FIFOs of 2 entries (floo_nw_router
+        # InFifoDepth) and the chimneys have no cut on the request channels
+        # (ChimneyDefaultCfg CutAx = 0). Write bursts travel as in floo_nw_chimney
+        # (write_burst_packet): one AW per burst, AW and W beats in one wormhole
+        # packet.
+        noc = FlooNocV22dMeshNarrowWide(self,
                                     name='magia-noc',
-                                    narrow_width=4,
-                                    wide_width=32,
-                                    ni_outstanding_reqs=8, #need to double check this with RTL
-                                    router_input_queue_size=4, #need to double check this with RTL
-                                    dim_x=tree.n_tiles_x+1, dim_y=tree.n_tiles_y)
-        
+                                    narrow_width=MagiaArch.BYTES_PER_WORD,
+                                    wide_width=MagiaArch.TILE_WIDE_WIDTH,
+                                    # ChimneyDefaultCfg MaxTxns
+                                    ni_outstanding_reqs=32,
+                                    router_input_queue_size=2,
+                                    dim_x=tree.n_tiles_x+1, dim_y=tree.n_tiles_y,
+                                    max_burst_size=4096, cut_ax=False,
+                                    write_burst_packet=True)
+
 
         # Create noc routers
         for y in range(0,tree.n_tiles_y):
@@ -194,11 +211,14 @@ class MagiaV3Soc(gvsoc.systree.Component):
         for y in range(0,tree.n_tiles_y):
             for x in range(1,tree.n_tiles_x+1):
                 print(f"[NoC] Adding cluster {id} at position x={x} y={y}")
-                cluster[id].o_KILLER_OUTPUT(killer.i_INPUT())
+                cluster[id].o_KILLER_OUTPUT(killer.i_INPUT(id))
                 cluster[id].o_NARROW_OUTPUT(noc.i_NARROW_INPUT(x,y))
-                noc.o_NARROW_MAP(cluster[id].i_NARROW_INPUT(),name=f'narrow-tile-{id}-l1-mem',base=MagiaArch.L1_ADDR_START+(id*MagiaArch.L1_TILE_OFFSET),size=MagiaArch.L1_SIZE,x=x,y=y,rm_base=False)
+                # The NI mapping table is shared by both channels, so the tile's
+                # L1 range is declared once, with the narrow binding, and the wide
+                # output only needs its binding
+                noc.o_NARROW_MAP(cluster[id].i_NARROW_INPUT(),name=f'tile-{id}-l1-mem',base=MagiaArch.L1_ADDR_START+(id*MagiaArch.L1_TILE_OFFSET),size=MagiaArch.L1_SIZE,x=x,y=y,rm_base=False)
                 cluster[id].o_WIDE_OUTPUT(noc.i_WIDE_INPUT(x,y))
-                noc.o_WIDE_MAP(cluster[id].i_WIDE_INPUT(),name=f'wide-tile-{id}-l1-mem',base=MagiaArch.L1_ADDR_START+(id*MagiaArch.L1_TILE_OFFSET),size=MagiaArch.L1_SIZE,x=x,y=y,rm_base=False)
+                noc.o_WIDE_BIND(cluster[id].i_WIDE_INPUT(),x=x,y=y)
                 id += 1
 
         # Bind memory to noc
@@ -216,14 +236,24 @@ class MagiaV3Soc(gvsoc.systree.Component):
 
         for y in range(0,tree.n_tiles_y):
             print(f"[NoC] Adding L2 at position x={0} y={y}")
-            noc.o_NARROW_BIND(l2_mem.i_INPUT(), x=0, y=y)
-            noc.o_WIDE_BIND(l2_mem.i_INPUT(), x=0, y=y)
-        
-        noc.o_MAP_DIR(base=MagiaArch.L2_ADDR_START,size=MagiaArch.L2_SIZE, dir=FlooNocDirection.LEFT,name=f'mem_left', rm_base=True)
+            # Narrow port of the L2: the axi_dw_upsizer of the testbench, which
+            # delays the AR by two cycles and serves one read at a time for the
+            # whole row: the next AR is taken the cycle after the last R beat of
+            # the previous one (ar_valid held meanwhile on the RTL waveforms,
+            # the reads of all the tiles of the row reaching it through the L2
+            # chimney). With 8 tiles per row it bounds the L2 reads of the row.
+            l2_narrow_port = L2Port(self, f'L2-narrow-port-{y}', width=MagiaArch.BYTES_PER_WORD,
+                req_latency=MagiaDSE.SOC_L2_NARROW_UPSIZER_LATENCY, max_reads=1)
+            l2_narrow_port.o_OUTPUT(l2_xbar.i_INPUT(2*y))
+            noc.o_NARROW_BIND(l2_narrow_port.i_INPUT(), x=0, y=y)
+            # Wide port of the L2: the axi_sim_mem, reached directly
+            l2_wide_port = L2Port(self, f'L2-wide-port-{y}', width=MagiaArch.TILE_WIDE_WIDTH)
+            l2_wide_port.o_OUTPUT(l2_xbar.i_INPUT(2*y + 1))
+            noc.o_WIDE_BIND(l2_wide_port.i_INPUT(), x=0, y=y)
+            # axi_sim_mem takes a W beat once the AW of its burst is queued
+            noc.o_WIDE_AW_BIND(l2_wide_port.i_AW(), x=0, y=y)
 
-        if MagiaArch.ENABLE_PCIE_VFIO:
-            pcie_ep.o_MEM(l2_mem.i_INPUT())
-            killer.o_IRQ_DONE(pcie_ep.i_IRQ_DONE())
+        noc.o_MAP_DIR(base=MagiaArch.L2_ADDR_START,size=MagiaArch.L2_SIZE, dir=FlooNocV2Direction.LEFT,name=f'mem_left', rm_base=True)
 
         # Fractal tree routing
         for lvl in range(0,int(math.log2(tree.nb_clusters))):
@@ -409,13 +439,9 @@ class MagiaV3Soc(gvsoc.systree.Component):
                     fsync_center_v[lvl-1][1].o_MASTER_EAST_WEST(fsync_root.i_SLAVE_EAST())
                     fsync_root.o_SLAVE_EAST(fsync_center_v[lvl-1][1].i_MASTER_EAST_WEST())
 
-        # Bind loader or PCIe bridge to clusters
+        # Bind loader to clusters
         for id in range(0,tree.nb_clusters):
-            if MagiaArch.ENABLE_PCIE_VFIO:
-                pcie_ep.o_FETCH_ENABLE(cluster[id].i_FETCHEN())
-                pcie_ep.o_ENTRY_ADDR(cluster[id].i_ENTRY())
-            else:
-                if (id == 0):
-                    ctrl_core_loader.o_OUT(cluster[id].i_LOADER()) #only cluster connected to the corner loads the elf
-                ctrl_core_loader.o_START(cluster[id].i_FETCHEN())
-                ctrl_core_loader.o_ENTRY(cluster[id].i_ENTRY())
+            if (id == 0):
+                ctrl_core_loader.o_OUT(cluster[id].i_LOADER()) #only cluster connected to the corner loads the elf
+            ctrl_core_loader.o_START(cluster[id].i_FETCHEN())
+            ctrl_core_loader.o_ENTRY(cluster[id].i_ENTRY())
