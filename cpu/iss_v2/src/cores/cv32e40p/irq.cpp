@@ -14,12 +14,79 @@
 #include <cpu/iss_v2/include/iss.hpp>
 #include <cpu/iss_v2/include/cores/cv32e40p/cosim_model.hpp>
 
+/* RTL priority, from irq[31] down to irq[16], then MEI(11), MSI(3) and
+ * MTI(7). pending has at least one bit of IRQ_MASK set. */
+static int cv32e40p_irq_pick(iss_reg_t pending)
+{
+    for (int id = 31; id >= 16; id--)
+    {
+        if ((pending >> id) & 1)
+        {
+            return id;
+        }
+    }
+    if ((pending >> 11) & 1) return 11;
+    if ((pending >> 3) & 1)  return 3;
+    return 7;
+}
+
 Cv32e40pIrq::Cv32e40pIrq(Iss &iss) : IrqRiscv(iss)
 {
     this->haltreq_itf.set_sync_meth(&Cv32e40pIrq::haltreq_sync);
     this->iss.new_slave_port("haltreq", &this->haltreq_itf, (vp::Block *)this);
     this->mtvec_addr_itf.set_sync_meth(&Cv32e40pIrq::mtvec_addr_sync);
     this->iss.new_slave_port("mtvec_addr", &this->mtvec_addr_itf, (vp::Block *)this);
+    this->iss.new_master_port("irq_ack", &this->irq_ack_itf);
+
+    // mtvec base at boot of a chip tying mtvec_addr_i to a constant; the
+    // mtvec_addr port, when driven, overrides it.
+    js::Config *mtvec_conf = iss.get_js_config()->get("mtvec_addr");
+    if (mtvec_conf != NULL) this->mtvec_addr = (uint32_t)mtvec_conf->get_int();
+
+    // Take over the lines registered by IrqRiscv, to see them while the core
+    // sleeps on a cv.elw.
+    this->msi_itf.set_sync_meth(&Cv32e40pIrq::msi_sync);
+    this->mti_itf.set_sync_meth(&Cv32e40pIrq::mti_sync);
+    this->mei_itf.set_sync_meth(&Cv32e40pIrq::mei_sync);
+    for (int i=0; i<20; i++)
+    {
+        this->external_irq_itf[i].set_sync_meth_muxed(&Cv32e40pIrq::external_irq_sync, i + 12);
+    }
+}
+
+void Cv32e40pIrq::msi_sync(vp::Block *__this, bool value)
+{
+    IrqRiscv::msi_sync(__this, value);
+    ((Cv32e40pIrq *)__this)->elw_irq_check();
+}
+
+void Cv32e40pIrq::mti_sync(vp::Block *__this, bool value)
+{
+    IrqRiscv::mti_sync(__this, value);
+    ((Cv32e40pIrq *)__this)->elw_irq_check();
+}
+
+void Cv32e40pIrq::mei_sync(vp::Block *__this, bool value)
+{
+    IrqRiscv::mei_sync(__this, value);
+    ((Cv32e40pIrq *)__this)->elw_irq_check();
+}
+
+void Cv32e40pIrq::external_irq_sync(vp::Block *__this, bool value, int id)
+{
+    IrqRiscv::external_irq_sync(__this, value, id);
+    ((Cv32e40pIrq *)__this)->elw_irq_check();
+}
+
+/* In ELW_EXE the RTL leaves the sleep when an interrupt request is taken
+ * (irq_req_ctrl_i, which is gated by mie and mstatus.MIE), then replays the
+ * cv.elw after the handler through IRQ_FLUSH_ELW. */
+void Cv32e40pIrq::elw_irq_check()
+{
+    iss_reg_t pending = this->iss.csr.mie.value & this->iss.csr.mip.value & IRQ_MASK;
+    bool enabled = pending && this->iss.csr.mstatus.mie && !this->iss.exec.debug_mode &&
+        !(this->step_state && !((this->iss.csr.dcsr >> 11) & 1));
+    this->iss.lsu.irq_req_hook(pending ? cv32e40p_irq_pick(pending) : -1, enabled);
 }
 
 void Cv32e40pIrq::start()
@@ -119,22 +186,6 @@ bool Cv32e40pIrq::mie_write_fixup(iss_insn_t *insn, bool is_write, iss_reg_t &va
     }
     this->iss.csr.mie.value &= IRQ_MASK;
     return false;
-}
-
-/* RTL priority, from irq[31] down to irq[16], then MEI(11), MSI(3) and
- * MTI(7). pending has at least one bit of IRQ_MASK set. */
-static int cv32e40p_irq_pick(iss_reg_t pending)
-{
-    for (int id = 31; id >= 16; id--)
-    {
-        if ((pending >> id) & 1)
-        {
-            return id;
-        }
-    }
-    if ((pending >> 11) & 1) return 11;
-    if ((pending >> 3) & 1)  return 3;
-    return 7;
 }
 
 int Cv32e40pIrq::check()
@@ -372,6 +423,11 @@ void Cv32e40pIrq::irq_take(iss_reg_t pending)
 
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Handling IRQ (irq: %d, entry: 0x%lx)\n",
                     irq, entry);
+
+    if (this->irq_ack_itf.is_bound())
+    {
+        this->irq_ack_itf.sync(irq);
+    }
 
     Cv32e40pCosimModel *cosim = this->iss.exec.cosim;
     cosim->boundary_begin(CV32E40P_COSIM_BOUNDARY_IRQ_TAKE, 0x80000000u | irq, irq,
