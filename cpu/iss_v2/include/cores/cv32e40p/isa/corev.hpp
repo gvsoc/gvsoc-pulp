@@ -1223,12 +1223,14 @@ static inline iss_reg_t SW_RR_exec(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
 
 static inline iss_reg_t p_elw_exec(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
 {
-    // Without an event unit, cv.elw (COREV_CLUSTER) is a plain load, as in the
-    // RTL while the cluster keeps the clock enabled. The RTL runs it again after an
-    // interrupt or a debug request taken right after it (IRQ_FLUSH_ELW, DBG_FLUSH in
-    // cv32e40p_controller.sv), which is not modelled.
+    // cv.elw (COREV_CLUSTER): a load whose park in the event unit puts the core
+    // to sleep until the event comes, or until an interrupt, after which the
+    // cv.elw is replayed (ELW_EXE, IRQ_FLUSH_ELW in cv32e40p_controller.sv).
+    // Without an event unit the load completes at once, as in the RTL while the
+    // cluster keeps the clock enabled. The replay after a debug request taken
+    // right after it (DBG_FLUSH) is not modelled.
     iss->regfile.memcheck_access_reg(REG_IN(0));
-    if (iss->lsu.load_signed<int32_t>(insn, REG_GET(0) + SIM_GET(0), 4, REG_OUT(0)))
+    if (iss->lsu.elw(insn, REG_GET(0) + SIM_GET(0), 4, REG_OUT(0)))
     {
         return pc;
     }
