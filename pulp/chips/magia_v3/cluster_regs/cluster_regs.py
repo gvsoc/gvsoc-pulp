@@ -17,6 +17,7 @@
 # Authors: Lorenzo Zuolo, Chips-IT (lorenzo.zuolo@chips.it)
 
 import gvsoc.systree
+from gvsoc.signature import IoV2Sync
 
 class ClusterRegs(gvsoc.systree.Component):
 
@@ -34,7 +35,7 @@ class ClusterRegs(gvsoc.systree.Component):
         self.add_sources(['pulp/chips/magia_v3/cluster_regs/cluster_regs.cpp'])
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'input', signature='io')
+        return gvsoc.systree.SlaveItf(self, 'input', signature=IoV2Sync())
 
     def o_SPATZ_CLK_EN(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('spatz_clock_en', itf, signature='wire<bool>')
@@ -53,6 +54,10 @@ class ClusterRegs(gvsoc.systree.Component):
 
     def o_PULP_START(self, core_id: int, itf: gvsoc.systree.SlaveItf):
         self.itf_bind(f'pulp_start_irq_{core_id}', itf, signature='wire<bool>')
+
+    def i_PULP_IRQ_ACK(self, core_id: int) -> gvsoc.systree.SlaveItf:
+        """Interrupt acknowledge of PULP core ``core_id``: clears its start IRQ."""
+        return gvsoc.systree.SlaveItf(self, f'pulp_irq_ack_{core_id}', signature='wire<int>')
 
     def o_PULP_ENTRY(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('pulp_entry', itf, signature='wire<uint64_t>')

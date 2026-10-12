@@ -43,7 +43,7 @@ target name, `key=value` separated by commas:
 make build TARGETS="magia_v3:n_tiles_x=2,n_tiles_y=2,nb_pulp_cores=8"
 ```
 
-Defaults (`4×4`, `nb_pulp_cores=8`) are used if omitted, i.e. `TARGETS=magia_v3`.
+Defaults (`1×1`, `nb_pulp_cores=8`) are used if omitted, i.e. `TARGETS=magia_v3`.
 Several meshes can be built side by side (`;`-separated):
 
 ```bash
@@ -68,47 +68,40 @@ This installs the `gvrun` executable under `./install/bin/gvrun`.
 
 ## SDK
 
-The companion software SDK for MAGIA v3 is available at:
+The companion software SDK for MAGIA v3 is the `main` branch of:
 
-**https://github.com/FondazioneChipsIT/magia-sdk/tree/lz/magia_v3/pulp_on_magia**
+**https://github.com/pulp-platform/magia-sdk**
 
 ### Building the SDK
 
-Build from the SDK root directory. Choose the configuration that matches your simulation:
+Build from the SDK root directory (the default `target_platform=magia` selects
+the MAGIA v3 tree of gvsoc):
 
-**Spatz + PULP** (full configuration):
 ```bash
-make clean build \
-  target_platform=magia_v3 \
-  tiles=4 \
-  LLVM_INSTALL_DIR=/home/gvsoc/Documents/toolchain/llvm/ \
-  pulp_cores=8
-```
-
-**PULP only** (no Spatz tests):
-```bash
-make clean build \
-  target_platform=magia_v3 \
+make build \
   tiles=4 \
   pulp_cores=8 \
-  spatz_tests=0
-```
-
-**Spatz only** (no PULP tests):
-```bash
-make clean build \
-  target_platform=magia_v3 \
-  tiles=4 \
-  LLVM_INSTALL_DIR=/home/gvsoc/Documents/toolchain/llvm/
+  LLVM_INSTALL_DIR=/path/to/llvm/install
 ```
 
 SDK build parameters:
 
-- **`target_platform`** — must be `magia_v3`
-- **`tiles`** — number of tiles per dimension (e.g. `4` → 4×4 grid)
-- **`pulp_cores`** — number of PULP cores in the cluster (default: 8)
-- **`LLVM_INSTALL_DIR`** — path to LLVM/Clang toolchain, required for Spatz compilation
-- **`spatz_tests=0`** — disable Spatz test compilation
+- **`tiles`** — number of tiles per dimension (e.g. `4` → 4×4 grid); must match `n_tiles_x`/`n_tiles_y` of the gvsoc target
+- **`pulp_cores`** — number of PULP cores per tile (default: 8, `0` builds no PULP test); must match `nb_pulp_cores`
+- **`spatz`** — `0` to build no Spatz test (default: 1)
+- **`LLVM_INSTALL_DIR`** — LLVM/Clang toolchain, required for the Spatz tests
+- **`CMAKE_BUILDDIR`** — build directory (default: `build`)
+- **`profile_cmi`, `profile_cmo`, `profile_cmp`, `profile_snc`** — `1` to emit the profiling sentinels around the iDMA transfers, RedMulE jobs and synchronizations
+
+### Running from the SDK
+
+```bash
+make run platform=gvsoc test=<test_name> tiles=4 pulp_cores=8 \
+  GVSOC_DIR=/path/to/gvsoc
+```
+
+It calls `gvrun` with the target string matching `tiles`/`pulp_cores` and the
+Spatz boot ROM of the build (`build/bin/bootrom/spatz_init.bin`).
 
 ---
 
@@ -117,8 +110,8 @@ SDK build parameters:
 ```bash
 ./install/bin/gvrun \
   --target=magia_v3:n_tiles_x=4,n_tiles_y=4,nb_pulp_cores=8 \
-  --work-dir /home/gvsoc/Documents/test \
-  --param binary=/home/gvsoc/Documents/chips-magia-sdk/build/bin/<test_name> \
+  --work-dir /path/to/workdir \
+  --param binary=/path/to/magia-sdk/build/bin/<test_name> \
   run
 ```
 
@@ -144,8 +137,8 @@ When the binary includes a PULP workload, pass the number of PULP cores via
 ```bash
 ./install/bin/gvrun \
   --target=magia_v3:n_tiles_x=1,n_tiles_y=1,nb_pulp_cores=8 \
-  --work-dir /home/gvsoc/Documents/test \
-  --param binary=/home/gvsoc/Documents/chips-magia-sdk/build/bin/hello_pulp \
+  --work-dir /path/to/workdir \
+  --param binary=/path/to/magia-sdk/build/bin/hello_pulp \
   run
 ```
 
@@ -160,10 +153,10 @@ If **Spatz** is enabled, provide the Spatz boot ROM:
 ```bash
 ./install/bin/gvrun \
   --target=magia_v3:n_tiles_x=4,n_tiles_y=4,nb_pulp_cores=8 \
-  --work-dir /home/gvsoc/Documents/test \
-  --param binary=/home/gvsoc/Documents/chips-magia-sdk/build/bin/<spatz_test> \
+  --work-dir /path/to/workdir \
+  --param binary=/path/to/magia-sdk/build/bin/<spatz_test> \
   run \
-  --attr magia_v3/spatz_romfile=/home/gvsoc/Documents/toolchain/spatz/bootrom/spatz_init.bin
+  --attr magia_v3/spatz_romfile=/path/to/magia-sdk/build/bin/bootrom/spatz_init.bin
 ```
 
 - **`--attr magia_v3/spatz_romfile`** — path to the Snitch-Spatz boot ROM binary. Unlike the mesh knobs, this stays a run-time `--attr`: it is a stim-file path overlaid at run time and never baked into the compiled tree
@@ -177,8 +170,8 @@ Add `--trace-level=trace` and optionally filter by component:
 ```bash
 ./install/bin/gvrun \
   --target=magia_v3:n_tiles_x=1,n_tiles_y=1,nb_pulp_cores=8 \
-  --work-dir /home/gvsoc/Documents/test \
-  --param binary=/home/gvsoc/Documents/chips-magia-sdk/build/bin/hello_pulp \
+  --work-dir /path/to/workdir \
+  --param binary=/path/to/magia-sdk/build/bin/hello_pulp \
   --trace-level=trace \
   run \
   --trace=tile-0-cluster-regs
@@ -187,6 +180,12 @@ Add `--trace-level=trace` and optionally filter by component:
 ---
 
 ## PCIe VFIO Bridge Mode (`ENABLE_PCIE_VFIO`)
+
+> **Not available on the io_v2 platform.** The PCIe VFIO bridge
+> (`pulp/pcie_vfio_bridge`) is still an io (v1) model, which cannot bind to the
+> io_v2 models of MAGIA v3: the SoC refuses `ENABLE_PCIE_VFIO = True` until the
+> bridge is ported. The rest of this section describes the mode as it worked on
+> the io (v1) platform.
 
 When `ENABLE_PCIE_VFIO = True` is set in `arch.py`, MAGIA v3 exposes its L2 memory to an external **QEMU** virtual machine as a **PCIe endpoint** via the `vfio-user` protocol.
 
@@ -225,7 +224,7 @@ make build TARGETS=magia_v3
 ```bash
 ./install/bin/gvrun \
   --target=magia_v3:n_tiles_x=4,n_tiles_y=4,nb_pulp_cores=8 \
-  --work-dir /home/gvsoc/Documents/test \
+  --work-dir /path/to/workdir \
   run
 ```
 
@@ -260,7 +259,7 @@ The QEMU build must support the `vfio-user-pci` device. Launch QEMU from the QEM
   -display none \
   -serial none \
   -monitor tcp:127.0.0.1:45454,server,nowait \
-  -drive id=hd0,file=/home/gvsoc/Documents/toolchain/qemu-img/debian-12-nocloud-amd64.qcow2,format=qcow2,if=none \
+  -drive id=hd0,file=/path/to/debian-12-nocloud-amd64.qcow2,format=qcow2,if=none \
   -device virtio-blk-pci,drive=hd0 \
   -device e1000,netdev=net0 \
   -netdev user,id=net0,hostfwd=tcp:127.0.0.1:2222-:22 \
@@ -327,12 +326,17 @@ This is the component bound to `--target magia_v3`.
 The SoC is responsible for:
 
 - Creating the **tile mesh**
-- Instantiating **L2 memory**
-- Building the **2D NoC (FlooNoC)**
+- Instantiating **L2 memory** (`memory_v3`, behind an untimed router joining the NoC channels)
+- Building the **2D NoC (FlooNoC v2)**
 - Connecting tiles to memory and NoC
 - Instantiating the **Fractal Synchronization Tree**
 - Managing simulation termination via `KillModule`
-- Optionally instantiating the **PCIe VFIO bridge** and connecting it to L2
+
+The whole platform is described with **io_v2** models. An io_v2 slave port
+binds exactly one master, so every fan-in is explicit (routers in front of the
+L2, the TCDM banks, the event unit and the instruction caches), and the
+x-bars leave the tile through one catch-all mapping instead of one mapping per
+remote tile.
 
 ### Tile Placement
 
@@ -360,18 +364,35 @@ Each tile is a **self-contained compute cluster** composed of:
 
 ### Compute Cores
 
-- **CV32CtrlCore** (`ctrl_core/`) — tile controller; always present; uses `irq_external.cpp`
-  (`riscv_exceptions=False`), which exposes `irq_req`/`irq_ack` ports wired to the Event Unit
-  for vectored interrupt delivery
+- **CV32CtrlCore** (`ctrl_core/`) — tile controller, always present
 - Optional **Snitch + Spatz** vector core
-- Optional **PULP cluster** — up to 8 **CV32PulpCore** workers (`pulp_core/`); each uses
-  `irq_riscv.cpp` (`riscv_exceptions=True`), which exposes the standard RISC-V `mei` port for
-  direct Machine External Interrupt delivery from `ClusterRegs` (bypasses the Event Unit)
+- Optional **PULP cluster** — up to 8 **CV32PulpCore** workers (`pulp_core/`)
+
+The control core and the PULP cores are the **CV32E40P** model of the iss_v2
+(`pulp/cv32e40p`), configured as in `magia_tile.sv`: `COREV_PULP` and
+`COREV_CLUSTER`, FPU with `ZFINX`, 29 HPM counters. The SDK builds for
+`zhinxmin` on top of it, whose half-precision conversions come from the Xf16
+subsets. With `COREV_CLUSTER`, `cv.elw` sleeps until the event unit answers,
+and an interrupt taken meanwhile replays it after the handler.
+
+- The control core reaches the Event Unit on a direct link (RTL
+  `core_data_demux_eu_direct`); the Event Unit request drives its machine
+  external interrupt (`mei`) and the core acknowledges it (`irq_ack`). Its
+  `mtvec` starts at the boot address (`MagiaArch.BOOT_ADDR`, `mtvec_addr` of
+  the core configuration), as the RTL ties `mtvec_addr_i` to `boot_addr_i`:
+  the SDK crt0 relies on it (vector table at the start of the binary).
+- The PULP cores are started by `ClusterRegs` on their `mei` line (bypassing
+  the Event Unit); the line stays raised until the core acknowledges it
+  (`irq_ack`), as `cluster_start_irq_pending` in the RTL.
+
+Each group of cores has a two-level instruction cache (`icache.py`, built on
+`cache_v4`): one private L0 per core in front of a shared L1.
 
 ### Local Memory
 - **TCDM (L1 scratchpad)**
-  - 32 banks
-  - Multi-ported via interleavers
+  - 32 banks behind a single crossbar (`SpatzTcdmInterco`) with bank
+    conflicts modelled; wide masters (NoC wide channel, iDMA, RedMulE) span
+    several banks and take priority over the narrow ones
   - Shared by cores, DMA, accelerators, and PULP cluster
 
 ### Accelerators
@@ -379,9 +400,14 @@ Each tile is a **self-contained compute cluster** composed of:
 - Memory-mapped control interface
 
 ### DMA Engines
-- Two **Snitch DMA** engines per tile
-- Controlled through a memory-mapped iDMA controller
-- Support local and remote transfers
+- Two **iDMA** channels per tile (`AxiObiDmaV3`, RTL `idma_axi_obi_transfer_ch`):
+  AXI to OBI (L2 to L1) and OBI to AXI (L1 to L2)
+- Programmed through their `idma_reg32_3d` register file (iDMA v0.6.4 layout:
+  `NEXT_ID_0` at `0x44`, `DONE_ID_0` at `0x84`); the iDMA controller window
+  decodes `+0x000` to the AXI to OBI channel and `+0x200` to the OBI to AXI
+  one (RTL `idma_obi_ctrl_decoder`)
+- The completion of each channel is an Event Unit event (`2` for AXI to OBI,
+  `3` for OBI to AXI)
 
 ### Synchronization
 - **Fractal Sync MM Controller**
@@ -389,16 +415,14 @@ Each tile is a **self-contained compute cluster** composed of:
 - Neighbor and multi-level synchronization supported
 
 ### Interconnect
-- OBI crossbar (control / local memory)
-- AXI crossbar (remote accesses, L2)
-- Narrow+Wide NoC channels
+- OBI crossbar (control / local memory), beat router at the word width
+- AXI crossbar (remote accesses, L2), beat router at the word width
+- Narrow+Wide NoC channels; the two iDMA channels share the wide one
 
 ### Event & Debug
 - Event Unit (interrupt routing for CV32CtrlCore; PULP done IRQ at `in_event_12_pe_0`)
 - UART (stdout)
 - GDB server support
-
----
 
 ## PULP Cluster
 
@@ -530,13 +554,13 @@ Exact addresses are defined in `arch.py`.
 
 ### Architecture Parameters (`arch.py`)
 
-- **`N_TILES_X`** (default `4`) — tile grid width; **default** for the `n_tiles_x` target parameter
-- **`N_TILES_Y`** (default `4`) — tile grid height; **default** for the `n_tiles_y` target parameter
+- **`N_TILES_X`** (default `1`) — tile grid width; **default** for the `n_tiles_x` target parameter
+- **`N_TILES_Y`** (default `1`) — tile grid height; **default** for the `n_tiles_y` target parameter
 - **`NB_PULP_CORES`** (default `8`) — PULP cores per cluster; **default** for the `nb_pulp_cores` target parameter
 - **`TILE_CLK_FREQ`** (default `200 MHz`) — tile clock frequency
 - **`SPATZ_ENABLE`** (default `True`) — enable Snitch+Spatz vector core per tile
 - **`PULP_ENABLE`** (default `True`) — enable PULP multi-core cluster per tile
-- **`ENABLE_PCIE_VFIO`** (default `False`) — enable PCIe VFIO bridge for QEMU co-simulation
+- **`ENABLE_PCIE_VFIO`** (default `False`) — enable PCIe VFIO bridge for QEMU co-simulation (not available yet on the io_v2 platform)
 
 > `N_TILES_X`/`N_TILES_Y`/`NB_PULP_CORES` are only the **build-time defaults**.
 > To run a different shape, override them in the target string at both build and
@@ -584,16 +608,17 @@ This allows the QEMU guest to observe completion through the BAR0 status bits an
 pulp/pulp/chips/magia_v3/
 ├── arch.py                        # Architecture constants and parameters
 ├── board.py                       # GVSoC board entry point
-├── soc.py                         # SoC composition (tiles, NoC, L2, bridge)
+├── soc.py                         # SoC composition (tiles, NoC, L2)
 ├── tile.py                        # Tile micro-architecture
+├── icache.py                      # Two-level instruction cache
 ├── cluster_regs/                  # Cluster control registers (Spatz + PULP)
 │   ├── cluster_regs.cpp           # C++ model implementation
 │   └── cluster_regs.py            # Python systree binding
-├── ctrl_core/                     # CV32 control core (riscv_exceptions=False, irq_req/irq_ack)
-│   ├── core.py                    # CV32CtrlCore class
-│   └── hierarchical_cache.py      # Instruction cache for the control core
-├── pulp_core/                     # PULP worker cores (riscv_exceptions=True, mei port)
+├── ctrl_core/                     # CV32E40P control core
+│   └── core.py                    # CV32CtrlCore class
+├── pulp_core/                     # CV32E40P PULP worker cores
 │   └── core.py                    # CV32PulpCore class
+├── idma_mm_ctrl/                  # Decoder of the two iDMA channel windows
 ├── fractal_sync/                  # Fractal synchronization module
 ├── kill_module/                   # Simulation termination module
 │   ├── kill_module.py
