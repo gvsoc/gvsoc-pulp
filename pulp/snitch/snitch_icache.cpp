@@ -39,6 +39,7 @@
 #include <vp/itf/io_v2.hpp>
 #include <vp/signal.hpp>
 #include <vector>
+#include <deque>
 #include <pulp/snitch/snitch_icache/snitch_icache_config.hpp>
 
 static int ceil_log2(unsigned int n)
@@ -73,6 +74,7 @@ private:
     // Clock events
     static void refill_event_clear_handler(vp::Block *__this, vp::ClockEvent *event);
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
+    static void delayed_resp_handler(vp::Block *__this, vp::ClockEvent *event);
 
     // Wire callbacks
     static void enable_sync(vp::Block *_this, bool active);
@@ -101,6 +103,8 @@ private:
                             unsigned int *tag, unsigned int *line_offset);
 
     unsigned int step_lru();
+    // Way to replace in the set line_index (cfg.round_robin or pseudo-random)
+    unsigned int victim_way(unsigned int line_index);
     void enable(bool e);
     void flush();
     void flush_line_op(unsigned int addr);
@@ -175,6 +179,10 @@ private:
     vp::Signal<uint64_t> req_event;
 
     vp::ClockEvent *fsm_event = nullptr;
+    // Requests answered once their latency has elapsed (cfg.async_latency),
+    // in order, with the cycle of their response
+    std::deque<std::pair<vp::IoReq *, int64_t>> delayed_resps;
+    vp::ClockEvent *delayed_resp_event = nullptr;
     vp::ClockEvent  refill_event_clear_event;
 
     // Earliest cycle at which another synchronous refill can complete. Used to
@@ -184,6 +192,11 @@ private:
 
     // Pseudo-random LFSR state for replacement policy
     uint8_t lru_out = 0;
+    // Next way to replace in each set, with cfg.round_robin
+    std::vector<unsigned int> rr_next;
+    // Eviction LFSR of the RTL, with cfg.rtl_lfsr
+    unsigned int rtl_lfsr_q = 0;
+    unsigned int rtl_lfsr_step();
 
     // Flush-line wire staging (address arrives via a separate wire)
     uint32_t flush_line_addr = 0;
@@ -238,6 +251,7 @@ SnitchIcache::SnitchIcache(vp::ComponentConf &config)
     this->new_master_port("flush_ack", &this->flush_ack_itf);
 
     this->lines = new cache_line_t[this->nb_sets * this->cfg.ways];
+    this->rr_next.assign(this->nb_sets, 0);
     for (unsigned int i = 0; i < this->nb_sets; i++)
     {
         for (unsigned int j = 0; j < this->cfg.ways; j++)
@@ -259,6 +273,7 @@ SnitchIcache::SnitchIcache(vp::ComponentConf &config)
     this->refill_slots.resize(nb_refills);
 
     this->fsm_event = this->event_new(&SnitchIcache::fsm_handler);
+    this->delayed_resp_event = this->event_new(&SnitchIcache::delayed_resp_handler);
 
     this->trace.msg(vp::Trace::LEVEL_INFO,
         "Instantiating cache (sets: %d, ways: %d, line_size: %d)\n",
@@ -335,9 +350,11 @@ void SnitchIcache::reset(bool active)
     {
         this->flush();
         this->enabled = this->cfg.enabled;
+        this->rtl_lfsr_q = 0;
         this->refill_event.release();
         this->refill_retry_pending = false;
         this->input_needs_retry = false;
+        this->delayed_resps.clear();
         this->refill_timestamp = -1;
         this->prefetch_wanted = false;
         for (RefillSlot &slot : this->refill_slots)
@@ -480,6 +497,23 @@ void SnitchIcache::refill_retry(vp::Block *__this, vp::IoRetryChannel)
 // Kicked by check_state() whenever there is at least one queued CPU request and
 // no refill currently in flight. Pulls one request from the queue, runs it
 // through handle_req, and replies to the CPU if it resolves synchronously.
+void SnitchIcache::delayed_resp_handler(vp::Block *__this, vp::ClockEvent *event)
+{
+    SnitchIcache *_this = (SnitchIcache *)__this;
+    int64_t now = _this->clock.get_cycles();
+    while (!_this->delayed_resps.empty() && _this->delayed_resps.front().second <= now)
+    {
+        vp::IoReq *req = _this->delayed_resps.front().first;
+        _this->delayed_resps.pop_front();
+        _this->input_itf.resp(req);
+    }
+    if (!_this->delayed_resps.empty())
+    {
+        _this->event_enqueue(_this->delayed_resp_event,
+            _this->delayed_resps.front().second - now);
+    }
+}
+
 void SnitchIcache::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 {
     SnitchIcache *_this = (SnitchIcache *)__this;
@@ -659,7 +693,7 @@ void SnitchIcache::try_prefetch()
         return;
     }
 
-    unsigned int way = this->step_lru() % this->cfg.ways;
+    unsigned int way = this->victim_way(line_index);
     cache_line_t *line = &this->lines[line_index * this->cfg.ways + way];
 
     uint32_t full_addr = ((addr & ~((1U << this->line_size_bits) - 1))
@@ -755,7 +789,7 @@ cache_line_t *SnitchIcache::refill(int line_index, unsigned int addr, unsigned i
         return nullptr;
     }
 
-    unsigned int refill_way = this->step_lru() % this->cfg.ways;
+    unsigned int refill_way = this->victim_way(line_index);
     cache_line_t *line = &this->lines[line_index * this->cfg.ways + refill_way];
 
     uint32_t full_addr = ((addr & ~((1U << this->line_size_bits) - 1))
@@ -1030,6 +1064,21 @@ vp::IoReqStatus SnitchIcache::input_req(vp::Block *__this, vp::IoReq *req)
     }
 
     vp::IoReqStatus st = _this->handle_req(req);
+    if (st == vp::IO_REQ_DONE && _this->cfg.async_latency && req->get_latency() > 0)
+    {
+        // Answer so that the master, which resumes the cycle after the
+        // response, waits exactly the latency
+        int64_t ready = _this->clock.get_cycles()
+            + std::max((int64_t)1, req->get_latency() - 1);
+        req->inc_latency(-req->get_latency());
+        _this->delayed_resps.push_back({req, ready});
+        if (!_this->delayed_resp_event->is_enqueued())
+        {
+            _this->event_enqueue(_this->delayed_resp_event,
+                ready - _this->clock.get_cycles());
+        }
+        st = vp::IO_REQ_GRANTED;
+    }
     if (st == vp::IO_REQ_DENIED)
     {
         // Refill was refused by the downstream and this request was new (not yet
@@ -1048,6 +1097,50 @@ vp::IoReqStatus SnitchIcache::input_req(vp::Block *__this, vp::IoReq *req)
 // ---------------------------------------------------------------------------
 // Pseudo-random LRU (8-bit LFSR, matches cache_v3)
 // ---------------------------------------------------------------------------
+
+unsigned int SnitchIcache::victim_way(unsigned int line_index)
+{
+    if (this->cfg.rtl_lfsr)
+    {
+        return this->rtl_lfsr_step();
+    }
+    if (this->cfg.round_robin)
+    {
+        unsigned int way = this->rr_next[line_index];
+        this->rr_next[line_index] = (way + 1) % this->cfg.ways;
+        return way;
+    }
+    return this->step_lru() % this->cfg.ways;
+}
+
+// snitch_icache_lfsr: the value is used for the refill, then the LFSR steps
+// (evict_enable on the refill write). From 0 it goes to all ones, a value
+// which is otherwise replaced by 0; N = 1 is a toggle.
+unsigned int SnitchIcache::rtl_lfsr_step()
+{
+    static const unsigned int taps[] = {0, 0, 0x3, 0x6, 0xc, 0x14, 0x30, 0x60,
+        0xb8, 0x110, 0x240, 0x500, 0xe08};
+    unsigned int n = ceil_log2(this->cfg.ways);
+    unsigned int q = this->rtl_lfsr_q;
+    unsigned int ones = (1U << n) - 1;
+    unsigned int d;
+    if (n <= 1)
+    {
+        d = q ^ n;
+    }
+    else if (q == 0)
+    {
+        d = ones;
+    }
+    else
+    {
+        d = q >> 1;
+        if (q & 1) d ^= taps[n];
+        if (d == ones) d = 0;
+    }
+    this->rtl_lfsr_q = d;
+    return q;
+}
 
 unsigned int SnitchIcache::step_lru()
 {
