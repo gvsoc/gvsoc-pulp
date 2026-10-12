@@ -249,7 +249,7 @@ private:
     // may run later in the same cycle.
     Mask     banks_busy;
     int64_t  banks_busy_cycle = -1;
-    // Cycle in which a wide access was last served. The wide side of the
+    // Cycle in which a wide access was last served (wide_shared_port). The wide side of the
     // TCDM is fed by a single 512-bit port (`axi_to_mem_interleaved` on the
     // wide crossbar), so it carries ONE access per cycle whichever
     // direction it goes -- a DMA read and a DMA write cannot both progress
@@ -583,7 +583,8 @@ vp::IoReqStatus SpatzTcdmInterco::wide_input_req(vp::Block *__this, vp::IoReq *r
     {
         _this->wide_claim_mask(req->get_addr(), req->get_size(), _this->wide_claim);
         if (!_this->wide_claim.intersects(_this->banks_busy_now()) &&
-            _this->wide_used_cycle != _this->clock.get_cycles())
+            (!_this->cfg.wide_shared_port ||
+             _this->wide_used_cycle != _this->clock.get_cycles()))
         {
             _this->wide_used_cycle = _this->clock.get_cycles();
             _this->banks_busy.merge(_this->wide_claim);
@@ -635,7 +636,8 @@ void SpatzTcdmInterco::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
         _this->wide_claim_mask(w->pending_addr, w->pending_size, claim);
         if (claim.intersects(banks_taken) ||
-            _this->wide_used_cycle == _this->clock.get_cycles())
+            (_this->cfg.wide_shared_port &&
+             _this->wide_used_cycle == _this->clock.get_cycles()))
         {
             // Overlaps a wide master already served this tick; try again
             // next cycle.
