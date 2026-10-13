@@ -19,8 +19,8 @@
 
     "version": 5,
     "json_file": "cluster_v6",
-    "nb_pe": 9,
-    "has_cc": true,
+    "nb_pe": 8,
+    "has_cc": false,
 
     "pe": {
         "irq": [
@@ -52,8 +52,8 @@
 
     "icache": {
         "config": {
-            "has_cc": true,
-            "nb_cores": 9,
+            "has_cc": false,
+            "nb_cores": 8,
             "nb_l1_banks":2,
 
             "l0": {
@@ -115,7 +115,7 @@
                 "remove_offset": "0x10200800"
             },
             "config": {
-                "nb_core": 9,
+                "nb_core": 8,
                 "properties": {
                     "dispatch": {
                         "size": 8

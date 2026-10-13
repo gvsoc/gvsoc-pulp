@@ -268,6 +268,11 @@ public:
   int sync_irq;
   int pending_elw;
 
+  // True when the parked request is a core WAIT register read, whose return
+  // value (masked status) must be refreshed at wake time. Other parked
+  // reads (dispatch, mutex, barrier) fill their own value.
+  bool pending_req_is_wait;
+
 private:
   Event_unit *top;
   int core_id;
@@ -531,18 +536,20 @@ vp::IoReqStatus Core_event_unit::req(vp::IoReq *req, uint64_t offset, bool is_wr
   {
     if (is_write) return vp::IO_REQ_INVALID;
     top->trace.msg("Wait\n");
-    vp::IoReqStatus err = wait_event(req);
-    *data = evt_mask & status;
-    return err;
+    // The return value (masked status) is filled by wait_event /
+    // check_state at wake time.
+    pending_req_is_wait = true;
+    return wait_event(req);
   }
 
   else if (offset == EU_CORE_EVENT_WAIT_CLEAR)
   {
     top->trace.msg("Wait and clear\n");
     clear_evt_mask = evt_mask;
-    vp::IoReqStatus err = wait_event(req);
-    *data = evt_mask & status;
-    return err;
+    // The return value (masked status) is filled by wait_event /
+    // check_state at wake time.
+    pending_req_is_wait = true;
+    return wait_event(req);
   }
   else if (offset == EU_CORE_MASK_IRQ)
   {
@@ -603,6 +610,7 @@ vp::IoReqStatus Event_unit::demux_req(vp::Block *__this, vp::IoReq *req, int cor
   Core_event_unit *core_eu = &_this->core_eu[core];
 
   core_eu->pending_elw = false;
+  core_eu->pending_req_is_wait = false;
 
   if (core_eu->get_state() == CORE_STATE_SKIP_ELW)
   {
@@ -740,6 +748,9 @@ vp::IoReqStatus Core_event_unit::wait_event(vp::IoReq *req, Event_unit_core_stat
     // In this case, don't forget to clear the status in case of wait and clear.
     // Still apply the latency as to core will go to sleep before continuing.
     top->trace.msg("Activating clock (core: %d)\n", core_id);
+    // Capture the wait return value (masked status) before the wait-clear
+    // mask wipes the events.
+    *(uint32_t *)req->get_data() = evt_mask & status;
     check_wait_mask();
     pending_req = req;
     top->event_enqueue(wakeup_event, EU_WAKEUP_LATENCY);
@@ -897,6 +908,7 @@ void Core_event_unit::reset()
   status = 0;
   evt_mask = 0;
   irq_mask = 0;
+  pending_req_is_wait = false;
   clear_evt_mask = 0;
   sync_irq = -1;
   pending_elw = false;
@@ -976,6 +988,16 @@ void Core_event_unit::check_state()
             case CORE_STATE_WAITING_BARRIER:
 
               top->trace.msg("Activating clock (core: %d)\n", core_id);
+              // Refresh the wait read's return value with the masked status
+              // at wake time (the value stored at park time predates the
+              // waking event), before the wait-clear mask wipes it. Only
+              // the wait registers carry this semantic; barrier/dispatch/
+              // mutex parked reads fill their own value.
+              if (state == CORE_STATE_WAITING_EVENT && pending_req
+                  && pending_req_is_wait)
+              {
+                *(uint32_t *)pending_req->get_data() = evt_mask & status;
+              }
               state = CORE_STATE_NONE;
               check_wait_mask();
               if (!wakeup_event->is_enqueued())
