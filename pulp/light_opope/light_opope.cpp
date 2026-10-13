@@ -33,6 +33,7 @@
  *     unit holds 4 accumulators.
  *   - The 2p x 2p accumulators are preloaded with Y (2p beats) before the
  *     first step of an output tile and stored to Z (2p beats) after the last.
+ *     MATMUL (Z = X * W) clears them instead, without using the port.
  *   - Input registers have input_slots slots (2 = double buffering), so the
  *     x/w loads of the next steps overlap with the current computation.
  *   - Prefetch queue (stream_loads, as in LightRedmule): x/w beats are sent
@@ -127,6 +128,7 @@ private:
     uint32_t            queue_depth;
     uint64_t            loc_base;
     uint32_t            compute_able;
+    bool                use_y;          // GEMM loads Y, MATMUL starts from 0
 
     // Registers
     uint32_t            m_size;
@@ -252,6 +254,7 @@ LightOpope::LightOpope(vp::ComponentConf &config)
     }
 
     this->state.set(IDLE);
+    this->use_y = true;
     this->tcdm_req          = this->tcdm_itf.req_new(0, 0, 0, 0);
     this->fsm_event         = this->event_new(&LightOpope::fsm_handler);
     this->timer_start       = 0;
@@ -403,6 +406,15 @@ void LightOpope::issue_y()
 
 bool LightOpope::issue_beat()
 {
+    // MATMUL: clear the free accumulator banks, no Y beats
+    while (!this->use_y && (this->preload_tile < this->num_tiles) &&
+           (this->preload_tile < this->store_tile + 2))
+    {
+        memset(this->acc[this->preload_tile % 2], 0, this->tile * this->tile * sizeof(fp16));
+        this->acc_ready[this->preload_tile % 2] = this->now;
+        this->preload_tile += 1;
+    }
+
     bool xw_left = this->load_step < this->num_steps;
 
     // x/w loads into free input slots
@@ -557,10 +569,14 @@ uint32_t LightOpope::op_format_parser(uint32_t op_format)
 {
     uint32_t data_format = op_format & 0x7;
     uint32_t operation = (op_format >> 3) & 0x7;
-    // Only the FP16 GEMM is supported (compute_able=3, as in LightRedmule)
-    if ((operation == 1) && (data_format == 1))
+    // Only FP16 is supported (compute_able=3, as in LightRedmule).
+    // operation=1: GEMM (Z = X * W + Y), operation=0: MATMUL (Z = X * W)
+    if ((operation <= 1) && (data_format == 1))
+    {
+        this->use_y = (operation == 1);
         return 3;
-    this->trace.fatal("[LightOpope] Unsupported operation/format [op_format=0x%x-data_format=%d-operation=%d], only FP16 GEMM\n",
+    }
+    this->trace.fatal("[LightOpope] Unsupported operation/format [op_format=0x%x-data_format=%d-operation=%d], only FP16 GEMM/MATMUL\n",
         op_format, data_format, operation);
     return 0;
 }
@@ -647,8 +663,8 @@ vp::IoReqStatus LightOpope::req(vp::Block *__this, vp::IoReq *req)
                 _this->n_size = value & 0xFFFF;
                 break;
             case 0x54:
-                // Same marith mapping as LightRedmule
-                _this->compute_able = _this->op_format_parser((value == 0x480) ? 9 : 0);
+                // Same marith mapping as LightRedmule: op << 10 | fmt << 7
+                _this->compute_able = _this->op_format_parser((((value >> 10) & 0x7) << 3) | ((value >> 7) & 0x7));
                 break;
             default:
                 _this->trace.msg(vp::Trace::LEVEL_TRACE, "[LightOpope] write to INVALID address 0x%x\n", offset);

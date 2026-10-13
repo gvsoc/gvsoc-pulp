@@ -162,6 +162,8 @@ public:
     uint32_t            fold_tiles_mapping;
     uint64_t            loc_base;
     uint32_t            compute_able;
+    // GEMM (1): Z = X * W + Y, Y is loaded. MATMUL (0): Z = X * W, no Y loads
+    uint32_t            use_y;
     uint32_t            LOCAL_BUFFER_H;
     uint32_t            LOCAL_BUFFER_N;
     uint32_t            LOCAL_BUFFER_W;
@@ -313,6 +315,7 @@ LightRedmule::LightRedmule(vp::ComponentConf &config)
 
     //Initialize FSM
     this->state.set(IDLE);
+    this->use_y             = 1;
     this->redmule_query     = NULL;
     this->tcdm_req          = this->tcdm_itf.req_new(0, 0, 0, 0);
     this->fsm_event         = this->event_new(&LightRedmule::fsm_handler);
@@ -366,6 +369,12 @@ void LightRedmule::init_redmule_meta_data(){
     this->iter_w_row_ptr = 0;
     this->iter_y_row_ptr = 0;
     this->iter_z_row_ptr = 0;
+
+    // MATMUL: the Y buffer stays zero (it is cleared after every forward to Z)
+    if (this->use_y == 0)
+    {
+        std::memset(this->y_buffer_preload, 0, this->LOCAL_BUFFER_H * this->LOCAL_BUFFER_W * this->elem_size);
+    }
 
     this->ideal_runtime = 1.0 * (this->m_size * this->n_size * this->k_size)/( 1.0 * this->ce_height * this->ce_width);
 }
@@ -705,8 +714,8 @@ uint32_t LightRedmule::get_routine_access_block_number(){
         total_blocks += this->x_acc_block;
     }
 
-    // Y block
-    if (this->iter_k == (this->x_row_tiles - 1) && (is_last_iteration == 0))
+    // Y block (not loaded by MATMUL)
+    if (this->use_y && (this->iter_k == (this->x_row_tiles - 1)) && (is_last_iteration == 0))
     {
         //update y tile base address
         uint32_t _i = this->iter_i;
@@ -757,7 +766,10 @@ uint32_t LightRedmule::get_preload_access_block_number(){
 
     // X & Y block
     this->x_acc_block = this->m_size < this->ce_height ?  this->m_size : this->ce_height;
-    this->y_acc_block = this->m_size < this->ce_height ?  this->m_size : this->ce_height;
+    if (this->use_y)
+    {
+        this->y_acc_block = this->m_size < this->ce_height ?  this->m_size : this->ce_height;
+    }
     total_blocks = this->x_acc_block + this->y_acc_block;
 
     return total_blocks;
@@ -814,12 +826,14 @@ uint32_t LightRedmule::op_foramt_parser(uint32_t op_format) {
     //expected compute_able=5 --> matmul_uint8
     //expected compute_able=6 --> matmul_int8
     //expected compute_able=7 --> matmul_fp8e4m3
-    if ((operation==1) && (data_format==1))
+    //operation=1 --> GEMM (Z = X * W + Y), operation=0 --> MATMUL (Z = X * W)
+    if ((operation<=1) && (data_format==1))
         compute_able=3;
-    else if ((operation==1) && (data_format==0))
+    else if ((operation<=1) && (data_format==0))
         compute_able=7;
     else 
         this->trace.fatal("[LightRedmule] Selected wrong operation/format combination [op_format=0x%x-data_format=%d-operation=%d]\n",op_format,data_format,operation);
+    this->use_y = operation;
     return compute_able;
 }
 
@@ -957,7 +971,8 @@ vp::IoReqStatus LightRedmule::req(vp::Block *__this, vp::IoReq *req)
                 break;
             }
             case 0x54: {
-                _this->compute_able = _this->op_foramt_parser((value == 0x480)? 9:0); //the marith mapping between reg-if and offload-if is different... WHY?
+                // marith = op << 10 | fmt << 7 (hal_redmule.h), parsed as op << 3 | fmt
+                _this->compute_able = _this->op_foramt_parser((((value >> 10) & 0x7) << 3) | ((value >> 7) & 0x7));
                 _this->elem_size = (_this->compute_able < 4)? 2:1;
                 _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] marith 0x%x, compute_able 0x%x, elem_size %d)\n", value,_this->compute_able,_this->elem_size);
                 break;
