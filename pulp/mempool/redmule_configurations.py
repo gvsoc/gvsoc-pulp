@@ -10,6 +10,17 @@ _DEFAULT_REDMULE_HEIGHT = int(os.environ.get('REDMULE_HEIGHT', 4))
 _DEFAULT_REDMULE_WIDTH = int(os.environ.get('REDMULE_WIDTH', 8))
 _DEFAULT_REDMULE_REGS = int(os.environ.get('REDMULE_REGS', 3))
 
+# Tensor engine model: 'redmule' (LightRedmule) or 'opope' (LightOpope, outer
+# product engine with p x p MACs and a 2p x 16-bit port, X stored transposed).
+# Read from the environment as the RedMulE shape, both by the standalone
+# Tensorpool target and by the flex_cluster arch files.
+_DEFAULT_ENGINE = os.environ.get('TENSOR_ENGINE', 'redmule')
+_DEFAULT_OPOPE_P = int(os.environ.get('OPOPE_P', 8))
+_DEFAULT_OPOPE_MAC_LATENCY = int(os.environ.get('OPOPE_MAC_LATENCY', 0))
+_DEFAULT_OPOPE_INPUT_SLOTS = int(os.environ.get('OPOPE_INPUT_SLOTS', 2))
+# Prefetch FIFO in beats, used with stream_loads (default: queue_depth)
+_DEFAULT_OPOPE_PREFETCH_DEPTH = os.environ.get('OPOPE_PREFETCH_DEPTH')
+
 class RedmuleParam:
     def __init__(
         self,
@@ -19,10 +30,19 @@ class RedmuleParam:
         redmule_regs=_DEFAULT_REDMULE_REGS,
         queue_depth=128,
         stream_loads=True,
-        row_refill_cyc=30
+        row_refill_cyc=30,
+        engine=_DEFAULT_ENGINE,
+        opope_p=_DEFAULT_OPOPE_P,
+        opope_mac_latency=_DEFAULT_OPOPE_MAC_LATENCY,
+        opope_input_slots=_DEFAULT_OPOPE_INPUT_SLOTS,
+        opope_prefetch_depth=_DEFAULT_OPOPE_PREFETCH_DEPTH
     ):
+        assert engine in ('redmule', 'opope'), f"unknown tensor engine '{engine}'"
         if tcdm_bank_number is not None:
             self.tcdm_bank_number = tcdm_bank_number
+        elif engine == 'opope':
+            # 2p x 16-bit port on 32-bit banks
+            self.tcdm_bank_number = opope_p
         else:
             self.tcdm_bank_number = (redmule_height * (redmule_regs + 1)) // 2
 
@@ -32,3 +52,8 @@ class RedmuleParam:
         self.queue_depth = queue_depth
         self.stream_loads = stream_loads
         self.row_refill_cyc = row_refill_cyc
+        self.engine = engine
+        self.opope_p = opope_p
+        self.opope_mac_latency = opope_mac_latency
+        self.opope_input_slots = opope_input_slots
+        self.opope_prefetch_depth = int(opope_prefetch_depth) if opope_prefetch_depth is not None else queue_depth
