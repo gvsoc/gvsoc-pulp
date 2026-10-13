@@ -141,10 +141,11 @@ if os.environ.get('USE_GVRUN') is None:
 else:
 
     class SnitchAttr(Tree):
-        def __init__(self, parent, name, nb_cluster=1, spatz=False, spatz_nb_lanes=4):
+        def __init__(self, parent, name, nb_cluster=1, spatz=False, spatz_nb_lanes=4,
+                core_type='accurate'):
             super().__init__(parent, name)
 
-            self.chip = SnitchAttr.Chip(self, 'chip', spatz, spatz_nb_lanes, nb_cluster)
+            self.chip = SnitchAttr.Chip(self, 'chip', spatz, spatz_nb_lanes, nb_cluster, core_type)
             self.hbm = SnitchAttr.Hbm(self, 'hbm')
 
         class Hbm(Tree):
@@ -156,14 +157,15 @@ else:
 
         class Chip(Tree):
 
-            def __init__(self, parent, name, use_spatz, spatz_nb_lanes, nb_cluster):
+            def __init__(self, parent, name, use_spatz, spatz_nb_lanes, nb_cluster, core_type):
                 super().__init__(parent, name)
 
-                self.soc = SnitchAttr.Chip.Soc(self, 'soc', use_spatz, spatz_nb_lanes, nb_cluster)
+                self.soc = SnitchAttr.Chip.Soc(self, 'soc', use_spatz, spatz_nb_lanes, nb_cluster,
+                    core_type)
 
             class Soc(Tree):
 
-                def __init__(self, parent, name, use_spatz, spatz_nb_lanes, nb_cluster):
+                def __init__(self, parent, name, use_spatz, spatz_nb_lanes, nb_cluster, core_type):
                     super().__init__(parent, name)
                     current_hartid = 0
                     noc_type = 'simple'
@@ -184,7 +186,8 @@ else:
                     self.clusters = []
                     for id in range(0, self.nb_cluster):
                         cluster_arch = ClusterArch(self, 'cluster', self.get_cluster_base(id),
-                            current_hartid, spatz=use_spatz, spatz_nb_lanes=spatz_nb_lanes)
+                            current_hartid, spatz=use_spatz, spatz_nb_lanes=spatz_nb_lanes,
+                            core_type=core_type)
                         self.clusters.append(cluster_arch)
                         current_hartid += self.clusters[id].nb_core
 
@@ -480,7 +483,13 @@ class SnitchBoard(gvsoc.systree.Component):
         if os.environ.get('USE_GVRUN') is None:
             arch = SnitchArch(self, spatz=spatz)
         else:
-            arch = SnitchAttr(self, 'snitch', spatz=spatz)
+            # Set with the target qualifier, e.g. snitch:core_type=fast
+            TargetParameter(
+                self, name='core_type', value='accurate', allowed_values=['accurate', 'fast'],
+                description='Type of the snitch model'
+            )
+            arch = SnitchAttr(self, 'snitch', spatz=spatz,
+                core_type=self.get_parameter('core_type'))
 
         # Expose the attributes so that tools like the build process can query
         # the architecture (memory map, cluster characteristics, and so on)
