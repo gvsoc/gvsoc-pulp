@@ -25,6 +25,7 @@ from pulp.mempool.l1_interconnect.l1_address_scrambler import L1AddressScrambler
 from pulp.cpu.iss.snitch_mempool import SnitchMempoolConfig, SnitchMempool
 
 from pulp.light_redmule.light_redmule import LightRedmule
+from pulp.light_opope.light_opope import LightOpope
 from utils.common_cells import Or
 from pulp.mempool.irq_hold import IrqHold
 from pulp.mempool.redmule_configurations import RedmuleParam
@@ -38,7 +39,20 @@ class Tile(st.Component):
         # one providing the dedicated wide RedMulE L1 path.
         assert not has_redmule or tensorpool, "has_redmule requires the tensorpool configuration"
 
-        if has_redmule:
+        if has_redmule and redmule_config.engine == 'opope':
+            # Outer product engine, in place of RedMulE (same ports)
+            redmule = LightOpope(self, f'tile-{tile_id}-redmule',
+                                    tcdm_bank_width     = 4,
+                                    tcdm_bank_number    = redmule_config.tcdm_bank_number,
+                                    p                   = redmule_config.opope_p,
+                                    elem_size           = 2,
+                                    mac_latency         = redmule_config.opope_mac_latency,
+                                    input_slots         = redmule_config.opope_input_slots,
+                                    stream_loads        = redmule_config.stream_loads,
+                                    prefetch_depth      = redmule_config.opope_prefetch_depth,
+                                    queue_depth         = redmule_config.queue_depth
+                                    )
+        elif has_redmule:
             # REDMULE
             #redmule = LightRedmule(self, 'redmule')
             redmule = LightRedmule(self, f'tile-{tile_id}-redmule',
