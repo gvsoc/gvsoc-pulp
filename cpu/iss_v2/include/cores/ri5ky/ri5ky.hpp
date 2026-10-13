@@ -21,10 +21,11 @@
 #pragma once
 
 #include <vp/vp.hpp>
+#include <cpu/iss_v2/include/arch.hpp>
 
 class Iss;
 
-class Ri5ky
+class Ri5ky : public IssArch
 {
 public:
     Ri5ky(Iss &iss);

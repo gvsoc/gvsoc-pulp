@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cpu/iss_v2/include/types.hpp>
+#include <cpu/iss_v2/include/arch.hpp>
 #include <cpu/iss_v2/include/insn.hpp>
 #include <cpu/iss_v2/include/csr.hpp>
 #include <cpu/iss_v2/include/vector.hpp>
@@ -25,7 +26,7 @@ class Iss;
 // would be lost. With it, every barrier_sync that arrives outside a WFI
 // banks one credit, and the next WFI walks straight through instead of
 // sleeping (see IrqMempool::wfi_handle).
-class SpatzMempool
+class SpatzMempool : public IssArch
 {
 public:
     SpatzMempool(Iss &iss);

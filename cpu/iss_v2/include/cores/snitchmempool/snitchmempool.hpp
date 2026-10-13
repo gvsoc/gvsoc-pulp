@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cpu/iss_v2/include/types.hpp>
+#include <cpu/iss_v2/include/arch.hpp>
 #include <cpu/iss_v2/include/insn.hpp>
 #include <cpu/iss_v2/include/csr.hpp>
 #if defined(CONFIG_GVSOC_ISS_USE_SPATZ)
@@ -20,7 +21,7 @@ class Iss;
 // barrier (wake on the barrier_ack port) and a wake-up counter for the
 // barrier_sync/WFI race. With CONFIG_GVSOC_ISS_USE_SPATZ it also carries the
 // Spatz vector unit.
-class SnitchMempool
+class SnitchMempool : public IssArch
 {
 public:
     SnitchMempool(Iss &iss);
