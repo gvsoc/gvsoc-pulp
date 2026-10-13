@@ -1,6 +1,12 @@
 import os
 import gvsoc.systree as st
 
+# Tensor engine model: 'redmule' (LightRedmule) or 'opope' (LightOpope, outer
+# product engine with p x p MACs and a 2p x 16-bit port, X stored transposed).
+# Read from the environment as the RedMulE shape, both by the standalone
+# Tensorpool target and by the flex_cluster arch files.
+_DEFAULT_ENGINE = os.environ.get('TENSOR_ENGINE', 'redmule')
+
 # Standalone (single-cluster) Tensorpool RedMulE shape. TensorpoolSystem
 # (pulp/pulp/mempool/mempool_system.py) instantiates RedmuleParam() with no
 # arguments, so these env vars are the only way to resize RedMulE for that
@@ -10,15 +16,9 @@ _DEFAULT_REDMULE_HEIGHT = int(os.environ.get('REDMULE_HEIGHT', 4))
 _DEFAULT_REDMULE_WIDTH = int(os.environ.get('REDMULE_WIDTH', 8))
 _DEFAULT_REDMULE_REGS = int(os.environ.get('REDMULE_REGS', 3))
 
-# Tensor engine model: 'redmule' (LightRedmule) or 'opope' (LightOpope, outer
-# product engine with p x p MACs and a 2p x 16-bit port, X stored transposed).
-# Read from the environment as the RedMulE shape, both by the standalone
-# Tensorpool target and by the flex_cluster arch files.
-_DEFAULT_ENGINE = os.environ.get('TENSOR_ENGINE', 'redmule')
 _DEFAULT_OPOPE_P = int(os.environ.get('OPOPE_P', 8))
 _DEFAULT_OPOPE_MAC_LATENCY = int(os.environ.get('OPOPE_MAC_LATENCY', 0))
 _DEFAULT_OPOPE_INPUT_SLOTS = int(os.environ.get('OPOPE_INPUT_SLOTS', 2))
-# Prefetch FIFO in beats, used with stream_loads (default: queue_depth)
 _DEFAULT_OPOPE_PREFETCH_DEPTH = os.environ.get('OPOPE_PREFETCH_DEPTH')
 
 class RedmuleParam:
