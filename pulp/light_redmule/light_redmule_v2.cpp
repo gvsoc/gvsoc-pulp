@@ -22,6 +22,9 @@
             Yinrong Li,      ETH Zurich                       yinrli@student.ethz.ch
  * Note:
  *      Here we only support (No Compute/ INT16 / UINT16 / FP16 ) for matrix multiply
+ *      On the memory-mapped HWPE path (req_v2), MCNFIG1.gemm_ops selects GEMM
+ *      (Z = X*W + Y) or MATMUL (Z = X*W, Y never loaded), and Y is read at
+ *      Z + MCNFIG2.y_offs, as the RTL. The other paths always run GEMM with Y = Z.
  *
  * io_v2 port of light_redmule.cpp.
  *
@@ -116,6 +119,11 @@ static constexpr uint32_t W_PREFETCH_ROWS = 9;
 // the number of X and W rows of the preload).
 static constexpr int64_t Y_ROW_CYCLES = 4;
 
+// gemm_op_e values of MCNFIG1.gemm_ops (redmule_pkg.sv). Only these two are
+// modeled; with MATMUL the RTL never starts the Y stream and feeds a zero bias.
+static constexpr uint32_t GEMM_OP_MATMUL = 0;
+static constexpr uint32_t GEMM_OP_GEMM   = 1;
+
 enum iter_instruction {
     INSTR_LOAD_Y,
     INSTR_LOAD_W,
@@ -168,6 +176,7 @@ public:
     int32_t  acquire();
     void     commit(bool start);
     void     start_next_job();
+    bool     is_gemm() const { return this->gemm_ops != GEMM_OP_MATMUL; }
     void     soft_clear(uint32_t value);
     void init_redmule_meta_data();
     uint32_t tmp_next_addr();
@@ -248,7 +257,9 @@ public:
     uint32_t            cxt_k_size[2];
     uint32_t            cxt_x_addr[2];
     uint32_t            cxt_w_addr[2];
-    uint32_t            cxt_y_addr[2];
+    uint32_t            cxt_z_addr[2];
+    uint32_t            cxt_y_offs[2];
+    uint32_t            cxt_gemm_ops[2];
     uint32_t            cxt_compute_able[2];
 
     //redmule configuration
@@ -275,6 +286,8 @@ public:
     uint32_t            w_addr;
     uint32_t            y_addr;
     uint32_t            z_addr;
+    uint32_t            y_offs;     //MCNFIG2: Y read at z_addr + y_offs (bytes)
+    uint32_t            gemm_ops;   //MCNFIG1[22:20]: 0 = MATMUL, 1 = GEMM
 
     //redmule meta data
     uint32_t            x_row_tiles;
@@ -400,6 +413,8 @@ LightRedmule::LightRedmule(vp::ComponentConf &config)
     this->w_addr            = 0;
     this->y_addr            = 0;
     this->z_addr            = 0;
+    this->y_offs            = 0;
+    this->gemm_ops          = GEMM_OP_GEMM;
 
     //Initialize redmule meta data
     this->x_row_tiles       = 0;
@@ -480,7 +495,9 @@ LightRedmule::LightRedmule(vp::ComponentConf &config)
         this->cxt_k_size[i]       = 0;
         this->cxt_x_addr[i]       = 0;
         this->cxt_w_addr[i]       = 0;
-        this->cxt_y_addr[i]       = 0;
+        this->cxt_z_addr[i]       = 0;
+        this->cxt_y_offs[i]       = 0;
+        this->cxt_gemm_ops[i]     = GEMM_OP_GEMM;
         this->cxt_compute_able[i] = 0;
     }
 
@@ -876,7 +893,12 @@ void LightRedmule::process_iter_instruction(uint8_t *buf, uint32_t instr){
             break;
         case INSTR_FORWARD_YZ:
             std::memcpy(this->z_buffer_previos, this->z_buffer_compute, buffer_yz_byte);
-            std::memcpy(this->z_buffer_compute, this->y_buffer_preload, buffer_yz_byte);
+            if (this->is_gemm()) {
+                std::memcpy(this->z_buffer_compute, this->y_buffer_preload, buffer_yz_byte);
+            } else {
+                // MATMUL: the z_buffer masks Y, the bias is zero
+                std::memset(this->z_buffer_compute, 0, buffer_yz_byte);
+            }
             std::memset(this->y_buffer_preload, 0, buffer_yz_byte);
             this->z_store_width = z_width_cutoff / this->elem_size;
             this->z_store_height = z_height_cutoff / this->elem_size;
@@ -955,8 +977,8 @@ uint32_t LightRedmule::get_routine_access_block_number(){
         total_blocks += this->x_acc_block;
     }
 
-    // Y block
-    if (this->iter_k == (this->x_row_tiles - 1) && (is_last_iteration == 0))
+    // Y block (none in MATMUL: the RTL never starts the Y stream)
+    if (this->is_gemm() && this->iter_k == (this->x_row_tiles - 1) && (is_last_iteration == 0))
     {
         //update y tile base address
         uint32_t _i = this->iter_i;
@@ -1022,8 +1044,11 @@ uint32_t LightRedmule::get_preload_access_block_number(){
 
     // X & Y block
     this->x_acc_block = this->m_size < this->ce_height ?  this->m_size : this->ce_height;
-    this->y_acc_block = this->m_size < this->ce_height ?  this->m_size : this->ce_height;
-    this->y_pad_block = this->get_y_z_pad_rows(this->y_acc_block);
+    if (this->is_gemm())
+    {
+        this->y_acc_block = this->m_size < this->ce_height ?  this->m_size : this->ce_height;
+        this->y_pad_block = this->get_y_z_pad_rows(this->y_acc_block);
+    }
     total_blocks = this->x_acc_block + this->y_acc_block + this->y_pad_block;
 
     // First rows of the first W tile, padding first as in the iterations
@@ -1252,14 +1277,16 @@ void LightRedmule::start_next_job()
     this->k_size         = this->cxt_k_size[this->cxt_use_ptr];
     this->x_addr         = this->cxt_x_addr[this->cxt_use_ptr];
     this->w_addr         = this->cxt_w_addr[this->cxt_use_ptr];
-    this->y_addr         = this->cxt_y_addr[this->cxt_use_ptr];
-    this->z_addr         = this->y_addr;
+    this->z_addr         = this->cxt_z_addr[this->cxt_use_ptr];
+    this->y_offs         = this->cxt_y_offs[this->cxt_use_ptr];
+    this->y_addr         = this->z_addr + this->y_offs;
+    this->gemm_ops       = this->cxt_gemm_ops[this->cxt_use_ptr];
     this->compute_able   = this->cxt_compute_able[this->cxt_use_ptr];
     this->elem_size      = (this->compute_able < 4) ? 2 : 1;
     this->running_job_id = this->cxt_job_id[this->cxt_use_ptr];
 
     //Sanity Check
-    this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] redmule configuration (M-N-K): %d, %d, %d. Compute able is %d\n", this->m_size, this->n_size, this->k_size, this->compute_able);
+    this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] redmule configuration (M-N-K): %d, %d, %d. Compute able is %d. %s, Y addr 0x%x, Z addr 0x%x\n", this->m_size, this->n_size, this->k_size, this->compute_able, this->is_gemm() ? "GEMM" : "MATMUL", this->y_addr, this->z_addr);
     if ((this->m_size == 0)||(this->n_size == 0)||(this->k_size == 0))
     {
         this->trace.fatal("[LightRedmule] INVALID redmule configuration (M-N-K): %d, %d, %d\n", this->m_size, this->n_size, this->k_size);
@@ -1301,7 +1328,9 @@ void LightRedmule::soft_clear(uint32_t value)
             this->cxt_k_size[i]       = 0;
             this->cxt_x_addr[i]       = 0;
             this->cxt_w_addr[i]       = 0;
-            this->cxt_y_addr[i]       = 0;
+            this->cxt_z_addr[i]       = 0;
+            this->cxt_y_offs[i]       = 0;
+            this->cxt_gemm_ops[i]     = GEMM_OP_GEMM;
             this->cxt_compute_able[i] = 0;
         }
     }
@@ -1459,11 +1488,19 @@ vp::IoReqStatus LightRedmule::req_v2(vp::Block *__this, vp::IoReq *req)
             }
             case 0x24: { //REDMULE_MCFG1_PTR
                 _this->cxt_n_size[_this->cxt_cfg_ptr] = value & 0xFFFF;
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set mcfg_reg1 -- N size %d)\n", _this->cxt_n_size[_this->cxt_cfg_ptr]);
+                //gemm_ops (redmule_regif.rdl): only MATMUL and GEMM are modeled
+                uint32_t gemm_ops = (value >> 20) & 0x7;
+                if ((gemm_ops != GEMM_OP_MATMUL) && (gemm_ops != GEMM_OP_GEMM))
+                {
+                    _this->trace.fatal("[LightRedmule] Unsupported gemm_ops %d (only MATMUL=0 and GEMM=1)\n", gemm_ops);
+                }
+                _this->cxt_gemm_ops[_this->cxt_cfg_ptr] = gemm_ops;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set mcfg_reg1 -- N size %d, gemm_ops %d)\n", _this->cxt_n_size[_this->cxt_cfg_ptr], gemm_ops);
                 break;
             }
             case 0x28: { //REDMULE_MCFG2_PTR
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set mcfg_reg2 -- currently not used\n");
+                _this->cxt_y_offs[_this->cxt_cfg_ptr] = value;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set mcfg_reg2 -- Y offset 0x%x)\n", _this->cxt_y_offs[_this->cxt_cfg_ptr]);
                 break;
             }
             case 0x2C: {
@@ -1477,8 +1514,8 @@ vp::IoReqStatus LightRedmule::req_v2(vp::Block *__this, vp::IoReq *req)
                 break;
             }
             case 0x34: {
-                _this->cxt_y_addr[_this->cxt_cfg_ptr] = value;
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set Y addr 0x%x)\n", _this->cxt_y_addr[_this->cxt_cfg_ptr]);
+                _this->cxt_z_addr[_this->cxt_cfg_ptr] = value;
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set Z addr 0x%x)\n", _this->cxt_z_addr[_this->cxt_cfg_ptr]);
                 break;
             }
             case 0x14: { //REDMULE_SOFT_CLEAR
@@ -1885,11 +1922,15 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             int64_t latency = 1;
             if (iter_done)
             {
-                // The computation starts once Y is through the z_buffer
-                int64_t start = _this->preload_first_issue
-                    + Y_ROW_CYCLES * (_this->ce_height - 1) + 1;
-                int64_t now = _this->clock.get_cycles();
-                if (start > now + 1) latency = start - now;
+                // The computation starts once Y is through the z_buffer. In
+                // MATMUL there is no Y and it starts once X is loaded
+                if (_this->is_gemm())
+                {
+                    int64_t start = _this->preload_first_issue
+                        + Y_ROW_CYCLES * (_this->ce_height - 1) + 1;
+                    int64_t now = _this->clock.get_cycles();
+                    if (start > now + 1) latency = start - now;
+                }
 
                 _this->tcdm_block_total = _this->get_routine_access_block_number();
                 _this->fsm_counter      = 0;
@@ -2054,6 +2095,8 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             if (_this->job_pending > 0) {
                 _this->job_pending--;
             }
+            //Back to GEMM, for the paths that never set gemm_ops
+            _this->gemm_ops = GEMM_OP_GEMM;
 
             //Reply Stalled Query
             if (_this->redmule_query == NULL)
