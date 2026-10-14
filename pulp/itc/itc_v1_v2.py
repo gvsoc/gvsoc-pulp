@@ -34,6 +34,10 @@ class Itc_v1_V2(gvsoc.systree.Component):
     def i_EVENT(self, id: int) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, itf_name=f'in_event_{id}', signature='wire<bool>')
 
+    def i_SOC_EVENT(self) -> gvsoc.systree.SlaveItf:
+        """SoC event FIFO input (event IDs pushed by the SoC event unit)."""
+        return gvsoc.systree.SlaveItf(self, itf_name='soc_event', signature='wire<int>')
+
     def gen_gtkw(self, tree, comp_traces):
 
         if tree.get_view() == 'overview':
