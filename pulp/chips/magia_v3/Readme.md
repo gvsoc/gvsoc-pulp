@@ -181,11 +181,10 @@ Add `--trace-level=trace` and optionally filter by component:
 
 ## PCIe VFIO Bridge Mode (`ENABLE_PCIE_VFIO`)
 
-> **Not available on the io_v2 platform.** The PCIe VFIO bridge
-> (`pulp/pcie_vfio_bridge`) is still an io (v1) model, which cannot bind to the
-> io_v2 models of MAGIA v3: the SoC refuses `ENABLE_PCIE_VFIO = True` until the
-> bridge is ported. The rest of this section describes the mode as it worked on
-> the io (v1) platform.
+MAGIA v3 uses the io_v2 version of the bridge, `PCIeVfioMemBridgeV2`
+(`pulp/pcie_vfio_bridge/pcie_vfio_mem_bridge_v2.cpp`). It reaches the L2 on one
+more input of the L2 fan-in router, with addresses relative to the L2, and
+starts the tiles in place of the ELF loader.
 
 When `ENABLE_PCIE_VFIO = True` is set in `arch.py`, MAGIA v3 exposes its L2 memory to an external **QEMU** virtual machine as a **PCIe endpoint** via the `vfio-user` protocol.
 
@@ -216,7 +215,7 @@ ENABLE_PCIE_VFIO = True   # default: False
 Then rebuild:
 
 ```bash
-make build TARGETS=magia_v3
+make build TARGETS="magia_v3:n_tiles_x=4,n_tiles_y=4,nb_pulp_cores=8"
 ```
 
 ### Running GVSoC in VFIO Bridge Mode
@@ -225,6 +224,7 @@ make build TARGETS=magia_v3
 ./install/bin/gvrun \
   --target=magia_v3:n_tiles_x=4,n_tiles_y=4,nb_pulp_cores=8 \
   --work-dir /path/to/workdir \
+  --attr magia_v3/spatz_romfile=/path/to/magia-sdk/build/bin/bootrom/spatz_init.bin \
   run
 ```
 

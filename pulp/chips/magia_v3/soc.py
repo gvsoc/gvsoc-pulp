@@ -29,6 +29,7 @@ from pulp.floonoc_v2.floonoc_v2 import FlooNocV22dMeshNarrowWide, FlooNocV2Direc
 from pulp.chips.magia_v3.fractal_sync.fractal_sync import *
 from pulp.chips.magia_v3.kill_module.kill_module import *
 from pulp.chips.magia_v3.l2_port.l2_port import L2Port
+from pulp.pcie_vfio_bridge.pcie_vfio_mem_bridge_v2 import PCIeVfioMemBridgeV2
 from typing import List, Dict
 import math
 
@@ -56,19 +57,13 @@ class MagiaV3Soc(gvsoc.systree.Component):
 
         self.set_attributes(tree)
 
-        if MagiaArch.ENABLE_PCIE_VFIO:
-            # The PCIe/VFIO bridge is an io (v1) model, which cannot bind to the
-            # io_v2 models of the chip
-            raise RuntimeError('ENABLE_PCIE_VFIO is not supported: '
-                'pulp.pcie_vfio_bridge.pcie_vfio_mem_bridge is still an io (v1) model')
-
         # Standard platform level bin Loader
         ctrl_core_loader=ElfLoader(self, f'ctrl_core_loader', binary=binary)
         self.ctrl_core_loader = ctrl_core_loader # this is needed when building the platform as it requires at least one binary
 
         # Simulation engine killer, with one input per tile
         killer=KillModule(self,'kill-module',kill_addr_base=MagiaArch.TEST_END_ADDR_START,kill_addr_size=MagiaArch.TEST_END_SIZE,nb_cores_to_wait=tree.nb_clusters,
-                          nb_inputs=tree.nb_clusters)
+                          nb_inputs=tree.nb_clusters, done_irq_enable=MagiaArch.ENABLE_PCIE_VFIO)
 
         # Single clock domain
         clock = vp.clock_domain.Clock_domain(self, 'tile-clock',
@@ -92,6 +87,16 @@ class MagiaV3Soc(gvsoc.systree.Component):
         # adapter the framework inserts.
         l2_xbar = Router(self, 'L2-xbar', config=RouterConfig(kind=KIND_UNTIMED))
         l2_xbar.o_MAP_DEFAULT(l2_mem.i_INPUT(), name='L2-mem')
+
+        # PCIe/VFIO bridge: the host loads the binaries into the L2 and starts
+        # the tiles through it instead of the ELF loader. It reaches the L2 on
+        # one more input of the L2 fan-in, with addresses relative to the L2,
+        # as the NoC.
+        if MagiaArch.ENABLE_PCIE_VFIO:
+            pcie_ep = PCIeVfioMemBridgeV2(self, 'l2-vfio-bridge',
+                socket_path='/tmp/gvsoc.sock', bar0_size=0x1000, dma_chunk_bytes=16)
+            pcie_ep.o_MEM(l2_xbar.i_INPUT(2*tree.n_tiles_y))
+            killer.o_IRQ_DONE(pcie_ep.i_IRQ_DONE())
 
         # Create Tile matrix for IDs
         # --------------> X direction
@@ -439,9 +444,13 @@ class MagiaV3Soc(gvsoc.systree.Component):
                     fsync_center_v[lvl-1][1].o_MASTER_EAST_WEST(fsync_root.i_SLAVE_EAST())
                     fsync_root.o_SLAVE_EAST(fsync_center_v[lvl-1][1].i_MASTER_EAST_WEST())
 
-        # Bind loader to clusters
+        # Bind the loader, or the PCIe/VFIO bridge, to the clusters
         for id in range(0,tree.nb_clusters):
-            if (id == 0):
-                ctrl_core_loader.o_OUT(cluster[id].i_LOADER()) #only cluster connected to the corner loads the elf
-            ctrl_core_loader.o_START(cluster[id].i_FETCHEN())
-            ctrl_core_loader.o_ENTRY(cluster[id].i_ENTRY())
+            if MagiaArch.ENABLE_PCIE_VFIO:
+                pcie_ep.o_FETCH_ENABLE(cluster[id].i_FETCHEN())
+                pcie_ep.o_ENTRY_ADDR(cluster[id].i_ENTRY())
+            else:
+                if (id == 0):
+                    ctrl_core_loader.o_OUT(cluster[id].i_LOADER()) #only cluster connected to the corner loads the elf
+                ctrl_core_loader.o_START(cluster[id].i_FETCHEN())
+                ctrl_core_loader.o_ENTRY(cluster[id].i_ENTRY())
