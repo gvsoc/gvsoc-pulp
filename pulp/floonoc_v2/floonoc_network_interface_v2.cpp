@@ -616,6 +616,14 @@ void NetworkInterfaceV2::input_room(int nw, int input)
     }
 }
 
+void NetworkInterfaceV2::id_txn_done(bool wide, bool is_write)
+{
+    if (this->id_txns[wide][is_write] > 0)
+    {
+        this->id_txns[wide][is_write]--;
+    }
+}
+
 void NetworkInterfaceV2::reset(bool active)
 {
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Resetting network interface\n");
@@ -631,6 +639,15 @@ void NetworkInterfaceV2::reset(bool active)
         this->narrow_write_pending_burst_nb_req = 0;
         this->nb_pending_bursts[0] = 0;
         this->nb_pending_bursts[1] = 0;
+        for (int w = 0; w < 2; w++)
+        {
+            for (int d = 0; d < 2; d++)
+            {
+                this->id_txns[w][d] = 0;
+                this->id_dest[w][d] = -1;
+                this->owes_id_retry[w][d] = false;
+            }
+        }
         this->owes_retry_wide_input = false;
         this->owes_retry_narrow_input = false;
         // A held (denied) forwarded write object is allocator-backed either
@@ -764,6 +781,16 @@ vp::IoReqStatus NetworkInterfaceV2::handle_req(vp::IoReq *req, bool wide)
         }
         return vp::IO_REQ_DENIED;
     }
+    // No reorder buffer: a new burst of an ID with bursts in flight to
+    // another destination waits for them (RTL floo_rob_wrapper NoRoB).
+    bool is_write = req->get_is_write();
+    EntryV2 *id_entry = wr_continuation ? NULL : this->get_entry(req->get_addr(), req->get_size());
+    if (id_entry != NULL && this->id_txns[wide][is_write] > 0 &&
+        this->id_dest[wide][is_write] != id_entry->node_id)
+    {
+        this->owes_id_retry[wide][is_write] = true;
+        return vp::IO_REQ_DENIED;
+    }
     // Contention: the arbiter input of the request is full, as an AXI channel
     // whose ready is low. The initiator is retried on that channel only.
     NetworkQueueV2 &carrier = req->get_is_write() && wide ? this->wide_queue : this->req_queue;
@@ -779,6 +806,11 @@ vp::IoReqStatus NetworkInterfaceV2::handle_req(vp::IoReq *req, bool wide)
         if (!wr_continuation)
         {
             this->nb_pending_bursts[wide]++;
+            if (id_entry != NULL)
+            {
+                this->id_txns[wide][is_write]++;
+                this->id_dest[wide][is_write] = id_entry->node_id;
+            }
         }
 
         // Per-burst write acknowledgement (io_v2 write-ack contract): a write
@@ -989,6 +1021,7 @@ bool NetworkInterfaceV2::link_req(vp::Block *__this, FloonocReqV2 *req, int nw)
             _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received atomic response (burst: %p)\n",
                 burst);
             _this->nb_pending_bursts[wide]--;
+            _this->id_txn_done(wide, true);
 
             burst->set_resp_status(req->get_resp_status());
             port->resp(burst);
@@ -1040,6 +1073,7 @@ bool NetworkInterfaceV2::link_req(vp::Block *__this, FloonocReqV2 *req, int nw)
                 // Lone single-beat burst without an id: bypasses the tracking
                 // map and completes on its own B.
                 _this->nb_pending_bursts[wide]--;
+                _this->id_txn_done(wide, true);
                 vp::IoReq *ack = _this->ack_allocator->alloc();
                 ack->prepare();
                 ack->set_addr(base);
@@ -1081,6 +1115,7 @@ bool NetworkInterfaceV2::link_req(vp::Block *__this, FloonocReqV2 *req, int nw)
                     ack->set_resp_status(track.error ? vp::IO_RESP_INVALID : vp::IO_RESP_OK);
                     _this->wr_bursts[wide].erase(it);
                     _this->nb_pending_bursts[wide]--;
+                    _this->id_txn_done(wide, true);
                     port->resp(ack);
                 }
             }
@@ -1122,6 +1157,7 @@ bool NetworkInterfaceV2::link_req(vp::Block *__this, FloonocReqV2 *req, int nw)
             {
                 _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Finished burst (burst: %p)\n", burst);
                 _this->nb_pending_bursts[wide]--;
+                _this->id_txn_done(wide, false);
             }
             port->resp(beat);
         }
@@ -1308,6 +1344,19 @@ void NetworkInterfaceV2::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     // re-issue when it sees the retry callback. Mirrors the admission gate
     // above: retry as soon as nb_pending_bursts drops below the limit, without
     // waiting for any in-flight fragmentation to drain.
+    // An ID with nothing in flight any more takes a burst to any destination
+    for (int w = 0; w < 2; w++)
+    {
+        for (int d = 0; d < 2; d++)
+        {
+            if (_this->owes_id_retry[w][d] && _this->id_txns[w][d] == 0)
+            {
+                _this->owes_id_retry[w][d] = false;
+                vp::IoSlave &itf = w ? _this->wide_input_itf : _this->narrow_input_itf;
+                itf.retry(d ? vp::IO_RETRY_WRITE : vp::IO_RETRY_READ);
+            }
+        }
+    }
     if (_this->owes_retry_wide_input &&
         _this->nb_pending_bursts[1] < _this->ni_outstanding_reqs)
     {

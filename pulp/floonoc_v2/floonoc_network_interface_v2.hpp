@@ -283,4 +283,12 @@ private:
     vp::Queue response_queue;
 
     int nb_pending_bursts[2];
+
+    // No reorder buffer: the bursts of one AXI ID, here one input and direction
+    // ([wide][is_write]), may only be in flight to one destination at a time. A
+    // burst to another destination waits until those in flight are done.
+    int id_txns[2][2];
+    int id_dest[2][2];
+    bool owes_id_retry[2][2];
+    void id_txn_done(bool wide, bool is_write);
 };
