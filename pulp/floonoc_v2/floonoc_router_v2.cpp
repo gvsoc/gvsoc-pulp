@@ -68,6 +68,7 @@ RouterV2::RouterV2(vp::ComponentConf &config)
             std::string("stalled_queue_") + port.name, 1));
 
         this->output_owner.push_back(-1);
+        this->output_prio.push_back(0);
     }
 
     for (size_t i = 0; i < this->cfg.routes_count; i++)
@@ -118,106 +119,88 @@ bool RouterV2::link_req(vp::Block *__this, FloonocReqV2 *req, int queue_index)
 void RouterV2::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 {
     RouterV2 *_this = (RouterV2 *)__this;
-    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Checking pending requests\n");
-    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Current queue: %d\n", _this->current_queue);
-    int in_queue_index = _this->current_queue;
     int nb_ports = _this->nb_ports;
+    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Checking pending requests\n");
 
-    std::vector<bool> output_full(nb_ports, false);
-    for (int i = 0; i < nb_ports; i++)
+    // Output of the head flit of each input, -1 if none.
+    std::vector<int> head_output(nb_ports, -1);
+    for (int in = 0; in < nb_ports; in++)
     {
-        vp::Queue *queue = _this->input_queues[in_queue_index];
-        _this->trace.msg(vp::Trace::LEVEL_TRACE, "Checking input queue (queue_index: %d, queue size: %d)\n", in_queue_index, queue->size());
+        vp::Queue *queue = _this->input_queues[in];
         if (!queue->empty())
         {
-            FloonocReqV2 *req = (FloonocReqV2 *)queue->head();
-
-            int out_queue_id = _this->get_output_port(req->dest_id);
-            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Resolved output port (req: %p, dest: %d, port: %d)\n",
-                             req, req->dest_id, out_queue_id);
-
-            // Wormhole: an output mid-packet is reserved for its owning input.
-            // A flit from any other input must wait until the owner passes its
-            // tail flit and releases the output.
-            if (_this->output_owner[out_queue_id] != -1 &&
-                _this->output_owner[out_queue_id] != in_queue_index)
-            {
-                int owner = _this->output_owner[out_queue_id];
-                _this->trace.msg(vp::Trace::LEVEL_DEBUG,
-                    "Output locked to another input, skipping (out queue: %d, owner: %d)\n",
-                    out_queue_id, owner);
-                in_queue_index += 1;
-                if (in_queue_index == nb_ports)
-                {
-                    in_queue_index = 0;
-                }
-                continue;
-            }
-
-            if (output_full[out_queue_id])
-            {
-                _this->trace.msg(vp::Trace::LEVEL_TRACE, "Output queue is full, skipping (out queue: %d)\n", out_queue_id);
-                _this->fsm_event.enqueue();
-                in_queue_index += 1;
-                if (in_queue_index == nb_ports)
-                {
-                    in_queue_index = 0;
-                }
-                continue;
-            }
-            output_full[out_queue_id] = true;
-
-            if (*_this->stalled_queues[out_queue_id])
-            {
-                _this->trace.msg(vp::Trace::LEVEL_TRACE, "Output queue is stalled, skipping (out queue: %d)\n", out_queue_id);
-                in_queue_index += 1;
-                if (in_queue_index == nb_ports)
-                {
-                    in_queue_index = 0;
-                }
-                continue;
-            }
-
-            queue->pop();
-
-            if (queue->size() == _this->queue_capacity[in_queue_index])
-            {
-                _this->input_ports[in_queue_index]->unstall();
-            }
-
-            // Wormhole: lock the output to this input for the rest of the
-            // packet; release it once the tail (is_last) flit is forwarded. A
-            // single-flit packet (is_first && is_last) leaves it free.
-            _this->output_owner[out_queue_id] = req->is_last ? -1 : in_queue_index;
-
-            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Forwarding request to next router (req: %p, base: 0x%x, size: 0x%x, port: %d, in_queue: %d)\n",
-                                req, req->get_addr(), req->get_size(), out_queue_id, in_queue_index);
-            if (_this->output_ports[out_queue_id]->req(req))
-            {
-                _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Stalling queue (queue: %d)\n", out_queue_id);
-                *_this->stalled_queues[out_queue_id] = true;
-            }
-            _this->current_queue = in_queue_index + 1;
-            if (_this->current_queue == nb_ports)
-            {
-                _this->current_queue = 0;
-            }
-
+            head_output[in] = _this->get_output_port(((FloonocReqV2 *)queue->head())->dest_id);
+        }
+        else if (queue->size())
+        {
+            // Flits still in the input stages
             _this->fsm_event.enqueue();
+        }
+    }
+
+    // One round-robin arbiter per output, as the RTL floo_output_arbiter:
+    // the input after the last winner first, kept until the tail flit
+    // (wormhole), one flit per output and cycle.
+    for (int out = 0; out < nb_ports; out++)
+    {
+        if (*_this->stalled_queues[out])
+        {
+            continue;
+        }
+
+        int winner = -1;
+        int owner = _this->output_owner[out];
+        if (owner != -1)
+        {
+            if (head_output[owner] == out)
+            {
+                winner = owner;
+            }
         }
         else
         {
-            if (queue->size())
+            for (int i = 0; i < nb_ports; i++)
             {
-               _this->fsm_event.enqueue();
+                int in = (_this->output_prio[out] + i) % nb_ports;
+                if (head_output[in] == out)
+                {
+                    winner = in;
+                    break;
+                }
             }
         }
 
-        in_queue_index += 1;
-        if (in_queue_index == nb_ports)
+        if (winner == -1)
         {
-            in_queue_index = 0;
+            continue;
         }
+
+        vp::Queue *queue = _this->input_queues[winner];
+        FloonocReqV2 *req = (FloonocReqV2 *)queue->pop();
+
+        if (queue->size() == _this->queue_capacity[winner])
+        {
+            _this->input_ports[winner]->unstall();
+        }
+
+        // Wormhole: lock the output to this input for the rest of the
+        // packet; release it, and move the arbiter on, once the tail
+        // (is_last) flit is forwarded.
+        _this->output_owner[out] = req->is_last ? -1 : winner;
+        if (req->is_last)
+        {
+            _this->output_prio[out] = (winner + 1) % nb_ports;
+        }
+
+        _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Forwarding request to next router (req: %p, base: 0x%x, size: 0x%x, port: %d, in_queue: %d)\n",
+                            req, req->get_addr(), req->get_size(), out, winner);
+        if (_this->output_ports[out]->req(req))
+        {
+            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Stalling queue (queue: %d)\n", out);
+            *_this->stalled_queues[out] = true;
+        }
+
+        _this->fsm_event.enqueue();
     }
 }
 
@@ -324,11 +307,11 @@ void RouterV2::reset(bool active)
 {
     if (active)
     {
-        this->current_queue = 0;
         for (int i = 0; i < this->nb_ports; i++)
         {
             *this->stalled_queues[i] = false;
             this->output_owner[i] = -1;
+            this->output_prio[i] = 0;
         }
     }
 }

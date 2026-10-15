@@ -93,7 +93,6 @@ private:
     std::vector<std::unique_ptr<FloonocLinkSlave>> input_ports;
     std::vector<std::unique_ptr<FloonocLinkMaster>> output_ports;
     vp::ClockEvent fsm_event;
-    int current_queue;
     // Wormhole arbitration: each output, once a packet's head flit wins it,
     // is locked to the winning INPUT port until that input passes the tail
     // (is_last) flit; other inputs targeting a locked output must wait. -1
@@ -101,6 +100,8 @@ private:
     // RTL floo wormhole arbiter and cannot head-of-line deadlock, since each
     // physical link delivers one packet's flits contiguously.
     std::vector<int> output_owner;
+    // Per output: the input its round-robin arbiter looks at first
+    std::vector<int> output_prio;
     std::vector<std::unique_ptr<vp::Signal<bool>>> stalled_queues;
     vp::Signal<uint64_t> signal_req;
     vp::Signal<uint64_t> signal_req_size;
