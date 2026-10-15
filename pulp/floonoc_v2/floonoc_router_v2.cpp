@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+#include <algorithm>
 #include <string.h>
 #include <vp/vp.hpp>
 #include "floonoc_v2.hpp"
@@ -266,19 +267,27 @@ void RouterV2::get_next_router_pos(int dest_id, int &next_x, int &next_y)
             return;
         }
 
-        if (dest_x != x)
+        // XY routing, as the RTL floo_route_select: X first, then Y. An NI
+        // of the West/East border (no router in its column) is reached
+        // through the router it hangs off, with a last hop on X out of it.
+        // The RTL routes on the NI's X and would eject into the border NI of
+        // the source row; this only differs from it on such paths.
+        int router_x = std::clamp<int64_t>(dest_x, this->cfg.router_min_x, this->cfg.router_max_x);
+        if (router_x != x)
+        {
+            next_x = router_x < x ? x - 1 : x + 1;
+            next_y = y;
+        }
+        else if (dest_y != y)
+        {
+            next_x = x;
+            next_y = dest_y < y ? y - 1 : y + 1;
+        }
+        else
         {
             next_x = dest_x < x ? x - 1 : x + 1;
             next_y = y;
-
-            if (next_x != 0 && next_x != this->cfg.dim_x - 1 || next_y == dest_y)
-            {
-                return;
-            }
         }
-
-        next_x = x;
-        next_y = dest_y < y ? y - 1 : y + 1;
     }
 }
 

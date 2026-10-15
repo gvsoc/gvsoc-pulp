@@ -103,6 +103,12 @@ class FloonocRouterV2Config(Config):
     y: int = cfg_field(default=0, dump=True, desc="Mesh Y position (XY routing)")
     dim_x: int = cfg_field(default=0, dump=True, desc="Mesh width (XY routing)")
     dim_y: int = cfg_field(default=0, dump=True, desc="Mesh height (XY routing)")
+    router_min_x: int = cfg_field(default=0, dump=True, desc=(
+        "Lowest X with routers (XY routing); NIs left of it hang off a router's West port"
+    ))
+    router_max_x: int = cfg_field(default=0, dump=True, desc=(
+        "Highest X with routers (XY routing); NIs right of it hang off a router's East port"
+    ))
     queue_size: int = cfg_field(default=2, dump=True, desc=(
         "Input queue size: requests buffered per input before the sender is stalled"
     ))
@@ -129,7 +135,7 @@ class FloonocRouterV2Config(Config):
     def xy(x: int, y: int, dim_x: int, dim_y: int, queue_size: int=2) -> FloonocRouterV2Config:
         """Config of an XY-routed mesh router, with the five direction ports."""
         config = FloonocRouterV2Config(route_algo=ROUTE_XY, x=x, y=y, dim_x=dim_x,
-            dim_y=dim_y, queue_size=queue_size)
+            dim_y=dim_y, router_min_x=0, router_max_x=dim_x - 1, queue_size=queue_size)
         for name in _DIR_NAMES:
             config.add_port(name)
         return config
@@ -486,6 +492,16 @@ class FlooNocV2MeshFabric:
             self._routers[pos][nw].o_OUTPUT(dir, itf)
 
     def finalize(self):
+        # The X extent of the routers, for the routing to the NIs of the
+        # West/East borders, which have no router.
+        if self._routers:
+            min_x = min(x for x, _ in self._routers)
+            max_x = max(x for x, _ in self._routers)
+            for routers in self._routers.values():
+                for router in routers:
+                    router.router_config.router_min_x = min_x
+                    router.router_config.router_max_x = max_x
+
         # Every NI holds the full memory map so it can translate addresses to
         # mesh positions on its own. Distributed here so callers can keep
         # adding mappings after construction. Entries are sorted by name: the
