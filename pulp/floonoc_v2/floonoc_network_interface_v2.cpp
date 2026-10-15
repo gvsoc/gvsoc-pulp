@@ -27,47 +27,71 @@ NetworkQueueV2::NetworkQueueV2(NetworkInterfaceV2 &ni, std::string name, uint64_
 : vp::Block(&ni, name), ni(ni), width(width), nw(nw)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
+    // The inputs of the arbiter of this link:
+    // req = narrow AW+W, narrow AR, wide AR; wide = wide AW+W, wide R;
+    // rsp = narrow B, narrow R, wide B.
+    this->nb_inputs = nw == NetworkInterfaceV2::NW_WIDE ? 2 : 3;
 }
 
 void NetworkQueueV2::reset(bool active)
 {
     if (active)
     {
-        for (std::queue<FloonocReqV2 *> *queue : {&this->queue, &this->wr_queue})
+        for (int i = 0; i < MAX_INPUTS; i++)
         {
-            while (queue->size() > 0)
+            while (!this->inputs[i].empty())
             {
                 // Queued flits are exclusively ours — recycle them. The
                 // external bursts/beats they reference are dropped, as before.
-                this->ni.flit_allocator->free(queue->front());
-                queue->pop();
+                this->ni.flit_allocator->free(this->inputs[i].front());
+                this->inputs[i].pop();
             }
+            this->owes_room[i] = false;
         }
-        this->locked = false;
-        this->wr_turn = false;
+        this->locked_input = -1;
+        this->rr_input = 0;
         this->stalled = false;
     }
 }
 
-std::queue<FloonocReqV2 *> *NetworkQueueV2::next_queue()
+bool NetworkQueueV2::reserve(int input)
 {
-    if (this->locked)
+    if (this->inputs[input].size() < INPUT_DEPTH)
     {
-        return this->wr_queue.size() > 0 ? &this->wr_queue : NULL;
+        return true;
     }
-    if (this->wr_queue.size() > 0 && (this->wr_turn || this->queue.size() == 0))
+    this->owes_room[input] = true;
+    return false;
+}
+
+int NetworkQueueV2::next_input()
+{
+    // Wormhole: in the middle of a packet, only its input may inject.
+    if (this->locked_input != -1)
     {
-        return &this->wr_queue;
+        return !this->inputs[this->locked_input].empty() ? this->locked_input : -1;
     }
-    return this->queue.size() > 0 ? &this->queue : NULL;
+    int input = this->rr_input;
+    for (int i = 0; i < this->nb_inputs; i++)
+    {
+        if (!this->inputs[input].empty())
+        {
+            return input;
+        }
+        if (++input == this->nb_inputs)
+        {
+            input = 0;
+        }
+    }
+    return -1;
 }
 
 void NetworkQueueV2::check()
 {
-    std::queue<FloonocReqV2 *> *queue = this->next_queue();
-    if (!this->stalled && queue != NULL)
+    int input = this->next_input();
+    if (!this->stalled && input != -1)
     {
-        this->send_router_req(queue);
+        this->send_router_req(input);
     }
 }
 
@@ -78,7 +102,7 @@ void NetworkQueueV2::unstall()
     this->ni.fsm_event.enqueue();
 }
 
-void NetworkQueueV2::handle_req(vp::IoReq *req, bool wide)
+void NetworkQueueV2::handle_req(vp::IoReq *req, bool wide, int input)
 {
     this->trace.msg(vp::Trace::LEVEL_DEBUG, "Received %s burst from initiator (burst: %p, offset: 0x%x, size: 0x%x, is_write: %d, op: %d)\n",
                      wide ? "wide" : "narrow", req, req->get_addr(), req->get_size(), req->get_is_write(), req->get_opcode());
@@ -99,21 +123,22 @@ void NetworkQueueV2::handle_req(vp::IoReq *req, bool wide)
     // flits.
     if (!req->get_is_write() || req->is_first)
     {
-        this->enqueue_router_req(req, true, wide, true);
+        this->enqueue_router_req(req, true, wide, true, input);
     }
     if (req->get_is_write())
     {
-        this->enqueue_router_req(req, false, wide, true);
+        this->enqueue_router_req(req, false, wide, true, input);
     }
 }
 
-void NetworkQueueV2::handle_rsp(FloonocReqV2 *req, bool is_address)
+void NetworkQueueV2::handle_rsp(FloonocReqV2 *req, bool is_address, int input)
 {
-    this->enqueue_router_rsp(req, is_address);
+    this->enqueue_router_rsp(req, is_address, input);
 }
 
 
-void NetworkQueueV2::enqueue_router_req(vp::IoReq *req, bool is_address, bool wide, bool is_req)
+void NetworkQueueV2::enqueue_router_req(vp::IoReq *req, bool is_address, bool wide, bool is_req,
+    int input)
 {
     uint64_t burst_base = req->get_addr();
     uint64_t burst_size = req->get_size();
@@ -238,7 +263,7 @@ void NetworkQueueV2::enqueue_router_req(vp::IoReq *req, bool is_address, bool wi
         }
         prev_dest_id = entry->node_id;
 
-        (wr_packet ? this->wr_queue : this->queue).push(router_req);
+        this->inputs[input].push(router_req);
 
         burst_base += size;
         if (burst_data != NULL)
@@ -250,7 +275,7 @@ void NetworkQueueV2::enqueue_router_req(vp::IoReq *req, bool is_address, bool wi
     this->ni.fsm_event.enqueue();
 }
 
-void NetworkQueueV2::enqueue_router_rsp(FloonocReqV2 *req, bool is_address)
+void NetworkQueueV2::enqueue_router_rsp(FloonocReqV2 *req, bool is_address, int input)
 {
     // Allocate a fresh FloonocReqV2 for the response traversal, copying the
     // metadata the router needs from the incoming request. The caller frees
@@ -301,24 +326,21 @@ void NetworkQueueV2::enqueue_router_rsp(FloonocReqV2 *req, bool is_address)
     router_req->set_second_data(req->get_second_data());
     router_req->set_resp_status(req->get_resp_status());
 
-    this->queue.push(router_req);
+    this->inputs[input].push(router_req);
     this->ni.fsm_event.enqueue();
 }
 
-void NetworkQueueV2::send_router_req(std::queue<FloonocReqV2 *> *queue)
+void NetworkQueueV2::send_router_req(int input)
 {
-    FloonocReqV2 *req = queue->front();
-    queue->pop();
+    FloonocReqV2 *req = this->inputs[input].front();
+    this->inputs[input].pop();
 
-    if (!this->locked)
+    if (this->locked_input == -1)
     {
-        // A packet starts: the other queue goes first after it.
-        this->wr_turn = queue != &this->wr_queue;
+        // A packet starts: the next inputs go first after it.
+        this->rr_input = input + 1 == this->nb_inputs ? 0 : input + 1;
     }
-    if (queue == &this->wr_queue)
-    {
-        this->locked = !req->is_last;
-    }
+    this->locked_input = req->is_last ? -1 : input;
 
     // Keyed on the flit's own copies of is_write/wide: req->burst may only be
     // dereferenced on the request path (a write beat is consumed and freed by
@@ -352,9 +374,15 @@ void NetworkQueueV2::send_router_req(std::queue<FloonocReqV2 *> *queue)
         this->trace.msg(vp::Trace::LEVEL_TRACE, "Stalling network interface (node: %d)\n", (int)this->ni.cfg.node_id);
     }
 
-    if (this->next_queue() != NULL)
+    if (this->next_input() != -1)
     {
         this->ni.fsm_event.enqueue();
+    }
+
+    if (this->owes_room[input] && this->inputs[input].size() < INPUT_DEPTH)
+    {
+        this->owes_room[input] = false;
+        this->ni.input_room(this->nw, input);
     }
 }
 
@@ -464,6 +492,10 @@ EntryV2 *NetworkInterfaceV2::get_entry(uint64_t base, uint64_t size)
 vp::IoRespAck NetworkInterfaceV2::wide_response(vp::Block *__this, vp::IoReq *req)
 {
     NetworkInterfaceV2 *_this = (NetworkInterfaceV2 *)__this;
+    if (!_this->accept_response(req, true))
+    {
+        return vp::IO_RESP_DENIED;
+    }
     _this->handle_response(_this->unwrap_response(req));
     return vp::IO_RESP_ACCEPTED;
 }
@@ -514,36 +546,41 @@ FloonocReqV2 *NetworkInterfaceV2::unwrap_response(vp::IoReq *req)
     return self_req;
 }
 
+void NetworkInterfaceV2::retry_target(bool wide)
+{
+    // The downstream target is ready again. Re-send the objects it denied
+    // and unstall the links they came on, so further reqs can flow. A request
+    // denied again stays held until the next retry.
+    for (int nw = 0; nw < NW_NB; nw++)
+    {
+        HeldReq &held = this->held[wide][nw];
+        if (held.to_send == NULL)
+        {
+            continue;
+        }
+        if (this->send_to_target(held.to_send, wide))
+        {
+            continue;
+        }
+        held = HeldReq();
+        this->link_in[nw].unstall();
+    }
+    this->fsm_event.enqueue();
+}
+
 void NetworkInterfaceV2::wide_retry(vp::Block *__this, vp::IoRetryChannel)
 {
     NetworkInterfaceV2 *_this = (NetworkInterfaceV2 *)__this;
-    // The downstream target is ready again. Re-send the object we were holding
-    // (the flit itself for reads/atomics, our pool write beat for write data)
-    // and unstall the upstream router so further reqs can flow.
-    if (_this->wide_target_stalled_req)
-    {
-        vp::IoReq *held = _this->wide_target_stalled_req;
-        _this->wide_target_stalled_req = NULL;
-
-        if (_this->send_to_target(held, /*wide=*/true))
-        {
-            // Target denied again — hold and wait for next retry.
-            _this->wide_target_stalled_req = held;
-            return;
-        }
-
-        if (_this->wide_stalled_link_nw != -1)
-        {
-            _this->link_in[_this->wide_stalled_link_nw].unstall();
-            _this->wide_stalled_link_nw = -1;
-        }
-    }
-    _this->fsm_event.enqueue();
+    _this->retry_target(true);
 }
 
 vp::IoRespAck NetworkInterfaceV2::narrow_response(vp::Block *__this, vp::IoReq *req)
 {
     NetworkInterfaceV2 *_this = (NetworkInterfaceV2 *)__this;
+    if (!_this->accept_response(req, false))
+    {
+        return vp::IO_RESP_DENIED;
+    }
     _this->handle_response(_this->unwrap_response(req));
     return vp::IO_RESP_ACCEPTED;
 }
@@ -551,24 +588,32 @@ vp::IoRespAck NetworkInterfaceV2::narrow_response(vp::Block *__this, vp::IoReq *
 void NetworkInterfaceV2::narrow_retry(vp::Block *__this, vp::IoRetryChannel)
 {
     NetworkInterfaceV2 *_this = (NetworkInterfaceV2 *)__this;
-    if (_this->narrow_target_stalled_req)
+    _this->retry_target(false);
+}
+
+void NetworkInterfaceV2::input_room(int nw, int input)
+{
+    if (nw == NW_REQ || (nw == NW_WIDE && input == NetworkQueueV2::IN_WIDE_W))
     {
-        vp::IoReq *held = _this->narrow_target_stalled_req;
-        _this->narrow_target_stalled_req = NULL;
+        // A request input: the initiator it denied may send again, on that
+        // channel only.
+        bool wide = nw == NW_WIDE || input == NetworkQueueV2::IN_REQ_WIDE_AR;
+        bool write = input == NetworkQueueV2::IN_REQ_NARROW_W || nw == NW_WIDE;
+        (wide ? this->wide_input_itf : this->narrow_input_itf).retry(
+            write ? vp::IO_RETRY_WRITE : vp::IO_RETRY_READ);
+        return;
+    }
 
-        if (_this->send_to_target(held, /*wide=*/false))
+    // A response input: the target whose response it denied may send it
+    // again (it re-checks the input it needs).
+    for (int wide = 0; wide < 2; wide++)
+    {
+        if (this->owes_resp_retry[wide])
         {
-            _this->narrow_target_stalled_req = held;
-            return;
-        }
-
-        if (_this->narrow_stalled_link_nw != -1)
-        {
-            _this->link_in[_this->narrow_stalled_link_nw].unstall();
-            _this->narrow_stalled_link_nw = -1;
+            this->owes_resp_retry[wide] = false;
+            (wide ? this->wide_output_itf : this->narrow_output_itf).resp_retry();
         }
     }
-    _this->fsm_event.enqueue();
 }
 
 void NetworkInterfaceV2::reset(bool active)
@@ -597,28 +642,31 @@ void NetworkInterfaceV2::reset(bool active)
         // or reference with them — consistent with reads, where the external
         // master likewise never gets its in-flight burst answered across a
         // reset.
-        for (vp::IoReq *held : {this->wide_target_stalled_req,
-                                this->narrow_target_stalled_req})
+        for (int wide = 0; wide < 2; wide++)
         {
-            if (held == NULL)
+            for (int nw = 0; nw < NW_NB; nw++)
             {
-                continue;
-            }
-            if (held->initiator != held)
-            {
-                held->free();
-            }
-            else
-            {
-                this->flit_allocator->free((FloonocReqV2 *)held);
+                HeldReq &held = this->held[wide][nw];
+                if (held.to_send != NULL && held.to_send->initiator != held.to_send)
+                {
+                    held.to_send->free();
+                }
+                else if (held.flit != NULL)
+                {
+                    this->flit_allocator->free(held.flit);
+                }
+                held = HeldReq();
             }
         }
-        this->wide_target_stalled_req = NULL;
-        this->narrow_target_stalled_req = NULL;
-        this->wide_stalled_link_nw = -1;
-        this->narrow_stalled_link_nw = -1;
         this->wr_bursts[0].clear();
         this->wr_bursts[1].clear();
+        for (int wide = 0; wide < 2; wide++)
+        {
+            this->target_txns[wide][0] = 0;
+            this->target_txns[wide][1] = 0;
+            this->owes_resp_retry[wide] = false;
+        }
+        this->forward_held_pending = false;
     }
 }
 
@@ -716,6 +764,16 @@ vp::IoReqStatus NetworkInterfaceV2::handle_req(vp::IoReq *req, bool wide)
         }
         return vp::IO_REQ_DENIED;
     }
+    // Contention: the arbiter input of the request is full, as an AXI channel
+    // whose ready is low. The initiator is retried on that channel only.
+    NetworkQueueV2 &carrier = req->get_is_write() && wide ? this->wide_queue : this->req_queue;
+    int input = !req->get_is_write() ? (wide ? NetworkQueueV2::IN_REQ_WIDE_AR :
+        NetworkQueueV2::IN_REQ_NARROW_AR) : wide ? NetworkQueueV2::IN_WIDE_W :
+        NetworkQueueV2::IN_REQ_NARROW_W;
+    if (!carrier.reserve(input))
+    {
+        return vp::IO_REQ_DENIED;
+    }
     else
     {
         if (!wr_continuation)
@@ -765,14 +823,7 @@ vp::IoReqStatus NetworkInterfaceV2::handle_req(vp::IoReq *req, bool wide)
         }
 
         *queue = req;
-        if (!req->get_is_write() || !wide)
-        {
-            this->req_queue.handle_req(req, wide);
-        }
-        else
-        {
-            this->wide_queue.handle_req(req, wide);
-        }
+        carrier.handle_req(req, wide, input);
         this->fsm_event.enqueue();
         return vp::IO_REQ_GRANTED;
     }
@@ -1091,32 +1142,13 @@ bool NetworkInterfaceV2::link_req(vp::Block *__this, FloonocReqV2 *req, int nw)
 
         if ((req->get_is_write() && !req->is_address) || !req->get_is_write())
         {
-            bool wide = req->wide;
             _this->trace.msg(vp::Trace::LEVEL_DEBUG,
                 "Sending request to target (req: %p, base: 0x%x, size: 0x%x)\n",
                 req, req->get_addr(), req->get_size());
 
-            vp::IoReq *to_send = _this->make_target_req(req);
-
-            if (_this->send_to_target(to_send, wide))
-            {
-                // v2 master holds the denied object and re-sends it from the
-                // target's retry() callback (wide_retry / narrow_retry). The
-                // link the req arrived on is stalled by our return value;
-                // remember it so the retry can unstall it.
-                if (wide)
-                {
-                    _this->wide_target_stalled_req = to_send;
-                    _this->wide_stalled_link_nw = nw;
-                }
-                else
-                {
-                    _this->narrow_target_stalled_req = to_send;
-                    _this->narrow_stalled_link_nw = nw;
-                }
-                return true;
-            }
-            return false;
+            // A held flit stalls the link it came on (our return value)
+            // until it is sent.
+            return _this->forward_to_target(req, nw);
         }
         else
         {
@@ -1126,6 +1158,98 @@ bool NetworkInterfaceV2::link_req(vp::Block *__this, FloonocReqV2 *req, int nw)
     }
 
     return false;
+}
+
+bool NetworkInterfaceV2::expects_response(FloonocReqV2 *flit)
+{
+    // A write beat which is not the last of its burst gets no B
+    return flit->get_opcode() != vp::WRITE || !flit->silent_b;
+}
+
+bool NetworkInterfaceV2::accept_response(vp::IoReq *req, bool wide)
+{
+    // Only a target which can be retried can be held, the others are always
+    // accepted (they are bounded by the transaction limit anyway).
+    vp::IoMaster &itf = wide ? this->wide_output_itf : this->narrow_output_itf;
+    if (!itf.is_resp_retry_bound())
+    {
+        return true;
+    }
+
+    FloonocReqV2 *flit = (FloonocReqV2 *)req->initiator;
+    bool room;
+    if (!req->get_is_write())
+    {
+        room = wide ? this->wide_queue.reserve(NetworkQueueV2::IN_WIDE_R) :
+            this->rsp_queue.reserve(NetworkQueueV2::IN_RSP_NARROW_R);
+    }
+    else if (flit->silent_b && req->get_resp_status() == vp::IO_RESP_OK)
+    {
+        return true;
+    }
+    else
+    {
+        room = this->rsp_queue.reserve(wide ? NetworkQueueV2::IN_RSP_WIDE_B :
+            NetworkQueueV2::IN_RSP_NARROW_B);
+    }
+    if (!room)
+    {
+        this->owes_resp_retry[wide] = true;
+    }
+    return room;
+}
+
+bool NetworkInterfaceV2::forward_to_target(FloonocReqV2 *flit, int nw)
+{
+    bool wide = flit->wide;
+    HeldReq &held = this->held[wide][nw];
+    this->traces.assert(held.flit == NULL, "request flit received on a stalled link");
+
+    // A request is only forwarded when the target has fewer than
+    // ni_outstanding_reqs transactions of its kind in flight. The others wait,
+    // their link stalled.
+    if (expects_response(flit))
+    {
+        int &txns = this->target_txns[wide][flit->get_is_write()];
+        if (txns >= this->ni_outstanding_reqs)
+        {
+            held.flit = flit;
+            return true;
+        }
+        txns++;
+    }
+
+    vp::IoReq *to_send = this->make_target_req(flit);
+    if (this->send_to_target(to_send, wide))
+    {
+        // v2 master holds the denied object and re-sends it from the
+        // target's retry() callback (wide_retry / narrow_retry).
+        held.flit = flit;
+        held.to_send = to_send;
+        return true;
+    }
+    return false;
+}
+
+void NetworkInterfaceV2::forward_held()
+{
+    for (int wide = 0; wide < 2; wide++)
+    {
+        for (int nw = 0; nw < NW_NB; nw++)
+        {
+            HeldReq &held = this->held[wide][nw];
+            if (held.flit == NULL || held.to_send != NULL)
+            {
+                continue;
+            }
+            FloonocReqV2 *flit = held.flit;
+            held = HeldReq();
+            if (!this->forward_to_target(flit, nw))
+            {
+                this->link_in[nw].unstall();
+            }
+        }
+    }
 }
 
 void NetworkInterfaceV2::link_unstall(vp::Block *__this, int nw)
@@ -1147,6 +1271,12 @@ void NetworkInterfaceV2::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     if (!_this->response_queue.empty())
     {
         _this->handle_response((FloonocReqV2 *)_this->response_queue.pop());
+    }
+
+    if (_this->forward_held_pending)
+    {
+        _this->forward_held_pending = false;
+        _this->forward_held();
     }
 
     if (_this->wide_read_pending_burst && _this->wide_read_pending_burst_nb_req == 0)
@@ -1216,11 +1346,11 @@ void NetworkInterfaceV2::handle_response(FloonocReqV2 *req)
         req->dest_id = req->src_id;
         if (req->wide)
         {
-            this->wide_queue.handle_rsp(req, false);
+            this->wide_queue.handle_rsp(req, false, NetworkQueueV2::IN_WIDE_R);
         }
         else
         {
-            this->rsp_queue.handle_rsp(req, false);
+            this->rsp_queue.handle_rsp(req, false, NetworkQueueV2::IN_RSP_NARROW_R);
         }
     }
     else if (req->get_opcode() != vp::WRITE)
@@ -1239,7 +1369,8 @@ void NetworkInterfaceV2::handle_response(FloonocReqV2 *req)
         {
             this->trace.msg(vp::Trace::LEVEL_DEBUG, "Finished burst (burst: %p)\n", burst);
             req->dest_id = req->src_id;
-            this->rsp_queue.handle_rsp(req, true);
+            this->rsp_queue.handle_rsp(req, true, req->wide ? NetworkQueueV2::IN_RSP_WIDE_B :
+                NetworkQueueV2::IN_RSP_NARROW_B);
         }
     }
     else if (req->owns_beat)
@@ -1257,7 +1388,8 @@ void NetworkInterfaceV2::handle_response(FloonocReqV2 *req)
                 req->set_size(0);
             }
             req->dest_id = req->src_id;
-            this->rsp_queue.handle_rsp(req, true);
+            this->rsp_queue.handle_rsp(req, true, req->wide ? NetworkQueueV2::IN_RSP_WIDE_B :
+                NetworkQueueV2::IN_RSP_NARROW_B);
         }
     }
     else
@@ -1277,7 +1409,8 @@ void NetworkInterfaceV2::handle_response(FloonocReqV2 *req)
         {
             this->trace.msg(vp::Trace::LEVEL_DEBUG, "Finished burst (burst: %p)\n", burst);
             req->dest_id = req->src_id;
-            this->rsp_queue.handle_rsp(req, true);
+            this->rsp_queue.handle_rsp(req, true, req->wide ? NetworkQueueV2::IN_RSP_WIDE_B :
+                NetworkQueueV2::IN_RSP_NARROW_B);
         }
     }
     // Keep the FloonocReqV2 alive across the beats of a multi-beat resp().
@@ -1286,6 +1419,14 @@ void NetworkInterfaceV2::handle_response(FloonocReqV2 *req)
     // immediately as before.
     if (req->is_last)
     {
+        // The transaction leaves the target-side limit, a held request may
+        // take its place.
+        if (expects_response(req))
+        {
+            this->target_txns[req->wide][req->get_is_write()]--;
+            this->forward_held_pending = true;
+            this->fsm_event.enqueue();
+        }
         this->flit_allocator->free(req);
     }
 }

@@ -30,6 +30,13 @@ class NetworkInterfaceV2;
  * Per-network injection queue of the NI. Splits external bursts into mesh
  * requests and feeds them to the NI's link output for its network (req, rsp
  * or wide).
+ *
+ * The link is shared by several inputs, one per channel it carries, arbitrated
+ * round-robin per packet. Each input holds at most INPUT_DEPTH flits: a full
+ * input refuses the next request, so contention reaches the initiator (request
+ * inputs: the request is denied and retried) or the destination target
+ * (response inputs: its response is denied and retried, if the target supports
+ * it).
  */
 class NetworkQueueV2 : public vp::Block
 {
@@ -38,15 +45,37 @@ public:
     NetworkQueueV2(NetworkInterfaceV2 &ni, std::string name, uint64_t width, int nw);
     void reset(bool active) override;
 
+    // Inputs of the req link
+    static constexpr int IN_REQ_NARROW_W = 0;
+    static constexpr int IN_REQ_NARROW_AR = 1;
+    static constexpr int IN_REQ_WIDE_AR = 2;
+    // Inputs of the wide link
+    static constexpr int IN_WIDE_W = 0;
+    static constexpr int IN_WIDE_R = 1;
+    // Inputs of the rsp link
+    static constexpr int IN_RSP_NARROW_B = 0;
+    static constexpr int IN_RSP_NARROW_R = 1;
+    static constexpr int IN_RSP_WIDE_B = 2;
+    static constexpr int MAX_INPUTS = 3;
+    // Flits an input holds: the two entries a link stage needs to stream one
+    // flit per cycle while ready is registered.
+    static constexpr size_t INPUT_DEPTH = 2;
+
     void check();
-    void handle_req(vp::IoReq *req, bool wide);
-    void handle_rsp(FloonocReqV2 *req, bool is_address);
+    // The flits go to the arbiter input given by the caller (IN_*), the one
+    // it reserved.
+    void handle_req(vp::IoReq *req, bool wide, int input);
+    void handle_rsp(FloonocReqV2 *req, bool is_address, int input);
+    // Whether the input can take a flit. If not, the input remembers that its
+    // producer is owed a notification (NetworkInterfaceV2::input_room) when
+    // it can.
+    bool reserve(int input);
 
 private:
-    void enqueue_router_req(vp::IoReq *req, bool is_address, bool wide, bool is_req);
-    void enqueue_router_rsp(FloonocReqV2 *req, bool is_address);
-    std::queue<FloonocReqV2 *> *next_queue();
-    void send_router_req(std::queue<FloonocReqV2 *> *queue);
+    void enqueue_router_req(vp::IoReq *req, bool is_address, bool wide, bool is_req, int input);
+    void enqueue_router_rsp(FloonocReqV2 *req, bool is_address, int input);
+    int next_input();
+    void send_router_req(int input);
     void unstall();
 
     NetworkInterfaceV2 &ni;
@@ -55,17 +84,14 @@ private:
     // of the NI's link output ports it drives.
     int nw;
     vp::Trace trace;
-    std::queue<FloonocReqV2 *> queue;
-    // Flits of the write bursts (AW then W until the last beat), each burst
-    // one wormhole packet, as the RTL chimney: once its AW is injected, the
-    // link stays with it until its last W, even across holes between beats.
-    // The other flits (AR, R, B, lone writes) wait in `queue`, the two
-    // queues alternating between packets.
-    std::queue<FloonocReqV2 *> wr_queue;
-    // In a write packet: only wr_queue may inject.
-    bool locked = false;
-    // Queue that injects first when both have a flit outside a packet.
-    bool wr_turn = false;
+    int nb_inputs;
+    std::queue<FloonocReqV2 *> inputs[MAX_INPUTS];
+    // Input owning the link in the middle of a packet, -1 between packets.
+    int locked_input = -1;
+    // Input that has priority for the next packet.
+    int rr_input = 0;
+    // Inputs which refused a flit and owe a notification when they have room.
+    bool owes_room[MAX_INPUTS];
     bool stalled;
 };
 
@@ -123,6 +149,22 @@ private:
     // Returns true when the target denied it (the caller keeps it in its
     // stalled slot and stalls the link it came in on).
     bool send_to_target(vp::IoReq *to_send, bool wide);
+    // Destination side: forward a request flit delivered on link nw to the
+    // local target, once the target has room for one more transaction.
+    // Returns true when it is held (its link must stall until it is sent).
+    bool forward_to_target(FloonocReqV2 *flit, int nw);
+    // Whether a request flit gets a response from the target, i.e. holds an
+    // entry of the target-side transaction limit until it comes back.
+    static bool expects_response(FloonocReqV2 *flit);
+    // Send the held flits which waited for room in the transaction limit.
+    void forward_held();
+    // Whether the arbiter input of a target response has room. If not, the
+    // target is owed a resp_retry().
+    bool accept_response(vp::IoReq *req, bool wide);
+    // The target is ready again: re-send the requests it denied.
+    void retry_target(bool wide);
+    // Input `input` of the queue of link nw has room again.
+    void input_room(int nw, int input);
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
     int get_req_nw(bool is_wide, bool is_write);
     int get_rsp_nw(bool is_wide, bool is_write);
@@ -213,21 +255,28 @@ private:
     bool owes_retry_wide_input;
     bool owes_retry_narrow_input;
 
-    // When a downstream target returns DENIED, v2 requires the master (this
-    // NI) to hold the req and re-send it on the target's retry(). One slot
-    // per output port. Holds whatever make_target_req built: the flit itself
-    // for reads/atomics, or the encapsulated external write beat for write
-    // data flits (the flit then stays reachable via beat->initiator).
-    // nullptr-initialized here (not just in reset()) because reset() itself
-    // inspects them to recycle a held pool write beat.
-    vp::IoReq *wide_target_stalled_req = nullptr;
-    vp::IoReq *narrow_target_stalled_req = nullptr;
-    // Link input (NW_* index) to unstall when a target retry frees the
-    // corresponding output, -1 when none. This is the link the denied request
-    // ARRIVED on, which is not implied by its wide flag (a wide read AR
-    // travels on the req network).
-    int wide_stalled_link_nw;
-    int narrow_stalled_link_nw;
+    // Request flits held for the local targets, per target port ([0] =
+    // narrow, [1] = wide) and per link they arrived on, their link stalled
+    // until they are sent: one may come on each link (a wide read request on
+    // the req link, a wide write beat on the wide link). `to_send` is what
+    // make_target_req built, denied by the target and re-sent on its retry:
+    // the flit itself for reads/atomics, the encapsulated external write beat
+    // for write data (the flit then stays reachable via beat->initiator).
+    // NULL while the flit waits for room for its response.
+    struct HeldReq
+    {
+        FloonocReqV2 *flit = nullptr;
+        vp::IoReq *to_send = nullptr;
+    };
+    HeldReq held[2][NW_NB];
+    // Destination side, transactions forwarded to the local targets and not
+    // answered yet, per target port and [0] = read, [1] = write (atomics with
+    // the writes), at most ni_outstanding_reqs of each.
+    int target_txns[2][2];
+    // A transaction completed: the held flits may be forwarded.
+    bool forward_held_pending;
+    // Target port whose response was denied and is owed a resp_retry().
+    bool owes_resp_retry[2];
 
     // Synchronous responses are pushed here so they fire after the latency
     // annotation expires.
