@@ -93,6 +93,11 @@ public:
     // ownership (see `burst` above). Decided at enqueue time on the source
     // side, copied onto the B flit for the return-path accounting.
     bool owns_beat;
+    // True on the W flit of a write beat that is not the last of its burst:
+    // a burst gets a single B, so the destination
+    // sends none for this beat (the source counted it as acked when it
+    // issued it), unless the target rejected it.
+    bool silent_b;
     // True if the request travels on the wide network, false for narrow.
     bool wide;
     // True if this is the AR/AW (address) phase of a split request, false if it
