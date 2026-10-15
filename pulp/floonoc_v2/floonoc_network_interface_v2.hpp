@@ -45,7 +45,8 @@ public:
 private:
     void enqueue_router_req(vp::IoReq *req, bool is_address, bool wide, bool is_req);
     void enqueue_router_rsp(FloonocReqV2 *req, bool is_address);
-    void send_router_req();
+    std::queue<FloonocReqV2 *> *next_queue();
+    void send_router_req(std::queue<FloonocReqV2 *> *queue);
     void unstall();
 
     NetworkInterfaceV2 &ni;
@@ -55,6 +56,16 @@ private:
     int nw;
     vp::Trace trace;
     std::queue<FloonocReqV2 *> queue;
+    // Flits of the write bursts (AW then W until the last beat), each burst
+    // one wormhole packet, as the RTL chimney: once its AW is injected, the
+    // link stays with it until its last W, even across holes between beats.
+    // The other flits (AR, R, B, lone writes) wait in `queue`, the two
+    // queues alternating between packets.
+    std::queue<FloonocReqV2 *> wr_queue;
+    // In a write packet: only wr_queue may inject.
+    bool locked = false;
+    // Queue that injects first when both have a flit outside a packet.
+    bool wr_turn = false;
     bool stalled;
 };
 

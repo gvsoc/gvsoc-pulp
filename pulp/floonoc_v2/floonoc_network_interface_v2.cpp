@@ -33,22 +33,41 @@ void NetworkQueueV2::reset(bool active)
 {
     if (active)
     {
-        while (this->queue.size() > 0)
+        for (std::queue<FloonocReqV2 *> *queue : {&this->queue, &this->wr_queue})
         {
-            // Queued flits are exclusively ours — recycle them. The external
-            // bursts/beats they reference are dropped, as before.
-            this->ni.flit_allocator->free(this->queue.front());
-            this->queue.pop();
+            while (queue->size() > 0)
+            {
+                // Queued flits are exclusively ours — recycle them. The
+                // external bursts/beats they reference are dropped, as before.
+                this->ni.flit_allocator->free(queue->front());
+                queue->pop();
+            }
         }
+        this->locked = false;
+        this->wr_turn = false;
         this->stalled = false;
     }
 }
 
+std::queue<FloonocReqV2 *> *NetworkQueueV2::next_queue()
+{
+    if (this->locked)
+    {
+        return this->wr_queue.size() > 0 ? &this->wr_queue : NULL;
+    }
+    if (this->wr_queue.size() > 0 && (this->wr_turn || this->queue.size() == 0))
+    {
+        return &this->wr_queue;
+    }
+    return this->queue.size() > 0 ? &this->queue : NULL;
+}
+
 void NetworkQueueV2::check()
 {
-    if (!this->stalled && this->queue.size() > 0)
+    std::queue<FloonocReqV2 *> *queue = this->next_queue();
+    if (!this->stalled && queue != NULL)
     {
-        this->send_router_req();
+        this->send_router_req(queue);
     }
 }
 
@@ -75,8 +94,9 @@ void NetworkQueueV2::handle_req(vp::IoReq *req, bool wide)
     // chimney, where the id-less AXI W beats must not interleave), while the
     // address header and any entry-boundary-crossing fragments become their own
     // single-flit packets. Reads (AR) are single-flit and never lock. A write
-    // burst has one address header, as one AW in the RTL: only its first beat
-    // sends it, the next beats only their W flits.
+    // burst with an id is one packet instead, with one address header, as one
+    // AW in the RTL: only its first beat sends it, the next beats only their W
+    // flits.
     if (!req->get_is_write() || req->is_first)
     {
         this->enqueue_router_req(req, true, wide, true);
@@ -101,6 +121,10 @@ void NetworkQueueV2::enqueue_router_req(vp::IoReq *req, bool is_address, bool wi
     // Previous flit's destination, for dest-run packet framing below. INT_MIN
     // sentinel so the first flit always opens a run.
     int prev_dest_id = INT_MIN;
+    // A write burst with an id is one wormhole packet, from the AW of its
+    // first beat to the last W of its last beat. Being legal, it stays in one
+    // memory-map entry.
+    bool wr_packet = is_req && req->get_opcode() == vp::WRITE && req->burst_id >= 0;
 
     while(burst_size > 0)
     {
@@ -205,9 +229,16 @@ void NetworkQueueV2::enqueue_router_req(vp::IoReq *req, bool is_address, bool wi
         bool burst_ends = (burst_size <= size);
         router_req->is_first = dest_changed;
         router_req->is_last = burst_ends || reached_entry_end;
+        if (wr_packet)
+        {
+            this->traces.assert(burst_ends || !reached_entry_end,
+                "write burst crosses a memory-map entry (addr: 0x%lx)", burst_base);
+            router_req->is_first = is_address;
+            router_req->is_last = !is_address && burst_ends && req->is_last;
+        }
         prev_dest_id = entry->node_id;
 
-        this->queue.push(router_req);
+        (wr_packet ? this->wr_queue : this->queue).push(router_req);
 
         burst_base += size;
         if (burst_data != NULL)
@@ -274,10 +305,20 @@ void NetworkQueueV2::enqueue_router_rsp(FloonocReqV2 *req, bool is_address)
     this->ni.fsm_event.enqueue();
 }
 
-void NetworkQueueV2::send_router_req()
+void NetworkQueueV2::send_router_req(std::queue<FloonocReqV2 *> *queue)
 {
-    FloonocReqV2 *req = this->queue.front();
-    this->queue.pop();
+    FloonocReqV2 *req = queue->front();
+    queue->pop();
+
+    if (!this->locked)
+    {
+        // A packet starts: the other queue goes first after it.
+        this->wr_turn = queue != &this->wr_queue;
+    }
+    if (queue == &this->wr_queue)
+    {
+        this->locked = !req->is_last;
+    }
 
     // Keyed on the flit's own copies of is_write/wide: req->burst may only be
     // dereferenced on the request path (a write beat is consumed and freed by
@@ -311,7 +352,7 @@ void NetworkQueueV2::send_router_req()
         this->trace.msg(vp::Trace::LEVEL_TRACE, "Stalling network interface (node: %d)\n", (int)this->ni.cfg.node_id);
     }
 
-    if (this->queue.size() > 0)
+    if (this->next_queue() != NULL)
     {
         this->ni.fsm_event.enqueue();
     }
