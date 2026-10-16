@@ -21,38 +21,13 @@
             Francesco Conti, University of Bologna & Chips-IT f.conti@unibo.it
             Yinrong Li,      ETH Zurich                       yinrli@student.ethz.ch
  * Note:
- *      Here we only support (No Compute/ INT16 / UINT16 / FP16 ) for matrix multiply
- *      On the memory-mapped HWPE path (req_v2), MCNFIG1.gemm_ops selects GEMM
- *      (Z = X*W + Y) or MATMUL (Z = X*W, Y never loaded), and Y is read at
- *      Z + MCNFIG2.y_offs, as the RTL. The other paths always run GEMM with Y = Z.
+ *     The model currently supports:
+ *       - GEMM mode:   Z = X @ W + Y
+ *       - MATMUL mode: Z = X @ W
+ *     Other GEMM-Ops may be supported in a future release.
  *
  * io_v2 port of light_redmule.cpp.
  *
- * The engine (tiling, buffers, matmul, HWPE register protocol, FSM and the
- * request-slot pool with its timing model) is untouched. Only the IO plumbing
- * changes:
- *
- *   - the two register slave ports and the TCDM master port take their
- *     callbacks at construction; the master's response callback now returns
- *     vp::IoRespAck (this consumer always accepts, so IO_RESP_ACCEPTED) and its
- *     retry callback takes the retry channel.
- *   - status mapping: IO_REQ_OK -> IO_REQ_DONE, IO_REQ_PENDING ->
- *     IO_REQ_GRANTED. IO_REQ_DENIED is unchanged, and the deny/retry handshake
- *     keeps the same shape: block further issues until the retry fires.
- *   - v2 has no per-request argument stack (arg_alloc / arg_get). The slot id a
- *     response belongs to travels in IoReq::initiator, the field the protocol
- *     reserves for exactly this (the master's own correlation handle) and never
- *     touches itself. The v1 second argument (a back-pointer to the component)
- *     was unused and is gone.
- *   - request objects are plain vp::IoReq allocated by this component instead of
- *     IoMaster::req_new(). They live on the non-beat plane (IoV2SingleReq), where
- *     the target never frees what it is handed, so no IoReqAllocator is needed.
- *   - the cost of an access is read with get_full_latency() (head latency +
- *     bandwidth occupancy) instead of get_latency(), so a target that models
- *     throughput is not silently dropped; on magia's TCDM path (crossbar +
- *     memory_v3) duration is 0, so the value is the v1 one.
- *   - v2 has no per-request response port: a parked query would be answered on
- *     the slave port it came in on (see redmule_query_port).
  */
 
 #include <vp/vp.hpp>
@@ -79,15 +54,6 @@
 *                   Type Definition                 *
 ****************************************************/
 
-// typedef union {
-//     float f;
-//     struct {
-//         uint32_t mantissa : 23;
-//         uint32_t exponent : 8;
-//         uint32_t sign : 1;
-//     } parts;
-// } FloatBits;
-
 typedef uint8_t  fp8e4m3;
 typedef uint16_t fp16;
 
@@ -105,18 +71,12 @@ enum redmule_state {
 // -> scheduler IDLE->PRELOAD (2) -> streamer address generators (2).
 static constexpr int JOB_START_LATENCY = 8;
 
-// Rows of W the W stream loads ahead before the computation starts: the HCI
-// load FIFO of the stream (4, redmule_streamer.sv) and i_w_buffer_fifo (4,
-// redmule_top.sv), plus the row in flight (9 rows on the waveforms).
+// W rows loaded ahead of the compute: HCI load FIFO (4, redmule_streamer.sv) +
+// i_w_buffer_fifo (4, redmule_top.sv) + 1 in flight.
 static constexpr uint32_t W_PREFETCH_ROWS = 9;
 
-// Cycles the z_buffer takes per Y row in the preload: the Y stream feeds it
-// one row every 4 cycles (redmule_streamer.sv, load FIFO: "the consumer has a
-// throughput of 1 packet over 4 cycles"), the X and W accesses taking the
-// cycles in between. The scheduler enters LOAD_W once the z_buffer is loaded,
-// Y_ROW_CYCLES * (Width - 1) + 1 cycles after the first request of the job
-// (29 on the waveforms of test_mm_os, test_mm_os_2 and test_mm_ws, whatever
-// the number of X and W rows of the preload).
+// The Y stream feeds the z_buffer one row every 4 cycles (redmule_streamer.sv). The
+// compute starts Y_ROW_CYCLES * (ce_height - 1) + 1 cycles after the first preload access.
 static constexpr int64_t Y_ROW_CYCLES = 4;
 
 // gemm_op_e values of MCNFIG1.gemm_ops (redmule_pkg.sv). Only these two are
@@ -128,12 +88,10 @@ enum iter_instruction {
     INSTR_LOAD_Y,
     INSTR_LOAD_W,
     INSTR_LOAD_W_COMPUTE,
-    // Load of a W row the RTL reads beyond N (see get_w_rows()): timing only,
-    // the row is padding the RTL gates to zero
+    // W row past N (see get_w_rows()): timing only, gated to zero by the RTL
     INSTR_LOAD_W_PAD,
-    // Y load / Z store of a row past M in the last M tile: the RTL always moves
-    // Width (ce_height) rows (see get_y_z_pad_rows()). The Y load is timing
-    // only, the Z store writes zeroes, as the RTL
+    // Y/Z row past M in the last M tile (see get_y_z_pad_rows()): the Y load is
+    // timing only, the Z store writes zeroes
     INSTR_LOAD_Y_PAD,
     INSTR_STOR_Z_PAD,
     INSTR_LOAD_X,
@@ -162,7 +120,6 @@ class LightRedmule : public vp::Component
 public:
     LightRedmule(vp::ComponentConf &config);
 
-// private: ? why not private?????
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
     static vp::IoReqStatus req_v2(vp::Block *__this, vp::IoReq *req);
     // Method for offload interface, called when the core is offloading an instruction
@@ -195,23 +152,22 @@ public:
     void     process_iter_instruction(uint8_t *buf, uint32_t instr);
     void     process_compute();
 
-    // TCDM async response / retry callbacks (only fire for GRANTED/DENIED).
+    // TCDM callbacks: response for GRANTED requests, retry after a DENIED one.
     static vp::IoRespAck tcdm_response(vp::Block *__this, vp::IoReq *req);
     static void tcdm_retry(vp::Block *__this, vp::IoRetryChannel channel);
     int  alloc_req_slot();
     void free_req_slot(int id, int64_t available_at);
     // Iteration end-condition: all slots reusable at the current cycle.
     bool all_slots_free();
-    // Issue-side capacity gate mirroring the old queue-size check.
+    // True if another request can be issued (see definition).
     bool issue_slot_gate_ok();
     // Issue one request; returns false only if the slot pool is exhausted.
     bool issue_request(uint32_t addr, uint32_t instr, bool is_write, uint32_t size);
-    // Shared response handler (sync OK and async paths). free_cycle is when
-    // the slot becomes reusable.
+    // Consume a response (DONE inline or GRANTED); the slot is reusable from free_cycle.
     void handle_response(int slot_id, int64_t free_cycle);
     // Apply the data movement using the values captured at issue time.
     void apply_response_data(uint8_t *buf, uint32_t instr, uint32_t dst_offset, uint32_t cutoff);
-    // Fired when the last W burst lands: run matmul and clear w_buffer.
+    // Called when the last W row lands: run the matmul and clear w_buffer.
     void run_compute_and_drain();
     void     matmul_fp16(fp16 * z, fp16 * y, fp16 * x, fp16 * w, uint16_t m_size, uint16_t n_size, uint16_t k_size);
 
@@ -228,8 +184,7 @@ public:
 
     //redmule fsm
     vp::IoReq *         redmule_query;
-    // Slave port a parked query came in on: v2 replies on the port, not
-    // through a port carried by the request.
+    // Port the parked query came in on, to respond on.
     vp::IoSlave *       redmule_query_port;
     vp::IoReq*          tcdm_req;
     vp::ClockEvent *    fsm_event;
@@ -338,18 +293,15 @@ public:
     uint8_t *           z_buffer_compute;
     uint8_t *           z_buffer_previos;
 
-    // Per-slot outstanding-request state (LSU-style, one field per slot
-    // captures both sync OK latency timing and async PENDING tracking).
+    // Outstanding TCDM request.
     struct ReqSlot {
         vp::IoReq *     req;
         uint8_t *       buf;
         uint32_t        instr;
-        // Captured at issue time; never read from live FSM state at response
-        // time, so OOO responses are safe.
+        // Captured at issue, so responses can be applied out of order.
         uint32_t        dst_offset;
         uint32_t        cutoff;
-        // <=now: free. >now (finite): sync OK in-flight until that cycle.
-        // INT64_MAX: async PENDING/DENIED awaiting callback.
+        // <= now: free; > now: busy until then; INT64_MAX: awaiting response or retry.
         int64_t         available_at;
     };
     std::vector<ReqSlot> req_slots;
@@ -569,7 +521,7 @@ void LightRedmule::init_redmule_meta_data(){
     this->iter_y_row_ptr = 0;
     this->iter_z_row_ptr = 0;
 
-    // Reset per-matmul slot-pool state defensively.
+    // Reset the slot pool for the new job.
     this->w_outstanding_count = 0;
     this->compute_pending     = false;
     int64_t now = this->clock.get_cycles();
@@ -697,9 +649,8 @@ uint32_t LightRedmule::next_addr(){
         this->iter_instruction  = INSTR_STOR_Z;
     } else if (this->z_pad_block > 0)
     {
-        // Rows past M. The RTL stores them too, with zeroes and all the byte
-        // enables set, overwriting the memory right after Z: done the same
-        // here, so that software sees on the model what the hardware does.
+        // Rows past M: the RTL writes zeroes with all byte enables set, clobbering
+        // the memory after Z. Modeled as such.
         addr = this->iter_z_addr;
         this->iter_z_addr = this->inc_addr(addr, this->k_size, buffer_w);
         this->z_pad_block -= 1;
@@ -789,10 +740,7 @@ void LightRedmule::process_compute(){
 }
 
 void LightRedmule::process_iter_instruction(){
-    // Sync wrapper: reuse the global access_buffer and the FSM-current
-    // iter_instruction. The async path calls the overload below with a
-    // per-slot buffer and the instruction captured at issue time, since
-    // iter_instruction may have advanced by the time the response fires.
+    // Used for FORWARD_YZ only; TCDM responses go through apply_response_data().
     this->process_iter_instruction(this->access_buffer, this->iter_instruction);
 }
 
@@ -1020,14 +968,9 @@ uint32_t LightRedmule::get_routine_access_block_number(){
 
 }
 
-// Accesses of the preload, as in the RTL, where the X, W and Y streams start
-// together and the computation waits for the z_buffer to have loaded Y: the
-// first X tile, the first W_PREFETCH_ROWS rows of the first W tile, and the Y
-// rows. They are issued one per cycle, and the computation starts once the
-// z_buffer has loaded Y (Y_ROW_CYCLES), or after the accesses if later. The rest of the first
-// W tile is loaded by the first iteration. The RTL X stream also loads the
-// second X tile before the computation, which the model leaves to the first
-// iteration as for the next tiles.
+// Preload accesses, one per cycle: the first X tile, the Y rows (GEMM only) and the
+// first W_PREFETCH_ROWS rows of the first W tile. The rest of that W tile, and the
+// second X tile the RTL also preloads, are left to the first iteration.
 uint32_t LightRedmule::get_preload_access_block_number(){
     uint32_t total_blocks       = 0;
     uint32_t tcdms_bw           = this->bandwidth / this->elem_size;
@@ -1128,7 +1071,7 @@ uint32_t LightRedmule::get_w_rows(uint32_t iter_k)
 }
 
 // Rows of padding added to a Y load or Z store of `rows` real rows: the RTL
-// streams always Width (ce_height) rows per M tile (redmule_tiler.sv:
+// always streams Width (ce_height) rows per M tile (redmule_tiler.sv:
 // yz_tot_len = Width * x_rows_iter * w_cols_iter; only the X stream is cut to
 // x_rows_lftovr, in redmule_memory_scheduler.sv).
 uint32_t LightRedmule::get_y_z_pad_rows(uint32_t rows)
@@ -1547,9 +1490,9 @@ vp::IoReqStatus LightRedmule::req_v2(vp::Block *__this, vp::IoReq *req)
                 break;
             }
             case 0x10: { //REDMULE_RUNNING_JOB
-                //Number of jobs completed so far, as job_running_id_q in
-                //hwpe_ctrl_target.sv (incremented on each job_done, cleared
-                //by the soft clear), not the id of the job last started
+                // Number of jobs completed so far, as job_running_id_q in
+                // hwpe_ctrl_target.sv (incremented on each job_done, cleared
+                // by the soft clear)
                 uint32_t running_job = (uint32_t) _this->completed_jobs;
                 memcpy((void *)data, (void *)&running_job, size);
                 _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] RUNNING_JOB -> %d\n", running_job);
@@ -1562,11 +1505,8 @@ vp::IoReqStatus LightRedmule::req_v2(vp::Block *__this, vp::IoReq *req)
     return vp::IO_REQ_DONE;
 }
 
-// LSU-style slot allocation. A slot is considered free when its available_at
-// timestamp has elapsed; scan the pool and grab the first such slot, marking
-// it as in-flight (available_at = INT64_MAX) so it can't be reallocated until
-// either the sync OK path or the async response callback installs a real
-// completion timestamp.
+// Reserve the free slot (available_at <= now) that freed earliest, or return -1.
+// It stays reserved (INT64_MAX) until free_req_slot() sets its completion cycle.
 int LightRedmule::alloc_req_slot()
 {
     int64_t now = this->clock.get_cycles();
@@ -1583,7 +1523,6 @@ int LightRedmule::alloc_req_slot()
     }
     if (best_id >= 0)
     {
-        // Reserve until free_req_slot() installs the real completion cycle.
         this->req_slots[best_id].available_at = INT64_MAX;
     }
     return best_id;
@@ -1604,9 +1543,8 @@ bool LightRedmule::all_slots_free()
     return true;
 }
 
-// Mirror the old `pending_req_queue.size() <= queue_depth` issue gate: a slot
-// maturing at `now` still counts as busy here (`>= now`) vs the `<= now` reuse
-// test in alloc_req_slot()/all_slots_free(), so the next alloc cannot fail.
+// At most queue_depth + 1 requests in flight. A slot freeing at now still counts
+// here (>=), unlike in alloc_req_slot() (<=), so the alloc that follows cannot fail.
 bool LightRedmule::issue_slot_gate_ok()
 {
     int64_t now = this->clock.get_cycles();
@@ -1618,8 +1556,7 @@ bool LightRedmule::issue_slot_gate_ok()
     return outstanding <= this->queue_depth;
 }
 
-// Memcpy using the captured (dst_offset, cutoff). OOO-safe because no FSM
-// state is touched.
+// Copy response data into the local buffers, using only what was captured at issue.
 void LightRedmule::apply_response_data(uint8_t *buf, uint32_t instr, uint32_t dst_offset, uint32_t cutoff)
 {
     switch (instr)
@@ -1686,12 +1623,8 @@ vp::IoRespAck LightRedmule::tcdm_response(vp::Block *__this, vp::IoReq *req)
     return vp::IO_RESP_ACCEPTED;
 }
 
-// DENIED -> retry. The held request MUST be re-sent from inside this callback,
-// in the same cycle: a bank-arbitrating TCDM interconnect (SpatzTcdmInterco,
-// log_ico_v2) only keeps its election window open for the duration of this
-// call, so a master that defers the re-send to the next cycle is denied again
-// forever. See vp/itf/io_v2.hpp (IoSlave::retry) and the io_v2 manual,
-// "Retry must be serviced synchronously".
+// Re-send the denied request from inside the callback: io_v2 retries must be
+// serviced synchronously, the interconnect re-arbitrates only during this call.
 void LightRedmule::tcdm_retry(vp::Block *__this, vp::IoRetryChannel channel)
 {
     LightRedmule *_this = (LightRedmule *)__this;
@@ -1709,8 +1642,7 @@ void LightRedmule::tcdm_retry(vp::Block *__this, vp::IoRetryChannel channel)
     int slot_id = _this->denied_slot;
     ReqSlot &slot = _this->req_slots[slot_id];
 
-    // prepare() resets only the per-send fields (latency, duration, status);
-    // addr / size / data / initiator still describe the same access.
+    // prepare() resets the per-send fields and keeps initiator (the slot id).
     slot.req->prepare();
     vp::IoReqStatus err = _this->tcdm_itf.req(slot.req);
 
@@ -1736,9 +1668,8 @@ void LightRedmule::tcdm_retry(vp::Block *__this, vp::IoRetryChannel channel)
     // GRANTED: the slot stays reserved, tcdm_response will free it.
 }
 
-// Issue one request. Captures iter-dependent state (dst_offset, cutoff) at
-// issue time so OOO responses don't race against an advancing FSM. Returns
-// false only if the slot pool is exhausted.
+// Issue one request, capturing dst_offset and cutoff now since the FSM moves on
+// before the response. Returns false if no slot is free.
 bool LightRedmule::issue_request(uint32_t addr, uint32_t instr, bool is_write, uint32_t size)
 {
     int slot_id = this->alloc_req_slot();
@@ -1780,14 +1711,13 @@ bool LightRedmule::issue_request(uint32_t addr, uint32_t instr, bool is_write, u
     }
     slot.cutoff = cutoff;
 
-    // Capture row offset, advance iter_*_row_ptr at issue (mirrors the sync
-    // handler's pointer arithmetic).
+    // Capture the row offset and advance the row pointer, as process_iter_instruction() does.
     if (instr == INSTR_LOAD_Y)
     {
         slot.dst_offset = this->iter_y_row_ptr;
         if (slot.dst_offset == 0)
         {
-            // FORWARD_YZ consumes y_buffer_preload only after all_slots_free.
+            // Safe to clear now: FORWARD_YZ reads it only once all slots are free.
             std::memset(this->y_buffer_preload, 0,
                 this->LOCAL_BUFFER_H * this->LOCAL_BUFFER_W * this->elem_size);
         }
@@ -1799,7 +1729,7 @@ bool LightRedmule::issue_request(uint32_t addr, uint32_t instr, bool is_write, u
         slot.dst_offset = this->iter_w_row_ptr;
         if (slot.dst_offset == 0)
         {
-            // Compute fires only after all W responses are in.
+            // Safe to clear now: compute runs only once all W responses are in.
             std::memset(this->w_buffer, 0,
                 this->LOCAL_BUFFER_N * this->LOCAL_BUFFER_W * this->elem_size);
         }
@@ -1836,8 +1766,7 @@ bool LightRedmule::issue_request(uint32_t addr, uint32_t instr, bool is_write, u
         std::memset(slot.buf, 0, size);
     }
 
-    // prepare() resets the per-send fields (latency, duration, status) and
-    // leaves initiator - i.e. the slot id - alone.
+    // prepare() resets the per-send fields and keeps initiator (the slot id).
     slot.req->prepare();
     slot.req->set_addr(addr);
     slot.req->set_size(size);
@@ -1848,8 +1777,7 @@ bool LightRedmule::issue_request(uint32_t addr, uint32_t instr, bool is_write, u
 
     if (err == vp::IO_REQ_DONE)
     {
-        // Inline answer: data is back, but the port was busy for the
-        // annotated number of cycles.
+        // Data is back; the slot stays busy for the full latency.
         int64_t free_cycle = this->clock.get_cycles() + (int64_t)slot.req->get_full_latency();
         this->handle_response(slot_id, free_cycle);
     }
@@ -1859,13 +1787,7 @@ bool LightRedmule::issue_request(uint32_t addr, uint32_t instr, bool is_write, u
     }
     else if (err == vp::IO_REQ_DENIED)
     {
-        // Hold this slot's request and stop issuing new ones. The TCDM
-        // interconnect will call tcdm_retry(), where it is re-sent — inside the
-        // callback, same cycle, as the io_v2 retry contract demands. Everything
-        // the access needs is already captured in the slot (addr / size / data
-        // in the request object, instr / dst_offset / cutoff in the slot), so
-        // the re-send is a plain re-issue of the same object and the FSM state
-        // stays consistent.
+        // Hold the request in its slot and stop issuing; tcdm_retry() re-sends it.
         this->request_denied = true;
         this->denied_slot    = slot_id;
     }
@@ -1984,7 +1906,7 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 int modeled_runtime = _this->get_redmule_array_runtime();
                 int64_t latency = 1;
 
-                // Compensation
+                // Wait for the modeled array runtime if the accesses finished earlier
                 if (_this->fsm_timestamp >= modeled_runtime)
                 {
                     _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][ROUTINE-ijk: %0d-%0d-%0d] TCDM Access Time(%d) > Model Time(%d)\n", _this->iter_i, _this->iter_j, _this->iter_k, _this->fsm_timestamp, modeled_runtime);
@@ -2087,8 +2009,8 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             break;
         }
         case FINISHED: {
-            //Retire the job that just finished (no-op for jobs launched via the
-            //offload/custom-instruction path, which never touches job_pending)
+            //Retire the job. Offload/legacy-path jobs have no queue entry but still
+            //flip cxt_use_ptr and count in completed_jobs
             _this->cxt_job_id[_this->cxt_use_ptr] = -1;
             _this->cxt_use_ptr = 1 - _this->cxt_use_ptr;
             _this->completed_jobs++;
@@ -2169,310 +2091,6 @@ void matmul_int16(int16_t * z, int16_t * y, int16_t * x, int16_t * w, uint16_t m
         }
     }
 }
-
-
-// // Convert float to FP16 (half-precision)
-// fp16 float_to_fp16(float value) {
-//     FloatBits floatBits;
-//     floatBits.f = value;
-
-//     uint16_t sign = floatBits.parts.sign << 15;
-//     int32_t exponent = floatBits.parts.exponent - 127 + 15; // adjust bias from 127 to 15
-//     uint32_t mantissa = floatBits.parts.mantissa >> 13;     // reduce to 10 bits
-
-//     if (exponent <= 0) {
-//         if (exponent < -10) return sign;   // too small
-//         mantissa = (floatBits.parts.mantissa | 0x800000) >> (1 - exponent);
-//         return sign | mantissa;
-//     } else if (exponent >= 0x1F) {
-//         return sign | 0x7C00;  // overflow to infinity
-//     }
-//     return sign | (exponent << 10) | mantissa;
-// }
-
-// // Convert FP16 to float
-// float fp16_to_float(fp16 value) {
-//     FloatBits floatBits;
-//     floatBits.parts.sign = (value >> 15) & 0x1;
-//     int32_t exponent = (value >> 10) & 0x1F;
-//     floatBits.parts.exponent = (exponent == 0) ? 0 : exponent + 127 - 15;
-//     floatBits.parts.mantissa = (value & 0x3FF) << 13;
-//     return floatBits.f;
-// }
-
-// -----------------------------------------------------------------------------
-// Improved FP16 <-> FP32 conversion routines by Lorenzo Zuolo
-//
-// These versions fix several numerical and IEEE-754 compliance issues found
-// in the original naive implementations. The original functions performed
-// a simple bias adjustment and bit shift, which *worked for normalized values*
-// but failed to handle special cases properly.
-//
-// Key improvements over the original versions:
-//
-//  • Correct handling of subnormal (denormalized) numbers
-//    The old float_to_fp16() simply zeroed out very small values,
-//    losing precision for magnitudes near zero. The new version detects
-//    and correctly normalizes them using the implicit leading 1 bit.
-//
-//  • Accurate rounding (round-to-nearest-even)
-//    The old version truncated the mantissa bits directly (>> 13),
-//    introducing systematic downward bias. The improved version applies
-//    IEEE-compliant rounding to preserve statistical neutrality.
-//
-//  • Proper Inf/NaN propagation
-//    The old code treated any large exponent as infinity but did not
-//    propagate NaN payloads correctly. The new one does, matching real
-//    hardware FP16 behavior.
-//
-//  • Safe exponent biasing and shift handling
-//    The previous logic could produce undefined behavior with negative
-//    shifts or overflowed exponents. The new version clamps exponents
-//    safely and handles edge cases explicitly.
-//
-// In short: these functions produce the same results as hardware FP16 units
-// (ARM, NVIDIA, etc.), eliminating subtle rounding and underflow errors
-// that accumulated across multiple conversions (like in FMA loops).
-// -----------------------------------------------------------------------------
-
-// fp16 float_to_fp16(float f)
-// {
-//     uint32_t f_bits;
-//     memcpy(&f_bits, &f, sizeof(f));
-
-//     uint32_t sign = (f_bits >> 16) & 0x8000u;
-//     int32_t  exp  = ((f_bits >> 23) & 0xFF) - 127 + 15;
-//     uint32_t mant = f_bits & 0x007FFFFFu;
-
-//     if (exp <= 0) {
-//         // Subnormal or zero
-//         if (exp < -10) {
-//             // Too small -> underflow to zero
-//             return sign;
-//         }
-//         // Add implicit leading 1 and shift to create subnormal
-//         mant = (mant | 0x00800000u) >> (1 - exp);
-//         // Round-to-nearest-even
-//         if (mant & 0x00001000u)
-//             mant += 0x00002000u;
-//         return sign | (mant >> 13);
-//     } 
-//     else if (exp >= 0x1F) {
-//         // Overflow -> Inf or NaN
-//         if ((f_bits & 0x7FFFFFu) != 0)
-//             return sign | 0x7E00u; // NaN
-//         return sign | 0x7C00u;     // +Inf / -Inf
-//     }
-
-//     // Normal number: add rounding before truncating
-//     mant = mant + 0x00001000u;
-
-//     // Handle rounding overflow in mantissa
-//     if (mant & 0x00800000u) {
-//         mant = 0;
-//         exp += 1;
-//     }
-
-//     // Overflow after rounding -> Inf
-//     if (exp >= 0x1F)
-//         return sign | 0x7C00u;
-
-//     // Compose final 16-bit result
-//     return sign | ((exp & 0x1F) << 10) | (mant >> 13);
-// }
-
-// float fp16_to_float(fp16 h)
-// {
-//     uint16_t h_exp = (h & 0x7C00u);
-//     uint16_t h_sig = (h & 0x03FFu);
-//     uint32_t f_sgn = ((uint32_t)h & 0x8000u) << 16;
-//     uint32_t f_exp;
-//     uint32_t f_sig;
-
-//     if (h_exp == 0x0000u) {
-//         // Zero or subnormal number
-//         if (h_sig == 0) {
-//             // ±0
-//             f_exp = 0;
-//             f_sig = 0;
-//         } else {
-//             // Subnormal -> normalize it
-//             int shift = 0;
-//             while ((h_sig & 0x0400u) == 0) {
-//                 h_sig <<= 1;
-//                 shift++;
-//             }
-//             h_sig &= 0x03FFu;
-//             f_exp = (127 - 15 - shift) << 23;
-//             f_sig = ((uint32_t)h_sig) << 13;
-//         }
-//     } else if (h_exp == 0x7C00u) {
-//         // Inf or NaN
-//         f_exp = 0xFFu << 23;
-//         f_sig = ((uint32_t)h_sig) << 13;
-//     } else {
-//         // Normalized number
-//         uint32_t exp = ((h_exp >> 10) & 0x1Fu);
-//         f_exp = (exp + (127 - 15)) << 23;
-//         f_sig = ((uint32_t)h_sig) << 13;
-//     }
-
-//     uint32_t f_bits = f_sgn | f_exp | f_sig;
-//     float f;
-//     memcpy(&f, &f_bits, sizeof(f));
-//     return f;
-// }
-
-// // Fused multiply-add for FP16
-// fp16 fp16_fma(fp16 a, fp16 b, fp16 c) {
-//     float fa = fp16_to_float(a);
-//     float fb = fp16_to_float(b);
-//     float fc = fp16_to_float(c);
-//     if ((a == 0) || (b == 0))
-//          return c;
-//     else if (c == 0) {
-//         float result = fa * fb;
-//         return float_to_fp16(result);
-//     }
-//     else {
-//         float result = (fa * fb) + fc;
-//         return float_to_fp16(result);
-//     }
-// }
-
-// uint16_t double_to_fp16(double d) {
-//     uint64_t bits;
-//     memcpy(&bits, &d, sizeof(bits)); 
-
-//     uint16_t sign = (bits >> 63) & 0x1;
-//     int64_t exp_d = (bits >> 52) & 0x7FF;
-//     uint64_t frac_d = bits & 0x000FFFFFFFFFFFFFull; // 52 bits
-
-//     uint16_t exp_h, frac_h;
-
-//     // Handle special cases
-//     if (exp_d == 0x7FF) { // Inf or NaN
-//         exp_h = 0x1F;
-//         if (frac_d == 0) { // Infinity
-//             frac_h = 0;
-//         } else { // NaN: preserve quiet NaN bit
-//             // Preserve top 10 bits of FP32 fraction for FP16
-//             // Ensure quiet NaN (set MSB of frac_h)
-//             frac_h = (uint16_t)((frac_d >> (52 - 10)) | 0x200);
-//         }
-//     } else if (exp_d == 0) { // Zero or subnormal in double → zero in half
-//         // All double subnormals are mapped to FP16 zero.
-//         // Some double subnormals might be large enough to become FP16 subnormals.
-//         // This results in a small precision loss.
-//         exp_h = 0;
-//         frac_h = 0;
-//     } else { // Normalized double
-//         int32_t exp_unbiased = (int32_t)exp_d - 1023; // remove double bias
-//         int32_t exp_half = exp_unbiased + 15;         // re-bias for half
-
-//         if (exp_half >= 0x1F) { // Overflow → Infinity
-//             exp_h = 0x1F;
-//             frac_h = 0;
-//         } else if (exp_half <= 0) { // Subnormal or underflow to zero
-//             if (exp_half < -10) { // Too small → underflow to zero
-//                 exp_h = 0;
-//                 frac_h = 0;
-//             } else {
-//                 // Subnormal number
-//                 uint64_t mant = (frac_d | 0x10000000000000ull); // add hidden bit 
-//                 uint8_t shift = 52 + (1 - exp_half) - 10; 
-//                 uint64_t frac = mant >> shift; 
-
-//                 // Round to nearest-even
-//                 uint64_t round_bit = (mant >> (shift - 1)) & 1; 
-//                 uint64_t rest = mant & ((1ull << (shift - 1)) - 1); 
-//                 if (round_bit && (rest || (frac & 1))) 
-//                     frac++;
-
-//                 frac_h = (uint16_t)frac;
-//                 exp_h = 0;
-//             }
-//         } else {
-//             // Normal half-precision number
-//             uint64_t mant = frac_d;
-
-//             // Extract top 10 bits and round
-//             uint64_t frac = mant >> (52 - 10);
-//             uint64_t round_bit = (mant >> (52 - 10 - 1)) & 1;
-//             uint64_t rest = mant & ((1ull << (52 - 10 - 1)) - 1);
-
-//             if (round_bit && (rest || (frac & 1)))
-//                 frac++;
-
-//             if (frac == 0x400) { // mantissa overflow
-//                 frac = 0;
-//                 exp_half++;
-//             }
-
-//             if (exp_half >= 0x1F) {
-//                 // Overflow → Infinity
-//                 exp_h = 0x1F;
-//                 frac_h = 0;
-//             } else {
-//                 exp_h = exp_half & 0x1F;
-//                 frac_h = (uint16_t)(frac & 0x3FF);
-//             }
-//         }
-//     }
-
-//     return (sign << 15) | (exp_h << 10) | frac_h;
-// }
-
-// double fp16_to_double(fp16 h) { 
-//     uint16_t sign = (h >> 15) & 0x1u; 
-//     uint16_t exp = (h >> 10) & 0x1Fu; 
-//     uint16_t frac = h & 0x03FFu; 
-//     uint64_t exp_d = 0; 
-//     uint64_t frac_d = 0; 
-//     if (exp == 0x1F) { // Inf or NaN 
-//         exp_d = 0x7FF; // double exponent all 1s 
-//         frac_d = (frac ? ((uint64_t)frac << (52 - 10)) : 0); // propagate fraction 
-//     } else if (exp == 0) { // Zero or subnormal 
-//         if (frac != 0) { // if Zero, do nothing (exp_d and frac_d are 0) 
-//             // Subnormal: scale fraction up to normalized double 
-//             // FP16 subnormal: value = frac * 2^(-24) (2^-14 / 2^10) 
-//             uint64_t frac_norm = frac; 
-//             int exp_shift = 0; 
-//             while ((frac_norm & 0x400) == 0) { // 0x400 = 1 << 10 (FP16 MSB) 
-//                 frac_norm <<= 1; exp_shift++; 
-//             } 
-//             frac_norm &= 0x3FF; 
-//             frac_d = frac_norm << (52 - 10); 
-//             exp_d = (uint64_t)(1023 - 15 - exp_shift); 
-//         } 
-//     } else { // Normalized number 
-//         frac_d = ((uint64_t)frac) << (52 - 10); // align fraction to 52 bits 
-//         exp_d = (uint64_t)((int32_t)exp - 15 + 1023); // double bias 
-//     } 
-    
-//     // Compose final 64-bit result 
-//     uint64_t d_bits = ((uint64_t)sign << 63) | (exp_d << 52) | frac_d; 
-//     double d; 
-//     memcpy(&d, &d_bits, sizeof(d)); 
-//     return d; 
-// }
-
-// // Fused multiply-add for FP16
-// fp16 fp16_fma(fp16 a, fp16 b, fp16 c) {
-//     double da = fp16_to_double(a);
-//     double db = fp16_to_double(b);
-//     double dc = fp16_to_double(c);
-//     if ((a==0) || (b==0))
-//         return c;
-//     else if (c==0) {
-//         double result = (da * db);
-//         return double_to_fp16(result);
-//     }
-//     else {
-//         double result = (da * db) + dc;
-//         return double_to_fp16(result);
-//     }
-// }
 
 fp16 fp16_fma(fp16 a, fp16 b, fp16 c) {
     flexfloat_t ff_a, ff_b, ff_c, ff_res; 
