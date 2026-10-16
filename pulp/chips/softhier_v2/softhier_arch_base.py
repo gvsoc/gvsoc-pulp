@@ -101,7 +101,8 @@ class SoftHierArchBase:
         self.soc_register_eoc        = 0x70000000
 
         #NoC
-        self.noc_link_width          = 512
+        # Wide NoC links, iDMA and wide crossbars, in bytes (512 bits)
+        self.noc_link_width          = 64
         # The NoC routers use wormhole arbitration with a single virtual
         # channel, like the FlooNoC RTL: routing tables whose channel
         # dependency graph has a cycle can deadlock under load. The NoC
