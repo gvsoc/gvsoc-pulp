@@ -72,6 +72,9 @@ public:
     bool holding_beat() override { return this->held_resp != nullptr; }
     bool busy() override;
 
+    /// The bus master, for a component binding it to one of its own blocks.
+    vp::IoMaster &master() { return this->bus; }
+
 private:
     /// One outstanding read burst.
     struct ReadCtx

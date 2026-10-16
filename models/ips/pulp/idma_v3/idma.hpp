@@ -102,6 +102,12 @@ struct IdmaNdReq
     /// idma_pkg::options_t bits the legalizer honours.
     bool decouple_rw = false;
     bool decouple_aw = false;
+    /// Burst length limits (idma_pkg::options_t beo): with reduce_len, the
+    /// bursts of that side are at most 2^max_llen bus words.
+    bool src_reduce_len = false;
+    bool dst_reduce_len = false;
+    int src_max_llen = 0;
+    int dst_max_llen = 0;
     /// Transfer id returned to software and stream the request was launched on.
     uint32_t id = 0;
     int stream = 0;
@@ -119,6 +125,11 @@ struct Idma1dReq
     int dst_prot = IDMA_PROT_AXI;
     bool decouple_rw = false;
     bool decouple_aw = false;
+    /// Burst length limits, as in IdmaNdReq.
+    bool src_reduce_len = false;
+    bool dst_reduce_len = false;
+    int src_max_llen = 0;
+    int dst_max_llen = 0;
     /// opt.last: this is the last 1D of its ND transfer.
     bool super_last = true;
     IdmaNdReq *parent = nullptr;

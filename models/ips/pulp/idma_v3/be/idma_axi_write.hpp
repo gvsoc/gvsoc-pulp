@@ -76,6 +76,9 @@ public:
     void on_read_first_beat() override;
     bool busy() override;
 
+    /// The bus master, for a component binding it to one of its own blocks.
+    vp::IoMaster &master() { return this->bus; }
+
 private:
     /// One write burst, alive from its AW to its response.
     struct WriteCtx

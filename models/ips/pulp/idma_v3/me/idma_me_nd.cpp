@@ -144,6 +144,10 @@ Idma1dReq *IdmaMeNd::build_1d()
     burst->dst_prot = req->dst_prot;
     burst->decouple_rw = req->decouple_rw;
     burst->decouple_aw = req->decouple_aw;
+    burst->src_reduce_len = req->src_reduce_len;
+    burst->dst_reduce_len = req->dst_reduce_len;
+    burst->src_max_llen = req->src_max_llen;
+    burst->dst_max_llen = req->dst_max_llen;
     burst->parent = req;
     req->nb_1d_alive++;
 

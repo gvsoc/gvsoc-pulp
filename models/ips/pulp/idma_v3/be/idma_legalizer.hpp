@@ -35,7 +35,9 @@ class IdmaBackend;
  *
  * - each side may not cross the boundary its manager reports
  *   (bytes_to_page_boundary(): the AXI page of 2^(offset + burst_len) bytes,
- *   or one bus word for the non-bursting protocols);
+ *   or one bus word for the non-bursting protocols), nor, when the transfer
+ *   reduces the burst length of the side (reduce_len), 2^(offset + max_llen)
+ *   bytes;
  * - in coupled mode (both protocols burst and decouple_rw is clear) both
  *   sides take the shorter of the two and advance together;
  * - otherwise (decoupled) each side advances on its own;
@@ -83,7 +85,13 @@ private:
         uint64_t length = 0;
         /// Byte rotation applied to this side's beats (read or write shift).
         uint8_t shift = 0;
+        /// Bursts of this side limited to 2^max_llen bus words.
+        bool reduce_len = false;
+        int max_llen = 0;
     };
+
+    /// Bytes from the side's address to the boundary its bursts may not cross.
+    uint64_t bytes_to_boundary(const Side &side, uint32_t manager_bytes, bool not_bursting);
 
     /// Try to take the next 1D request from the mid-end.
     bool take_request(int64_t now);
