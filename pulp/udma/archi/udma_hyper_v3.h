@@ -34,19 +34,14 @@
 /* Architectural configuration
 */
 #define HYPER_FIFO_DEPTH 8
-#ifdef PULP_OPEN_UDMA
-#define HYPER_NB_CHANNELS 8 /* 8 tran_id and 1 common space */
-#else
-#define HYPER_NB_CHANNELS 2 /* 2 tran_id and 1 common space */
-#endif
+/* The number of tran_id comes from the udma config: the register space holds one area
+   per tran_id followed by 1 common space, each one being a periph id */
 
 #define HYPER_CHANNELS_OFFSET 0x80
 #define HYPER_CHANNELS_ID_OFFSET(id) HYPER_CHANNELS_OFFSET*(id)
-#define HYPER_COMMON_REGS_OFFSET HYPER_CHANNELS_OFFSET*HYPER_NB_CHANNELS
 
 #define HYPER_NB_COMMON_REGS 10
 #define HYPER_NB_CONFIG_REGS 16
-#define HYPER_NB_REGS HYPER_NB_COMMON_REGS + HYPER_NB_CONFIG_REGS*HYPER_NB_CHANNELS
 #define HYPER_NB_TWD_REGS 6
 #define HYPER_NB_CTL_REGS 2
 
@@ -66,18 +61,7 @@
 #define ARCHI_UDMA_HYPER_EOT_RX_EVT       2
 #define ARCHI_UDMA_HYPER_EOT_TX_EVT       3
 
-/* Start from periph id*4 */
-#ifdef PULP_OPEN_UDMA
-#define ARCHI_SOC_EVENT_HYPER_RX      32
-#define ARCHI_SOC_EVENT_HYPER_TX      33
-#define ARCHI_SOC_EVENT_HYPER_EOT_RX  34
-#define ARCHI_SOC_EVENT_HYPER_EOT_TX  35
-#else
-#define ARCHI_SOC_EVENT_HYPER_RX      16
-#define ARCHI_SOC_EVENT_HYPER_TX      17
-#define ARCHI_SOC_EVENT_HYPER_EOT_RX  18
-#define ARCHI_SOC_EVENT_HYPER_EOT_TX  19
-#endif
+/* SoC events are relative to the periph first event, i.e. UDMA_EVENT_ID(periph id) */
 
 
 /* Common registers offsets
@@ -93,18 +77,9 @@
 #define MEM_SEL_OFFSET 0x20 // Reserved for the future extension
 #define TRANS_ID_ALLOC_OFFSET 0x24 // The smallest number of the transaction id which is not busy
 
-/* Common registers
+/* Common registers are located after the tran_id areas, i.e. at
+   HYPER_CHANNELS_ID_OFFSET(nb_tran_ids), which depends on the udma config
 */
-#define REG_PAGE_BOUND REG_PAGE_BOUND_OFFSET + HYPER_COMMON_REGS_OFFSET
-#define REG_T_LATENCY_ACCESS REG_T_LATENCY_ACCESS_OFFSET + HYPER_COMMON_REGS_OFFSET
-#define REG_EN_LATENCY_ADD REG_EN_LATENCY_ADD_OFFSET + HYPER_COMMON_REGS_OFFSET
-#define REG_T_CS_MAX REG_T_CS_MAX_OFFSET + HYPER_COMMON_REGS_OFFSET
-#define REG_T_RW_RECOVERY REG_T_RW_RECOVERY_OFFSET + HYPER_COMMON_REGS_OFFSET
-#define REG_T_RWDS_DELAY_LINE REG_T_RWDS_DELAY_LINE_OFFSET + HYPER_COMMON_REGS_OFFSET
-#define REG_T_VARI_LATENCY REG_T_VARI_LATENCY_OFFSET + HYPER_COMMON_REGS_OFFSET
-#define N_HYPER_DEVICE N_HYPER_DEVICE_OFFSET + HYPER_COMMON_REGS_OFFSET
-#define MEM_SEL MEM_SEL_OFFSET + HYPER_COMMON_REGS_OFFSET
-#define TRANS_ID_ALLOC TRANS_ID_ALLOC_OFFSET + HYPER_COMMON_REGS_OFFSET
 
 /*Configuration registers offset
 */
