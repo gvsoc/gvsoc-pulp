@@ -42,19 +42,37 @@ public:
     void handle_req(vp::IoReq *req, bool wide);
     void handle_rsp(FloonocReqV2 *req, bool is_address);
 
+    // Injects the head of the queue now if this queue has not injected a flit
+    // in this cycle yet (cut_ax = false: no register on the request channels).
+    void inject_now();
+
 private:
     void enqueue_router_req(vp::IoReq *req, bool is_address, bool wide, bool is_req);
     void enqueue_router_rsp(FloonocReqV2 *req, bool is_address);
     void send_router_req();
     void unstall();
+    // True when the arbitration can inject a flit (head of the locked queue,
+    // or of any queue when no packet is open).
+    bool has_ready();
 
     NetworkInterfaceV2 &ni;
+    // Cycle of the last flit injected, so that at most one is injected per cycle.
+    int64_t last_inject_cycle = -1;
     uint64_t width;
     // Network this queue injects into (NetworkInterfaceV2::NW_*), i.e. which
     // of the NI's link output ports it drives.
     int nw;
     vp::Trace trace;
-    std::queue<FloonocReqV2 *> queue;
+    // Flits of the requests (AW/W/AR) and of the responses (R/B) this network
+    // carries, arbitrated by packet in send_router_req (write_burst_packet;
+    // otherwise all flits go to Q_REQ, one FIFO).
+    static constexpr int Q_REQ = 0;
+    static constexpr int Q_RSP = 1;
+    std::queue<FloonocReqV2 *> queues[2];
+    // Queue owning the link until the tail flit of its packet (-1: none), and
+    // the round-robin pointer.
+    int locked = -1;
+    int rr_next = 0;
     bool stalled;
 };
 
@@ -132,6 +150,12 @@ private:
 
     vp::IoMaster wide_output_itf;
     vp::IoMaster narrow_output_itf;
+    // AW channel towards the target (write_burst_packet only, when bound): the
+    // address of every write burst is synced when its AW flit arrives, ahead
+    // of its W beats on the output port, for a target timing its W beats on
+    // the AW as an AXI slave does
+    vp::WireMaster<uint64_t> wide_aw_itf;
+    vp::WireMaster<uint64_t> narrow_aw_itf;
     vp::IoSlave wide_input_itf;
     vp::IoSlave narrow_input_itf;
 

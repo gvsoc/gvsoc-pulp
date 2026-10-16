@@ -54,6 +54,12 @@ class SpatzTcdmIntercoConfig(Config):
         "consecutive banks served within the same arbiter tick, with "
         "priority over the narrow masters (RTL superbank mux behaviour)"
     ))
+    wide_shared_port: bool = cfg_field(default=True, dump=True, desc=(
+        "True if all the wide masters reach the banks through one port, which "
+        "carries one access per cycle (the 512-bit port of the spatz cluster). "
+        "False if each wide master has its own path and only conflicts on banks "
+        "(the HWPE and DMA branches of a HCI interconnect)"
+    ))
 
 
 

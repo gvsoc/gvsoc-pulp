@@ -164,6 +164,17 @@ class FloonocNetworkInterfaceV2Config(Config):
         "the memory map at construction and against each request at runtime "
         "(asserts builds). 0 disables the checks"
     ))
+    cut_ax: bool = cfg_field(default=True, dump=True, desc=(
+        "Register on the incoming AXI request channels, like the RTL chimney "
+        "CutAx: a request is injected into the router the cycle after it "
+        "arrives. False injects it in the cycle it arrives (CutAx = 0)"
+    ))
+    write_burst_packet: bool = cfg_field(default=False, dump=True, desc=(
+        "Write bursts as in the RTL chimney: one AW per burst, the AW and the W "
+        "beats forming one wormhole packet, requests and responses of a network "
+        "arbitrated by packet, the outstanding limit counting bursts (MaxTxns). "
+        "False sends every write beat as its own burst with its own AW"
+    ))
     mappings: list[FloonocMappingV2] = cfg_field(default_factory=list, init=False, desc=(
         "Memory map: every NI holds the full table"
     ))
@@ -227,6 +238,11 @@ class FloonocNetworkInterfaceV2(gvsoc.systree.Component):
     def o_WIDE_OUTPUT(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('wide_output', itf, signature=IoV2Beat(self.wide_width))
 
+    def o_WIDE_AW(self, itf: gvsoc.systree.SlaveItf):
+        """AW channel of the wide output: the address of each write burst when
+        its AW arrives (write_burst_packet only)."""
+        self.itf_bind('wide_aw', itf, signature='wire<uint64_t>')
+
     def i_LINK(self, nw: int) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'{_NW_NAMES[nw]}_link_in', signature='floonoc_link')
 
@@ -277,8 +293,11 @@ class FlooNocV2MeshFabric:
 
     def __init__(self, container: gvsoc.systree.Component, narrow_width: int, wide_width: int,
             dim_x: int, dim_y: int, ni_outstanding_reqs: int=8, router_input_queue_size: int=2,
-            mappings: dict=None, max_burst_size: int=4096):
+            mappings: dict=None, max_burst_size: int=4096, cut_ax: bool=True,
+            write_burst_packet: bool=False):
         self.container = container
+        self.cut_ax = cut_ax
+        self.write_burst_packet = write_burst_packet
         self.narrow_width = narrow_width
         self.wide_width = wide_width
         self.dim_x = dim_x
@@ -317,7 +336,8 @@ class FlooNocV2MeshFabric:
         return FloonocNetworkInterfaceV2Config(node_id=xy_node_id(x, y),
             narrow_width=self.narrow_width, wide_width=self.wide_width,
             ni_outstanding_reqs=self.ni_outstanding_reqs,
-            max_burst_size=self.max_burst_size)
+            max_burst_size=self.max_burst_size, cut_ax=self.cut_ax,
+            write_burst_packet=self.write_burst_packet)
 
     def _get_tile(self, name: str, x: int, y: int) -> FloonocTileV2:
         tile = self._tiles.get(name)
@@ -429,6 +449,15 @@ class FlooNocV2MeshFabric:
         ni, tile = self._nis[(x, y)]
         comp = tile if tile is not None else ni
         comp.itf_bind('wide_output', itf, signature=IoV2Beat(self.wide_width))
+
+    def o_WIDE_AW_BIND(self, itf: gvsoc.systree.SlaveItf, x: int, y: int):
+        """Bind the AW channel of the wide output of the NI at (x, y)."""
+        ni, tile = self._nis[(x, y)]
+        if tile is not None:
+            ni.o_WIDE_AW(gvsoc.systree.SlaveItf(tile, 'wide_aw', signature='wire<uint64_t>'))
+            tile.itf_bind('wide_aw', itf, signature='wire<uint64_t>', composite_bind=True)
+        else:
+            ni.o_WIDE_AW(itf)
 
     def _ni_router_pos(self, x: int, y: int):
         """Position of the router an NI attaches to.
@@ -555,7 +584,7 @@ class FlooNocV22dMeshNarrowWide(gvsoc.systree.Component):
     """
     def __init__(self, parent: gvsoc.systree.Component, name, narrow_width: int, wide_width:int,
             dim_x: int, dim_y:int, ni_outstanding_reqs: int=8, router_input_queue_size: int=2,
-            max_burst_size: int=4096):
+            max_burst_size: int=4096, cut_ax: bool=True, write_burst_packet: bool=False):
         super().__init__(parent, name)
 
         self.add_property('mappings', {})
@@ -574,7 +603,8 @@ class FlooNocV22dMeshNarrowWide(gvsoc.systree.Component):
             wide_width=wide_width, dim_x=dim_x, dim_y=dim_y,
             ni_outstanding_reqs=ni_outstanding_reqs,
             router_input_queue_size=router_input_queue_size,
-            mappings=self.get_property('mappings'), max_burst_size=max_burst_size)
+            mappings=self.get_property('mappings'), max_burst_size=max_burst_size,
+            cut_ax=cut_ax, write_burst_packet=write_burst_packet)
 
     def __add_mapping(self, name: str, base: int, size: int, x: int, y: int, remove_offset:int =0):
         self._fabric.add_mapping(name, base=base, size=size, x=x, y=y, remove_offset=remove_offset)
@@ -612,6 +642,13 @@ class FlooNocV22dMeshNarrowWide(gvsoc.systree.Component):
 
     def o_WIDE_BIND(self, itf: gvsoc.systree.SlaveItf, x: int, y: int):
         self.itf_bind(f"ni_wide_{x}_{y}", itf, signature=IoV2Beat(self.get_property('wide_width')))
+
+    def o_WIDE_AW_BIND(self, itf: gvsoc.systree.SlaveItf, x: int, y: int):
+        """Bind the AW channel of the wide output at (x, y), for a target timing
+        its W beats on the AW (write_burst_packet only)."""
+        self._fabric.o_WIDE_AW_BIND(gvsoc.systree.SlaveItf(self, f'ni_wide_aw_{x}_{y}',
+            signature='wire<uint64_t>'), x, y)
+        self.itf_bind(f'ni_wide_aw_{x}_{y}', itf, signature='wire<uint64_t>')
 
     def o_NARROW_BIND(self, itf: gvsoc.systree.SlaveItf, x: int, y: int):
         self.itf_bind(f"ni_narrow_{x}_{y}", itf, signature=IoV2Beat(self.get_property('narrow_width')))

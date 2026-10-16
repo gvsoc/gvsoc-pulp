@@ -34,3 +34,7 @@ class Cv32e40pConfig(RiscvConfig):
     debug_exception_handler: int = cfg_field(default=0x1A111600, dump=True, fmt="hex", desc=(
         "Entry address of exceptions taken in debug mode (RTL dm_exception_addr_i input)"
     ))
+    mtvec_addr: int = cfg_field(default=0, dump=True, fmt="hex", desc=(
+        "mtvec base at boot (RTL mtvec_addr_i input), for a chip tying the input to a "
+        "constant; the mtvec_addr port, when driven, overrides it"
+    ))

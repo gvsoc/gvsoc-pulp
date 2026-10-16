@@ -7,3 +7,23 @@
 /cpu/iss_v2/src/cores/cv32e40p/ @marpac3
 /pulp/cv32e40p/ @marpac3
 /examples/cv32e40p/ @marpac3
+# MAGIA platforms
+/pulp/chips/magia/ @TheSSDGuy
+/pulp/chips/magia_v2/ @TheSSDGuy
+/pulp/chips/magia_v3/ @TheSSDGuy
+/magia.py @TheSSDGuy
+/magia_v2.py @TheSSDGuy
+/magia_v3.py @TheSSDGuy
+# Light RedMulE and its HWPE interleaver
+/pulp/light_redmule/ @TheSSDGuy
+# Event unit v3 on io_v2
+/pulp/event_unit/eu_v3_impl_v2.cpp @TheSSDGuy
+/pulp/event_unit/event_unit_v3_v2.py @TheSSDGuy
+# iDMA (io v1) of pulp_open: 3D register front-end and middle-end
+/pulp/idma/pulp_open_dma.* @TheSSDGuy
+/pulp/idma/fe/idma_fe_reg32_3d.* @TheSSDGuy
+/pulp/idma/me/idma_me_3d.* @TheSSDGuy
+# Single-direction AXI/OBI iDMA (idma_v3)
+/models/ips/pulp/idma_v3/axi_obi_dma* @TheSSDGuy
+# PCIe/VFIO memory bridge (io v1 and io_v2)
+/pulp/pcie_vfio_bridge/ @TheSSDGuy

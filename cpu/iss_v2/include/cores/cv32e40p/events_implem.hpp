@@ -48,6 +48,11 @@ inline void Cv32e40pEvents::event_jalr_account(int rs1)
     // The RTL jump line fires on JALR, c.jr and c.jalr too (cv32e40p_id_stage.sv).
     Events::event_jalr_account(rs1);
     this->pending_events |= CV32E40P_HPM_JUMP;
+#if defined(CONFIG_GVSOC_ISS_JUMP_STALL_CYCLES)
+    // Same one-cycle penalty as jal; the generic event_jalr_account() has no
+    // timing, only event_jump_account() does.
+    this->iss.exec.stall_cycles_inc(1);
+#endif
 }
 
 inline void Cv32e40pEvents::event_retire_account(iss_insn_t *insn)

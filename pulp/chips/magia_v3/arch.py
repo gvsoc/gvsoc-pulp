@@ -1,0 +1,173 @@
+# Copyright (C) 2025 Fondazione Chips-IT
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+
+# Authors: Lorenzo Zuolo, Chips-IT (lorenzo.zuolo@chips.it)
+
+from gvrun.attribute import Tree, Value
+from gvrun.parameter import TargetParameter
+
+class MagiaArch:
+    # Single tile address map from magia_tile_pkg.sv
+    #
+    # Convention: *_SIZE is the real size of the window in bytes and *_ADDR_END
+    # is its last byte, so a window covers [START, START + SIZE - 1] and the
+    # next one opens at END + 1. The addresses seen by software are the ones of
+    # the RTL map, so the SDK's own copy of the map stays valid.
+    #
+    # With true sizes the tile L1 windows and the L2 window are whole,
+    # page-aligned multiples of the 4 KiB AXI page, which lets the NoC keep its
+    # burst-legality check enabled: a burst can never straddle two targets.
+    REDMULE_CTRL_ADDR_START = 0x0000_0100
+    REDMULE_CTRL_SIZE       = 0x0000_0100
+    REDMULE_CTRL_ADDR_END   = REDMULE_CTRL_ADDR_START + REDMULE_CTRL_SIZE - 1
+    IDMA_CTRL_ADDR_START    = REDMULE_CTRL_ADDR_END + 1
+    IDMA_CTRL_SIZE          = 0x0000_0400
+    IDMA_CTRL_ADDR_END      = IDMA_CTRL_ADDR_START + IDMA_CTRL_SIZE - 1
+    FSYNC_CTRL_ADDR_START   = IDMA_CTRL_ADDR_END + 1
+    FSYNC_CTRL_SIZE         = 0x0000_0100
+    FSYNC_CTRL_ADDR_END     = FSYNC_CTRL_ADDR_START + FSYNC_CTRL_SIZE - 1
+    EVENT_UNIT_ADDR_START   = FSYNC_CTRL_ADDR_END + 1
+    EVENT_UNIT_SIZE         = 0x0000_1000
+    EVENT_UNIT_ADDR_END     = EVENT_UNIT_ADDR_START + EVENT_UNIT_SIZE - 1
+    CLUSTER_CTRL_START      = EVENT_UNIT_ADDR_END + 1
+    CLUSTER_CTRL_SIZE       = 0x0000_0100
+    CLUSTER_CTRL_END        = CLUSTER_CTRL_START + CLUSTER_CTRL_SIZE - 1
+    RESERVED_ADDR_START     = CLUSTER_CTRL_END + 1
+    RESERVED_SIZE           = 0x0000_E800
+    RESERVED_ADDR_END       = RESERVED_ADDR_START + RESERVED_SIZE - 1
+    STACK_ADDR_START        = RESERVED_ADDR_END + 1
+    STACK_SIZE              = 0x0001_0000
+    STACK_ADDR_END          = STACK_ADDR_START + STACK_SIZE - 1
+    L1_ADDR_START           = STACK_ADDR_END + 1
+    L1_SIZE                 = 0x000E_0000
+    L1_ADDR_END             = L1_ADDR_START + L1_SIZE - 1
+    L1_TILE_OFFSET          = 0x0010_0000
+    L2_ADDR_START           = 0xC000_0000
+    L2_SIZE                 = 0x0CFF_0000 # here in RTL we have 0x4000_0000 but the end address (TEST_END_ADDR_START) then will fall in L2... no sense to me
+    L2_ADDR_END             = L2_ADDR_START + L2_SIZE - 1
+    TEST_END_ADDR_START     = L2_ADDR_END + 1
+    TEST_END_SIZE           = 0x400
+    STDOUT_ADDR_START       = 0xFFFF_0004
+    STDOUT_SIZE             = 0x100
+
+    # Boot address of the tile (magia.sv boot_addr_i, the start of the code in
+    # L2 for the SDK), which is also the reset value of mtvec (mtvec_addr_i)
+    BOOT_ADDR               = 0xCC00_0000
+
+    # From magia_pkg.sv
+    N_MEM_BANKS         = 32        # Number of TCDM banks
+    N_WORDS_BANK        = 8192      # Number of words per TCDM bank
+
+    # Extra
+    BYTES_PER_WORD      = 4
+    TILE_WIDE_WIDTH     = 32        # WIDE_DATA_W / 8, the wide NoC channel and the iDMA data path
+    TILE_CLK_FREQ       = 200 * (10 ** 6)
+
+    # Snitch_Spatz
+    SPATZ_ENABLE               = True
+    SPATZ_BOOTROM_ADDR         = 0x1000_0000
+    SPATZ_BOOTROM_SIZE         = 0x100
+    SPATZ_ROMFILE              = ''
+
+    # Pulp Cores
+    PULP_ENABLE         = True
+    NB_PULP_CORES       = 8
+
+    # Tiles assignment
+    N_TILES_X           = 1
+    N_TILES_Y           = 1
+
+    ENABLE_PCIE_VFIO            = False
+
+class MagiaTree(Tree):
+    """Customizable knobs of the platform.
+
+    The tree-reshaping knobs (mesh size n_tiles_x/n_tiles_y and the per-tile
+    nb_pulp_cores) are **target parameters**, i.e. they belong to the target
+    *name*, not to the run command line:
+
+        make TARGETS="magia_v3:n_tiles_x=2,n_tiles_y=2" build
+        gvrun --target=magia_v3:n_tiles_x=2,n_tiles_y=2 --param binary=<elf> run
+
+    gvsoc bakes the whole component tree (its shape + every model's typed
+    config) into libplatform_tree_<target>.so and checks it against the systree
+    it rebuilds at run time. Reshaping the tree from a run-time --attr
+    invalidates that library and drops to the JSON fallback, which cannot carry
+    the typed (io_v2 / iss_v2) configurations -> a component comes up with an
+    uninitialized config and the sim dies (std::bad_alloc) for no visible
+    reason. Embedding the reshaping knobs in the target name makes build and run
+    coherent by construction. Hence these are TargetParameters, not Values:
+    --attr magia_v3/n_tiles_x=... is now rejected instead of silently
+    mismatching.
+
+    spatz_romfile stays a plain run-time attribute (--attr
+    magia_v3/spatz_romfile=<path>) on purpose: it is a stim_file path that
+    differs between build and run and is overlaid at run time, never entering
+    the compiled tree.
+    """
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
+        self.n_tiles_x = TargetParameter(parent, name='n_tiles_x',
+            value=MagiaArch.N_TILES_X, cast=int,
+            description='Number of tiles on X dimension').value
+        self.n_tiles_y = TargetParameter(parent, name='n_tiles_y',
+            value=MagiaArch.N_TILES_Y, cast=int,
+            description='Number of tiles on Y dimension').value
+
+        self.nb_clusters = self.n_tiles_x*self.n_tiles_y
+
+        if MagiaArch.SPATZ_ENABLE:
+            self.romfile = Value(self, 'spatz_romfile', MagiaArch.SPATZ_ROMFILE, cast=str,
+                description='Snitch_Spatz rom file')
+            print("SNITCH_SPATZ complex enabled")
+
+        if MagiaArch.PULP_ENABLE:
+            self.nb_pulp_cores = TargetParameter(parent, name='nb_pulp_cores',
+                value=MagiaArch.NB_PULP_CORES, cast=int,
+                description='Number of pulp cores').value
+            print(f"PULP complex enabled with {self.nb_pulp_cores} cores")
+
+class MagiaDSE:
+    # L2 of the testbench (magia_l2_mem_wrapper.sv): an axi_sim_mem answering
+    # one cycle after the request, behind an axi_dw_upsizer on each narrow
+    # port, which delays the narrow requests by two cycles (the wide ports
+    # reach the memory directly)
+    SOC_L2_LATENCY              = 1
+    SOC_L2_NARROW_UPSIZER_LATENCY = 2
+    TILE_ICACHE_REFILL_LATENCY  = 2
+    # Cost of an L0 miss on top of the L1 access in snitch_icache: refill
+    # request to the L1, lookup (tag then data with SERIAL_LOOKUP, measured on
+    # the RTL control core: L0 miss -> L1 hit -> L0 hit in 3 cycles; one less
+    # with the parallel lookup of the Spatz i$), write into the L0
+    TILE_ICACHE_L0_REFILL_LATENCY_SERIAL   = 3
+    TILE_ICACHE_L0_REFILL_LATENCY_PARALLEL = 2
+    TILE_TCDM_LATENCY           = 1
+
+    # Outstanding bursts allowed per input port of the tile beat x-bars (the
+    # RTL AXI x-bars register all ports and allow a few outstanding
+    # transactions each). Per input, so one busy master cannot starve the
+    # others.
+    TILE_AXI_XBAR_MAX_BURSTS    = 4
+    TILE_OBI_XBAR_MAX_BURSTS    = 4
+    # The wide x-bar only joins the two iDMA channels onto the NoC wide
+    # channel: in the RTL this is axi_rw_join, combinational and with no limit
+    # of its own, so the bound is the iDMA one (iDMA_NumAxInFlight)
+    TILE_WIDE_XBAR_MAX_BURSTS   = 16
+
+    # iDMA channels (magia_tile_pkg.sv iDMA_* parameters)
+    TILE_IDMA_NUM_AX_IN_FLIGHT  = 16
+    TILE_IDMA_BUFFER_DEPTH      = 3
+    TILE_IDMA_JOB_FIFO_DEPTH    = 16

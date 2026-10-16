@@ -43,6 +43,9 @@ class IdmaBackend;
  *   0x004 + 4 (M + s)  NEXT_ID_s: a read launches the transfer on stream s
  *                      and returns its id
  *   0x004 + 4 (2M + s) DONE_ID_s: completion counter of stream s
+ *                      (M is the number of entries of each multireg, the
+ *                      number of streams unless multireg_count says more;
+ *                      the entries past the last stream read as zero)
  *   0x0D0 / 0x0D8      destination / source address
  *   0x0E0              length
  *   0x0E8 / 0x0F0 / 0x0F8  dst stride 2 / src stride 2 / reps 2
@@ -94,7 +97,12 @@ public:
     /// @param nb_streams    Streams (id counters, STATUS / NEXT_ID / DONE_ID).
     /// @param nb_events     Completion event outputs (event_<n>).
     /// @param launch_bubble Extra cycles of a launch from idle (clock gate).
-    IdmaFeReg(vp::Component *top, int nb_ports, int nb_streams, int nb_events, int launch_bubble);
+    /// @param multireg_count Entries of each of the STATUS / NEXT_ID / DONE_ID
+    ///                      multiregs; 0 packs them to nb_streams. The RTL
+    ///                      register file of iDMA v0.6.4 reserves 16 entries
+    ///                      whatever the number of streams.
+    IdmaFeReg(vp::Component *top, int nb_ports, int nb_streams, int nb_events, int launch_bubble,
+        int multireg_count=0);
 
     /// Hardware reset; the block starts gated when the enable wire is bound.
     void reset(bool active) override;
@@ -168,4 +176,6 @@ private:
     int launch_bubble;
     /// Round-robin position among the ports waiting for a stream.
     int rr_port = 0;
+    /// Entries of each per-stream multireg (>= number of streams).
+    int multireg_count;
 };

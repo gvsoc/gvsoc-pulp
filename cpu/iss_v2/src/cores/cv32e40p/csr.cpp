@@ -402,6 +402,10 @@ static void cv32e40p_fp_wrap(iss_decoder_item_t *item,
     iss_reg_t (*stub)(Iss *, iss_insn_t *, iss_reg_t))
 {
     if (item->u.insn.stub_handler == stub) return;
+    /* The decoder items are shared by all the cores built with the same ISA,
+     * so another core may have installed the stubs already. The rounding-mode
+     * stub then stands for the plain one it replaced. */
+    if (item->u.insn.stub_handler == &cv32e40p_fp_rm_stub && stub == &cv32e40p_fp_stub) return;
     if (item->u.insn.stub_handler != nullptr && item->u.insn.stub_handler != &cv32e40p_fp_stub)
         throw std::logic_error("cv32e40p FP stub: instruction already has a stub handler");
     item->u.insn.stub_handler = stub;

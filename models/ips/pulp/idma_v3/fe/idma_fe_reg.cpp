@@ -97,13 +97,20 @@ IdmaFeReg::RegPort::RegPort(IdmaFeReg *top, int id)
 
 
 IdmaFeReg::IdmaFeReg(vp::Component *top, int nb_ports, int nb_streams, int nb_events,
-    int launch_bubble)
+    int launch_bubble, int multireg_count)
 :   Block(top, "fe"),
     trace_irq(*this, "irq", 1, vp::SignalCommon::ResetKind::HighZ),
     done_event(this, &IdmaFeReg::done_handler),
-    launch_bubble(launch_bubble)
+    launch_bubble(launch_bubble),
+    multireg_count(multireg_count == 0 ? nb_streams : multireg_count)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
+
+    if (this->multireg_count < nb_streams)
+    {
+        this->trace.fatal("idma_v3: each multireg needs one entry per stream (streams: %d, "
+            "entries: %d)\n", nb_streams, this->multireg_count);
+    }
 
     for (int i = 0; i < nb_ports; i++)
     {
@@ -207,12 +214,28 @@ vp::IoReqStatus IdmaFeReg::req(vp::Block *__this, vp::IoReq *req, int port_id)
 
     req->set_resp_status(vp::IO_RESP_OK);
 
-    // Per-stream registers: STATUS, then NEXT_ID, then DONE_ID blocks
-    if (offset >= REG_STREAM_BASE && offset < REG_STREAM_BASE + 12 * nb_streams)
+    // Per-stream registers: STATUS, then NEXT_ID, then DONE_ID blocks of
+    // multireg_count entries each
+    int multireg_count = _this->multireg_count;
+    if (offset >= REG_STREAM_BASE && offset < REG_STREAM_BASE + 12 * multireg_count)
     {
         int index = (offset - REG_STREAM_BASE) / 4;
-        int kind = index / nb_streams;
-        int stream = index % nb_streams;
+        int kind = index / multireg_count;
+        int stream = index % multireg_count;
+
+        if (stream >= nb_streams)
+        {
+            // Entry reserved by the register file for a stream which does not
+            // exist: reads as zero, writes are dropped
+            _this->trace.force_warning("Access to the register of a missing stream (port: %d, "
+                "offset: 0x%lx, stream: %d)\n", port_id, offset, stream);
+            if (!is_write)
+            {
+                *data = 0;
+            }
+            return vp::IO_REQ_DONE;
+        }
+
         Stream *s = _this->streams[stream];
 
         if (kind == 0)
