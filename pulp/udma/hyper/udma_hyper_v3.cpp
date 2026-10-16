@@ -25,9 +25,11 @@
 #include "vp/itf/hyper.hpp"
 
 
-Hyper_periph_v3::Hyper_periph_v3(udma *top, int id, int itf_id) : Udma_periph(top, id)
+Hyper_periph_v3::Hyper_periph_v3(udma *top, int id, int itf_id, int nb_tran_ids) : Udma_periph(top, id)
 {
   std::string itf_name = "hyper" + std::to_string(itf_id);
+
+  this->nb_tran_ids = nb_tran_ids;
 
   top->traces.new_trace(itf_name, &trace, vp::DEBUG);
 
@@ -37,8 +39,8 @@ Hyper_periph_v3::Hyper_periph_v3(udma *top, int id, int itf_id) : Udma_periph(to
   this->hyper_itf.set_sync_cycle_meth(&Hyper_periph_v3::rx_sync);
   top->new_master_port(itf_name, &this->hyper_itf, (vp::Block *)this);
 
-  this->regs = new unsigned int*[HYPER_NB_CHANNELS]{0};
-  for(int i=0; i<HYPER_NB_CHANNELS; i++)
+  this->regs = new unsigned int*[this->nb_tran_ids]{0};
+  for(int i=0; i<this->nb_tran_ids; i++)
   {
     this->regs[i] = new unsigned int[HYPER_NB_CONFIG_REGS]{0};
   }
@@ -55,7 +57,10 @@ Hyper_periph_v3::Hyper_periph_v3(udma *top, int id, int itf_id) : Udma_periph(to
 
   int fifo_depth = HYPER_FIFO_DEPTH;
 
-  for(int i=0; i<HYPER_NB_CHANNELS; i++)
+  free_fifo.resize(this->nb_tran_ids);
+  pending_fifo.resize(this->nb_tran_ids);
+
+  for(int i=0; i<this->nb_tran_ids; i++)
   {
     free_fifo[i] = new Udma_queue<Hyper_transfer>(fifo_depth);
     pending_fifo[i] = new Udma_queue<Hyper_transfer>(fifo_depth);
@@ -65,8 +70,8 @@ Hyper_periph_v3::Hyper_periph_v3(udma *top, int id, int itf_id) : Udma_periph(to
     }
   }
 
-  this->cfg_setup = new bool[HYPER_NB_CHANNELS]{false};
-  this->command_word = new bool[HYPER_NB_CHANNELS]{false};
+  this->cfg_setup = new bool[this->nb_tran_ids]{false};
+  this->command_word = new bool[this->nb_tran_ids]{false};
 }
  
 
@@ -214,11 +219,11 @@ void Hyper_periph_v3::handle_pending_word(vp::Block *__this, vp::ClockEvent *eve
         _this->trace.msg("Current transfer is finished\n");
         if (!_this->ca.read)
         {
-          _this->top->trigger_event(ARCHI_SOC_EVENT_HYPER_EOT_TX);
+          _this->top->trigger_event(UDMA_EVENT_ID(_this->id) + ARCHI_UDMA_HYPER_EOT_TX_EVT);
         }
         else
         {
-          _this->top->trigger_event(ARCHI_SOC_EVENT_HYPER_EOT_RX);
+          _this->top->trigger_event(UDMA_EVENT_ID(_this->id) + ARCHI_UDMA_HYPER_EOT_RX_EVT);
         }
       }
     }
@@ -534,9 +539,9 @@ vp::IoReqStatus Hyper_periph_v3::custom_req(vp::IoReq *req, uint64_t offset, int
     return vp::IO_REQ_INVALID;
   }
 
-  if(id == HYPER_NB_CHANNELS)
+  if(id == this->nb_tran_ids)
   {
-    access_common_regs(req, offset - (HYPER_COMMON_REGS_OFFSET), id);
+    access_common_regs(req, offset - (HYPER_CHANNELS_ID_OFFSET(this->nb_tran_ids)), id);
   }
   else
   {
@@ -752,7 +757,7 @@ int Hyper_periph_v3::update_trans_id_alloc()
 {
   int trans_id_alloc;
 
-  for(int i=0; i<HYPER_NB_CHANNELS; i++)
+  for(int i=0; i<this->nb_tran_ids; i++)
   {
     if(get_busy_reg(i) == 0)
     {
@@ -761,7 +766,7 @@ int Hyper_periph_v3::update_trans_id_alloc()
     }
   }
 
-  return HYPER_NB_CHANNELS;
+  return this->nb_tran_ids;
 }
 
 /* fetches from tran_id fifo in round robin manner */
@@ -770,12 +775,12 @@ int Hyper_periph_v3::transfer_arbiter(int id)
   int new_id = id;
 
   id++;
-  if (id == HYPER_NB_CHANNELS)
+  if (id == this->nb_tran_ids)
   {
     id = 0;
   }
 
-  for(int i=0; i<HYPER_NB_CHANNELS; i++)
+  for(int i=0; i<this->nb_tran_ids; i++)
   {
     if(!pending_fifo[id]->is_empty())
     {
@@ -785,7 +790,7 @@ int Hyper_periph_v3::transfer_arbiter(int id)
     else
     {
       id++;
-      if(id == HYPER_NB_CHANNELS)
+      if(id == this->nb_tran_ids)
       {
         id = 0;
       }
@@ -808,14 +813,14 @@ vp::IoReqStatus Hyper_periph_v3::req(vp::IoReq *req, uint64_t offset)
 
   int id;
 
-  for(int i=1; i<HYPER_NB_CHANNELS + 1; i++)
+  for(int i=1; i<this->nb_tran_ids + 1; i++)
   {
     if(offset < HYPER_CHANNELS_ID_OFFSET(i))
     {
       id = i - 1;
-      i = HYPER_NB_CHANNELS;
+      i = this->nb_tran_ids;
     }
-    else if(i == HYPER_NB_CHANNELS)
+    else if(i == this->nb_tran_ids)
     {
       id = i;
     }

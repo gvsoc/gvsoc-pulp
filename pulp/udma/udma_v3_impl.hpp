@@ -827,7 +827,7 @@ class Hyper_periph_v3 : public Udma_periph
   friend class Hyper_v3_rx_channel;
 
 public:
-  Hyper_periph_v3(udma *top, int id, int itf_id);
+  Hyper_periph_v3(udma *top, int id, int itf_id, int nb_tran_ids);
   vp::IoReqStatus custom_req(vp::IoReq *req, uint64_t offset, int id);
   static void rx_sync(vp::Block *__this, int data);
   void reset(bool active);
@@ -901,8 +901,9 @@ private:
   vp::IoReqStatus hyper_cfg_req(vp::IoReq *req, int id);
   vp::IoReqStatus access_common_regs(vp::IoReq *req, uint64_t offset, int id);
   vp::IoReqStatus access_private_regs(vp::IoReq *req, uint64_t offset, int id);
-  Udma_queue<Hyper_transfer> *free_fifo[HYPER_NB_CHANNELS];
-  Udma_queue<Hyper_transfer> *pending_fifo[HYPER_NB_CHANNELS];
+  int nb_tran_ids;
+  std::vector<Udma_queue<Hyper_transfer> *> free_fifo;
+  std::vector<Udma_queue<Hyper_transfer> *> pending_fifo;
   Hyper_transfer *current_command;
   int channel_id;
   int mem_sel;

@@ -564,9 +564,50 @@ udma::udma(vp::ComponentConf &config)
         // }
         if (version == 3)
         {
-          Hyper_periph_v3 *periph = new Hyper_periph_v3(this, id, j);
+          // The ids list gives the periph slots of the hyper: one per tran_id plus the
+          // common registers one, which is the last
+          int nb_ids = (int)ids->get_size();
+          int nb_tran_ids = nb_ids - 1;
+
+          if (nb_channels != 1)
+          {
+            throw logic_error("Hyper v3 only supports 1 channel, ids are its periph slots (nb_channels: " +
+              std::to_string(nb_channels) + ")");
+          }
+
+          if (nb_tran_ids < 1)
+          {
+            throw logic_error("Hyper v3 needs at least 2 ids, 1 tran_id and the common registers (nb_ids: " +
+              std::to_string(nb_ids) + ")");
+          }
+
+          if ((int)offsets->get_size() != nb_ids)
+          {
+            throw logic_error("Hyper v3 ids and offsets have different sizes (ids: " +
+              std::to_string(nb_ids) + ", offsets: " + std::to_string(offsets->get_size()) + ")");
+          }
+
+          for (int k=1; k<nb_ids; k++)
+          {
+            if (ids->get_elem(k)->get_int() != id + k ||
+                offsets->get_elem(k)->get_int() != offset + k*UDMA_PERIPH_AREA_SIZE)
+            {
+              throw logic_error("Hyper v3 ids and offsets must be contiguous (index: " +
+                std::to_string(k) + ")");
+            }
+          }
+
+          if (id + nb_tran_ids >= nb_periphs)
+          {
+            throw logic_error(
+              "Hyper periph does not fit in udma (id: " + std::to_string(id) +
+              ", nb_tran_ids: " + std::to_string(nb_tran_ids) +
+              ", nb_periphs: " + std::to_string(nb_periphs) + ")");
+          }
+
+          Hyper_periph_v3 *periph = new Hyper_periph_v3(this, id, j, nb_tran_ids);
           periphs[id] = periph;
-          for(int channel_count=1; channel_count<=HYPER_NB_CHANNELS; channel_count++)
+          for(int channel_count=1; channel_count<=nb_tran_ids; channel_count++)
           {
             periphs[id+channel_count] = periph;
           }
@@ -810,11 +851,7 @@ vp::IoReqStatus udma::periph_req(vp::IoReq *req, uint64_t offset)
 
   int periph_id = UDMA_PERIPH_GET(offset);
 
-#if HAS_HYPER
-  if (periph_id >= nb_periphs + HYPER_NB_CHANNELS || periphs[periph_id] == NULL)
-#else
   if (periph_id >= nb_periphs || periphs[periph_id] == NULL)
-#endif
   {
     trace.force_warning("Accessing invalid periph (id: %d)\n", periph_id);
     return vp::IO_REQ_INVALID;
