@@ -51,6 +51,7 @@ void NetworkQueueV2::reset(bool active)
         this->locked_input = -1;
         this->rr_input = 0;
         this->stalled = false;
+        this->last_inject_cycle = -1;
     }
 }
 
@@ -91,7 +92,16 @@ void NetworkQueueV2::check()
     int input = this->next_input();
     if (!this->stalled && input != -1)
     {
-        this->send_router_req(input);
+        // One flit per cycle on the link: one already left in this cycle,
+        // the next one goes in the next cycle.
+        if (this->last_inject_cycle == this->ni.clock.get_cycles())
+        {
+            this->ni.fsm_event.enqueue();
+        }
+        else
+        {
+            this->send_router_req(input);
+        }
     }
 }
 
@@ -129,11 +139,15 @@ void NetworkQueueV2::handle_req(vp::IoReq *req, bool wide, int input)
     {
         this->enqueue_router_req(req, false, wide, true, input);
     }
+    // The first flit leaves in the cycle the request arrives.
+    this->check();
 }
 
 void NetworkQueueV2::handle_rsp(FloonocReqV2 *req, bool is_address, int input)
 {
     this->enqueue_router_rsp(req, is_address, input);
+    // In the cycle the target answers.
+    this->check();
 }
 
 
@@ -334,6 +348,7 @@ void NetworkQueueV2::send_router_req(int input)
 {
     FloonocReqV2 *req = this->inputs[input].front();
     this->inputs[input].pop();
+    this->last_inject_cycle = this->ni.clock.get_cycles();
 
     if (this->locked_input == -1)
     {

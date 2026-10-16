@@ -93,6 +93,8 @@ private:
     // Inputs which refused a flit and owe a notification when they have room.
     bool owes_room[MAX_INPUTS];
     bool stalled;
+    // Cycle of the last flit injected, the link taking one per cycle.
+    int64_t last_inject_cycle = -1;
 };
 
 /**
