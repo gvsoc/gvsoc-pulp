@@ -95,6 +95,8 @@ private:
     bool stalled;
     // Cycle of the last flit injected, the link taking one per cycle.
     int64_t last_inject_cycle = -1;
+    // Cycle the router freed a slot of its full input, usable from the next one
+    int64_t unstall_cycle = -1;
 };
 
 /**

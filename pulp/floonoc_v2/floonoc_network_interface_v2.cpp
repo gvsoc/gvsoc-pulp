@@ -52,6 +52,7 @@ void NetworkQueueV2::reset(bool active)
         this->rr_input = 0;
         this->stalled = false;
         this->last_inject_cycle = -1;
+        this->unstall_cycle = -1;
     }
 }
 
@@ -94,7 +95,8 @@ void NetworkQueueV2::check()
     {
         // One flit per cycle on the link: one already left in this cycle,
         // the next one goes in the next cycle.
-        if (this->last_inject_cycle == this->ni.clock.get_cycles())
+        if (this->last_inject_cycle == this->ni.clock.get_cycles() ||
+            this->unstall_cycle == this->ni.clock.get_cycles())
         {
             this->ni.fsm_event.enqueue();
         }
@@ -109,6 +111,7 @@ void NetworkQueueV2::unstall()
 {
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Unstalling queue\n");
     this->stalled = false;
+    this->unstall_cycle = this->ni.clock.get_cycles();
     this->ni.fsm_event.enqueue();
 }
 
