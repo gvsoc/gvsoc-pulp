@@ -102,9 +102,9 @@ public:
 
     /// Write managers: true when the next data beat of the burst heading the
     /// write FIFO can be assembled this cycle; returns its split, beat index
-    /// and bus-space byte mask.
+    /// and the bus bytes it writes.
     bool write_beat_ready(IdmaWriteManager *manager, IdmaSplit **split, int *beat_idx,
-        uint64_t *mask_out, int64_t now);
+        IdmaBeatBytes *bytes_out, int64_t now);
     /// Write managers: pop the bytes of that beat into a full-width bus word.
     void write_beat_take(IdmaWriteManager *manager, uint8_t *bus, int64_t now);
     /// Write managers: the response of the oldest outstanding write burst
@@ -112,8 +112,8 @@ public:
     /// its last one. @p error reports a failed burst (traced only).
     void write_burst_done(IdmaWriteManager *manager, bool error);
 
-    /// Byte mask (bus space) of beat @p beat_idx of a split.
-    uint64_t beat_mask(const IdmaSplit &split, int beat_idx) const;
+    /// Bus bytes of beat @p beat_idx of a split.
+    IdmaBeatBytes beat_bytes(const IdmaSplit &split, int beat_idx) const;
 
     /// Evaluate the pipeline again in @p cycles cycles (IdmaBeWake).
     void wake(int cycles=1) override;

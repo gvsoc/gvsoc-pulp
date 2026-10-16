@@ -84,7 +84,7 @@ private:
         /// Bytes left to split.
         uint64_t length = 0;
         /// Byte rotation applied to this side's beats (read or write shift).
-        uint8_t shift = 0;
+        uint16_t shift = 0;
         /// Bursts of this side limited to 2^max_llen bus words.
         bool reduce_len = false;
         int max_llen = 0;

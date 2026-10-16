@@ -142,7 +142,7 @@ struct Idma1dReq
 /// addresses [base + k * width, base + (k + 1) * width) where base is addr
 /// rounded down to the width. Only the bytes of the split are valid in the
 /// first beat (from offset) and in the last one (up to tailer), which is
-/// what IdmaBackend::beat_mask() computes.
+/// what IdmaBackend::beat_bytes() computes.
 struct IdmaSplit
 {
     /// Unaligned first byte address of the split.
@@ -150,11 +150,11 @@ struct IdmaSplit
     /// Bytes of the split.
     uint32_t num_bytes = 0;
     /// Leading invalid bytes of the first beat (addr & (w - 1)).
-    uint8_t offset = 0;
+    uint16_t offset = 0;
     /// (num_bytes + offset) & (w - 1); 0 means the last beat is full.
-    uint8_t tailer = 0;
+    uint16_t tailer = 0;
     /// read_shift or write_shift of the transfer (byte rotation).
-    uint8_t shift = 0;
+    uint16_t shift = 0;
     /// Beats of the split (AXI: AxLEN + 1).
     uint16_t num_beats = 1;
     /// Single-beat split.

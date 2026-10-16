@@ -28,8 +28,8 @@ class SnitchDmaV3Config(Config):
     """
 
     axi_width: int = cfg_field(default=64, desc=(
-        "Width of the data path and of the AXI masters in bytes (the RTL "
-        "DataWidth / 8)."
+        "Width of the data path and of the AXI masters in bytes, a power of "
+        "two (the RTL DataWidth / 8)."
     ))
 
     num_ax_in_flight: int = cfg_field(default=3, desc=(

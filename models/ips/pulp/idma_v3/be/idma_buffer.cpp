@@ -34,7 +34,7 @@ void IdmaByteLaneBuffer::configure(int width, int depth)
 {
     this->width = width;
     this->depth = depth;
-    this->full_mask = width == 64 ? ~(uint64_t)0 : (((uint64_t)1 << width) - 1);
+    this->lane_mask = width - 1;
     this->rows.assign(width * depth, 0);
     this->lanes.assign(width, Lane());
     this->reset();
@@ -67,7 +67,7 @@ void IdmaByteLaneBuffer::split_lanes()
 
 
 
-bool IdmaByteLaneBuffer::can_push(uint64_t mask_in, int64_t now) const
+bool IdmaByteLaneBuffer::can_push(IdmaBeatBytes in, int shift, int64_t now) const
 {
     if (this->last_beat_cycle == now)
     {
@@ -79,9 +79,9 @@ bool IdmaByteLaneBuffer::can_push(uint64_t mask_in, int64_t now) const
         return this->shared.count < this->depth;
     }
 
-    for (int i = 0; i < this->width; i++)
+    for (int j = in.first; j < in.first + in.count; j++)
     {
-        if (((mask_in >> i) & 1) && this->lanes[i].count >= this->depth)
+        if (this->lanes[(j - shift) & this->lane_mask].count >= this->depth)
         {
             return false;
         }
@@ -92,13 +92,13 @@ bool IdmaByteLaneBuffer::can_push(uint64_t mask_in, int64_t now) const
 
 
 
-void IdmaByteLaneBuffer::push(uint64_t mask_in, const uint8_t *bus, int shift, int64_t now)
+void IdmaByteLaneBuffer::push(IdmaBeatBytes in, const uint8_t *bus, int shift, int64_t now)
 {
     this->last_beat_cycle = now;
 
     if (this->uniform)
     {
-        if (mask_in == this->full_mask && shift == 0)
+        if (this->is_full(in, shift))
         {
             // All lanes together: one row copy
             int slot = this->shared.head + this->shared.count;
@@ -115,27 +115,25 @@ void IdmaByteLaneBuffer::push(uint64_t mask_in, const uint8_t *bus, int shift, i
         this->split_lanes();
     }
 
-    for (int i = 0; i < this->width; i++)
+    for (int j = in.first; j < in.first + in.count; j++)
     {
-        if ((mask_in >> i) & 1)
+        int i = (j - shift) & this->lane_mask;
+        Lane &lane = this->lanes[i];
+        int slot = lane.head + lane.count;
+        if (slot >= this->depth)
         {
-            Lane &lane = this->lanes[i];
-            int slot = lane.head + lane.count;
-            if (slot >= this->depth)
-            {
-                slot -= this->depth;
-            }
-            this->row(slot)[i] = bus[(i + shift) & (this->width - 1)];
-            lane.count++;
-            lane.last_push_cycle = now;
-            this->bytes++;
+            slot -= this->depth;
         }
+        this->row(slot)[i] = bus[j];
+        lane.count++;
+        lane.last_push_cycle = now;
+        this->bytes++;
     }
 }
 
 
 
-bool IdmaByteLaneBuffer::can_pop(uint64_t mask_out, int shift, int64_t now) const
+bool IdmaByteLaneBuffer::can_pop(IdmaBeatBytes out, int shift, int64_t now) const
 {
     if (this->uniform)
     {
@@ -143,14 +141,11 @@ bool IdmaByteLaneBuffer::can_pop(uint64_t mask_out, int shift, int64_t now) cons
         return visible > 0;
     }
 
-    for (int j = 0; j < this->width; j++)
+    for (int j = out.first; j < out.first + out.count; j++)
     {
-        if ((mask_out >> j) & 1)
+        if (this->visible((j + shift) & this->lane_mask, now) <= 0)
         {
-            if (this->visible((j + shift) & (this->width - 1), now) <= 0)
-            {
-                return false;
-            }
+            return false;
         }
     }
 
@@ -159,11 +154,11 @@ bool IdmaByteLaneBuffer::can_pop(uint64_t mask_out, int shift, int64_t now) cons
 
 
 
-void IdmaByteLaneBuffer::pop(uint64_t mask_out, int shift, uint8_t *bus, int64_t now)
+void IdmaByteLaneBuffer::pop(IdmaBeatBytes out, int shift, uint8_t *bus, int64_t now)
 {
     if (this->uniform)
     {
-        if (mask_out == this->full_mask && shift == 0)
+        if (this->is_full(out, shift))
         {
             std::memcpy(bus, this->row(this->shared.head), this->width);
             this->shared.head++;
@@ -178,21 +173,18 @@ void IdmaByteLaneBuffer::pop(uint64_t mask_out, int shift, uint8_t *bus, int64_t
         this->split_lanes();
     }
 
-    for (int j = 0; j < this->width; j++)
+    for (int j = out.first; j < out.first + out.count; j++)
     {
-        if ((mask_out >> j) & 1)
+        int i = (j + shift) & this->lane_mask;
+        Lane &lane = this->lanes[i];
+        bus[j] = this->row(lane.head)[i];
+        lane.head++;
+        if (lane.head == this->depth)
         {
-            int i = (j + shift) & (this->width - 1);
-            Lane &lane = this->lanes[i];
-            bus[j] = this->row(lane.head)[i];
-            lane.head++;
-            if (lane.head == this->depth)
-            {
-                lane.head = 0;
-            }
-            lane.count--;
-            this->bytes--;
+            lane.head = 0;
         }
+        lane.count--;
+        this->bytes--;
     }
 
     // Back to the shared bookkeeping once drained

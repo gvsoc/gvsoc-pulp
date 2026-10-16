@@ -270,8 +270,8 @@ bool IdmaAxiWrite::tick(int64_t now)
 
     IdmaSplit *split;
     int beat_idx;
-    uint64_t mask;
-    if (!this->be->write_beat_ready(this, &split, &beat_idx, &mask, now))
+    IdmaBeatBytes bytes;
+    if (!this->be->write_beat_ready(this, &split, &beat_idx, &bytes, now))
     {
         return false;
     }
@@ -283,8 +283,8 @@ bool IdmaAxiWrite::tick(int64_t now)
     uint8_t *bus_word = ctx->stage.data() + beat_idx * this->width;
     this->be->write_beat_take(this, bus_word, now);
 
-    int first = __builtin_ctzll(mask);
-    int count = __builtin_popcountll(mask);
+    int first = bytes.first;
+    int count = bytes.count;
 
     vp::IoReq *beat = this->req_allocator->alloc();
     beat->prepare();

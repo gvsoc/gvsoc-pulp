@@ -110,6 +110,19 @@ def build_case(case_name: str) -> dict:
     if case_name == 'w8_1d_4k':
         # el1-like width for cross-checking the topology
         return {**common, 'axi_width': 8, 'max_pending': 8, 'transfers': [transfer(src, dst, 4096, seed=0x81)]}
+    # SoftHier width: 512-byte beats, so a 4 KiB burst is 8 beats and the
+    # byte shifts through the lane buffer go beyond 64
+    w512 = dict(axi_width=512, max_pending=4)
+    if case_name == 'w512_1d_32k':
+        return {**common, **w512, 'transfers': [transfer(src, dst, 32768, seed=0x91)]}
+    if case_name == 'w512_1d_unaligned':
+        return {**common, **w512, 'transfers': [transfer(src + 5, dst + 300, 5000, seed=0x92)]}
+    if case_name == 'w512_page_cross':
+        return {**common, **w512, 'transfers': [transfer(src + 0x900, dst + 0x40, 4096, seed=0x93)]}
+    if case_name == 'w512_2d_unaligned':
+        return {**common, **w512, 'transfers': [
+            transfer(src + 70, dst + 450, 1000, src_stride=1100, dst_stride=1300, reps=8, nd=1,
+                     seed=0x94)]}
     if case_name == 'speed_big':
         return {**common, 'axi_width': 8, 'max_pending': 8, 'raw_coupling': 0, 'quit': 5_250_000,
             'transfers': [
