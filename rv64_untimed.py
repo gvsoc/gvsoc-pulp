@@ -93,8 +93,12 @@ class Soc(st.Component):
         self.bind(ico, 'plic', plic, 'input')
         self.bind(uart, 'irq', plic, 'irq1')
 
+        # HTIF, so that bare-metal programs exit through tohost: the core accesses
+        # its memory directly, so it polls tohost itself rather than a watchpoint
+        # on the bus seeing the write. Binaries without a tohost symbol are not
+        # polled.
         host = iss.Riscv(self, 'host', isa=isa, boot_addr=0x1000, timed=False,
-            memory_start=0x80000000, memory_size=0x80000000)
+            memory_start=0x80000000, memory_size=0x80000000, htif=True)
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 
@@ -113,6 +117,7 @@ class Soc(st.Component):
         self.bind(plic, 'm_irq_0', host, 'mei')
 
         self.loader = loader
+        self.host = host
         self.register_binary_handler(self.handle_binary)
 
     @override
@@ -122,6 +127,9 @@ class Soc(st.Component):
         binary = self.get_parameter('binary')
         if binary is not None:
             self.loader.set_binary(binary)
+            # The binary does not come as a tree executable, so the core cannot find
+            # tohost/fromhost by itself
+            self.host.handle_htif(binary)
 
     def handle_binary(self, binary: str):
         # This gets called when an executable is attached to a hierarchy of components containing
