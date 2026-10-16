@@ -26,7 +26,7 @@ from io_v2 models:
   narrow masters are the scalar ports of the cores, the vector ports and the
   narrow NoC input; the wide masters are the iDMA (through the cluster wide
   crossbar) and the wide NoC input.
-- iDMA v2 (Snitch offload front-end) on the wide crossbar: accesses to the
+- iDMA v3 (xdma offload front-end) on the wide crossbar: accesses to the
   local TCDM loop back to it, the rest leaves on the wide SoC port.
 - memory_v3 instruction and stack memories, and the cluster registers with
   the hardware barrier.
@@ -45,7 +45,8 @@ from pulp.snitch.snitch_cluster.spatz.spatz_tcdm_interco import (
     SpatzTcdmInterco, SpatzTcdmIntercoConfig)
 from pulp.cpu.iss.spatz import Spatz
 from pulp.cpu.iss.spatz_config import SpatzConfig
-from ips.pulp.idma_v2.snitch_dma import SnitchDmaV2
+from ips.pulp.idma_v3.snitch_dma import SnitchDmaV3
+from ips.pulp.idma_v3.snitch_dma_config import SnitchDmaV3Config
 import utils.loader.loader_v2 as loader_v2
 from pulp.chips.softhier_v2.common.cluster_csr import ClusterCSR, ClusterCsrConfig
 
@@ -213,9 +214,12 @@ class ClusterUnit(gvsoc.systree.Component):
         csr = ClusterCSR(self, 'csr', config=ClusterCsrConfig(nb_cores=arch.num_core,
             cluster_id=arch.cluster_id))
 
-        # iDMA, offloaded from the last core
-        idma = SnitchDmaV2(self, 'idma', transfer_queue_size=arch.idma_outstand_txn,
-            burst_queue_size=arch.idma_outstand_burst, axi_width=arch.wide_width)
+        # iDMA, offloaded from the last core: idma_outstand_txn transfers
+        # queued in front of the mid-end, idma_outstand_burst bursts in flight
+        idma = SnitchDmaV3(self, 'idma', config=SnitchDmaV3Config(
+            axi_width=arch.wide_width, req_fifo_depth=arch.idma_outstand_txn,
+            num_ax_in_flight=arch.idma_outstand_burst,
+            meta_fifo_depth=arch.idma_outstand_burst))
 
         #
         # Bindings
@@ -266,8 +270,8 @@ class ClusterUnit(gvsoc.systree.Component):
         # iDMA
         cores[arch.num_core-1].o_OFFLOAD(idma.i_OFFLOAD())
         idma.o_OFFLOAD_GRANT(cores[arch.num_core-1].i_OFFLOAD_GRANT())
-        idma.itf_bind('axi_read', wide_axi.i_INPUT(0), signature=IoV2Beat(arch.wide_width))
-        idma.itf_bind('axi_write', wide_axi.i_INPUT(1), signature=IoV2Beat(arch.wide_width))
+        idma.o_AXI_READ(wide_axi.i_INPUT(0))
+        idma.o_AXI_WRITE(wide_axi.i_INPUT(1))
         wide_axi.o_MAP(tcdm.i_WIDE_INPUT(0),
             RouterMapping(base=arch.tcdm_base, size=arch.tcdm_size), name='tcdm')
         wide_axi.o_MAP_DEFAULT(self.i_WIDE_SOC(), name='soc')

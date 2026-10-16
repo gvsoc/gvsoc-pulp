@@ -19,8 +19,7 @@
 This module provides the :class:`SnitchDmaV3` generator: the xdma offload
 front-end (dmsrc / dmdst / dmstr / dmrep / dmcpy / dmstat instructions of a
 Snitch core) in front of the ND mid-end and an AXI-to-AXI back-end. The
-defaults describe the Spatz cluster DMA. Not yet wired into the Spatz
-cluster, which keeps :class:`ips.pulp.idma_v2.snitch_dma.SnitchDmaV2`.
+defaults describe the Spatz cluster DMA.
 """
 
 from typing_extensions import override

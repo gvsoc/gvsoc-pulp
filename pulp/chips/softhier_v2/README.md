@@ -8,7 +8,7 @@ make flow are the same; what changes is the models:
 |---|---|---|
 | Cores | Snitch + Spatz (iss) | Snitch + Spatz (iss_v2) with the Snitch hardware barrier CSR |
 | TCDM | `L1_interleaver` + `DmaInterleaver` | `SpatzTcdmInterco` crossbar, `memory_v3` banks |
-| iDMA | `SnitchDma` | `SnitchDmaV2` (io_v2 AXI back-end) |
+| iDMA | `SnitchDma` | `SnitchDmaV3` (xdma front-end, ND mid-end, AXI managers) |
 | Crossbars, memories | io v1 routers, memories | `router_v2`, `memory_v3` |
 | NoC | FlooNoC-Flex | FlooNoC v2 graph NoC (`pulp/floonoc_v2`): per-router ID tables, wormhole arbitration |
 

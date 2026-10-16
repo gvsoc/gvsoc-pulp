@@ -30,9 +30,9 @@ More accurate model of ``tests/spatz/spatz-rtl`` than the v2 cluster:
 - Fabric: ``interco.router_v2`` routers (beat-streaming on the wide
   512-bit and narrow 64-bit AXI, matching per-cycle arbitration and
   bounded outstanding transactions).
-- iDMA: io_v2 ``SnitchDmaV2`` (Snitch offload front-end, 2D middle-end,
-  beat AXI back-end), looping back to the TCDM through the wide router
-  like the RTL.
+- iDMA: ``SnitchDmaV3`` (xdma offload front-end, ND middle-end, AXI
+  read/write managers with the RTL byte buffer), looping back to the TCDM
+  through the wide router like the RTL.
 - Instruction caches: per-core private L0 (8 x 32 B lines) + shared
   L1 (4 KiB, 2 ways) built from ``pulp.snitch.snitch_icache``, refilling
   through the wide router. The L1 runs the RTL snitch_icache's
@@ -57,7 +57,8 @@ import pulp.snitch.snitch_icache as snitch_icache
 from pulp.snitch.snitch_icache import SnitchIcacheConfig
 from pulp.snitch.zero_mem_v2 import ZeroMem
 import pulp.snitch.snitch_cluster.spatz.cluster_registers_v2 as cluster_registers_v2
-from ips.pulp.idma_v2.snitch_dma import SnitchDmaV2
+from ips.pulp.idma_v3.snitch_dma import SnitchDmaV3
+from ips.pulp.idma_v3.snitch_dma_config import SnitchDmaV3Config
 
 from gvrun.attribute import Tree, Area
 
@@ -214,11 +215,11 @@ class SnitchCluster(gvsoc.systree.Component):
         cluster_registers = cluster_registers_v2.ClusterRegisters(self, 'cluster_registers',
             nb_cores=arch.nb_core, boot_addr=entry)
 
-        # Cluster DMA (io_v2 iDMA with Snitch offload front-end). The AXI
-        # width is the wide-crossbar width; TCDM accesses loop back through
-        # the wide crossbar like in RTL.
-        idma = SnitchDmaV2(self, 'idma', transfer_queue_size=8, burst_queue_size=8,
-            axi_width=64)
+        # Cluster DMA (iDMA v3 with the xdma offload front-end, whose config
+        # defaults are this cluster's DMA). The AXI width is the
+        # wide-crossbar width; TCDM accesses loop back through the wide
+        # crossbar like in RTL.
+        idma = SnitchDmaV3(self, 'idma', config=SnitchDmaV3Config(axi_width=64))
 
         #
         # Bindings
@@ -267,8 +268,8 @@ class SnitchCluster(gvsoc.systree.Component):
         idma.o_OFFLOAD_GRANT(cores[dma_core].i_OFFLOAD_GRANT())
         # Beat-fidelity DMA read/write channels onto the wide beat plane
         # (same 64-byte beat width on both sides: direct bind, no adapter).
-        idma.itf_bind('axi_read', wide_axi.i_INPUT(1), signature=IoV2Beat(64))
-        idma.itf_bind('axi_write', wide_axi.i_INPUT(2), signature=IoV2Beat(64))
+        idma.o_AXI_READ(wide_axi.i_INPUT(1))
+        idma.o_AXI_WRITE(wide_axi.i_INPUT(2))
 
         # Per-core memory ports
         tcdm_port = 0
