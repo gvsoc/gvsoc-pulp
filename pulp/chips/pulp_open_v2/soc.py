@@ -35,7 +35,7 @@ from __future__ import annotations
 
 from config_tree import Config, cfg_field
 from gvsoc.systree import Component, SlaveItf
-from gvsoc.signature import IoV2SingleReq
+from gvsoc.signature import IoV2SingleReq, IoV2Beat
 from gvrun.parameter import TargetParameter
 from gvrun.systree import ExecutableContainer
 from interco.router_v2 import Router, RouterConfig, RouterMapping, KIND_BEAT
@@ -46,6 +46,7 @@ from interco.remapper_v2 import Remapper, RemapperConfig
 from interco.log_ico_v2 import LogIco, LogIcoConfig
 from memory.memory_v3 import Memory, MemoryV3Config
 from utils.loader.loader_v2 import ElfLoader
+from utils.io_v2_shared_clock_bridge import IoV2SharedClockBridge
 from vp.clock_domain import ClockDomain, ClockDomainConfig
 from pulp.cpu.iss.ri5ky import Ri5ky, Ri5kyConfig
 from pulp.itc.itc_v1_v2 import Itc_v1_V2
@@ -162,8 +163,16 @@ class PulpOpenV2Soc(Component):
         # cuts them into words.
         nb_axi_lanes = config.axi_width // 4
         axi_limiter = Limiter(self, 'axi_limiter', LimiterConfig(bandwidth=config.axi_width))
+        # The RTL has no register between the cluster CDC and the AXI to L2
+        # bridge (axi64_to_lint32), whose AR/AW/W and R/B single slices are
+        # the only ones of the path: the router is combinational and the
+        # slices are the register slice behind it (one cycle each way, reads
+        # and writes apart, as the AXI channels).
         axi = Router(self, 'axi', config=RouterConfig(kind=KIND_BEAT, width=config.axi_width,
-            max_pending_bursts_per_input=8, max_input_pending_size=8 * config.axi_width))
+            max_pending_bursts_per_input=8, max_input_pending_size=8 * config.axi_width,
+            combinational=True))
+        axi_slice = IoV2SharedClockBridge(self, 'axi64_to_lint32',
+            signature=IoV2Beat(config.axi_width))
         rw_splitter = RwSplitter(self, 'rw_splitter', config=RwSplitterConfig())
         axi_read_split = Splitter(self, 'axi_read_splitter', config=SplitterConfig(
             input_width=config.axi_width, output_width=4))
@@ -205,7 +214,8 @@ class PulpOpenV2Soc(Component):
 
         # AXI
         axi_limiter.o_OUTPUT(axi.i_INPUT(0))
-        axi.o_MAP_DEFAULT(rw_splitter.i_INPUT(), name='soc')
+        axi.o_MAP_DEFAULT(axi_slice.i_INPUT(), name='soc')
+        axi_slice.o_OUTPUT(rw_splitter.i_INPUT())
         rw_splitter.o_READ_OUTPUT(axi_read_split.i_INPUT())
         rw_splitter.o_WRITE_OUTPUT(axi_write_split.i_INPUT())
         for i in range(nb_axi_lanes):

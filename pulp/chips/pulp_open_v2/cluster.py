@@ -22,11 +22,17 @@
 #
 # The L1 test-and-set alias of the v1 cluster (0x1010_0000) is not modelled.
 #
-# Topology, as in the GAP9 io_v2 cluster: each PE has its own demux router, so
-# its L1 traffic enters the HCI on a dedicated port; the per-PE routers fan
-# into a shared periph_ico and a shared beat router (soc_ico) towards o_SOC.
-# The external slave (i_INPUT) enters through ext_ico, which owns HCI port
-# nb_pe; the DMA owns the last HCI ports.
+# Topology: each PE has its own demux router, so its L1 traffic enters the
+# HCI on a dedicated port. As the RTL core_demux, everything which is not the
+# L1 or a per-core demux goes through the PE's peripheral path into the shared
+# periph_ico, whose catch-all is the per2axi port of the beat router (soc_ico)
+# towards o_SOC. The external slave (i_INPUT) enters through ext_ico, which
+# owns HCI port nb_pe; the DMA owns the last HCI ports.
+#
+# The off-cluster path is the one of the RTL (pulp_cluster b6ae547), measured
+# on its waveforms: core_demux FIFO (1 cycle), per2axi (1 each way), the
+# cluster AXI crossbar (combinational), then the cluster to SoC axi_cdc (see
+# o_SOC), 16 cycles from a core load to its data in the L2.
 
 from __future__ import annotations
 
@@ -35,6 +41,7 @@ from gvsoc.systree import Component, SlaveItf
 from gvsoc.signature import IoV2SingleReq, IoV2Beat
 from interco.router_v2 import Router, RouterConfig, RouterMapping, KIND_UNTIMED, KIND_BEAT
 from interco.remapper_v2 import Remapper, RemapperConfig
+from interco.fifo_v2 import Fifo, FifoConfig
 from memory.memory_v3 import Memory, MemoryV3Config
 from pulp.cpu.iss.ri5ky import Ri5ky, Ri5kyConfig
 from ips.pulp.cluster.cluster_ctrl import ClusterCtrl, ClusterCtrlConfig
@@ -104,9 +111,15 @@ class PulpOpenV2Cluster(Component):
 
         # Instances
         #
+        # The core demux only grants a core's access to a peripheral or to the
+        # SoC when its response is about to come back, so the core cannot
+        # execute anything meanwhile, load or store alike (lsu_hold_on_async).
+        # The TCDM grants at once and is not concerned (it answers
+        # synchronously).
         pes = [
             Ri5ky(self, f'pe{i}', config=Ri5kyConfig(
-                isa=config.isa, hart_id=i, fetch_enable=False))
+                isa=config.isa, hart_id=i, fetch_enable=False,
+                lsu_hold_on_async=True))
             for i in range(nb_pe)
         ]
 
@@ -132,13 +145,37 @@ class PulpOpenV2Cluster(Component):
             interleaving_width=2))
 
         periph_ico = Router(self, 'periph_ico', config=rtr_cfg())
-        # Off-cluster interconnect: a beat-streaming router. The DMA ext port
-        # streams its beats directly; the single-req masters (PE data, icache
-        # refills) get an adapter inserted by the framework on their input.
+        # Core-demux peripheral path, one per PE (RTL core_demux periph_FIFO):
+        # a request FIFO whose state machine holds the core until the response
+        # is back, so a PE has a single peripheral / off-cluster access in
+        # flight. The request leaves one cycle after the core issued it (the
+        # FIFO register). The response comes back through two registers, and
+        # the core is granted on the first of them: that grant is what the
+        # response stands for here (the core resumes on the next cycle, and the
+        # data of a load is there one cycle after the grant, see
+        # lsu_hold_on_async). A cluster peripheral gives its response the cycle
+        # after the request, which the models answering inline do not account
+        # for (done_latency). Same as the el1 cluster.
+        pe_paths = [Fifo(self, f'pe{i}_path', config=FifoConfig(depth=1, latency=1,
+                        resp_latency=1, done_latency=1))
+                    for i in range(nb_pe)]
+        # per2axi: the peripheral crossbar's single external slave turns the
+        # cores' 32-bit off-cluster accesses into AXI transactions, one per
+        # cycle, with a register on the request (AR/AW slice) and on the
+        # response (R/B slice). Every core's L2 traffic funnels through it,
+        # but it does not serialise them: its buffers hold one access per core.
+        per2axi = Fifo(self, 'per2axi', config=FifoConfig(depth=nb_pe, latency=1,
+                       resp_latency=1, max_outstanding=nb_pe))
+        # Off-cluster interconnect (RTL cluster_bus axi_xbar): a beat-streaming
+        # router. The DMA ext port streams its beats directly; the single-req
+        # masters (per2axi, icache refills) get an adapter inserted by the
+        # framework on their input. The RTL crossbar has no register on its
+        # path: a read goes through in the cycle it arrives, write data one
+        # cycle after its address.
         soc_ico    = Router(self, 'soc_ico', config=RouterConfig(
             kind=KIND_BEAT, width=config.ext_axi_width,
             max_pending_bursts_per_input=8,
-            max_input_pending_size=0))
+            max_input_pending_size=0, combinational=True))
         ext_ico    = Router(self, 'ext_ico', config=rtr_cfg())
 
         cluster_ctrl = ClusterCtrl(self, 'cluster_ctrl', config=ClusterCtrlConfig(nb_core=nb_pe))
@@ -181,17 +218,17 @@ class PulpOpenV2Cluster(Component):
 
             pe_ico.o_MAP(l1_ico.i_INPUT(i),
                 RouterMapping(base=config.l1_base, size=config.l1_size), name='l1')
-            pe_ico.o_MAP(periph_ico.i_INPUT(i),
-                RouterMapping(base=config.periph_base,
-                              size=config.event_unit_demux_base - config.periph_base,
-                              remove_base=False), name='periph')
             pe_ico.o_MAP(event_unit.i_DEMUX_IN(i),
                 RouterMapping(base=config.event_unit_demux_base,
                               size=config.event_unit_demux_size), name='eu_demux')
             pe_ico.o_MAP(dma.i_INPUT(i),
                 RouterMapping(base=config.mchan_demux_base,
                               size=config.mchan_demux_size), name='dma_demux')
-            pe_ico.o_MAP_DEFAULT(soc_ico.i_INPUT(i), name='soc')
+            # Everything else (cluster peripherals, off-cluster) goes through
+            # the PE's peripheral path into the shared peripheral crossbar,
+            # which routes the unmapped addresses out to the SoC.
+            pe_ico.o_MAP_DEFAULT(pe_paths[i].i_INPUT(), name='periph')
+            pe_paths[i].o_OUTPUT(periph_ico.i_INPUT(i))
 
             cluster_ctrl.o_BOOTADDR(i, pe.i_ENTRY())
             cluster_ctrl.o_FETCHEN(i, pe.i_FETCHEN())
@@ -219,9 +256,9 @@ class PulpOpenV2Cluster(Component):
         # DMA data paths
         for p in range(dma_cfg.nb_loc_ports):
             dma.o_LOC(p, l1_ico.i_INPUT(dma_loc_base + p))
-        dma.o_EXT(soc_ico.i_INPUT(nb_pe))
+        dma.o_EXT(soc_ico.i_INPUT(1))
 
-        icache.o_REFILL(soc_ico.i_INPUT(nb_pe + 1))
+        icache.o_REFILL(soc_ico.i_INPUT(2))
 
         # Events: DMA and timer to every core, FC-channel DMA irq to the cores
         # and up to the SoC
@@ -235,6 +272,11 @@ class PulpOpenV2Cluster(Component):
 
         self.__o_REF_CLOCK(timer.i_REF_CLOCK())
 
+        # Off-cluster traffic: the peripheral crossbar's catch-all is the
+        # per2axi port, the first input of the off-cluster router, which exits
+        # through o_SOC (-> SoC -> L2).
+        periph_ico.o_MAP_DEFAULT(per2axi.i_INPUT(), name='soc')
+        per2axi.o_OUTPUT(soc_ico.i_INPUT(0))
         soc_ico.o_MAP_DEFAULT(self.__i_SOC(), name='soc')
 
         cluster_ctrl.o_HCI_CTRL(l1_ico.i_CTRL())
@@ -262,7 +304,17 @@ class PulpOpenV2Cluster(Component):
         self.itf_bind('ref_clock', itf, signature='clock_gen', composite_bind=True)
 
     def o_SOC(self, itf: SlaveItf):
-        self.itf_bind('soc', itf, signature=IoV2Beat(self._soc_beat_width))
+        # The cluster AXI master crosses into the SoC clock domain through the
+        # RTL axi_cdc: one common_cells cdc_fifo_gray per AXI channel, 8
+        # entries each (LogDepth 3): the bridge in its AXI mode, reads and
+        # writes crossing apart with 8 requests each. On the RTL waveforms,
+        # with the two clocks in phase, a request or a response is out 4
+        # cycles after it went in, each way: 3 for the gray-pointer
+        # synchronizer and 1 for the spill register at the destination.
+        self.itf_bind('soc', itf, signature=IoV2Beat(self._soc_beat_width),
+                      clock_bridge=('cdc_fifo_gray_beh',
+                                    {'k_src_per_dir': 1, 'k_dst_per_dir': 3, 'depth': 8,
+                                     'axi_channels': True}))
 
     def __i_SOC(self) -> SlaveItf:
         return SlaveItf(self, 'soc', signature=IoV2Beat(self._soc_beat_width))
