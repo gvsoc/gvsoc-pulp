@@ -36,11 +36,10 @@ class IdmaBackend;
  *
  * - dmcpy(i) allocates the transfer id and pushes the transfer into the
  *   request FIFO; when the FIFO is full the instruction is not granted, the
- *   core stalls (replaying the instruction, which is refused again) and the
- *   grant comes back on the offload_grant wire once a slot is free; the
- *   replay that follows the grant is answered with the id already
- *   allocated. The decision is taken inside the offload call, as the
- *   iss_v2 core requires.
+ *   core holds it, and the grant, with the id, comes back on the
+ *   offload_grant wire once a slot is free, completing the instruction (the
+ *   core does not send it again, as on the RTL). The decision is taken
+ *   inside the offload call, as the iss_v2 core requires.
  * - dmstat(i) returns, at once, the completed id (0), the next id (1), the
  *   busy flag (2) or whether a dmcpy would block (3).
  * - cfg bit 0 decouples the read and write sides, bit 1 selects 2D.
@@ -103,9 +102,6 @@ private:
 
     /// Transfer not granted for lack of FIFO room, pushed on me_ready().
     IdmaNdReq *stalled = nullptr;
-    /// The core replays the granted dmcpy: answer it with this id.
-    bool grant_replay = false;
-    uint32_t grant_id = 0;
     /// Completions of the current cycle, applied next cycle.
     int pending_done = 0;
     /// Last value driven on the busy wire.

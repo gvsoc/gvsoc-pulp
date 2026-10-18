@@ -62,7 +62,6 @@ void IdmaFeXdma::reset(bool active)
         }
         this->pending_done = 0;
         this->busy = false;
-        this->grant_replay = false;
     }
 }
 
@@ -130,30 +129,11 @@ uint32_t IdmaFeXdma::get_status(uint32_t status)
 
 
 
-// dmcpy / dmcpyi. Three situations, all decided inside the core's call:
-// - a transfer is stalled (FIFO was full): the core is replaying the
-//   instruction, refuse again;
-// - the grant just went back: this is the replay that completes the
-//   instruction, answer with the id already allocated, nothing to enqueue;
-// - otherwise allocate the id and push, or stall if the FIFO is full.
+// dmcpy / dmcpyi: allocate the id and push, or, if the FIFO is full, refuse
+// the grant and keep the transfer until me_ready(). As on the RTL, the core
+// holds the instruction and does not send it again: the grant completes it.
 uint32_t IdmaFeXdma::enqueue_copy(uint32_t config, uint32_t size, bool &granted)
 {
-    if (this->stalled != nullptr)
-    {
-        // The core replays the instruction while its grant is refused:
-        // nothing new to enqueue until the grant went back
-        granted = false;
-        return this->stalled->id;
-    }
-
-    if (this->grant_replay)
-    {
-        // The replay following the grant: the transfer is already queued
-        this->grant_replay = false;
-        granted = true;
-        return this->grant_id;
-    }
-
     uint32_t transfer_id = this->next_transfer_id.get();
     uint32_t next = transfer_id + 1;
     if (next < FIRST_ID) next = FIRST_ID;
@@ -208,8 +188,6 @@ void IdmaFeXdma::me_ready()
 
         IdmaNdReq *req = this->stalled;
         this->stalled = nullptr;
-        this->grant_replay = true;
-        this->grant_id = req->id;
 
         this->me->push_nd(req, 0);
         IssOffloadInsnGrant<uint32_t> offload_grant = { .result = req->id };

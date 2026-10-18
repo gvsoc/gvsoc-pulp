@@ -38,7 +38,7 @@ class SnitchDmaV3(gvsoc.systree.Component):
 
     ``i_OFFLOAD()``: the core's offload wire (synchronous; dmcpy is granted or
     refused inside the call, the grant of a refused one comes back through
-    ``o_OFFLOAD_GRANT`` and the core replays the instruction).
+    ``o_OFFLOAD_GRANT`` and completes the held instruction).
     ``o_AXI_READ`` / ``o_AXI_WRITE``: the AXI masters (IoV2Beat), to bind on
     two distinct interconnect inputs. ``o_IRQ()``: completion pulse.
     ``o_BUSY()``: high while a transfer is queued or in flight.

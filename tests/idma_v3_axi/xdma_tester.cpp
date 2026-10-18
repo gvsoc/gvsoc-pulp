@@ -22,9 +22,10 @@
  * Testbench driver for the Snitch xdma-driven iDMA (SnitchDmaV3).
  *
  * Plays the Snitch core: one offload instruction per cycle to program and
- * launch each transfer (dmsrc, dmdst, dmstr, dmrep, dmcpy), replaying a
- * refused dmcpy every cycle until it is granted as the iss_v2 core does,
- * then one dmstat(busy) per cycle until the DMA is idle; irq pulses are
+ * launch each transfer (dmsrc, dmdst, dmstr, dmrep, dmcpy); a refused dmcpy
+ * is held, as the cores do, until the grant comes back with its id, which
+ * completes it (it is not sent again); then one dmstat(busy) per cycle
+ * until the DMA is idle; irq pulses are
  * counted; finally every destination is read back (8 bytes per access) and
  * checked against the pattern (seed + i) & 0xff. Prints
  *
@@ -80,6 +81,7 @@ private:
     static void irq_sync(vp::Block *__this, bool value);
 
     uint32_t offload(int func7, uint32_t arg_a, uint32_t arg_b, bool *granted=nullptr);
+    void launched(uint32_t id);
     void step();
     bool issue_read(uint64_t addr);
     void after_resp();
@@ -106,6 +108,7 @@ private:
     int sub_step;
     bool waiting_for_resp;
     bool req_denied;
+    // A refused dmcpy is held until its grant
     bool core_denied;
     uint64_t rb_index;
     int64_t start_cycle;
@@ -208,13 +211,7 @@ uint32_t XdmaTester::offload(int func7, uint32_t arg_a, uint32_t arg_b, bool *gr
     this->offload_itf.sync(&insn);
     if (granted != nullptr)
     {
-        // iss_v2 semantics: the instruction only completes once no grant
-        // is pending and the front-end granted it
-        *granted = !this->core_denied && insn.granted;
-        if (!*granted)
-        {
-            this->core_denied = true;
-        }
+        *granted = insn.granted;
     }
     return insn.result;
 }
@@ -224,7 +221,33 @@ uint32_t XdmaTester::offload(int func7, uint32_t arg_a, uint32_t arg_b, bool *gr
 void XdmaTester::grant_sync(vp::Block *__this, IssOffloadInsnGrant<uint32_t> *grant)
 {
     XdmaTester *_this = (XdmaTester *)__this;
+    if (!_this->core_denied)
+    {
+        _this->fail("grant received while no dmcpy is held");
+        return;
+    }
+    // The grant completes the held dmcpy with its id
     _this->core_denied = false;
+    _this->launched(grant->result);
+}
+
+
+
+void XdmaTester::launched(uint32_t id)
+{
+    Transfer &t = this->transfers[this->index];
+    t.id = id;
+    if (this->start_cycle < 0) this->start_cycle = this->clock.get_cycles();
+    printf("[%ld] tester launched %d id=%u\n", this->clock.get_cycles(),
+        this->index, id);
+    if (t.expect_denied && !t.denied_seen)
+    {
+        this->fail("transfer %d was expected to be denied", this->index);
+        return;
+    }
+    this->bytes_total += this->total_bytes(t);
+    this->index++;
+    this->sub_step = 0;
 }
 
 
@@ -265,7 +288,7 @@ void XdmaTester::timeout_handler(vp::Block *__this, vp::ClockEvent *event)
 
 void XdmaTester::step()
 {
-    if (this->waiting_for_resp) return;
+    if (this->waiting_for_resp || this->core_denied) return;
 
     switch (this->phase)
     {
@@ -290,23 +313,13 @@ void XdmaTester::step()
                     uint32_t id = this->offload(FUNC7_DMCPY, t.length, config, &granted);
                     if (!granted)
                     {
-                        // The core stalls and replays the instruction
+                        // The core holds the instruction until the grant
                         t.denied_seen = true;
+                        this->core_denied = true;
                         return;
                     }
-                    t.id = id;
-                    if (this->start_cycle < 0) this->start_cycle = this->clock.get_cycles();
-                    printf("[%ld] tester launched %d id=%u\n", this->clock.get_cycles(),
-                        this->index, id);
-                    if (t.expect_denied && !t.denied_seen)
-                    {
-                        this->fail("transfer %d was expected to be denied", this->index);
-                        return;
-                    }
-                    this->bytes_total += this->total_bytes(t);
-                    this->index++;
-                    this->sub_step = -1;
-                    break;
+                    this->launched(id);
+                    return;
                 }
             }
             this->sub_step++;
