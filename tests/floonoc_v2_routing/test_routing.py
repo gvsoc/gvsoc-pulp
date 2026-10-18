@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.join(_THIS_DIR, '..', '..', 'pulp', 'floonoc_v2'))
 import floonoc_v2_routing as R
 import floonoc_v2_floogen
 
-_FLOOGEN_DIR = os.path.join(_THIS_DIR, '..', 'floonoc_calib', 'floogen')
+_FLOOGEN_DIR = os.path.join(_THIS_DIR, 'floogen')
 
 
 def ring(nb_routers):
