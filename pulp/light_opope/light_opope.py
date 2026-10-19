@@ -31,10 +31,7 @@ class LightOpope(gvsoc.systree.Component):
                 p: int,
                 elem_size: int=2,
                 mac_latency: int=0,   # pipeline drain charged after the last step of a tile
-                input_slots: int=2,   # x/w input register slots (2 = double buffering)
-                stream_loads: bool=False, # prefetch x/w beats ahead of the input slots (as LightRedmule)
-                prefetch_depth: int=128,  # prefetch FIFO size in beats (2 beats per step)
-                queue_depth: int=128, # max outstanding memory requests
+                queue_depth: int=128, # request queue entries (beats), held until the array uses the data
                 loc_base=0):
 
         super().__init__(parent, name)
@@ -47,9 +44,6 @@ class LightOpope(gvsoc.systree.Component):
             'elem_size'         : elem_size,
             'p'                 : p,
             'mac_latency'       : mac_latency,
-            'input_slots'       : input_slots,
-            'stream_loads'      : int(stream_loads),
-            'prefetch_depth'    : prefetch_depth,
             'queue_depth'       : queue_depth,
             'loc_base'          : loc_base,
         })

@@ -34,22 +34,20 @@
  *   - The 2p x 2p accumulators are preloaded with Y (2p beats) before the
  *     first step of an output tile and stored to Z (2p beats) after the last.
  *     MATMUL (Z = X * W) clears them instead, without using the port.
- *   - Input registers have input_slots slots (2 = double buffering), so the
- *     x/w loads of the next steps overlap with the current computation.
- *   - Prefetch queue (stream_loads, as in LightRedmule): x/w beats are sent
- *     ahead of the input slots into a FIFO of prefetch_depth beats, so that
- *     the memory round trip is overlapped with the computation instead of
- *     being exposed at every step. The FIFO only takes the port cycles left
- *     free by the input slots, the Z stores and the Y preloads.
+ *   - Request queue of queue_depth entries: an x/w beat holds an entry from
+ *     when it is sent until the array starts its step, a Y or Z beat until
+ *     its response is back. x/w beats are sent ahead of the array while an
+ *     entry is free, so the memory round trip overlaps with the computation;
+ *     a step waits only for its own x and w beats.
  *   - Accumulators are ping-ponged (2 banks): the Y preload of tile t+1 and
  *     the Z store of tile t-1 overlap with the computation of tile t.
  *   - mac_latency extra cycles are charged after the last step of a tile
  *     before its accumulators can be stored (pipeline drain).
  *
  * The model is cycle driven: every cycle at most one beat is sent on the port
- * (priority: x/w loads into free input slots, Z stores, Y preloads, x/w
- * prefetches) and the array starts a
- * step when its inputs and accumulators are available. Memory latency comes
+ * (priority: x/w of the next 2 steps, Z stores, Y preloads, x/w of later
+ * steps) and the array starts a step when its inputs and accumulators are
+ * available. Memory latency comes
  * from the synchronous TCDM responses (bank conflicts and interconnect).
  */
 
@@ -94,7 +92,8 @@ private:
     void issue_xw();
     void issue_z();
     void issue_y();
-    int64_t send_beat(uint32_t addr, uint32_t size, bool is_write);
+    int64_t send_beat(uint32_t addr, uint32_t size, bool is_write, bool track);
+    uint32_t queue_used();
     void compute_step(uint32_t tile, uint32_t slot);
     void report();
 
@@ -121,11 +120,8 @@ private:
     uint32_t            p;
     uint32_t            tile;           // 2p: output tile side, elements per beat
     uint32_t            mac_latency;
-    uint32_t            input_slots;
-    bool                stream_loads;
-    uint32_t            prefetch_depth; // prefetch FIFO size in beats
-    uint32_t            buffered_steps; // steps held by the input slots and the FIFO
-    uint32_t            queue_depth;
+    uint32_t            buffered_steps; // x/w slots: steps that can be in the queue
+    uint32_t            queue_depth;    // request queue entries (beats)
     uint64_t            loc_base;
     uint32_t            compute_able;
     bool                use_y;          // GEMM loads Y, MATMUL starts from 0
@@ -147,7 +143,7 @@ private:
     uint64_t            load_step;      // next step whose x/w beats are sent
     uint32_t            load_beat;      // 0: x, 1: w
     uint64_t            start_step;     // next step to start on the array
-    uint64_t            consumed_steps; // steps whose computation completed
+    uint64_t            consumed_steps; // steps whose computation completed (unused by the queue)
     bool                op_active;
     int64_t             op_end;
     uint32_t            op_tile;
@@ -161,7 +157,7 @@ private:
     int64_t             acc_done[2];    // last step + drain of the bank done
     std::vector<uint64_t> slot_step;
     std::vector<int64_t>  slot_ready;
-    std::priority_queue<int64_t, std::vector<int64_t>, std::greater<int64_t>> pending;
+    std::priority_queue<int64_t, std::vector<int64_t>, std::greater<int64_t>> pending; // Y/Z beats in flight
 
     // Statistics
     int64_t             timer_start;
@@ -214,9 +210,6 @@ LightOpope::LightOpope(vp::ComponentConf &config)
     this->elem_size         = get_js_config()->get("elem_size")->get_int();
     this->p                 = get_js_config()->get("p")->get_int();
     this->mac_latency       = get_js_config()->get("mac_latency")->get_int();
-    this->input_slots       = get_js_config()->get("input_slots")->get_int();
-    this->stream_loads      = get_js_config()->get("stream_loads")->get_int();
-    this->prefetch_depth    = get_js_config()->get("prefetch_depth")->get_int();
     this->queue_depth       = get_js_config()->get("queue_depth")->get_int();
     this->loc_base          = get_js_config()->get("loc_base")->get_double();
     this->tile              = 2 * this->p;
@@ -227,10 +220,10 @@ LightOpope::LightOpope(vp::ComponentConf &config)
     if (this->tcdm_bank_width * this->tcdm_bank_number < this->tile * this->elem_size)
         this->trace.fatal("[LightOpope] Memory port (%d B) narrower than one beat of 2p elements (%d B)\n",
             this->tcdm_bank_width * this->tcdm_bank_number, this->tile * this->elem_size);
-    if (this->input_slots < 1)
-        this->trace.fatal("[LightOpope] input_slots must be at least 1\n");
-    // One step is two beats (x and w)
-    this->buffered_steps    = this->input_slots + (this->stream_loads ? this->prefetch_depth / 2 : 0);
+    if (this->queue_depth < 2)
+        this->trace.fatal("[LightOpope] queue_depth must be at least 2 (one step is an x and a w beat)\n");
+    // One step is two beats (x and w): at most queue_depth / 2 steps in the queue
+    this->buffered_steps    = this->queue_depth / 2 + 1;
 
     this->m_size = 4;
     this->n_size = 4;
@@ -262,9 +255,8 @@ LightOpope::LightOpope(vp::ComponentConf &config)
     this->total_runtime     = 0;
     this->num_matmul        = 0;
 
-    this->trace.msg("[LightOpope] Model Initialization Done! (p=%d, port=%d B, input slots=%d, prefetch=%d beats)\n",
-        this->p, this->tcdm_bank_width * this->tcdm_bank_number, this->input_slots,
-        this->stream_loads ? this->prefetch_depth : 0);
+    this->trace.msg("[LightOpope] Model Initialization Done! (p=%d, port=%d B, queue=%d beats)\n",
+        this->p, this->tcdm_bank_width * this->tcdm_bank_number, this->queue_depth);
 }
 
 uint32_t LightOpope::tile_rows(uint32_t tile)
@@ -310,8 +302,9 @@ void LightOpope::start_job()
     this->event_enqueue(this->fsm_event, 1);
 }
 
-// Sends one beat, returns the cycle at which its response is back
-int64_t LightOpope::send_beat(uint32_t addr, uint32_t size, bool is_write)
+// Sends one beat, returns the cycle at which its response is back. Y/Z beats
+// (track) hold their queue entry until then, x/w beats until their step starts.
+int64_t LightOpope::send_beat(uint32_t addr, uint32_t size, bool is_write, bool track)
 {
     this->tcdm_req->init();
     this->tcdm_req->set_addr(addr - this->loc_base);
@@ -323,8 +316,14 @@ int64_t LightOpope::send_beat(uint32_t addr, uint32_t size, bool is_write)
         this->trace.fatal("[LightOpope] Error while accessing 0x%08x (size %d, write %d)\n", addr, size, is_write);
     }
     int64_t ready = this->now + this->tcdm_req->get_latency();
-    this->pending.push(ready);
+    if (track) this->pending.push(ready);
     return ready;
+}
+
+// Queue entries in use: x/w beats of the steps not started yet, Y/Z beats in flight
+uint32_t LightOpope::queue_used()
+{
+    return 2 * (this->load_step - this->start_step) + this->load_beat + this->pending.size();
 }
 
 // One x or w beat of step load_step
@@ -343,7 +342,7 @@ void LightOpope::issue_xw()
         len  = this->tile_cols(t);
         addr = this->w_addr + (n * this->k_size + this->tile_col(t) * this->tile) * es;
     }
-    int64_t ready = this->send_beat(addr, len * es, false);
+    int64_t ready = this->send_beat(addr, len * es, false, false);
     fp16 *dst = this->load_beat == 0 ? this->slot_x[slot] : this->slot_w[slot];
     memset(dst, 0, this->tile * sizeof(fp16));
     memcpy(dst, this->access_buffer, len * es);
@@ -371,7 +370,7 @@ void LightOpope::issue_z()
     uint32_t len    = this->tile_cols(t);
     uint32_t addr   = this->z_addr + ((this->tile_row(t) * this->tile + row) * this->k_size + this->tile_col(t) * this->tile) * es;
     memcpy(this->access_buffer, &this->acc[t % 2][row * this->tile], len * es);
-    this->send_beat(addr, len * es, true);
+    this->send_beat(addr, len * es, true, true);
     this->trace.msg(vp::Trace::LEVEL_TRACE, "[LightOpope] Store Z tile %d row %d [addr=0x%08x]\n", t, row, addr);
     if (++this->store_row == this->tile_rows(t))
     {
@@ -388,7 +387,7 @@ void LightOpope::issue_y()
     uint32_t row    = this->preload_row;
     uint32_t len    = this->tile_cols(t);
     uint32_t addr   = this->y_addr + ((this->tile_row(t) * this->tile + row) * this->k_size + this->tile_col(t) * this->tile) * es;
-    int64_t ready   = this->send_beat(addr, len * es, false);
+    int64_t ready   = this->send_beat(addr, len * es, false, true);
     if (row == 0)
     {
         memset(this->acc[t % 2], 0, this->tile * this->tile * sizeof(fp16));
@@ -415,10 +414,16 @@ bool LightOpope::issue_beat()
         this->preload_tile += 1;
     }
 
-    bool xw_left = this->load_step < this->num_steps;
+    if (this->queue_used() >= this->queue_depth)
+    {
+        return false;
+    }
 
-    // x/w loads into free input slots
-    if (xw_left && (this->load_step < this->consumed_steps + this->input_slots))
+    bool xw_left = (this->load_step < this->num_steps) &&
+                   (this->load_step < this->start_step + this->buffered_steps);
+
+    // x/w of the next steps of the array
+    if (xw_left && (this->load_step < this->start_step + 2))
     {
         this->issue_xw();
         return true;
@@ -440,8 +445,8 @@ bool LightOpope::issue_beat()
         return true;
     }
 
-    // x/w prefetches into the FIFO
-    if (xw_left && (this->load_step < this->consumed_steps + this->buffered_steps))
+    // x/w of later steps
+    if (xw_left)
     {
         this->issue_xw();
         return true;
@@ -510,10 +515,7 @@ void LightOpope::tick()
     }
 
     // Port: one beat per cycle
-    if (this->pending.size() < this->queue_depth)
-    {
-        this->issue_beat();
-    }
+    this->issue_beat();
 }
 
 void LightOpope::report()

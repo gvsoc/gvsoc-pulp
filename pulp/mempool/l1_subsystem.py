@@ -25,6 +25,7 @@ from pulp.mempool.l1_interconnect.l1_remote_itf import L1_RemoteItf
 from pulp.mempool.l1_interconnect.l1_bank_arbiter import L1_BankArbiter
 from pulp.mempool.xbar.mempool_xbar_selector import MempoolXbarSelector
 import math
+import os
 
 class L1_subsystem(gvsoc.systree.Component):
     """
@@ -74,7 +75,8 @@ class L1_subsystem(gvsoc.systree.Component):
             "RedMulE (tensorpool) is only supported on the synchronous L1 interconnect"
         redmule_path = tensorpool
         # Per-bank hold arbiter: cycles a bank is reserved per wide (TE) / narrow (PE) access.
-        bank_hold = 10
+        # The TE hold can be overridden from the environment (L1_BANK_HOLD).
+        bank_hold = int(os.environ.get('L1_BANK_HOLD', 10))
         bank_hold_pe = 0
         bank_queue_depth = 4
         l1_bank_size = size / nb_banks_per_tile
