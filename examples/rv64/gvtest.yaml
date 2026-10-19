@@ -1,3 +1,4 @@
 targets:
   rv64:
   cva6:
+  cva6_v2:
