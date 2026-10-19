@@ -23,7 +23,7 @@ import os
 
 import gvsoc.runner
 from pulp.cpu.iss.cva6_v2 import Cva6V2
-from pulp.cpu.iss.cva6_config import Cva6Config
+from pulp.cpu.iss.cva6_v2_config import Cva6V2Config
 import memory.memory_v3 as memory_v3
 from memory.memory_v3 import MemoryV3Config
 from vp.clock_domain import Clock_domain
@@ -89,7 +89,8 @@ class Soc(st.Component):
 
         # HTIF like the CVA6 RTL testharness, so that bare-metal programs exit through tohost.
         # Binaries without a tohost symbol are not polled.
-        host = Cva6V2(self, 'host', config=Cva6Config(isa=isa, boot_addr=0x1000, htif=True))
+        host = Cva6V2(self, 'host', config=Cva6V2Config(isa=isa, boot_addr=0x1000,
+            htif=True))
 
         loader = loader_v2.ElfLoader(self, 'loader', binary=binary)
 

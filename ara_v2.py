@@ -21,7 +21,7 @@ except ImportError:
 
 import gvsoc.runner
 from pulp.cpu.iss.cva6_v2 import Cva6V2
-from pulp.cpu.iss.cva6_config import Cva6Config
+from pulp.cpu.iss.cva6_v2_config import Cva6V2Config
 import memory.memory_v3 as memory_v3
 from memory.memory_v3 import MemoryV3Config
 import pulp.cva6.control_regs_v2
@@ -68,8 +68,9 @@ class Soc(st.Component):
         ico.o_MAP(regs.i_INPUT(), RouterMapping(base=0xD0000000, size=0x10000000),
             name='control_regs')
 
-        config = Cva6Config(fetch_enable=False, htif=True, nb_lanes=4,
-            lane_width=8, vlen=4096)
+        # The frontend model is not calibrated with Ara yet
+        config = Cva6V2Config(fetch_enable=False, htif=True, nb_lanes=4,
+            lane_width=8, vlen=4096, branch_prediction=False)
         host = Cva6V2(self, 'host', config=config)
 
         loader = loader_v2.ElfLoader(self, 'loader')

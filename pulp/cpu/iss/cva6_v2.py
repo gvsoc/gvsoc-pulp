@@ -30,8 +30,42 @@ import cpu.iss.isa_gen.isa_riscv_gen
 from cpu.iss_v2.riscv import (Arch, ExecInOrder, Regfile, PrefetchSingleLine, Offload, Irq,
     LsuV2)
 from gvsoc.signature import IoV2SingleReq
-from pulp.cpu.iss.cva6_config import Cva6Config
+from pulp.cpu.iss.cva6_v2_config import Cva6V2Config
 from cpu.iss_v2.riscv import RiscvCommon, IssModule
+
+
+class Cva6Frontend(IssModule):
+    """CVA6 frontend timing (fetch bandwidth, BHT/BTB/RAS, instruction queue) on top of the
+    single-line prefetcher."""
+    def __init__(self, config: Cva6V2Config):
+        self.config = config
+
+    @override
+    def gen(self, iss: RiscvCommon):
+        iss.isa.add_define('CONFIG_GVSOC_ISS_PREFETCH', 'Cva6Frontend')
+        iss.isa.add_define('CONFIG_GVSOC_ISS_PREFETCH_SIZE', 16)
+        iss.isa.add_define('CONFIG_GVSOC_CVA6_BHT_ENTRIES', self.config.bht_entries)
+        iss.isa.add_define('CONFIG_GVSOC_CVA6_BTB_ENTRIES', self.config.btb_entries)
+        iss.isa.add_define('CONFIG_GVSOC_CVA6_RAS_DEPTH', self.config.ras_depth)
+        iss.isa.add_define('CONFIG_GVSOC_CVA6_QUEUE_DEPTH', self.config.fetch_queue_depth)
+        iss.isa.add_define('CONFIG_GVSOC_CVA6_QUEUE_CF_DEPTH', self.config.fetch_queue_cf_depth)
+        iss.isa.add_define('CONFIG_GVSOC_CVA6_QUEUE_RESTART', self.config.fetch_queue_restart)
+        iss.isa.add_define('CONFIG_GVSOC_CVA6_MISPREDICT_PENALTY', self.config.mispredict_penalty)
+        iss.isa.add_include('<cpu/iss_v2/include/cores/cva6/frontend.hpp>')
+        iss.add_sources([
+            'cpu/iss_v2/src/prefetch/prefetch_single_line.cpp',
+            'cpu/iss_v2/src/cores/cva6/frontend.cpp',
+        ])
+
+
+class Cva6Event(IssModule):
+    """Events feeding the CVA6 frontend with the dispatched instructions."""
+    @override
+    def gen(self, iss: RiscvCommon):
+        iss.isa.add_define('CONFIG_GVSOC_ISS_EVENT', 'Cva6Events')
+        iss.isa.add_include('<cpu/iss_v2/include/cores/cva6/events.hpp>')
+        iss.isa.add_implem_include('<cpu/iss_v2/include/cores/cva6/events_implem.hpp>')
+        iss.add_sources(['cpu/iss_v2/src/event/event.cpp'])
 
 
 isa_instances: dict[str,Isa] = {}
@@ -42,7 +76,7 @@ class Cva6V2(RiscvCommon):
     def __init__(self,
             parent: Component,
             name: str,
-            config: Cva6Config
+            config: Cva6V2Config
         ):
 
         # The vector extension is optional so that the same class can model both a
@@ -70,6 +104,10 @@ class Cva6V2(RiscvCommon):
             'lsu': LsuV2(width=8),
             'irq': Irq()
         }
+
+        if config.branch_prediction:
+            modules['prefetch'] = Cva6Frontend(config)
+            modules['event'] = Cva6Event()
 
         if self.has_vector:
             modules['arch'] = Arch('Ara')
