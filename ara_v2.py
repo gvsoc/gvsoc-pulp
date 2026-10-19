@@ -20,17 +20,19 @@ except ImportError:
     from typing_extensions import override  # Python 3.10–3.11
 
 import gvsoc.runner
-from pulp.cpu.iss.cva6 import Cva6
+from pulp.cpu.iss.cva6_v2 import Cva6V2
 from pulp.cpu.iss.cva6_config import Cva6Config
-import memory.memory as memory
-import pulp.cva6.control_regs
+import memory.memory_v3 as memory_v3
+from memory.memory_v3 import MemoryV3Config
+import pulp.cva6.control_regs_v2
 from vp.clock_domain import Clock_domain
-import interco.router as router
-import utils.loader.loader
+import interco.router_v2 as router_v2
+from interco.router_v2 import RouterConfig, RouterMapping, KIND_BANDWIDTH
+import utils.loader.loader_v2 as loader_v2
 import gvsoc.systree as st
 from elftools.elf.elffile import *
 import gvsoc.runner as gvsoc
-from pulp.stdout.stdout_v3 import Stdout
+from pulp.stdout.stdout_v3_v2 import StdoutV2
 from gvrun.parameter import TargetParameter
 
 
@@ -44,36 +46,41 @@ class Soc(st.Component):
             cast=str
         )
 
-        dram = memory.Memory(self, 'dram', size=0x10000000, atomics=True, width_log2=-1)
+        dram = memory_v3.Memory(self, 'dram', config=MemoryV3Config(size=0x10000000,
+            atomics=True, latency=0))
 
-        mem = memory.Memory(self, 'mem', size=0x80000000, atomics=True, width_log2=-1)
-        regs = pulp.cva6.control_regs.ControlRegs(self, 'control_regs', dram_end=0xc0000000)
+        mem = memory_v3.Memory(self, 'mem', config=MemoryV3Config(size=0x80000000,
+            atomics=True, latency=0))
+        regs = pulp.cva6.control_regs_v2.ControlRegsV2(self, 'control_regs',
+            dram_end=0xc0000000)
 
-        stdout = Stdout(self, 'stdout')
+        stdout = StdoutV2(self, 'stdout')
 
-        ico = router.Router(self, 'ico')
+        # Requests are handled inline, with the mapping latency added to them
+        ico = router_v2.Router(self, 'ico', config=RouterConfig(kind=KIND_BANDWIDTH))
 
-        ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x80000000, latency=5)
-        self.bind(ico, 'mem', mem, 'input')
-
-        ico.o_MAP(stdout.i_INPUT(), name='stdout', base=0xC0000000, size=0x10000000)
-        ico.o_MAP(dram.i_INPUT(), name='dram', base=0xB0000000, size=0x10000000, latency=5)
-        ico.o_MAP(regs.i_INPUT(), name='control_regs', base=0xD0000000, size=0x10000000)
+        ico.o_MAP(mem.i_INPUT(), RouterMapping(base=0x80000000, size=0x80000000, latency=5),
+            name='mem')
+        ico.o_MAP(stdout.i_INPUT(), RouterMapping(base=0xC0000000, size=0x10000000),
+            name='stdout')
+        ico.o_MAP(dram.i_INPUT(), RouterMapping(base=0xB0000000, size=0x10000000, latency=5),
+            name='dram')
+        ico.o_MAP(regs.i_INPUT(), RouterMapping(base=0xD0000000, size=0x10000000),
+            name='control_regs')
 
         config = Cva6Config(fetch_enable=False, htif=True, nb_lanes=4,
             lane_width=8, vlen=4096)
-        host = Cva6(self, 'host', config=config)
+        host = Cva6V2(self, 'host', config=config)
 
-        loader = utils.loader.loader.ElfLoader(self, 'loader')
+        loader = loader_v2.ElfLoader(self, 'loader')
         loader.o_START(host.i_FETCHEN())
         loader.o_ENTRY(host.i_ENTRY())
 
-        self.bind(host, 'data', ico, 'input')
-        self.bind(host, 'fetch', ico, 'input')
-        self.bind(loader, 'out', ico, 'input')
-        self.bind(loader, 'start', host, 'fetchen')
-
-        host.o_VLSU(ico.i_INPUT())
+        # io_v2 slaves have a single master, so each master has its own router input
+        host.o_DATA(ico.i_INPUT(0))
+        host.o_FETCH(ico.i_INPUT(1))
+        loader.o_OUT(ico.i_INPUT(2))
+        host.o_VLSU(ico.i_INPUT(3))
 
         self.loader = loader
         self.register_binary_handler(self.handle_binary)

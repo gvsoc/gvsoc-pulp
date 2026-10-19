@@ -210,9 +210,18 @@ def attach(component: Component, vlen: int, nb_lanes: int, use_spatz: bool=False
         ])
 
     else:
-        component.add_sources([
-            "cpu/iss_v2/src/cores/ara/ara_vlsu.cpp",
-        ])
+        # Same for the Ara VLSU, whose v2 variant has its own io_v2 port
+        if vlsu_v2:
+            component.add_sources([
+                "cpu/iss_v2/src/cores/ara/ara_vlsu_v2.cpp",
+            ])
+            component.add_c_flags([
+                "-DCONFIG_GVSOC_ISS_VLSU_V2=1",
+            ])
+        else:
+            component.add_sources([
+                "cpu/iss_v2/src/cores/ara/ara_vlsu.cpp",
+            ])
 
     component.add_c_flags([
         "-DCONFIG_ISS_HAS_VECTOR=1", f'-DCONFIG_ISS_VLEN={int(vlen)}'
