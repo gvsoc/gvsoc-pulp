@@ -43,7 +43,7 @@ from interco.router_v2 import Router, RouterConfig, RouterMapping, KIND_UNTIMED,
 from interco.remapper_v2 import Remapper, RemapperConfig
 from interco.fifo_v2 import Fifo, FifoConfig
 from memory.memory_v3 import Memory, MemoryV3Config
-from pulp.cpu.iss.ri5ky import Ri5ky, Ri5kyConfig
+from pulp.cpu.iss.ri5ky import Ri5ky, Ri5kyNn, Ri5kyConfig
 from ips.pulp.cluster.cluster_ctrl import ClusterCtrl, ClusterCtrlConfig
 from ips.pulp.cluster.hci import Hci, HciConfig
 from ips.pulp.cluster.cluster_icache import ClusterIcache, ClusterIcacheConfig
@@ -57,6 +57,7 @@ class PulpOpenV2ClusterConfig(Config):
 
     nb_pe:        int = cfg_field(default=8, desc="Number of processing elements")
     isa:          str = cfg_field(default='rv32imfc', desc="Base ISA string of the PEs")
+    pulpnn:       bool = cfg_field(default=False, desc="PEs with the PULP-NN ISA extension")
 
     base:         int = cfg_field(default=0x1000_0000, fmt="hex", desc="Cluster window base")
     size:         int = cfg_field(default=0x0040_0000, fmt="hex", desc="Cluster window size")
@@ -116,8 +117,9 @@ class PulpOpenV2Cluster(Component):
         # execute anything meanwhile, load or store alike (lsu_hold_on_async).
         # The TCDM grants at once and is not concerned (it answers
         # synchronously).
+        core_class = Ri5kyNn if config.pulpnn else Ri5ky
         pes = [
-            Ri5ky(self, f'pe{i}', config=Ri5kyConfig(
+            core_class(self, f'pe{i}', config=Ri5kyConfig(
                 isa=config.isa, hart_id=i, fetch_enable=False,
                 lsu_hold_on_async=True))
             for i in range(nb_pe)

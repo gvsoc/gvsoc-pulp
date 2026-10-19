@@ -48,8 +48,10 @@ from memory.memory_v3 import Memory, MemoryV3Config
 from utils.loader.loader_v2 import ElfLoader
 from utils.io_v2_shared_clock_bridge import IoV2SharedClockBridge
 from vp.clock_domain import ClockDomain, ClockDomainConfig
-from pulp.cpu.iss.ri5ky import Ri5ky, Ri5kyConfig
+from pulp.cpu.iss.ri5ky import Ri5ky, Ri5kyNn, Ri5kyConfig
 from pulp.itc.itc_v1_v2 import Itc_v1_V2
+from ips.pulp.udma.udma_v3 import UdmaV3
+from ips.pulp.hyper_cs.hyper_cs import HyperCs
 from pulp.stdout.stdout_v3_v2 import StdoutV2
 from ips.pulp.timer.timer_v2 import Timer, TimerConfig
 from ips.pulp.soc_eu.soc_eu import SocEu, SocEuConfig
@@ -63,6 +65,7 @@ class PulpOpenV2SocConfig(Config):
 
     fc_hart_id:      int = cfg_field(default=(31 << 5), desc="mhartid of the FC (cluster 31, core 0)")
     fc_isa:          str = cfg_field(default='rv32imfc', desc="ISA string of the FC")
+    fc_pulpnn:       bool = cfg_field(default=False, desc="FC with the PULP-NN ISA extension")
 
     l2_base:         int = cfg_field(default=0x1C00_0000, fmt="hex", desc="L2 base")
     l2_priv_size:    int = cfg_field(default=0x0000_8000, fmt="hex", desc="Size of each L2 private bank")
@@ -99,6 +102,7 @@ _APB_MAP = {
     'fll_soc':        (0x1A10_0000, 0x10),
     'fll_periph':     (0x1A10_0010, 0x10),
     'fll_cluster':    (0x1A10_0020, 0x10),
+    'udma':           (0x1A10_2000, 0x2000),
     'apb_soc_ctrl':   (0x1A10_4000, 0x1000),
     'soc_eu':         (0x1A10_6000, 0x1000),
     'fc_itc':         (0x1A10_9800, 0x800),
@@ -123,7 +127,7 @@ class PulpOpenV2Soc(Component):
         #
         loader = ElfLoader(self, 'loader')
 
-        fc = Ri5ky(self, 'fc', config=Ri5kyConfig(
+        fc = (Ri5kyNn if config.fc_pulpnn else Ri5ky)(self, 'fc', config=Ri5kyConfig(
             isa=config.fc_isa, hart_id=config.fc_hart_id, fetch_enable=False))
         fc_itc = Itc_v1_V2(self, 'fc_itc')
 
@@ -131,6 +135,10 @@ class PulpOpenV2Soc(Component):
         soc_eu = SocEu(self, 'soc_eu', config=SocEuConfig(ref_clock_event=config.soc_evt_ref_clock))
         timer = Timer(self, 'timer', TimerConfig())
         stdout = StdoutV2(self, 'stdout')
+        udma = UdmaV3(self, 'udma')
+        # The HyperBus pads of the uDMA: chip select 0 is the HyperRAM, 1 the
+        # HyperFlash
+        hyper_pads = HyperCs(self, 'hyper0_pads')
         fll_soc = Fll(self, 'fll_soc')
         fll_periph = Fll(self, 'fll_periph')
         fll_cluster = Fll(self, 'fll_cluster')
@@ -180,8 +188,9 @@ class PulpOpenV2Soc(Component):
             input_width=config.axi_width, output_width=4))
         fc_fetch_limiter = Limiter(self, 'fc_fetch_limiter', LimiterConfig(bandwidth=4))
 
+        # The uDMA ports come last, the other ones keep the port they had
         masters = (['fc_data', 'fc_instr'] + [f'axi_read_{i}' for i in range(nb_axi_lanes)]
-            + [f'axi_write_{i}' for i in range(nb_axi_lanes)])
+            + [f'axi_write_{i}' for i in range(nb_axi_lanes)] + ['udma_ro', 'udma_wo'])
         l2_shared_ico = LogIco(self, 'l2_shared_ico', config=LogIcoConfig(
             nb_masters=len(masters), nb_slaves=config.l2_shared_banks, interleaving_width=2))
         bridge = Router(self, 'bridge', config=RouterConfig())
@@ -211,6 +220,15 @@ class PulpOpenV2Soc(Component):
         # Cluster
         cluster.o_SOC(axi.i_INPUT(1))
         cluster.o_FC_IRQ(fc_itc.i_EVENT(config.irq_dma))
+
+        # uDMA: its L2 reads and writes, its events, and its pins
+        udma.o_L2_RO(demuxes['udma_ro'].i_INPUT())
+        udma.o_L2_WO(demuxes['udma_wo'].i_INPUT())
+        udma.o_EVENT(soc_eu.i_EVENT_IN())
+        udma.o_HYPER(0, hyper_pads.i_INPUT())
+        for cs in range(2):
+            self.bind(hyper_pads, f'cs{cs}', self, f'hyper0_cs{cs}')
+        self.bind(udma, 'uart0', self, 'uart0')
 
         # AXI
         axi_limiter.o_OUTPUT(axi.i_INPUT(0))
@@ -246,6 +264,7 @@ class PulpOpenV2Soc(Component):
             'fll_soc': fll_soc.i_INPUT(),
             'fll_periph': fll_periph.i_INPUT(),
             'fll_cluster': fll_cluster.i_INPUT(),
+            'udma': udma.i_INPUT(),
             'apb_soc_ctrl': apb_soc_ctrl.i_INPUT(),
             'soc_eu': soc_eu.i_INPUT(),
             'fc_itc': fc_itc.i_INPUT(),
@@ -267,6 +286,9 @@ class PulpOpenV2Soc(Component):
         fll_cluster.o_CLOCK(cluster_clock.i_CTRL())
         soc_clock.o_CLOCK(self.__i_CLOCK_SOC())
         cluster_clock.o_CLOCK(cluster.i_CLOCK())
+        # The uDMA is clocked by the SoC clock, its peripherals send their bits
+        # on the peripheral clock
+        periph_clock.o_CLOCK(udma.i_PERIPH_CLOCK())
 
         for ref_clock_slave in [fll_soc.i_REF_CLOCK(), fll_periph.i_REF_CLOCK(),
                 fll_cluster.i_REF_CLOCK(), timer.i_REF_CLOCK(),

@@ -8,33 +8,36 @@
 
 The same chip as the pulp-open target (pulp/chips/pulp_open), built from io_v2
 components and iss_v2 cores: the FC and the 8 cluster PEs are iss_v2 Ri5ky
-cores, the cluster IPs are the io_v2 ones of pulp/*/io_v2, and the
+cores, its IPs are the io_v2 ones of models/ips/pulp, and the
 interconnects are router_v2 / log_ico_v2 / HCI. The software sees the same
 memory map, so the PulpOS pulp-open port runs unchanged (the board has the
-pulp-open target name and attributes).
+pulp-open target name and attribute tree, see attr.py). With --platform rtl,
+the board is the RTL of PULP instead (see rtl.py).
 
-Not modelled yet: the uDMA and its peripherals with the board flash and RAM,
-the GPIOs, the debug TAPs, the padframe, the L1 test-and-set alias, NE16 and
-RedMulE, and the PULP-NN / Xf8 / Xfaux ISA extensions.
+The uDMA has its UART and HyperBus, with the board HyperFlash, HyperRAM and
+UART checker. Not modelled yet: the other uDMA peripherals, the GPIOs, the
+debug TAPs, the padframe (but its HyperBus chip selects), the L1 test-and-set
+alias, NE16 and RedMulE, and the Xf8 / Xfaux ISA extensions. The PULP-NN one
+is there with the pulp-open-nn_v2 target (PulpOpenNnV2Board).
 """
 
 from __future__ import annotations
 
+import os
+
 from config_tree import Config, cfg_field
-from gvrun.attribute import Attr, get_attribute_arg_value
 from gvsoc.systree import Component
 from vp.clock_domain import ClockDomain, ClockDomainConfig
 from utils.clock_generator import ClockGenerator, ClockGeneratorConfig
-from pulp.chips.pulp_open.pulp_open import PulpOpenAttr
+from pulp.chips.pulp_open_v2.attr import PulpOpenV2Attr
 from pulp.chips.pulp_open_v2.soc import PulpOpenV2Soc, PulpOpenV2SocConfig
-
-
-def _set_default(parent: Attr, name: str, value):
-    # Changes the default value of an attribute, unless it is set from the
-    # command line (reading an attribute returns its value, not the Value)
-    attribute = object.__getattribute__(parent, name)
-    if get_attribute_arg_value(attribute.get_path()) is None:
-        attribute.value = value
+from devices.hyperbus.hyperflash import Hyperflash
+from devices.hyperbus.hyperram import Hyperram
+from devices.uart.uart_checker import Uart_checker
+if os.environ.get('USE_GVRUN') is None:
+    from gapylib.chips.pulp.flash import DefaultFlashRomV2
+else:
+    import gvrun.flash
 
 
 class PulpOpenV2Config(Config):
@@ -63,24 +66,64 @@ class PulpOpenV2(Component):
         # The SoC is clocked by its own clock domain, driven by the SoC FLL
         soc.o_CLOCK_SOC(soc.i_CLOCK())
 
+        # Pins of the uDMA peripherals
+        for name in ['hyper0_cs0', 'hyper0_cs1', 'uart0']:
+            self.bind(soc, name, self, name)
+
 
 class PulpOpenV2Board(Component):
 
-    def __init__(self, parent: Component, name: str, parser=None, options=None):
+    def __init__(self, parent: Component, name: str, parser=None, options=None, pulpnn=False):
         super().__init__(parent, name, options=options)
 
-        # Same target name and attributes as pulp-open, so that the software
-        # is built by the same PulpOS port (pulpos/pulp-open.py)
-        self.set_target_name('pulp-open')
-        attr = PulpOpenAttr(self)
-        self.set_attributes(attr)
-
         config = PulpOpenV2Config()
+        # The FC and the cluster PEs with the PULP-NN ISA extension
+        config.soc.fc_pulpnn = pulpnn
+        config.soc.cluster.pulpnn = pulpnn
 
-        # The software is linked for the L2 of this chip (the attributes have
-        # the bigger one of the v1 pulp-open)
-        soc = config.soc
-        _set_default(attr.soc.l2.range, 'size', soc.l2_shared_base + soc.l2_shared_size - soc.l2_base)
-        _set_default(attr.soc.l2.shared.range, 'size', soc.l2_shared_size)
+        # Same target name and attribute tree as pulp-open, so that the
+        # software is built by the same PulpOS port (pulpos/pulp-open.py), for
+        # the L2 of this chip
+        self.set_target_name('pulp-open')
+        self.set_attributes(PulpOpenV2Attr(self, config.soc))
 
-        PulpOpenV2(self, 'chip', config=config)
+        chip = PulpOpenV2(self, 'chip', config=config)
+
+        # The HyperRAM and the HyperFlash, with its image, on the HyperBus of
+        # the uDMA, and the UART checker on its UART, as the pulp-open board
+        hyperflash = Hyperflash(self, 'hyperflash')
+        hyperram = Hyperram(self, 'ram')
+
+        if os.environ.get('USE_GVRUN') is None:
+            self.register_flash(
+                DefaultFlashRomV2(self, 'hyperflash', image_name=hyperflash.get_image_path(),
+                    flash_attributes={
+                        "flash_type": 'hyper'
+                    },
+                    size=8*1024*1024
+                ))
+        else:
+            default_content = os.path.join(os.path.dirname(__file__), 'default_flash_content.json')
+            flash = gvrun.flash.Flash(
+                name='hyperflash',
+                size=8 * 1024 * 1024,
+                attributes={'flash_type': 'hyper'},
+                default_content_path=default_content,
+            )
+            self.register_flash(flash)
+            # gvrun writes the image to {work_dir}/{image-basename}, where
+            # GVSoC runs
+            hyperflash.add_property('content/image', flash.get_image_basename())
+
+        self.bind(chip, 'hyper0_cs1', hyperflash, 'input')
+        self.bind(chip, 'hyper0_cs0', hyperram, 'input')
+
+        uart_checker = Uart_checker(self, 'uart_checker')
+        self.bind(chip, 'uart0', uart_checker, 'input')
+
+
+class PulpOpenNnV2Board(PulpOpenV2Board):
+    """pulp-open_v2 with the PULP-NN ISA extension (target pulp-open-nn_v2)."""
+
+    def __init__(self, parent: Component, name: str, parser=None, options=None):
+        super().__init__(parent, name, parser, options, pulpnn=True)

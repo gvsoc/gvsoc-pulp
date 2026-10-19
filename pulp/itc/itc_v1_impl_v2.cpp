@@ -61,6 +61,7 @@ private:
   static void irq_ack_sync(vp::Block *__this, int irq);
   static void in_event_sync(vp::Block *__this, bool active, int id);
   static void soc_event_sync(vp::Block *__this, int event);
+  static void soc_event_sync_back(vp::Block *__this, int *ready);
 
   vp::Trace     trace;
   vp::IoSlave in{&itc::req};
@@ -107,6 +108,9 @@ trace_irq(*this, "irq", 1)
   new_master_port("irq_req", &irq_req_itf);
 
   soc_event_itf.set_sync_meth(&itc::soc_event_sync);
+  // The SoC event unit asks whether the FIFO has room before sending an
+  // event, and keeps it while it is full
+  soc_event_itf.set_sync_back_meth(&itc::soc_event_sync_back);
   new_slave_port("soc_event", &soc_event_itf);
 
   irq_ack_itf.set_sync_meth(&itc::irq_ack_sync);
@@ -254,12 +258,17 @@ vp::IoReqStatus itc::itc_fifo_ioReq(uint32_t offset, uint32_t *data, uint32_t si
     *data = 0;
   } else {
     trace.msg("Popping event from FIFO (id: %d)\n", fifo_event[fifo_event_tail]);
+    // A full FIFO gets room: the SoC event unit may send the events it kept
+    bool notif = nb_free_events == 0;
     *data = fifo_event[fifo_event_tail];
     fifo_event_tail++;
     if (fifo_event_tail == nb_fifo_events) fifo_event_tail = 0;
     nb_free_events++;
     if (nb_free_events != nb_fifo_events) {
       itc_status_setValue(status.get() | (1<<fifo_irq));
+    }
+    if (notif) {
+      this->soc_event_itf.sync(1);
     }
   }
 
@@ -329,6 +338,12 @@ void itc::soc_event_sync(vp::Block *__this, int event)
     _this->trace.msg("Generating FIFO irq (id: %d)\n", _this->fifo_irq);
     _this->itc_status_setValue(_this->status.get() | (1<<_this->fifo_irq));
   }
+}
+
+void itc::soc_event_sync_back(vp::Block *__this, int *ready)
+{
+  itc *_this = (itc *)__this;
+  *ready = _this->nb_free_events != 0;
 }
 
 void itc::irq_ack_sync(vp::Block *__this, int irq)
