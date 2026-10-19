@@ -35,8 +35,7 @@ class LightRedmule(gvsoc.systree.Component):
                 fold_tiles_mapping: int=0,
                 loc_base=0, #here we might add also local size to check that tcdm requests do not overflow...
                 outstanding: bool=False, # outstanding-request model (TensorPool)
-                stream_loads: bool=False, # outstanding model: model load streaming across tile-iterations (timing only)
-                row_refill_cyc: int=0):   # outstanding model: fixed per-M-block (output-row) refill/priming overhead (calibration knob; 0 = off)
+                stream_loads: bool=False): # outstanding model: send the requests ahead of the array (timing only)
 
         super().__init__(parent, name)
 
@@ -66,7 +65,6 @@ class LightRedmule(gvsoc.systree.Component):
         if outstanding:
             self.add_properties({
                 'stream_loads'      : int(stream_loads),
-                'row_refill_cyc'    : row_refill_cyc,
             })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:

@@ -47,9 +47,6 @@ class Tile(st.Component):
                                     p                   = redmule_config.opope_p,
                                     elem_size           = 2,
                                     mac_latency         = redmule_config.opope_mac_latency,
-                                    input_slots         = redmule_config.opope_input_slots,
-                                    stream_loads        = redmule_config.stream_loads,
-                                    prefetch_depth      = redmule_config.opope_prefetch_depth,
                                     queue_depth         = redmule_config.queue_depth
                                     )
         elif has_redmule:
@@ -64,7 +61,6 @@ class Tile(st.Component):
                                     ce_pipe             = redmule_config.redmule_regs,
                                     queue_depth         = redmule_config.queue_depth,
                                     stream_loads        = redmule_config.stream_loads,
-                                    row_refill_cyc      = redmule_config.row_refill_cyc,
                                     outstanding         = True
                                     )
 

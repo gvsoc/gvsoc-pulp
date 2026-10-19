@@ -18,8 +18,10 @@ _DEFAULT_REDMULE_REGS = int(os.environ.get('REDMULE_REGS', 3))
 
 _DEFAULT_OPOPE_P = int(os.environ.get('OPOPE_P', 8))
 _DEFAULT_OPOPE_MAC_LATENCY = int(os.environ.get('OPOPE_MAC_LATENCY', 0))
-_DEFAULT_OPOPE_INPUT_SLOTS = int(os.environ.get('OPOPE_INPUT_SLOTS', 2))
-_DEFAULT_OPOPE_PREFETCH_DEPTH = os.environ.get('OPOPE_PREFETCH_DEPTH')
+
+# Request queue entries of the tensor engine (both models): a request holds an
+# entry until the array uses its data (or, for a store, until it is done).
+_DEFAULT_QUEUE_DEPTH = int(os.environ.get('TE_QUEUE_DEPTH', 128))
 
 class RedmuleParam:
     def __init__(
@@ -28,14 +30,11 @@ class RedmuleParam:
         redmule_height=_DEFAULT_REDMULE_HEIGHT,
         redmule_width=_DEFAULT_REDMULE_WIDTH,
         redmule_regs=_DEFAULT_REDMULE_REGS,
-        queue_depth=128,
+        queue_depth=_DEFAULT_QUEUE_DEPTH,
         stream_loads=True,
-        row_refill_cyc=30,
         engine=_DEFAULT_ENGINE,
         opope_p=_DEFAULT_OPOPE_P,
-        opope_mac_latency=_DEFAULT_OPOPE_MAC_LATENCY,
-        opope_input_slots=_DEFAULT_OPOPE_INPUT_SLOTS,
-        opope_prefetch_depth=_DEFAULT_OPOPE_PREFETCH_DEPTH
+        opope_mac_latency=_DEFAULT_OPOPE_MAC_LATENCY
     ):
         assert engine in ('redmule', 'opope'), f"unknown tensor engine '{engine}'"
         if tcdm_bank_number is not None:
@@ -51,9 +50,6 @@ class RedmuleParam:
         self.redmule_regs = redmule_regs
         self.queue_depth = queue_depth
         self.stream_loads = stream_loads
-        self.row_refill_cyc = row_refill_cyc
         self.engine = engine
         self.opope_p = opope_p
         self.opope_mac_latency = opope_mac_latency
-        self.opope_input_slots = opope_input_slots
-        self.opope_prefetch_depth = int(opope_prefetch_depth) if opope_prefetch_depth is not None else queue_depth
