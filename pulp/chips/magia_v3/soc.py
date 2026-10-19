@@ -19,7 +19,7 @@
 import gvsoc.systree
 import vp.clock_domain
 from memory.memory_v3 import Memory, MemoryV3Config
-from interco.router_v2 import Router, RouterConfig, KIND_UNTIMED, KIND_BANDWIDTH
+from interco.router_v2 import Router, RouterConfig, RouterMapping, KIND_UNTIMED, KIND_BANDWIDTH
 from utils.loader.loader_v2 import ElfLoader
 
 from pulp.chips.magia_v3.tile import MagiaV3Tile
@@ -75,10 +75,10 @@ class MagiaV3Soc(gvsoc.systree.Component):
         for id in range(0,tree.nb_clusters):
             cluster.append(MagiaV3Tile(self, f'magia-tile-{id}', tree, parser, id))
 
-        # L2. No address truncation: L2_SIZE is not a power of two, and the NoC
-        # already rebases the accesses (rm_base on the L2 mapping).
+        # L2. No address truncation: l2_size is not necessarily a power of two,
+        # and the NoC already rebases the accesses (rm_base on the L2 mapping).
         l2_mem = Memory(self, f'L2-mem', config=MemoryV3Config(
-            size=MagiaArch.L2_SIZE, latency=MagiaDSE.SOC_L2_LATENCY, truncate=False))
+            size=tree.l2_size, latency=MagiaDSE.SOC_L2_LATENCY, truncate=False))
 
         # L2 fan-in: the NoC has one narrow and one wide output per row and the
         # memory has a single input, so the 2*n_tiles_y channels are joined by
@@ -97,6 +97,13 @@ class MagiaV3Soc(gvsoc.systree.Component):
                 socket_path='/tmp/gvsoc.sock', bar0_size=0x1000, dma_chunk_bytes=16)
             pcie_ep.o_MEM(l2_xbar.i_INPUT(2*tree.n_tiles_y))
             killer.o_IRQ_DONE(pcie_ep.i_IRQ_DONE())
+
+        # The ELF loader writes the L2 directly, through an untimed router that
+        # strips the L2 base address
+        l2_loader_xbar = Router(self, 'L2-loader-xbar', config=RouterConfig(kind=KIND_UNTIMED))
+        l2_loader_xbar.o_MAP(l2_xbar.i_INPUT(1), RouterMapping(base=MagiaArch.L2_ADDR_START,
+            size=tree.l2_size, remove_base=True), name='L2')
+        l2_loader_xbar.add_mapping('error')
 
         # Create Tile matrix for IDs
         # --------------> X direction
@@ -252,7 +259,7 @@ class MagiaV3Soc(gvsoc.systree.Component):
             l2_wide_port.o_OUTPUT(l2_xbar.i_INPUT(2*y + 1))
             noc.o_WIDE_BIND(l2_wide_port.i_INPUT(), x=0, y=y)
 
-        noc.o_MAP_DIR(base=MagiaArch.L2_ADDR_START,size=MagiaArch.L2_SIZE, dir=FlooNocV2Direction.LEFT,name=f'mem_left', rm_base=True)
+        noc.o_MAP_DIR(base=MagiaArch.L2_ADDR_START,size=tree.l2_size, dir=FlooNocV2Direction.LEFT,name=f'mem_left', rm_base=True)
 
         # Fractal tree routing
         for lvl in range(0,int(math.log2(tree.nb_clusters))):
@@ -445,6 +452,6 @@ class MagiaV3Soc(gvsoc.systree.Component):
                 pcie_ep.o_ENTRY_ADDR(cluster[id].i_ENTRY())
             else:
                 if (id == 0):
-                    ctrl_core_loader.o_OUT(cluster[id].i_LOADER()) #only cluster connected to the corner loads the elf
+                    ctrl_core_loader.o_OUT(l2_loader_xbar.i_INPUT())
                 ctrl_core_loader.o_START(cluster[id].i_FETCHEN())
                 ctrl_core_loader.o_ENTRY(cluster[id].i_ENTRY())
