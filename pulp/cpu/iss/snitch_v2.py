@@ -44,8 +44,11 @@ class SnitchV2Config(RiscvConfig):
     isa: str = cfg_field(default='rv32imfdca', dump=True, desc=(
         "ISA string of the core"
     ))
-    lsu_nb_outstanding: int = cfg_field(default=1, dump=True, desc=(
-        "Outstanding integer loads (RTL NumIntOutstandingLoads)."
+    lsu_nb_outstanding: int = cfg_field(default=4, dump=True, desc=(
+        "Outstanding integer loads and stores (RTL NumIntOutstandingMem)."
+    ))
+    lsu_nb_outstanding_loads: int = cfg_field(default=1, dump=True, desc=(
+        "Outstanding integer loads among them (RTL NumIntOutstandingLoads)."
     ))
     lsu_width: int = cfg_field(default=8, dump=True, desc=(
         "Width in bytes of the core data port."
@@ -186,7 +189,7 @@ class SnitchV2(RiscvCommon):
             config.resp_latency, config.fma_latency, config.noncomp_latency,
             config.conv_latency, config.divsqrt_latency, config.fp_lsu_nb_outstanding,
             config.caq_depth, config.nb_ssrs, config.ssr_fifo_depth,
-            config.lsu_nb_outstanding, config.lsu_width])
+            config.lsu_nb_outstanding, config.lsu_nb_outstanding_loads, config.lsu_width])
         isa_instance: Isa | None = _isa_instances.get(isa_key)
 
         if isa_instance is None:
@@ -204,7 +207,9 @@ class SnitchV2(RiscvCommon):
             'regfile': RegfileSnitchV2(scoreboard=True),
             'prefetch': PrefetchSingleLine(),
             'offload': Offload(),
-            'lsu': LsuV2(nb_outstanding=config.lsu_nb_outstanding, width=config.lsu_width),
+            'lsu': LsuV2(nb_outstanding=config.lsu_nb_outstanding,
+                         nb_outstanding_loads=config.lsu_nb_outstanding_loads,
+                         width=config.lsu_width),
         }
 
         super().__init__(parent, name, config=config, isa=isa_instance, modules=modules)
