@@ -214,7 +214,10 @@ class SnitchCluster(gvsoc.systree.Component):
         for core_id in range(0, arch.nb_core):
             cores[core_id].o_FETCH(l0_caches[core_id].i_INPUT())
             l0_caches[core_id].o_REFILL(icache_refill_ico.i_INPUT(core_id))
+            # fence.i flushes the core's own L0 and the whole shared L1, as
+            # the RTL does (snitch_icache: flush_valid = |flush_valid_i)
             cores[core_id].o_FLUSH_CACHE(l0_caches[core_id].i_FLUSH())
+            cores[core_id].o_FLUSH_CACHE(l1_icache.i_FLUSH())
             l0_caches[core_id].o_FLUSH_ACK(cores[core_id].i_FLUSH_CACHE_ACK())
         icache_refill_ico.o_MAP_DEFAULT(l1_icache.i_INPUT(), name='l1')
         l1_icache.o_REFILL(wide_axi.i_INPUT(0))
