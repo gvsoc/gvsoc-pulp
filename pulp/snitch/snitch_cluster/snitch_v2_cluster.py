@@ -210,17 +210,12 @@ class SnitchCluster(gvsoc.systree.Component):
         narrow_axi.o_MAP(cluster_registers.i_INPUT(),
             RouterMapping(base=arch.peripheral.base, size=arch.peripheral.size),
             name='periph')
-        # Narrow accesses to the zero memory cross to the wide crossbar, through
-        # an untimed bridge where the framework inserts the width adapters
-        narrow_wide_bridge = router_v2.Router(self, 'narrow_wide_bridge',
-            config=RouterConfig(kind=KIND_UNTIMED))
-        narrow_axi.o_MAP(narrow_wide_bridge.i_INPUT(0),
-            RouterMapping(base=arch.zero_mem.base, size=arch.zero_mem.size,
-                remove_base=False), name='zero_mem')
-        narrow_wide_bridge.o_MAP_DEFAULT(wide_axi.i_INPUT(3), name='wide')
+        # As in the RTL, the narrow crossbar does not decode the zero memory,
+        # only the DMA one does: the narrow accesses to its window leave the
+        # cluster with everything else
         narrow_axi.o_MAP_DEFAULT(self.i_NARROW_SOC(), name='soc')
 
-        # Wide crossbar: icache refills, DMA and the narrow zero-mem alias
+        # Wide crossbar: icache refills and DMA
         wide_axi.o_MAP(tcdm.i_WIDE_INPUT(),
             RouterMapping(base=arch.tcdm.area.base, size=arch.tcdm.area.size,
                 remove_base=False), name='tcdm')

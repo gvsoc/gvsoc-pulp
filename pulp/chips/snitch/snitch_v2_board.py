@@ -158,13 +158,26 @@ class Soc(gvsoc.systree.Component):
             name='rom')
         narrow_wide_bridge.o_MAP_DEFAULT(wide_axi.i_INPUT(1), name='wide')
 
-        # Clusters
+        # Clusters. The zero memory window of a cluster is not decoded by its
+        # narrow crossbar, the core accesses to it come out of the cluster and
+        # the testbench memory, which answers any address, serves them as the
+        # HBM ones (with the same latency, reading 0 until written).
         for id in range(0, arch.nb_cluster):
+            cluster = arch.get_cluster(id)
             clusters[id].o_NARROW_SOC(narrow_axi.i_INPUT(0))
             clusters[id].o_WIDE_SOC(wide_axi.i_INPUT(0))
             narrow_axi.o_MAP(clusters[id].i_NARROW_INPUT(),
-                RouterMapping(base=arch.get_cluster_base(id), size=arch.cluster.size,
+                RouterMapping(base=arch.get_cluster_base(id),
+                    size=cluster.zero_mem.base - arch.get_cluster_base(id),
                     remove_base=False), name=f'cluster_{id}')
+            tb_zero_mem = memory_v3.Memory(self, f'tb_zero_mem_{id}', config=MemoryV3Config(
+                size=cluster.zero_mem.size, atomics=True, latency=10, init=False))
+            narrow_axi.o_MAP(narrow_wide_bridge.i_INPUT(2 + id),
+                RouterMapping(base=cluster.zero_mem.base, size=cluster.zero_mem.size,
+                    remove_base=False), name=f'cluster_{id}_zero_mem')
+            wide_axi.o_MAP(tb_zero_mem.i_INPUT(),
+                RouterMapping(base=cluster.zero_mem.base, size=cluster.zero_mem.size,
+                    max_pending_bursts=2), name=f'tb_zero_mem_{id}')
 
         # Binary loader
         loader.o_OUT(loader_limiter.i_INPUT())
