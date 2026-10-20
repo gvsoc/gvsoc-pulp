@@ -18,7 +18,9 @@
 
 Snitch cluster (see ``pulp.snitch.snitch_cluster.snitch_v2_cluster``) with
 the SoC fabric of the RTL testbench: wide 512-bit and narrow 64-bit AXI
-routers, boot ROM at 0x1000, HBM at 0x8000_0000. Same memory map and boot
+routers, boot ROM at 0x1000, HBM at 0x8000_0000. As in the RTL testbench, the
+narrow and the wide ports of the cluster each have their own testbench memory
+port, with 2 reads and 2 writes in flight, on the same storage. Same memory map and boot
 flow as the v1 ``snitch`` board: the loader writes the entry point into the
 boot ROM, which jumps to it. Everything is io_v2: routers are
 ``interco.router_v2``, memories are ``memory.memory_v3`` and the binary is
@@ -28,7 +30,7 @@ loaded through ``utils.loader.loader_v2``.
 import os
 
 import gvsoc.systree
-from gvsoc.signature import IoV2Beat
+from gvsoc.signature import IoV2Beat, IoV2SingleReq
 from vp.clock_domain import Clock_domain
 import memory.memory_v3 as memory_v3
 from memory.memory_v3 import MemoryV3Config
@@ -41,6 +43,12 @@ from elftools.elf.elffile import *
 from gvrun.parameter import TargetParameter
 from gvrun.attribute import Tree, Area
 from pulp.snitch.snitch_cluster.snitch_v2_cluster import ClusterArch, SnitchCluster
+
+
+# Latency of the testbench memory, its two ports alike: from the request at
+# the cluster output to its response back there, less the routing the model
+# adds on the way.
+TB_MEM_LATENCY = 7
 
 
 class SnitchArch(Tree):
@@ -133,35 +141,41 @@ class Soc(gvsoc.systree.Component):
         # Bindings
         #
 
-        # HBM, behind the testbench memory which accepts 2 read and 2 write
-        # transactions at a time (same as the spatz_v3 board, not calibrated
-        # on the Snitch RTL yet).
-        wide_axi.o_MAP(self.i_HBM(),
-            RouterMapping(base=arch.hbm.base, size=arch.hbm.size, max_pending_bursts=2),
+        # HBM: the testbench memory, which the RTL testbench serves on two
+        # ports, one per AXI port of the cluster (tb_memory_axi), with the same
+        # storage behind. Each port accepts 2 read and 2 write transactions at
+        # a time (its atomics filter). Their latency, the same on both, is the
+        # one of the memory.
+        tb_mem = router_v2.Router(self, 'tb_mem', config=RouterConfig(kind=KIND_UNTIMED))
+        tb_mem.o_MAP_DEFAULT(self.i_HBM(), name='hbm')
+        wide_axi.o_MAP(tb_mem.i_INPUT(0),
+            RouterMapping(base=arch.hbm.base, size=arch.hbm.size,
+                max_pending_bursts=2),
+            name='hbm')
+        narrow_axi.o_MAP(tb_mem.i_INPUT(1),
+            RouterMapping(base=arch.hbm.base, size=arch.hbm.size,
+                max_pending_bursts=2),
             name='hbm')
 
         # ROM sits on the wide crossbar (RTL BootROM slave).
         wide_axi.o_MAP(rom.i_INPUT(),
             RouterMapping(base=arch.bootrom.base, size=arch.bootrom.size), name='rom')
 
-        # Narrow accesses to the HBM and ROM cross to the wide crossbar (RTL
-        # IW/DW-upsize path). A beat router cannot bind another one of a
-        # different width directly, so the crossing goes through an untimed
-        # bridge (the framework inserts the beat adapters on both sides).
+        # Narrow accesses to the ROM cross to the wide crossbar. A beat router
+        # cannot bind another one of a different width directly, so the
+        # crossing goes through an untimed bridge (the framework inserts the
+        # beat adapters on both sides).
         narrow_wide_bridge = router_v2.Router(self, 'narrow_wide_bridge',
             config=RouterConfig(kind=KIND_UNTIMED))
         narrow_axi.o_MAP(narrow_wide_bridge.i_INPUT(0),
-            RouterMapping(base=arch.hbm.base, size=arch.hbm.size, remove_base=False),
-            name='hbm')
-        narrow_axi.o_MAP(narrow_wide_bridge.i_INPUT(1),
             RouterMapping(base=arch.bootrom.base, size=arch.bootrom.size, remove_base=False),
             name='rom')
         narrow_wide_bridge.o_MAP_DEFAULT(wide_axi.i_INPUT(1), name='wide')
 
         # Clusters. The zero memory window of a cluster is not decoded by its
         # narrow crossbar, the core accesses to it come out of the cluster and
-        # the testbench memory, which answers any address, serves them as the
-        # HBM ones (with the same latency, reading 0 until written).
+        # the narrow port of the testbench memory, which answers any address,
+        # serves them as the HBM ones (reading 0 until written).
         for id in range(0, arch.nb_cluster):
             cluster = arch.get_cluster(id)
             clusters[id].o_NARROW_SOC(narrow_axi.i_INPUT(0))
@@ -171,13 +185,11 @@ class Soc(gvsoc.systree.Component):
                     size=cluster.zero_mem.base - arch.get_cluster_base(id),
                     remove_base=False), name=f'cluster_{id}')
             tb_zero_mem = memory_v3.Memory(self, f'tb_zero_mem_{id}', config=MemoryV3Config(
-                size=cluster.zero_mem.size, atomics=True, latency=10, init=False))
-            narrow_axi.o_MAP(narrow_wide_bridge.i_INPUT(2 + id),
+                size=cluster.zero_mem.size, atomics=True, latency=TB_MEM_LATENCY, init=False))
+            narrow_axi.o_MAP(tb_zero_mem.i_INPUT(),
                 RouterMapping(base=cluster.zero_mem.base, size=cluster.zero_mem.size,
-                    remove_base=False), name=f'cluster_{id}_zero_mem')
-            wide_axi.o_MAP(tb_zero_mem.i_INPUT(),
-                RouterMapping(base=cluster.zero_mem.base, size=cluster.zero_mem.size,
-                    max_pending_bursts=2), name=f'tb_zero_mem_{id}')
+                    max_pending_bursts=2),
+                name=f'tb_zero_mem_{id}')
 
         # Binary loader
         loader.o_OUT(loader_limiter.i_INPUT())
@@ -219,10 +231,10 @@ class Soc(gvsoc.systree.Component):
         self.set_parameter('binary', binary)
 
     def i_HBM(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'hbm', signature=IoV2Beat(64))
+        return gvsoc.systree.SlaveItf(self, 'hbm', signature=IoV2SingleReq())
 
     def o_HBM(self, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind('hbm', itf, signature=IoV2Beat(64))
+        self.itf_bind('hbm', itf, signature=IoV2SingleReq())
 
 
 class Snitch(gvsoc.systree.Component):
@@ -235,10 +247,10 @@ class Snitch(gvsoc.systree.Component):
         soc.o_HBM(self.i_HBM())
 
     def i_HBM(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'hbm', signature=IoV2Beat(64))
+        return gvsoc.systree.SlaveItf(self, 'hbm', signature=IoV2SingleReq())
 
     def o_HBM(self, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind('hbm', itf, signature=IoV2Beat(64))
+        self.itf_bind('hbm', itf, signature=IoV2SingleReq())
 
 
 class SnitchBoard(gvsoc.systree.Component):
@@ -268,15 +280,10 @@ class SnitchBoard(gvsoc.systree.Component):
 
         chip = Snitch(self, 'chip', parser, arch.chip, binary, debug_binaries)
 
-        # The latency models the AXI path to the testbench memory (taken from
-        # the spatz_v3 board, not calibrated on the Snitch RTL yet).
+        # The storage of the testbench memory
         mem = memory_v3.Memory(self, 'mem', config=MemoryV3Config(
-            size=arch.hbm.size, atomics=True, latency=10, init=False))
+            size=arch.hbm.size, atomics=True, latency=TB_MEM_LATENCY, init=False))
 
         self.bind(clock, 'out', chip, 'clock')
         self.bind(clock, 'out', mem, 'clock')
-        # Signatured binding so the auto-bridge pass sees IoV2Beat(64) master
-        # vs IoV2Sync memory and inserts the beat-to-sync converter (a raw
-        # bind() carries no signatures and would leave the beat router facing
-        # the sync memory's inline DONE, which a beat master must never see).
         chip.o_HBM(mem.i_INPUT())
