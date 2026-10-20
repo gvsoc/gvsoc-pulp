@@ -49,6 +49,8 @@ from pulp.snitch.snitch_cluster.snitch_v2_cluster import ClusterArch, SnitchClus
 # the cluster output to its response back there, less the routing the model
 # adds on the way.
 TB_MEM_LATENCY = 7
+# A write takes a cycle more, its data following its address
+TB_MEM_WRITE_LATENCY = 8
 
 
 class SnitchArch(Tree):
@@ -185,7 +187,8 @@ class Soc(gvsoc.systree.Component):
                     size=cluster.zero_mem.base - arch.get_cluster_base(id),
                     remove_base=False), name=f'cluster_{id}')
             tb_zero_mem = memory_v3.Memory(self, f'tb_zero_mem_{id}', config=MemoryV3Config(
-                size=cluster.zero_mem.size, atomics=True, latency=TB_MEM_LATENCY, init=False))
+                size=cluster.zero_mem.size, atomics=True, latency=TB_MEM_LATENCY,
+                write_latency=TB_MEM_WRITE_LATENCY, init=False))
             narrow_axi.o_MAP(tb_zero_mem.i_INPUT(),
                 RouterMapping(base=cluster.zero_mem.base, size=cluster.zero_mem.size,
                     max_pending_bursts=2),
@@ -282,7 +285,8 @@ class SnitchBoard(gvsoc.systree.Component):
 
         # The storage of the testbench memory
         mem = memory_v3.Memory(self, 'mem', config=MemoryV3Config(
-            size=arch.hbm.size, atomics=True, latency=TB_MEM_LATENCY, init=False))
+            size=arch.hbm.size, atomics=True, latency=TB_MEM_LATENCY,
+                write_latency=TB_MEM_WRITE_LATENCY, init=False))
 
         self.bind(clock, 'out', chip, 'clock')
         self.bind(clock, 'out', mem, 'clock')

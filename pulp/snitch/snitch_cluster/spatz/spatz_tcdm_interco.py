@@ -49,6 +49,12 @@ class SpatzTcdmIntercoConfig(Config):
     interleaving_width: int = cfg_field(default=0, dump=True, desc=(
         "Number of low-order address bits kept local to a bank (granule size = 1 << interleaving_width)"
     ))
+    rr_tree: bool = cfg_field(default=False, dump=True, desc=(
+        "Arbitrate each bank as the RTL rr_arb_tree (common_cells, FairArb): the "
+        "winner is picked down a binary tree steered by the priority pointer, and "
+        "on a grant the pointer moves to the first requesting input after it. "
+        "False (default): first pending input after the last winner"
+    ))
     nb_wide_masters: int = cfg_field(default=0, dump=True, desc=(
         "Number of wide master input ports. A wide access spans several "
         "consecutive banks served within the same arbiter tick, with "

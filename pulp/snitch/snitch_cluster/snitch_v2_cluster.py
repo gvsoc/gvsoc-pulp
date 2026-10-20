@@ -26,6 +26,9 @@ Model of the RTL ``snitch_cluster`` (default configuration):
   core data port, the FP LSU and SSR 0 (a per-core demux, which also sends
   everything outside the TCDM to the narrow AXI), and one port per SSR 1 and
   2; the DMA core data port; the narrow AXI.
+- The data port of each core has a register on its request and one on its
+  response, its FP subsystem one on its request (RTL RegisterCoreReq,
+  RegisterCoreRsp, RegisterFPUReq), a cycle each on every data access.
 - The cores reach the narrow AXI through one shared converter, as the RTL
   ``reqrsp_mux`` + ``reqrsp_to_axi``: 2 accesses in flight for all the cores
   (the mux response FIFO), at most 3 reads or 3 writes, and no read while
@@ -48,6 +51,7 @@ from pulp.cpu.iss.snitch_v2 import SnitchV2, SnitchV2Config
 import memory.memory_v3 as memory_v3
 from memory.memory_v3 import MemoryV3Config
 import interco.router_v2 as router_v2
+from interco.fifo_v2 import Fifo, FifoConfig
 from interco.router_v2 import RouterConfig, RouterMapping, KIND_UNTIMED, KIND_BEAT
 from pulp.snitch.snitch_cluster.spatz.spatz_tcdm_interco import (
     SpatzTcdmInterco, SpatzTcdmIntercoConfig)
@@ -118,7 +122,7 @@ class SnitchClusterTcdm(gvsoc.systree.Component):
             nb_masters=arch.nb_masters,
             nb_slaves=arch.nb_banks,
             interleaving_width=int(math.log2(arch.bank_width)),
-            nb_wide_masters=1))
+            nb_wide_masters=1, rr_tree=True))
 
         for i in range(0, arch.nb_banks):
             bank = memory_v3.Memory(self, f'bank_{i}', config=MemoryV3Config(
@@ -180,12 +184,13 @@ class SnitchCluster(gvsoc.systree.Component):
                 config=RouterConfig(kind=KIND_UNTIMED)))
 
         # All the cores go to the narrow AXI through the RTL reqrsp_mux
-        # (RespDepth 2) and reqrsp_to_axi (MaxTrans 4, single ID)
+        # (RespDepth 2, lock-in round-robin arbiter) and reqrsp_to_axi
+        # (MaxTrans 4, single ID)
         cores_mux = router_v2.Router(self, 'cores_mux',
             config=RouterConfig(kind=KIND_UNTIMED, round_robin_retry=True))
         cores_to_axi = IoV2SingleReqToBeatAdapter(self, 'cores_to_axi', beat_width=8,
             config=IoV2SingleReqToBeatAdapterConfig(max_pending=2, max_pending_per_dir=3,
-                rw_exclusive=True))
+                rw_exclusive=True, lock_in=True, full_registered=True))
 
         cluster_registers = ClusterRegisters(self, 'cluster_registers',
             config=ClusterRegistersConfig(nb_cores=arch.nb_core))
@@ -249,8 +254,18 @@ class SnitchCluster(gvsoc.systree.Component):
         tcdm_port = 0
         for core_id in range(0, arch.nb_core):
             demux = cores_demux[core_id]
-            cores[core_id].o_DATA(demux.i_INPUT(0))
-            cores[core_id].o_FP_DATA(demux.i_INPUT(1))
+            # The registers of the core and FP subsystem data ports, which
+            # hold up to their 4 accesses in flight
+            data_reg = Fifo(self, f'pe{core_id}_data_reg', config=FifoConfig(
+                depth=4, latency=1, resp_latency=1, max_outstanding=4,
+                done_annotated_latency=True))
+            fp_data_reg = Fifo(self, f'pe{core_id}_fp_data_reg', config=FifoConfig(
+                depth=4, latency=1, resp_latency=0, max_outstanding=4,
+                done_annotated_latency=True))
+            cores[core_id].o_DATA(data_reg.i_INPUT())
+            data_reg.o_OUTPUT(demux.i_INPUT(0))
+            cores[core_id].o_FP_DATA(fp_data_reg.i_INPUT())
+            fp_data_reg.o_OUTPUT(demux.i_INPUT(1))
             demux.o_MAP(tcdm.i_INPUT(tcdm_port),
                 RouterMapping(base=arch.tcdm.area.base, size=arch.tcdm.area.size,
                     remove_base=False), name='tcdm')

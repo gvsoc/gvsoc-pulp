@@ -218,6 +218,11 @@ private:
     static vp::IoRespAck   output_resp    (vp::Block *__this, vp::IoReq *req, int id);
     static void            output_retry   (vp::Block *__this, int id, vp::IoRetryChannel);
     static void            fsm_handler    (vp::Block *__this, vp::ClockEvent *event);
+    // Winner of the RTL rr_arb_tree among the requests, for its priority
+    // pointer rr_q: down the binary tree of the inputs, from the root, take
+    // the right half when the left one has no request, or when both have and
+    // the bit of rr_q for this level is set.
+    int rr_tree_pick(const Mask &req, int rr_q);
 
     int       decode_bank   (uint64_t offset) const;
     uint64_t  decode_offset (uint64_t offset) const;
@@ -615,6 +620,33 @@ vp::IoReqStatus SpatzTcdmInterco::wide_input_req(vp::Block *__this, vp::IoReq *r
     return vp::IO_REQ_DENIED;
 }
 
+int SpatzTcdmInterco::rr_tree_pick(const Mask &req, int rr_q)
+{
+    int nb = (int)this->cfg.nb_masters;
+    int nb_levels = 0;
+    while ((1 << nb_levels) < nb) nb_levels++;
+    auto any_in = [&](int lo, int hi) {
+        for (int i = lo; i < hi && i < nb; i++)
+        {
+            if (req.test(i)) return true;
+        }
+        return false;
+    };
+    int lo = 0;
+    for (int bit = nb_levels - 1; bit >= 0; bit--)
+    {
+        int half = 1 << bit;
+        bool left = any_in(lo, lo + half);
+        bool right = any_in(lo + half, lo + 2 * half);
+        if (!left || (right && ((rr_q >> bit) & 1)))
+        {
+            lo += half;
+        }
+    }
+    return lo;
+}
+
+
 void SpatzTcdmInterco::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 {
     SpatzTcdmInterco *_this = (SpatzTcdmInterco *)__this;
@@ -672,10 +704,26 @@ void SpatzTcdmInterco::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             continue;
         }
 
-        // Round robin: first pending master at or after rr_next
-        int winner = bank->pending_mask.first_from(bank->rr_next);
+        int winner;
+        if (_this->cfg.rr_tree)
+        {
+            // RTL rr_arb_tree: rr_next is its priority pointer rr_q
+            winner = _this->rr_tree_pick(bank->pending_mask, bank->rr_next);
+            int next = bank->pending_mask.first_from((bank->rr_next + 1) % nb);
+            if (next <= bank->rr_next)
+            {
+                // No requester above the pointer: the lowest one
+                next = bank->pending_mask.first_from(0);
+            }
+            bank->rr_next = next;
+        }
+        else
+        {
+            // Round robin: first pending master at or after rr_next
+            winner = bank->pending_mask.first_from(bank->rr_next);
+            bank->rr_next = (winner + 1) % nb;
+        }
         bank->pending_mask.reset(winner);
-        bank->rr_next = (winner + 1) % nb;
         // Committed for this cycle: a wide access arriving later in the
         // same cycle must not take this bank as well.
         _this->banks_busy.set(bank->id);
