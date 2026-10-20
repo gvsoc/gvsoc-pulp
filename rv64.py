@@ -21,42 +21,26 @@ except ImportError:
 
 import os
 
-import gvsoc.runner
-import cpu.iss.riscv as iss
-import memory.memory as memory
+import cpu.iss_v2.riscv as iss
+from cpu.iss_v2.riscv_config import RiscvConfig
+from memory.memory_v3 import Memory, MemoryV3Config
 from vp.clock_domain import Clock_domain
-import interco.router as router
-import devices.uart.ns16550 as ns16550
-import cpu.clint
-import cpu.plic
-import utils.loader.loader
+from interco.router_v2 import Router, RouterConfig, RouterMapping, KIND_UNTIMED
+from devices.uart.ns16550_v2 import Ns16550V2
+from cpu.clint_v2 import ClintV2
+from cpu.plic_v2 import PlicV2
+from utils.loader.loader_v2 import ElfLoader
 import gvsoc.systree as st
-from interco.bus_watchpoint import Bus_watchpoint
-from elftools.elf.elffile import *
 import gvsoc.runner as gvsoc
 from gvrun.parameter import TargetParameter
 
 
-def _get_htif_addresses(binary):
-    # The HTIF watchpoint needs the addresses of the tohost/fromhost symbols
-    # of the binary to catch accesses to them.
-    tohost_addr = 0
-    fromhost_addr = 0
-    with open(binary, 'rb') as file:
-        elffile = ELFFile(file)
-        for section in elffile.iter_sections():
-            if isinstance(section, SymbolTableSection):
-                for symbol in section.iter_symbols():
-                    if symbol.name == 'tohost':
-                        tohost_addr = symbol.entry['st_value']
-                    if symbol.name == 'fromhost':
-                        fromhost_addr = symbol.entry['st_value']
-    return tohost_addr, fromhost_addr
-
-
 class Soc(st.Component):
+    """RV64 virtual board: a generic 64-bit core with 2 GB of DRAM, the spike boot ROM, a
+    NS16550 UART, a CLINT and a PLIC, on io_v2. Bare-metal programs and the proxy kernel
+    exit and do their system calls through HTIF, handled by the core."""
 
-    def __init__(self, parent, name, parser):
+    def __init__(self, parent, name, parser, timed=True):
         super().__init__(parent, name)
 
         _ = TargetParameter(
@@ -94,58 +78,53 @@ class Soc(st.Component):
         else:
             isa = self.get_parameter('isa')
 
-        mem = memory.Memory(self, 'mem', size=0x80000000, atomics=True)
-        rom = memory.Memory(self, 'rom', size=0x10000, stim_file=self.get_file_path('pulp/chips/rv64/rom.bin'))
-        uart = ns16550.Ns16550(self, 'uart')
-        clint = cpu.clint.Clint(self, 'clint')
-        plic = cpu.plic.Plic(self, 'plic', ndev=1)
+        # Zero-latency interconnect and memories, the core timing being the only one
+        mem = Memory(self, 'mem', config=MemoryV3Config(size=0x80000000, atomics=True,
+            latency=0))
+        rom = Memory(self, 'rom', config=MemoryV3Config(size=0x10000, latency=0,
+            stim_file=self.get_file_path('pulp/chips/rv64/rom.bin')))
+        uart = Ns16550V2(self, 'uart')
+        clint = ClintV2(self, 'clint')
+        plic = PlicV2(self, 'plic', ndev=1)
 
-        ico = router.Router(self, 'ico')
+        ico = Router(self, 'ico', config=RouterConfig(kind=KIND_UNTIMED))
 
-        ico.add_mapping('mem', base=0x80000000, remove_offset=0x80000000, size=0x80000000)
-        self.bind(ico, 'mem', mem, 'input')
+        ico.o_MAP(mem.i_INPUT(), mapping=RouterMapping(base=0x80000000, size=0x80000000))
+        ico.o_MAP(rom.i_INPUT(), mapping=RouterMapping(base=0x00001000, size=0x10000))
+        ico.o_MAP(uart.i_INPUT(), mapping=RouterMapping(base=0x10000000, size=0x100))
+        ico.o_MAP(clint.i_INPUT(), mapping=RouterMapping(base=0x2000000, size=0x10000))
+        ico.o_MAP(plic.i_INPUT(), mapping=RouterMapping(base=0xC000000, size=0x1000000))
+        uart.o_IRQ(plic.i_IRQ(0))
 
-        ico.add_mapping('rom', base=0x00001000, remove_offset=0x00001000, size=0x10000)
-        self.bind(ico, 'rom', rom, 'input')
+        # Binaries without a tohost symbol are not polled
+        core_config = RiscvConfig(isa=isa, boot_addr=0x1000, htif=True, mmu=True, pmp=True)
+        if not timed:
+            # Without timing, the core reads and writes the DRAM array directly, which is
+            # much faster than going through the interconnect
+            core_config.memory_start = 0x80000000
+            core_config.memory_size = 0x80000000
+        host = iss.Riscv(self, 'host', timed=timed, binaries=[binary] if binary else [],
+            config=core_config)
+        host.add_property('args', htif_args)
 
-        ico.add_mapping('uart', base=0x10000000, remove_offset=0x10000000, size=0x100)
-        self.bind(ico, 'uart', uart, 'input')
+        loader = ElfLoader(self, 'loader', binary=binary)
 
-        ico.add_mapping('clint', base=0x2000000, remove_offset=0x2000000, size=0x10000)
-        self.bind(ico, 'clint', clint, 'input')
+        # io_v2 slaves take a single master, each master has its own router input
+        loader.o_OUT(ico.i_INPUT(0))
+        host.o_FETCH(ico.i_INPUT(1))
+        host.o_DATA(ico.i_INPUT(2))
+        host.o_TIME(clint.i_TIME())
+        if not timed:
+            host.o_MEMINFO(mem.i_MEMINFO())
+        loader.o_START(host.i_FETCHEN())
 
-        ico.add_mapping('plic', base=0xC000000, remove_offset=0xC000000, size=0x1000000)
-        self.bind(ico, 'plic', plic, 'input')
-        self.bind(uart, 'irq', plic, 'irq1')
-
-        host = iss.Riscv(self, 'host', isa=isa, boot_addr=0x1000, timed=True)
-
-        loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
-
-        tohost_addr = 0
-        fromhost_addr = 0
-        if binary is not None:
-            tohost_addr, fromhost_addr = _get_htif_addresses(binary)
-
-        tohost = Bus_watchpoint(self, 'tohost', tohost_addr, fromhost_addr, word_size=64,
-            args=htif_args)
-        self.bind(host, 'data', tohost, 'input')
-        self.bind(tohost, 'output', ico, 'input')
-
-        self.bind(host, 'meminfo', mem, 'meminfo')
-        self.bind(host, 'fetch', ico, 'input')
-        self.bind(host, 'time', clint, 'time')
-        self.bind(loader, 'out', ico, 'input')
-        self.bind(loader, 'start', host, 'fetchen')
-        # self.bind(loader, 'entry', host, 'bootaddr')
-
-        self.bind(clint, 'sw_irq_0', host, 'msi')
-        self.bind(clint, 'timer_irq_0', host, 'mti')
-        self.bind(plic, 's_irq_0', host, 'sei')
-        self.bind(plic, 'm_irq_0', host, 'mei')
+        clint.o_SW_IRQ(0, host.i_IRQ(3))
+        clint.o_TIMER_IRQ(0, host.i_IRQ(7))
+        plic.o_S_IRQ(0, host.i_IRQ(9))
+        plic.o_M_IRQ(0, host.i_IRQ(11))
 
         self.loader = loader
-        self.tohost = tohost
+        self.host = host
         self.register_binary_handler(self.handle_binary)
 
     @override
@@ -155,16 +134,13 @@ class Soc(st.Component):
         binary = self.get_parameter('binary')
         if binary is not None:
             self.loader.set_binary(binary)
-
-            tohost_addr, fromhost_addr = _get_htif_addresses(binary)
-            self.tohost.add_properties({
-                'riscv_fesvr_tohost_addr': tohost_addr,
-                'riscv_fesvr_fromhost_addr': fromhost_addr,
-            })
+            # The binary does not come as a tree executable, so the core cannot find
+            # tohost/fromhost by itself
+            self.host.handle_htif(binary)
 
         args = self.get_parameter('args')
         if args is not None:
-            self.tohost.add_properties({'args': args.split()})
+            self.host.add_property('args', args.split())
 
     def handle_binary(self, binary: str):
         # This gets called when an executable is attached to a hierarchy of components containing
@@ -174,13 +150,16 @@ class Soc(st.Component):
 
 class Rv64(st.Component):
 
+    # False to simulate the core without timing
+    timed = True
+
     def __init__(self, parent, name, parser, options):
 
         super(Rv64, self).__init__(parent, name, options=options)
 
         clock = Clock_domain(self, 'clock', frequency=10000000)
 
-        soc = Soc(self, 'soc', parser)
+        soc = Soc(self, 'soc', parser, timed=self.timed)
 
         self.bind(clock, 'out', soc, 'clock')
 
