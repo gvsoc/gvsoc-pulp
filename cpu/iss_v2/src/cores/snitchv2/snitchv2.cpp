@@ -9,6 +9,7 @@
 SnitchV2::SnitchV2(Iss &iss)
 : iss(iss)
 , fp_ss(iss), ssr(iss)
+, barrier_release_event(&iss, &SnitchV2::barrier_release_handler)
 {
     this->iss.traces.new_trace("barrier", &this->barrier_trace, vp::DEBUG);
 
@@ -47,6 +48,7 @@ void SnitchV2::reset(bool active)
     {
         this->barrier_waiting = false;
         this->barrier_stalled = false;
+        this->barrier_release_event.cancel();
     }
 }
 
@@ -128,7 +130,14 @@ bool SnitchV2::barrier_update(iss_insn_t *insn, bool is_write, iss_reg_t &value)
         this->barrier_waiting = true;
         this->barrier_req_itf.sync(1);
 
-        if (this->barrier_waiting)
+        if (!this->barrier_waiting)
+        {
+            // Last to arrive: the RTL barrier registers the arrivals and the
+            // release, every core resumes 2 cycles after the last arrival, this
+            // one as the others which were released at once
+            this->iss.exec.stall_cycles_inc(1);
+        }
+        else
         {
             // Stall the core until barrier_sync releases it
             this->barrier_stalled = true;
@@ -148,8 +157,16 @@ void SnitchV2::barrier_sync(vp::Block *__this, bool value)
     _this->barrier_waiting = false;
     if (_this->barrier_stalled)
     {
-        _this->barrier_stalled = false;
-        _this->iss.exec.busy_enter();
-        _this->iss.exec.retain_dec();
+        // The release of the RTL barrier is registered: the next instruction
+        // goes 2 cycles after the last arrival
+        _this->barrier_release_event.enqueue(1);
     }
+}
+
+void SnitchV2::barrier_release_handler(vp::Block *__this, vp::ClockEvent *event)
+{
+    SnitchV2 *_this = &((Iss *)__this)->arch;
+    _this->barrier_stalled = false;
+    _this->iss.exec.busy_enter();
+    _this->iss.exec.retain_dec();
 }

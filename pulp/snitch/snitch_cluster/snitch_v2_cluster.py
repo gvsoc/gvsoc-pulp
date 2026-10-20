@@ -61,8 +61,6 @@ from pulp.snitch.zero_mem_v2 import ZeroMem
 from pulp.snitch.snitch_cluster.cluster_registers_v2 import (ClusterRegisters,
     ClusterRegistersConfig)
 from ips.pulp.idma_v3.snitch_dma import SnitchDmaV3
-from utils.io_v2_single_req_to_beat_adapter import (IoV2SingleReqToBeatAdapter,
-    IoV2SingleReqToBeatAdapterConfig)
 from ips.pulp.idma_v3.snitch_dma_config import SnitchDmaV3Config
 
 from gvrun.attribute import Tree, Area
@@ -183,14 +181,12 @@ class SnitchCluster(gvsoc.systree.Component):
             cores_demux.append(router_v2.Router(self, f'pe{core_id}_demux',
                 config=RouterConfig(kind=KIND_UNTIMED)))
 
-        # All the cores go to the narrow AXI through the RTL reqrsp_mux
-        # (RespDepth 2, lock-in round-robin arbiter) and reqrsp_to_axi
-        # (MaxTrans 4, single ID)
-        cores_mux = router_v2.Router(self, 'cores_mux',
-            config=RouterConfig(kind=KIND_UNTIMED, round_robin_retry=True))
-        cores_to_axi = IoV2SingleReqToBeatAdapter(self, 'cores_to_axi', beat_width=8,
-            config=IoV2SingleReqToBeatAdapterConfig(max_pending=2, max_pending_per_dir=3,
-                rw_exclusive=True, lock_in=True, full_registered=True))
+        # All the cores go to the narrow AXI through the RTL reqrsp_mux, an
+        # in-order request channel elected by a lock-in rr_arb_tree, without
+        # registers, and reqrsp_to_axi (on the mapping to the narrow AXI)
+        cores_mux = router_v2.Router(self, 'cores_mux', config=RouterConfig(
+            kind=KIND_BEAT, width=8, combinational=True, ordered_channel=True,
+            rr_arb_tree=True, lock_in=True, max_pending_bursts=64))
 
         cluster_registers = ClusterRegisters(self, 'cluster_registers',
             config=ClusterRegistersConfig(nb_cores=arch.nb_core))
@@ -205,9 +201,13 @@ class SnitchCluster(gvsoc.systree.Component):
         # Bindings
         #
 
-        # Narrow crossbar: the cores through their converter + the SoC narrow input
-        cores_mux.o_MAP_DEFAULT(cores_to_axi.i_INPUT(), name='axi')
-        cores_to_axi.o_OUTPUT(narrow_axi.i_INPUT(0))
+        # Narrow crossbar: the cores through their mux + the SoC narrow input.
+        # The mux holds 2 transactions in flight (its response FIFO, whose
+        # full flag is a register), reqrsp_to_axi 3 reads or 3 writes
+        # (MaxTrans 4), never both at once (a single AXI ID).
+        cores_mux.o_MAP(narrow_axi.i_INPUT(0), RouterMapping(base=0, size=0,
+            max_pending_bursts=2, full_registered=True, max_pending_per_dir=3,
+            rw_exclusive=True), name='axi')
         self.o_NARROW_INPUT(narrow_axi.i_INPUT(1))
         narrow_axi.o_MAP(tcdm.i_INPUT(arch.tcdm.nb_masters - 1),
             RouterMapping(base=arch.tcdm.area.base, size=arch.tcdm.area.size,

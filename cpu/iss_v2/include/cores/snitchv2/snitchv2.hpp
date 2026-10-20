@@ -49,6 +49,7 @@ public:
 private:
     bool barrier_update(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     static void barrier_sync(vp::Block *__this, bool value);
+    static void barrier_release_handler(vp::Block *__this, vp::ClockEvent *event);
     template<bool fast>
     static iss_reg_t csr_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc);
 
@@ -61,5 +62,8 @@ private:
     bool barrier_waiting;
     // True while the core is retained (stalled) on the barrier
     bool barrier_stalled;
+    // Releases the core the cycle after the barrier ack, the release of the
+    // RTL barrier being registered
+    vp::ClockEvent barrier_release_event;
     vp::Trace barrier_trace;
 };
