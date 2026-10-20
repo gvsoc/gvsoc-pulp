@@ -209,7 +209,7 @@ class SnitchV2(RiscvCommon):
             'offload': Offload(),
             'lsu': LsuV2(nb_outstanding=config.lsu_nb_outstanding,
                          nb_outstanding_loads=config.lsu_nb_outstanding_loads,
-                         width=config.lsu_width),
+                         width=config.lsu_width, in_order=True),
         }
 
         super().__init__(parent, name, config=config, isa=isa_instance, modules=modules)
