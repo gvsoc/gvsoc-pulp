@@ -25,7 +25,11 @@ Model of the RTL ``snitch_cluster`` (default configuration):
   26 narrow inputs are the RTL ones: per compute core, port 0 shared by the
   core data port, the FP LSU and SSR 0 (a per-core demux, which also sends
   everything outside the TCDM to the narrow AXI), and one port per SSR 1 and
-  2; the DMA core data port; the narrow AXI. The DMA enters on the wide
+  2; the DMA core data port; the narrow AXI.
+- The cores reach the narrow AXI through one shared converter, as the RTL
+  ``reqrsp_mux`` + ``reqrsp_to_axi``: 2 accesses in flight for all the cores
+  (the mux response FIFO), at most 3 reads or 3 writes, and no read while
+  writes are in flight nor the opposite (one AXI ID). The DMA enters on the wide
   input, with priority over the cores.
 - Fabric: ``router_v2`` beat routers, wide 512-bit and narrow 64-bit, with
   4 outstanding transactions per input.
@@ -53,6 +57,8 @@ from pulp.snitch.zero_mem_v2 import ZeroMem
 from pulp.snitch.snitch_cluster.cluster_registers_v2 import (ClusterRegisters,
     ClusterRegistersConfig)
 from ips.pulp.idma_v3.snitch_dma import SnitchDmaV3
+from utils.io_v2_single_req_to_beat_adapter import (IoV2SingleReqToBeatAdapter,
+    IoV2SingleReqToBeatAdapterConfig)
 from ips.pulp.idma_v3.snitch_dma_config import SnitchDmaV3Config
 
 from gvrun.attribute import Tree, Area
@@ -173,6 +179,14 @@ class SnitchCluster(gvsoc.systree.Component):
             cores_demux.append(router_v2.Router(self, f'pe{core_id}_demux',
                 config=RouterConfig(kind=KIND_UNTIMED)))
 
+        # All the cores go to the narrow AXI through the RTL reqrsp_mux
+        # (RespDepth 2) and reqrsp_to_axi (MaxTrans 4, single ID)
+        cores_mux = router_v2.Router(self, 'cores_mux',
+            config=RouterConfig(kind=KIND_UNTIMED, round_robin_retry=True))
+        cores_to_axi = IoV2SingleReqToBeatAdapter(self, 'cores_to_axi', beat_width=8,
+            config=IoV2SingleReqToBeatAdapterConfig(max_pending=2, max_pending_per_dir=3,
+                rw_exclusive=True))
+
         cluster_registers = ClusterRegisters(self, 'cluster_registers',
             config=ClusterRegistersConfig(nb_cores=arch.nb_core))
 
@@ -186,8 +200,10 @@ class SnitchCluster(gvsoc.systree.Component):
         # Bindings
         #
 
-        # Narrow crossbar: per-core demux defaults + the SoC narrow input
-        self.o_NARROW_INPUT(narrow_axi.i_INPUT(arch.nb_core))
+        # Narrow crossbar: the cores through their converter + the SoC narrow input
+        cores_mux.o_MAP_DEFAULT(cores_to_axi.i_INPUT(), name='axi')
+        cores_to_axi.o_OUTPUT(narrow_axi.i_INPUT(0))
+        self.o_NARROW_INPUT(narrow_axi.i_INPUT(1))
         narrow_axi.o_MAP(tcdm.i_INPUT(arch.tcdm.nb_masters - 1),
             RouterMapping(base=arch.tcdm.area.base, size=arch.tcdm.area.size,
                 remove_base=False), name='tcdm')
@@ -243,7 +259,7 @@ class SnitchCluster(gvsoc.systree.Component):
             demux.o_MAP(tcdm.i_INPUT(tcdm_port),
                 RouterMapping(base=arch.tcdm.area.base, size=arch.tcdm.area.size,
                     remove_base=False), name='tcdm')
-            demux.o_MAP_DEFAULT(narrow_axi.i_INPUT(core_id), name='soc')
+            demux.o_MAP_DEFAULT(cores_mux.i_INPUT(core_id), name='soc')
             tcdm_port += 1
 
             if core_id != arch.dma_core:
