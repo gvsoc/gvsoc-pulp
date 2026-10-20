@@ -49,6 +49,7 @@ public:
 private:
     bool barrier_update(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     static void barrier_sync(vp::Block *__this, bool value);
+    template<bool fast>
     static iss_reg_t csr_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc);
 
     Iss &iss;

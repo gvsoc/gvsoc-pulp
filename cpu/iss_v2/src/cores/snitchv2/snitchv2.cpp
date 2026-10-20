@@ -33,7 +33,8 @@ void SnitchV2::start()
         iss_decoder_item_t *item = this->iss.decode.get_insn(name);
         if (item != NULL)
         {
-            item->u.insn.stub_handler = &SnitchV2::csr_stub;
+            item->u.insn.stub_handler = &SnitchV2::csr_stub<false>;
+            item->u.insn.stub_fast_handler = &SnitchV2::csr_stub<true>;
         }
     }
 }
@@ -98,6 +99,7 @@ void SnitchV2::decode_hook(iss_insn_t *insn)
     insn->sb_out_reg_mask = out_mask;
 }
 
+template<bool fast>
 iss_reg_t SnitchV2::csr_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
 {
     iss_reg_t csr = UIM_GET(0);
@@ -112,7 +114,7 @@ iss_reg_t SnitchV2::csr_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
         return pc;
     }
 
-    return insn->stub_handler(iss, insn, pc);
+    return iss_stub_handler<fast>(insn)(iss, insn, pc);
 }
 
 bool SnitchV2::barrier_update(iss_insn_t *insn, bool is_write, iss_reg_t &value)

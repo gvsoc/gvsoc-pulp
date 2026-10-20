@@ -80,7 +80,8 @@ void SnitchFpSs::start()
             if (is_mem || strncmp(desc->label, "amo", 3) == 0 ||
                 strncmp(desc->label, "lr.", 3) == 0 || strncmp(desc->label, "sc.", 3) == 0)
             {
-                desc->stub_handler = &SnitchFpSs::caq_stub;
+                desc->stub_handler = &SnitchFpSs::caq_stub<false>;
+                desc->stub_fast_handler = &SnitchFpSs::caq_stub<true>;
             }
             continue;
         }
@@ -102,7 +103,8 @@ void SnitchFpSs::start()
         }
 
         desc->block_id = kind;
-        desc->stub_handler = &SnitchFpSs::offload_stub;
+        desc->stub_handler = &SnitchFpSs::offload_stub<false>;
+        desc->stub_fast_handler = &SnitchFpSs::offload_stub<true>;
         desc->resource_latency = CONFIG_GVSOC_ISS_SNITCH_FMA_LATENCY;
         desc->resource_bandwidth = 0;
     }
@@ -194,6 +196,7 @@ void SnitchFpSs::caq_remove(iss_addr_t addr)
     }
 }
 
+template<bool fast>
 iss_reg_t SnitchFpSs::caq_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
 {
     SnitchFpSs *_this = &iss->arch.fp_ss;
@@ -231,9 +234,10 @@ iss_reg_t SnitchFpSs::caq_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
         }
     }
 
-    return insn->stub_handler(iss, insn, pc);
+    return iss_stub_handler<fast>(insn)(iss, insn, pc);
 }
 
+template<bool fast>
 iss_reg_t SnitchFpSs::offload_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
 {
     SnitchFpSs *_this = &iss->arch.fp_ss;
@@ -253,6 +257,7 @@ iss_reg_t SnitchFpSs::offload_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
     entry.int_reg = -1;
     entry.int_value = 0;
     entry.caq_pending = false;
+    entry.handler = iss_stub_handler<fast>(insn);
     entry.ready_cycle = iss->clock.get_cycles() + CONFIG_GVSOC_ISS_SNITCH_OFFLOAD_LATENCY;
 
     // The integer operands are captured now, the core may overwrite them
@@ -649,12 +654,12 @@ bool SnitchFpSs::issue_entry(int index, int offset, bool last)
         uint64_t *regs = this->iss.regfile.dbt_regs();
         uint64_t saved = regs[entry.int_reg];
         regs[entry.int_reg] = entry.int_value;
-        insn->stub_handler(&this->iss, insn, insn->addr);
+        entry.handler(&this->iss, insn, insn->addr);
         regs[entry.int_reg] = saved;
     }
     else
     {
-        insn->stub_handler(&this->iss, insn, insn->addr);
+        entry.handler(&this->iss, insn, insn->addr);
     }
 
 #ifdef VP_TRACE_ACTIVE

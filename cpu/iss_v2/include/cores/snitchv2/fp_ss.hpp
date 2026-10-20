@@ -63,6 +63,9 @@ struct SnitchFpSsEntry
     // It goes away with the first execution, the FREP repetitions are not
     // tracked.
     bool caq_pending;
+    // Handler executing the instruction, the full or fast one depending on
+    // the variant of the stub which offloaded it
+    iss_reg_t (*handler)(Iss *, iss_insn_t *, iss_reg_t);
 };
 
 // FP load or store of the FP LSU
@@ -112,9 +115,11 @@ public:
     void reset(bool active);
 
     // Stub handler of all the offloaded instructions
+    template<bool fast>
     static iss_reg_t offload_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc);
     // Stub handler of the integer loads, stores and atomics, which wait on the
     // consistency address queue
+    template<bool fast>
     static iss_reg_t caq_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc);
 
     // True when no instruction is queued or in flight
