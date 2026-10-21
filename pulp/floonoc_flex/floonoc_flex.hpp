@@ -144,6 +144,33 @@ class FlooNoc : public vp::Component
     static constexpr int COLL_OP_REDMAX_INT16 = 10;
     static constexpr int COLL_OP_REDMAX_FP16 = 11;
 
+    // [Collective Only] REQ_COLL_MASK Format: we divide the mask into sub-masks,
+    // one per axis (XY in 2D, XYZ in 3D, or leaf-index ranges in a tree).
+    // We assume 16 bits are enough to index within an axis. 
+    // Sub-masks are packed as bits [16*i, 16*i+16): 0-15 for axis 0, 16-31 for axis 1, etc.
+    // The collective routing policy determines how these sub-masks are used.
+    static constexpr int COLL_MASK_AXIS_BITS = 16;
+    static constexpr uint64_t COLL_MASK_AXIS_MASK =
+        (1ULL << COLL_MASK_AXIS_BITS) - 1;
+
+    // Extract the sub-mask for routing axis `axis` (0-indexed) from a
+    // packed REQ_COLL_MASK value.
+    static inline uint16_t coll_mask_axis(uint64_t mask, int axis)
+    {
+        return (uint16_t)((mask >> (axis * COLL_MASK_AXIS_BITS)) &
+                          COLL_MASK_AXIS_MASK);
+    }
+
+    // Pack a single axis sub-mask into its slice of a REQ_COLL_MASK value,
+    // leaving all other axes unchanged.
+    static inline uint64_t coll_mask_set_axis(uint64_t mask, int axis,
+                                              uint16_t axis_mask)
+    {
+        uint64_t shift = axis * COLL_MASK_AXIS_BITS;
+        return (mask & ~(COLL_MASK_AXIS_MASK << shift)) |
+               ((uint64_t)axis_mask << shift);
+    }
+
     // Width in bytes of the noc. This is used to split incoming bursts into
     // internal requests of this width so that the bandwidth corresponds to the
     // width.
