@@ -59,6 +59,7 @@ class FlooNocFlex(gvsoc.systree.Component):
             'pulp/floonoc_flex/floonoc_flex.cpp',
             'pulp/floonoc_flex/floonoc_router_flex.cpp',
             'pulp/floonoc_flex/floonoc_network_interface_flex.cpp',
+            'pulp/floonoc_flex/floonoc_collective_policy.cpp',
         ])
 
         self.add_property('mappings', {})
