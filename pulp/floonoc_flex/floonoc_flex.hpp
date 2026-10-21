@@ -110,8 +110,39 @@ class FlooNoc : public vp::Component
         4; // Node ID of the destination target for flexible topologies
     static constexpr int REQ_INJECT_TIME =
         5; // Cycle timestamp when the packet was injected into the NoC
+    static constexpr int REQ_SRC_ID =
+        6; // Node ID of the network interface which injected the request.
+           // Needed by collective fan-out, which is relative to both source
+           // and destination (unicast routing only ever needs REQ_DEST_ID).
+    static constexpr int REQ_COLL_OP =
+        7; // [Collective Only] Collective operation code for this request, 
+           // 0 (COLL_OP_UNICAST) for a normal, non-collective request.
+    static constexpr int REQ_COLL_MASK =
+        8; // [Collective Only] Mask for collective primitives.
+    static constexpr int REQ_COLL_STATE =
+        9; // [Collective Only] Stores the current collective state.
+           // 0 is reserved as "freshly injected".
+    static constexpr int REQ_PARENT =
+        10; // [Collective Only] Pointer to the original request it forked from,
+             // nullptr for the root request.
+    static constexpr int REQ_PEND_KIDS =
+        11; // [Collective Only] How many kids to be waited for response.
     static constexpr int REQ_NB_ARGS =
-        6; // Number of request data required by this model
+        12; // Number of request data required by this model
+
+    // Collective operation codes for REQ_COLL_OP, aligned with FlooNoC
+    // RTL's collect_reserved_op_e
+    static constexpr int COLL_OP_UNICAST = 0;   // Not a collective (passthrough)
+    static constexpr int COLL_OP_MULTICAST = 1; // Broadcast, no compute
+    // @TODO Values 2-5 reserved for future structural ops (LsbAnd/SelectAW/CollectB/SeqAW)
+    static constexpr int COLL_OP_FIRST_ARITH_OP =
+        6; // First arithmetic (reduction) op code
+    static constexpr int COLL_OP_REDADD_UINT16 = 6;
+    static constexpr int COLL_OP_REDADD_INT16 = 7;
+    static constexpr int COLL_OP_REDADD_FP16 = 8;
+    static constexpr int COLL_OP_REDMAX_UINT16 = 9;
+    static constexpr int COLL_OP_REDMAX_INT16 = 10;
+    static constexpr int COLL_OP_REDMAX_FP16 = 11;
 
     // Width in bytes of the noc. This is used to split incoming bursts into
     // internal requests of this width so that the bandwidth corresponds to the
