@@ -164,7 +164,7 @@ class MagiaV3Tile(gvsoc.systree.Component):
             config = SpatzConfig(isa="rv32imfdcav", fetch_enable=False,
                 boot_addr=MagiaArch.SPATZ_BOOTROM_ADDR, hart_id=tid + tree.nb_clusters,
                 htif=False, nb_lanes=MagiaTileTcdm.NB_SPATZ_VLSU, lane_width=4, vlsu_v2=True,
-                vlen=256, nb_ipus=1)
+                vlen=tree.spatz_vlen, nb_ipus=1)
 
             snitch_spatz = Spatz(self, f'tile-{tid}-snitch-spatz', config=config)
 
@@ -260,13 +260,18 @@ class MagiaV3Tile(gvsoc.systree.Component):
             config=self.idma_config(axi_to_obi=False))
 
         # Redmule
+        # The TCDM port is ARRAY_HEIGHT * (PIPE_REGS + 1) FP16 elements wide, as in the RTL
+        # (DATA_W): 8 x 2 x 2 B = 32 B = 256 bits in the default configuration. tcdm_bank_width x
+        # tcdm_bank_number is the size of that port, not of the TCDM.
+        redmule_elem_size = 2 # max number of bytes per element (FP16)
+        redmule_port_bytes = tree.redmule_h * (MagiaArch.REDMULE_PIPE + 1) * redmule_elem_size
         redmule = LightRedmule(self, f'tile-{tid}-redmule',
                                     tcdm_bank_width     = MagiaArch.BYTES_PER_WORD,
-                                    tcdm_bank_number    = 8, # here we set 8 since tcdm_bank_width x tcdm_bank_number --> 8 x 4 = 32bytes, i.e., 256 bits. Please do not consider tcdm_bank_width and tcdm_bank_number as the boundaries of the TCDM, but rather the size of the port towards it.
-                                    elem_size           = 2, # max number of bytes per element --> if FP16 then elem_size=2. This is the max number to accomodate any supported format which for now are 8bits and 16bits data types
-                                    ce_height           = 8,
-                                    ce_width            = 8,
-                                    ce_pipe             = 1,
+                                    tcdm_bank_number    = redmule_port_bytes // MagiaArch.BYTES_PER_WORD,
+                                    elem_size           = redmule_elem_size,
+                                    ce_height           = tree.redmule_h,
+                                    ce_width            = tree.redmule_w,
+                                    ce_pipe             = MagiaArch.REDMULE_PIPE,
                                     queue_depth         = 1)
 
         # Fsync mm controller
