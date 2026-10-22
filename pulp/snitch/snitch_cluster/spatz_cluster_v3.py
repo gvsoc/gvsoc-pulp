@@ -57,6 +57,7 @@ from pulp.snitch.snitch_icache import SnitchIcacheL0, SnitchIcacheL1
 from pulp.snitch.zero_mem_v2 import ZeroMem
 import pulp.snitch.snitch_cluster.spatz.cluster_registers_v2 as cluster_registers_v2
 from ips.pulp.idma_v3.snitch_dma import SnitchDmaV3
+from interco.fifo_v2 import Fifo, FifoConfig
 from ips.pulp.idma_v3.snitch_dma_config import SnitchDmaV3Config
 
 from gvrun.attribute import Tree, Area
@@ -249,9 +250,17 @@ class SnitchCluster(gvsoc.systree.Component):
         narrow_axi.o_MAP_DEFAULT(self.i_NARROW_SOC(), name='soc')
 
         # Wide crossbar: icache refills, DMA and the narrow zero-mem alias.
-        wide_axi.o_MAP(tcdm.i_WIDE_INPUT(),
+        # The RTL crossbar registers all its ports: 2 cycles through it each
+        # way, where the beat router and its single-request adapter take 1.
+        # The TCDM gets the difference from a register stage, as in snitch_v2
+        # (a DMA write takes 4 cycles from the TCDM write to its completion).
+        wide_tcdm_reg = Fifo(self, 'wide_tcdm_reg', config=FifoConfig(
+            depth=8, latency=1, resp_latency=1, max_outstanding=8,
+            done_annotated_latency=True))
+        wide_axi.o_MAP(wide_tcdm_reg.i_INPUT(),
             RouterMapping(base=arch.tcdm.area.base, size=arch.tcdm.area.size,
                 remove_base=False), name='tcdm')
+        wide_tcdm_reg.o_OUTPUT(tcdm.i_WIDE_INPUT())
         wide_axi.o_MAP(zero_mem.i_INPUT(),
             RouterMapping(base=arch.zero_mem.base, size=arch.zero_mem.size),
             name='zero_mem')

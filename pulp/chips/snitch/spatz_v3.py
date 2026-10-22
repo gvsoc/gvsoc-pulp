@@ -18,9 +18,9 @@
 
 Single Spatz cluster (see ``pulp.snitch.snitch_cluster.spatz_cluster_v3``)
 with the SoC fabric of the RTL testbench: wide 512-bit and narrow 64-bit
-AXI routers, boot ROM at 0x1000, HBM at 0x8000_0000 (8 cycles of latency
-modeling the RTL AXI path to the testbench memory: registered crossbars,
-IW/DW converters and the axi_to_reg frontend). Everything is io_v2:
+AXI routers, boot ROM at 0x1000, HBM at 0x8000_0000 (7 cycles of latency
+modeling the RTL AXI path to the testbench memory, plus 6 cycles on the
+narrow path for the cluster IW/DW converters it crosses). Everything is io_v2:
 routers are
 ``interco.router_v2``, memories are ``memory.memory_v3`` and the binary
 is loaded through ``utils.loader.loader_v2``.
@@ -35,6 +35,7 @@ import memory.memory_v3 as memory_v3
 from memory.memory_v3 import MemoryV3Config
 import interco.router_v2 as router_v2
 from interco.router_v2 import RouterConfig, RouterMapping, KIND_BEAT, KIND_UNTIMED
+from interco.fifo_v2 import Fifo, FifoConfig
 import interco.limiter_v2 as limiter_v2
 from interco.limiter_v2 import LimiterConfig
 import utils.loader.loader_v2 as loader_v2
@@ -143,8 +144,8 @@ class Soc(gvsoc.systree.Component):
         #
 
         # HBM. The memory itself answers immediately in the RTL testbench,
-        # but the AXI path to it (registered crossbars, IW/DW converters,
-        # axi_to_reg) costs ~8 cycles — carried by the board memory latency.
+        # but the AXI path to it (registered crossbars, axi_to_reg) costs
+        # ~7 cycles, carried by the board memory latency.
         # The testbench memory (tb_memory_axi) serialises everything behind
         # an axi_riscv_atomics wrapper that accepts 2 read and 2 write
         # transactions at a time: a third master (an icache refill while the
@@ -164,9 +165,19 @@ class Soc(gvsoc.systree.Component):
         # bridge (the framework inserts the beat adapters on both sides).
         narrow_wide_bridge = router_v2.Router(self, 'narrow_wide_bridge',
             config=RouterConfig(kind=KIND_UNTIMED))
-        narrow_axi.o_MAP(narrow_wide_bridge.i_INPUT(0),
+        # In the RTL, the narrow accesses leave the cluster through its IW and
+        # DW converters and its wide crossbar: a DRAM load takes 18 cycles
+        # from the core and back, where an icache refill takes 9 from the
+        # wide crossbar. The register stage adds the 6 cycles of that path
+        # the routers do not have. It sits on the HBM mapping, which has a
+        # single target, to keep the responses in order.
+        narrow_hbm_reg = Fifo(self, 'narrow_hbm_reg', config=FifoConfig(
+            depth=4, latency=3, resp_latency=3, max_outstanding=4,
+            done_annotated_latency=True))
+        narrow_axi.o_MAP(narrow_hbm_reg.i_INPUT(),
             RouterMapping(base=arch.hbm.base, size=arch.hbm.size, remove_base=False),
             name='hbm')
+        narrow_hbm_reg.o_OUTPUT(narrow_wide_bridge.i_INPUT(0))
         narrow_axi.o_MAP(narrow_wide_bridge.i_INPUT(1),
             RouterMapping(base=arch.bootrom.base, size=arch.bootrom.size, remove_base=False),
             name='rom')
@@ -271,11 +282,11 @@ class SpatzBoard(gvsoc.systree.Component):
 
         chip = Spatz(self, 'chip', parser, arch.chip, binary, debug_binaries)
 
-        # 8 cycles model the RTL AXI path to the testbench memory
-        # (calibrated against the RTL: a scalar load round trip costs
-        # ~30 cycles there, an icache line refill similar).
+        # 7 cycles model the RTL AXI path to the testbench memory: with the
+        # two wide crossbar hops, an icache line refill takes 9 cycles from
+        # the request to the data, as in the RTL.
         mem = memory_v3.Memory(self, 'mem', config=MemoryV3Config(
-            size=arch.hbm.size, atomics=True, latency=10, init=False))
+            size=arch.hbm.size, atomics=True, latency=7, init=False))
 
         self.bind(clock, 'out', chip, 'clock')
         self.bind(clock, 'out', mem, 'clock')
