@@ -41,6 +41,12 @@ public:
     // Rebuilds the scoreboard masks.
     void decode_hook(iss_insn_t *insn);
 
+    // Called when the core stops fetching (IssArch hook, wfi, and the barrier
+    // CSR). The RTL core keeps showing the address of the next instruction on
+    // its fetch port without a request, and its L0 still prefetches on it: it
+    // is sent as a request of size 0, which asks for nothing.
+    void idle_hook(iss_insn_t *insn);
+
     CsrReg fmode;
 
     SnitchFpSs fp_ss;
@@ -54,6 +60,9 @@ private:
     static iss_reg_t csr_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc);
 
     Iss &iss;
+
+    // Size-0 request showing the next PC on the fetch port while idle
+    vp::IoReq fetch_hint_req;
 
     CsrReg barrier;
     vp::WireMaster<bool> barrier_req_itf;

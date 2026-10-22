@@ -76,6 +76,9 @@ class Spatz(RiscvCommon):
         # The barrier CSR is compiled in too
         if config.barrier_csr:
             isa_key += '_barrier'
+        # And so is the fetch size
+        if config.fetch_size != 16:
+            isa_key += f'_fetch{config.fetch_size}'
         isa_instance: Isa | None = isa_instances.get(isa_key)
 
         if isa_instance is None:
@@ -92,7 +95,7 @@ class Spatz(RiscvCommon):
             'arch': Arch('Spatz'),
             'exec': ExecInOrder(scoreboard=True),
             'regfile': Regfile(scoreboard=True),
-            'prefetch': PrefetchSingleLine(),
+            'prefetch': PrefetchSingleLine(size=config.fetch_size),
             'offload': Offload(),
             'irq': IrqExternal() if config.irq == 'external' else Irq()
         }

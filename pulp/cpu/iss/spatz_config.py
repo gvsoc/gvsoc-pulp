@@ -74,6 +74,10 @@ class SpatzConfig(RiscvConfig):
         "The spatz_v3 cluster turns it on; the default keeps the single-cycle "
         "behaviour the other users of this core were calibrated with."
     ))
+    fetch_size: int = cfg_field(default=16, dump=True, desc=(
+        "Bytes the core fetches at once. The RTL core fetches one 32-bit "
+        "word at its PC each cycle (snitch_icache FETCH_DW), which is also "
+        "what the L0 prefetcher decides from"))
     barrier_csr: bool = cfg_field(default=False, dump=True, desc=(
         "Snitch barrier CSR (0x7C2): reading it notifies the cluster "
         "barrier unit on barrier_req and stalls the core until barrier_ack. "

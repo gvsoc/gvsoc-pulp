@@ -8,29 +8,29 @@
  * Snitch instruction cache: the set-associative io_v2 cache used by the
  * Snitch / Spatz clusters as their per-core L0 and shared L1 icaches.
  *
- * Forked from the generic cache/cache_v4.cpp, which stays as it is because
- * gap9, el1 and voscap share it and none of them model a snitch_icache. What
- * lives here and not there is the RTL snitch_icache behaviour:
+ * The configuration only carries the parameters of the RTL snitch_icache;
+ * cfg.level selects which of its two levels an instance is:
  *
- *   - Miss-status holding registers (cfg.nb_refills): several line refills in
- *     flight at once, each owning its own downstream request vehicle, with a
- *     secondary miss on a line already on its way merged onto the refill that
- *     is fetching it rather than issuing a duplicate. The RTL has two, one for
- *     the demand miss and one for the prefetch, which is also what lets the
- *     armed prefetch go out behind a demand miss instead of after it.
- *   - Branch-target prefetching (cfg.prefetch_branch_target): snitch_icache_l0
- *     scans the line it just fetched for the first statically-taken branch or
- *     JAL and aims the prefetch at its target, falling back to the next line.
- *     See arm_prefetch_from_line() for how faithfully that is reproduced.
+ *   - L0 (snitch_icache_l0), one per core: fully associative with
+ *     L0_LINE_COUNT lines replaced in turn, the line hitting skipped. It has
+ *     one refill in flight (pending_refill_q), shared by the demand miss and
+ *     the prefetch, and serves its hits during it. Its prefetcher decides a
+ *     prefetch on a hit with no refill pending when the target is not in the
+ *     cache; the prefetch takes the refill slot and evicts its line at once,
+ *     and its request goes out the next cycle. The target is the first
+ *     statically-taken branch or JAL of the fetched line from the fetch
+ *     position, else the next line. See prefetch_target().
+ *   - L1 (snitch_icache_lookup and snitch_icache_handler), shared: LINE_COUNT
+ *     sets of WAY_COUNT ways, one input port per L0 (NR_FETCH_PORTS), one
+ *     lookup per cycle granted round-robin among them and answered in its
+ *     cycle. A miss goes to one of NUM_AXI_OUTSTANDING refill slots (merged
+ *     with a miss on the same line) and the lookups go on; they only stall
+ *     when every slot is busy. A landed refill answers all the requests
+ *     waiting for its line at once.
  *
- * Everything else is the generic cache and behaves identically:
- *   - pseudo-random LFSR replacement, line-granular
- *   - CPU requests that miss while all refill slots are busy are queued and
- *     replied to once their miss resolves; they are acknowledged as GRANTED
- *   - disable (via the `enable` wire) bypasses the cache: the CPU request is
- *     forwarded verbatim through the refill port (address transformed by
- *     refill_shift / refill_offset first)
- *   - flush, flush-line, flush-ack wires are unchanged
+ * Fetches outside the cacheable window (the PMA) and every fetch while the
+ * cache is disabled (the `enable` wire) are forwarded through the refill port
+ * without touching the cache.
  */
 
 #include <bit>
@@ -39,6 +39,9 @@
 #include <vp/itf/io_v2.hpp>
 #include <vp/signal.hpp>
 #include <vector>
+#include <deque>
+#include <map>
+#include <unordered_map>
 #include <pulp/snitch/snitch_icache/snitch_icache_config.hpp>
 
 static int ceil_log2(unsigned int n)
@@ -54,10 +57,6 @@ typedef struct
     uint8_t *data;
     vp::Trace tag_event;
     int64_t timestamp;
-    // Line brought in by the sequential prefetcher and not yet demanded.
-    // The first demand hit on it triggers the prefetch of the next line
-    // (tagged prefetching, like the RTL snitch_icache prefetcher).
-    bool prefetched;
 } cache_line_t;
 
 class SnitchIcache : public vp::Component
@@ -73,6 +72,12 @@ private:
     // Clock events
     static void refill_event_clear_handler(vp::Block *__this, vp::ClockEvent *event);
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
+    static void delayed_resp_handler(vp::Block *__this, vp::ClockEvent *event);
+
+    // Answer a request which was queued (its master got IO_REQ_GRANTED) and is
+    // now served: the latency annotated on it is applied as a delay, since the
+    // master does not read it on an asynchronous response.
+    void resp_queued(vp::IoReq *req);
 
     // Wire callbacks
     static void enable_sync(vp::Block *_this, bool active);
@@ -82,30 +87,40 @@ private:
 
     // io_v2 callbacks
     static vp::IoReqStatus input_req(vp::Block *__this, vp::IoReq *req);
+    static vp::IoReqStatus input_req_muxed(vp::Block *__this, vp::IoReq *req, int port);
     static vp::IoRespAck refill_resp(vp::Block *__this, vp::IoReq *req);
     static void refill_retry(vp::Block *__this, vp::IoRetryChannel);
 
     vp::IoReqStatus handle_req(vp::IoReq *req);
+    // False for a fetch outside the cacheable window, which bypasses the cache
+    bool cacheable(uint64_t addr) const
+    {
+        return this->cfg.cacheable_size == 0 || (addr >= this->cfg.cacheable_base &&
+            addr - this->cfg.cacheable_base < this->cfg.cacheable_size);
+    }
     void check_state();
 
     cache_line_t *refill(int line_index, unsigned int addr, unsigned int tag,
                           vp::IoReq *req, unsigned int line_offset, bool *pending);
-    void arm_prefetch(unsigned int addr);
-    // Arm the prefetcher from the content of a line, the way the RTL
-    // snitch_icache L0 prefetcher does: scan the line from the accessed
-    // instruction onwards for the first taken branch or JAL and aim at its
-    // target; fall back to the next line when there is none.
-    void arm_prefetch_from_line(cache_line_t *line, unsigned int addr);
-    void try_prefetch();
+    // Line the RTL L0 prefetcher aims at from a fetch of addr in line: the
+    // target of the first taken branch or JAL from the fetched instruction
+    // onwards, else the next line
+    unsigned int prefetch_target(cache_line_t *line, unsigned int addr);
+    // The prefetch decision of a fetch of addr hitting line, as the RTL L0
+    // takes it on every hit with no refill pending
+    void decide_prefetch(cache_line_t *line, unsigned int addr);
+    void send_prefetch();
     cache_line_t *get_line(vp::IoReq *req, unsigned int *line_index,
                             unsigned int *tag, unsigned int *line_offset);
 
-    unsigned int step_lru();
     void enable(bool e);
     void flush();
     void flush_line_op(unsigned int addr);
 
     // Derived geometry (computed in the ctor from cfg)
+    bool is_l1 = false;
+    unsigned int nb_ways = 0;
+    unsigned int line_bytes = 0;
     unsigned int line_size_bits = 0;
     unsigned int nb_sets_bits = 0;
     unsigned int nb_sets = 0;
@@ -126,13 +141,34 @@ private:
     vp::WireSlave<bool>     flush_line_itf;
     vp::WireSlave<uint32_t> flush_line_addr_itf;
 
-    // One miss-status holding register. The cache can have cfg.nb_refills of
-    // these in flight at once; each owns the request vehicle used downstream,
+    // One miss-status holding register. The L0 has 1 in flight at once, the
+    // L1 NUM_AXI_OUTSTANDING; each owns the request vehicle used downstream,
     // so responses are told apart by their request pointer, and each remembers
     // what has to happen when its line lands.
+    // Request of a port of the arbitrated L1, with the cycle from which it can
+    // be granted (lookup), or answered (response).
+    struct PortReq
+    {
+        vp::IoReq *req;
+        int port;
+        int64_t cycle;
+    };
+
     struct RefillSlot
     {
         vp::IoReq req;
+        // Arbitrated L1: the requests waiting for this line, answered when it
+        // lands, and for a synchronous refill the cycle it lands.
+        std::vector<PortReq> waiters;
+        int64_t done_cycle = -1;
+        // Arbitrated L1: first cycle the slot can take a new miss. The RTL
+        // pending table entry is cleared on the edge closing the landing
+        // cycle, so a miss can only take it the cycle after.
+        int64_t reuse_cycle = -1;
+        // Arbitrated L1: the line is refilled into this buffer and only
+        // written to a way of its set when it lands, as in the RTL
+        std::vector<uint8_t> data;
+        unsigned int line_index = 0;
         cache_line_t *line = nullptr;
         uint32_t tag = 0;
         bool busy = false;
@@ -153,13 +189,34 @@ private:
     // that is on its way must wait for it instead of fetching it twice.
     RefillSlot *slot_for_tag(uint32_t tag);
     void free_refill_slot(RefillSlot *slot);
+    // The line of a set to refill: the replacement way, or the next one not
+    // already being refilled by a slot in flight, so that two refills never
+    // land in the same line. nullptr when every way of the set is.
+    // The line being hit (skip) is not replaced, as the RTL L0 evictor skips
+    // the line hitting.
+    cache_line_t *refill_victim(unsigned int line_index, cache_line_t *skip=nullptr);
     bool refill_slot_available() const { return this->nb_busy_refills < this->refill_slots.size(); }
-    // Sequential prefetcher state (active when cfg.prefetch). A demand miss
-    // or the first hit on a prefetched line arms the next line; the prefetch
-    // is issued through the refill port when it is otherwise idle, using its
-    // own request vehicle so responses can be told apart.
-    bool prefetch_wanted = false;
-    unsigned int prefetch_addr = 0;
+    // Prefetch decided, holding its refill slot, whose request goes out from
+    // the next cycle (prefetch_req_vld_q of the RTL), and the event sending it
+    RefillSlot *prefetch_slot = nullptr;
+    vp::ClockEvent prefetch_event{this, &SnitchIcache::prefetch_handler};
+    // L0: prefetch decision of a fetch whose miss was answered. The RTL L0
+    // writes the line on the landing cycle and the fetch hits it, taking the
+    // decision, only the cycle after.
+    static void miss_decide_handler(vp::Block *__this, vp::ClockEvent *event);
+    vp::ClockEvent miss_decide_event{this, &SnitchIcache::miss_decide_handler};
+    cache_line_t *miss_decide_line = nullptr;
+    unsigned int miss_decide_addr = 0;
+    static void prefetch_handler(vp::Block *__this, vp::ClockEvent *event);
+
+    // Address the core shows on its fetch port while it does not fetch (wfi,
+    // barrier), sent as a request of size 0, ~0 once it fetches again. The
+    // RTL L0 evaluates its prefetch on it like on a hit, without a request:
+    // hit_any does not need in_valid_i.
+    uint64_t idle_addr = ~(uint64_t)0;
+    // The address is registered in the core (pc_q): seen from the next cycle
+    vp::ClockEvent idle_event{this, &SnitchIcache::idle_handler};
+    static void idle_handler(vp::Block *__this, vp::ClockEvent *event);
 
     // FIFO of CPU requests that were acknowledged upstream (GRANTED) but not yet
     // served. Two sources feed it:
@@ -177,13 +234,63 @@ private:
     vp::ClockEvent *fsm_event = nullptr;
     vp::ClockEvent  refill_event_clear_event;
 
+    // Queued requests answered with a latency, by the cycle of their response
+    // (in order for the same cycle)
+    std::multimap<int64_t, vp::IoReq *> delayed_resps;
+    vp::ClockEvent  delayed_resp_event;
+
+    // L1: one input port per L0, the requests
+    // waiting for their lookup per port, the arbiter state, and the answers
+    // waiting for their cycle.
+    static void lookup_handler(vp::Block *__this, vp::ClockEvent *event);
+    static void resp_handler(vp::Block *__this, vp::ClockEvent *event);
+    static void refill_done_handler(vp::Block *__this, vp::ClockEvent *event);
+    // Looks up the request at the head of a port: false if it must stay there
+    // (no refill slot or refill denied), the lookups then stall.
+    bool lookup(PortReq &pr);
+    void complete_refill(RefillSlot *slot);
+    // Way replaced by a landing refill: the eviction LFSR of the RTL handler
+    // (snitch_icache_lfsr over the set index bits, a toggle for 2 ways),
+    // stepped at each refill, which never looks for an invalid way
+    unsigned int rtl_evict_way();
+    uint32_t evict_lfsr = 0;
+    // Next way replaced in the L0
+    unsigned int rr_victim = 0;
+    std::vector<vp::IoSlave *> ports;
+    std::vector<std::deque<PortReq>> port_reqs;
+    // A hit answer: the data is read at the lookup, as the RTL reads its
+    // SRAM, and only given to the master with the answer, since the master
+    // may still be using the buffer until then
+    struct Resp
+    {
+        PortReq pr;
+        std::vector<uint8_t> data;
+    };
+    std::deque<Resp> resps;
+    // Requests forwarded while the cache is disabled, to answer on their port
+    std::unordered_map<vp::IoReq *, int> bypass_ports;
+    // The port arbiter is the multi_accept_rr_arb of the RTL: an rr_arb_tree
+    // with its pointer (rr_q), and the port it keeps granting while the
+    // lookup cannot take its request (locked_port)
+    int rr_q = 0;
+    int locked_port = -1;
+    // Arbitrated L1: cycle without lookup. The RTL lookup gives the tag and
+    // data memories to the refill write on the landing cycle and takes no
+    // request then, which leaves the handler stage, modelled by the lookup,
+    // idle the cycle after.
+    int64_t lookup_block_cycle = -1;
+    // The locked request was looked up and waits in the handler (for a
+    // refill slot): the blocked cycle does not hold it back.
+    bool locked_in_handler = false;
+    int rr_tree_winner(std::vector<bool> &req);
+    vp::ClockEvent lookup_event;
+    vp::ClockEvent resp_event;
+    vp::ClockEvent refill_done_event;
+
     // Earliest cycle at which another synchronous refill can complete. Used to
     // fold a previous refill's in-flight window into subsequent synchronous
     // hits/misses so the CPU sees the serialised latency.
     int64_t refill_timestamp = -1;
-
-    // Pseudo-random LFSR state for replacement policy
-    uint8_t lru_out = 0;
 
     // Flush-line wire staging (address arrives via a separate wire)
     uint32_t flush_line_addr = 0;
@@ -208,18 +315,40 @@ SnitchIcache::SnitchIcache(vp::ComponentConf &config)
       pending_refill(*this, "refill", 0),
       refill_event(*this, "refill_addr", 32),
       req_event(*this, "req_addr", 64, vp::SignalCommon::ResetKind::HighZ),
-      refill_event_clear_event(this, &SnitchIcache::refill_event_clear_handler)
+      refill_event_clear_event(this, &SnitchIcache::refill_event_clear_handler),
+      delayed_resp_event(this, &SnitchIcache::delayed_resp_handler),
+      lookup_event(this, &SnitchIcache::lookup_handler),
+      resp_event(this, &SnitchIcache::resp_handler),
+      refill_done_event(this, &SnitchIcache::refill_done_handler)
 {
-    // Derived geometry — SnitchIcacheConfig carries bytes, we unpack into log2s.
-    this->line_size_bits = ceil_log2(this->cfg.line_size);
-    this->nb_sets = this->cfg.size / this->cfg.ways / this->cfg.line_size;
+    // Derived geometry: the L0 is a single set of L0_LINE_COUNT ways, the L1
+    // LINE_COUNT sets of WAY_COUNT ways
+    this->is_l1 = this->cfg.level == 1;
+    this->nb_ways = this->is_l1 ? this->cfg.way_count : this->cfg.line_count;
+    this->nb_sets = this->is_l1 ? this->cfg.line_count : 1;
+    this->line_bytes = this->cfg.line_width / 8;
+    this->line_size_bits = ceil_log2(this->line_bytes);
     this->nb_sets_bits = ceil_log2(this->nb_sets);
 
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
     this->traces.new_trace_event("port", &this->io_event, 32);
 
     // io_v2 slave/master ports (methods bound in-class above).
-    this->new_slave_port("input", &this->input_itf);
+    if (this->is_l1)
+    {
+        int nb_ports = this->cfg.nr_fetch_ports;
+        this->port_reqs.resize(nb_ports);
+        for (int i = 0; i < nb_ports; i++)
+        {
+            vp::IoSlave *itf = new vp::IoSlave(i, &SnitchIcache::input_req_muxed);
+            this->ports.push_back(itf);
+            this->new_slave_port(i == 0 ? "input" : "input_" + std::to_string(i), itf);
+        }
+    }
+    else
+    {
+        this->new_slave_port("input", &this->input_itf);
+    }
     this->new_master_port("refill", &this->refill_itf);
 
     // Side-band wires
@@ -237,40 +366,44 @@ SnitchIcache::SnitchIcache(vp::ComponentConf &config)
 
     this->new_master_port("flush_ack", &this->flush_ack_itf);
 
-    this->lines = new cache_line_t[this->nb_sets * this->cfg.ways];
+    this->lines = new cache_line_t[this->nb_sets * this->nb_ways];
     for (unsigned int i = 0; i < this->nb_sets; i++)
     {
-        for (unsigned int j = 0; j < this->cfg.ways; j++)
+        for (unsigned int j = 0; j < this->nb_ways; j++)
         {
-            cache_line_t *line = &this->lines[i * this->cfg.ways + j];
+            cache_line_t *line = &this->lines[i * this->nb_ways + j];
             line->timestamp = -1;
             line->tag = -1;
-            line->prefetched = false;
-            line->data = new uint8_t[this->cfg.line_size];
+            line->data = new uint8_t[this->line_bytes];
             this->traces.new_trace_event(
                 "set_" + std::to_string(j) + "/line_" + std::to_string(i),
                 &line->tag_event, 32);
         }
     }
 
-    // Miss-status holding registers. One is the historical behaviour (a
-    // single refill in flight, demand and prefetch sharing it).
-    unsigned int nb_refills = this->cfg.nb_refills > 0 ? this->cfg.nb_refills : 1;
+    // Miss-status holding registers: the L0 pending_refill_q, shared by the
+    // demand miss and the prefetch, the L1 NUM_AXI_OUTSTANDING
+    unsigned int nb_refills = this->is_l1 ? this->cfg.num_axi_outstanding : 1;
     this->refill_slots.resize(nb_refills);
+    for (RefillSlot &slot : this->refill_slots)
+    {
+        slot.data.resize(this->line_bytes);
+    }
 
     this->fsm_event = this->event_new(&SnitchIcache::fsm_handler);
 
     this->trace.msg(vp::Trace::LEVEL_INFO,
         "Instantiating cache (sets: %d, ways: %d, line_size: %d)\n",
-        this->nb_sets, this->cfg.ways, this->cfg.line_size);
+        this->nb_sets, this->nb_ways, this->line_bytes);
 }
 
 
 SnitchIcache::RefillSlot *SnitchIcache::alloc_refill_slot()
 {
+    int64_t cycles = this->clock.get_cycles();
     for (RefillSlot &slot : this->refill_slots)
     {
-        if (!slot.busy)
+        if (!slot.busy && slot.reuse_cycle <= cycles)
         {
             slot.busy = true;
             slot.line = nullptr;
@@ -312,6 +445,37 @@ SnitchIcache::RefillSlot *SnitchIcache::slot_for_tag(uint32_t tag)
 }
 
 
+cache_line_t *SnitchIcache::refill_victim(unsigned int line_index, cache_line_t *skip)
+{
+    // RTL L0: the lines are replaced in turn (snitch_icache_l0 cnt_q), the
+    // line hitting skipped
+    unsigned int way = this->rr_victim;
+    this->rr_victim = (this->rr_victim + 1) % this->nb_ways;
+    if (&this->lines[line_index * this->nb_ways + way] == skip)
+    {
+        way = this->rr_victim;
+        this->rr_victim = (this->rr_victim + 1) % this->nb_ways;
+    }
+    for (unsigned int i = 0; i < this->nb_ways; i++)
+    {
+        cache_line_t *line = &this->lines[line_index * this->nb_ways +
+            (way + i) % this->nb_ways];
+        bool busy = false;
+        for (RefillSlot &slot : this->refill_slots)
+        {
+            busy |= slot.busy && slot.line == line;
+        }
+        if (!busy)
+        {
+            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Evicting way %d (tag: 0x%x)\n",
+                (int)((way + i) % this->nb_ways), line->tag);
+            return line;
+        }
+    }
+    return nullptr;
+}
+
+
 void SnitchIcache::free_refill_slot(RefillSlot *slot)
 {
     if (!slot->busy)
@@ -334,12 +498,19 @@ void SnitchIcache::reset(bool active)
     if (active)
     {
         this->flush();
-        this->enabled = this->cfg.enabled;
+        this->enabled = true;
         this->refill_event.release();
         this->refill_retry_pending = false;
         this->input_needs_retry = false;
         this->refill_timestamp = -1;
-        this->prefetch_wanted = false;
+        this->delayed_resps.clear();
+        this->delayed_resp_event.cancel();
+        this->prefetch_slot = nullptr;
+        this->prefetch_event.cancel();
+        this->miss_decide_event.cancel();
+        this->miss_decide_line = nullptr;
+        this->idle_addr = ~(uint64_t)0;
+        this->idle_event.cancel();
         for (RefillSlot &slot : this->refill_slots)
         {
             slot.busy = false;
@@ -347,6 +518,24 @@ void SnitchIcache::reset(bool active)
             slot.cpu_req = nullptr;
         }
         this->nb_busy_refills = 0;
+        for (RefillSlot &slot : this->refill_slots)
+        {
+            slot.waiters.clear();
+            slot.done_cycle = -1;
+            slot.reuse_cycle = -1;
+        }
+        for (auto &q : this->port_reqs)
+        {
+            q.clear();
+        }
+        this->resps.clear();
+        this->bypass_ports.clear();
+        this->rr_q = 0;
+        this->locked_port = -1;
+        this->lookup_block_cycle = -1;
+        this->locked_in_handler = false;
+        this->evict_lfsr = 0;
+        this->rr_victim = 0;
     }
 }
 
@@ -366,7 +555,24 @@ vp::IoRespAck SnitchIcache::refill_resp(vp::Block *__this, vp::IoReq *req)
     // to no MSHR), so we forward the response to the CPU on our own slave port.
     if (slot == nullptr)
     {
+        if (_this->is_l1)
+        {
+            auto it = _this->bypass_ports.find(req);
+            int port = it->second;
+            _this->bypass_ports.erase(it);
+            _this->ports[port]->resp(req);
+            return vp::IO_RESP_ACCEPTED;
+        }
         _this->input_itf.resp(req);
+        return vp::IO_RESP_ACCEPTED;
+    }
+
+    if (_this->is_l1)
+    {
+        if (req->is_last)
+        {
+            _this->complete_refill(slot);
+        }
         return vp::IO_RESP_ACCEPTED;
     }
 
@@ -381,7 +587,6 @@ vp::IoRespAck SnitchIcache::refill_resp(vp::Block *__this, vp::IoReq *req)
         }
         cache_line_t *line = slot->line;
         line->tag = slot->tag;
-        line->prefetched = true;
         _this->free_refill_slot(slot);
         _this->refill_event.release();
         _this->check_state();
@@ -431,12 +636,11 @@ vp::IoRespAck SnitchIcache::refill_resp(vp::Block *__this, vp::IoReq *req)
             memcpy(&line->data[line_offset], data, size);
         }
 
-        // The line content is only known now, so this is where the RTL
-        // prefetcher gets to look at it: re-aim the prefetch at the first
-        // taken branch / JAL it contains. The miss path armed the next
-        // line as a placeholder because the data was not there yet.
-        _this->arm_prefetch_from_line(line,
-            (unsigned int)cpu_req->get_addr());
+        // The fetch which missed hits the line the next cycle, and takes its
+        // prefetch decision then
+        _this->miss_decide_line = line;
+        _this->miss_decide_addr = (unsigned int)cpu_req->get_addr();
+        _this->miss_decide_event.enqueue(1);
     }
 
     _this->input_itf.resp(cpu_req);
@@ -463,10 +667,31 @@ void SnitchIcache::refill_retry(vp::Block *__this, vp::IoRetryChannel)
     // Both flags are one-shot and cleared here.
     _this->refill_retry_pending = false;
 
+    if (_this->prefetch_slot != nullptr)
+    {
+        _this->send_prefetch();
+    }
+
     if (_this->input_needs_retry)
     {
         _this->input_needs_retry = false;
-        _this->input_itf.retry();
+        if (_this->is_l1)
+        {
+            for (vp::IoSlave *port : _this->ports)
+            {
+                port->retry();
+            }
+        }
+        else
+        {
+            _this->input_itf.retry();
+        }
+    }
+
+    if (_this->is_l1)
+    {
+        _this->lookup_event.enqueue(1);
+        return;
     }
 
     _this->check_state();
@@ -496,7 +721,7 @@ void SnitchIcache::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         vp::IoReqStatus st = _this->handle_req(req);
         if (st == vp::IO_REQ_DONE)
         {
-            _this->input_itf.resp(req);
+            _this->resp_queued(req);
         }
         else if (st == vp::IO_REQ_DENIED)
         {
@@ -512,8 +737,52 @@ void SnitchIcache::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 }
 
 
+void SnitchIcache::resp_queued(vp::IoReq *req)
+{
+    int64_t latency = req->get_full_latency();
+    if (latency <= 0)
+    {
+        this->input_itf.resp(req);
+        return;
+    }
+
+    // The delay is now carried by the time of the response
+    req->latency = 0;
+    req->duration = 0;
+    int64_t cycle = this->clock.get_cycles() + latency;
+    this->delayed_resps.emplace(cycle, req);
+    this->delayed_resp_event.enqueue(this->delayed_resps.begin()->first - this->clock.get_cycles());
+}
+
+
+void SnitchIcache::delayed_resp_handler(vp::Block *__this, vp::ClockEvent *event)
+{
+    SnitchIcache *_this = (SnitchIcache *)__this;
+    int64_t now = _this->clock.get_cycles();
+
+    while (!_this->delayed_resps.empty() && _this->delayed_resps.begin()->first <= now)
+    {
+        vp::IoReq *req = _this->delayed_resps.begin()->second;
+        _this->delayed_resps.erase(_this->delayed_resps.begin());
+        _this->input_itf.resp(req);
+    }
+
+    if (!_this->delayed_resps.empty())
+    {
+        _this->delayed_resp_event.enqueue(_this->delayed_resps.begin()->first - now);
+    }
+}
+
+
 void SnitchIcache::check_state()
 {
+    // The prefetch decision on the idle address is taken again once the
+    // pending refill is over
+    if (this->idle_addr != ~(uint64_t)0)
+    {
+        this->idle_event.enqueue(1);
+    }
+
     // Use has_reqs() (presence), NOT !empty() (readiness): a CPU request queued
     // via push_back this same cycle carries a now+1 timestamp, so empty() reports
     // it as "not yet available". If a refill completes the same cycle the request
@@ -529,44 +798,24 @@ void SnitchIcache::check_state()
             this->event_enqueue(this->fsm_event, 1);
         }
     }
-
-    // The refill port is idle and no demand request is waiting: give the
-    // armed prefetch a chance.
-    if (this->refill_slot_available() && !this->refill_retry_pending
-        && !this->refill_pending_reqs.has_reqs())
-    {
-        this->try_prefetch();
-    }
 }
 
 
 // Scan a fetched line for the first statically-taken control transfer, as
-// snitch_icache_l0.sv does, and arm the prefetch at its target.
+// snitch_icache_l0.sv does, and return the line of its target.
 //
 // The RTL looks at every 32-bit slot of the line from the fetch position
 // onwards (it does not account for compressed instructions either) and
 // takes the first backward conditional branch -- the sign bit of the
 // immediate is its static prediction -- or JAL. JALR is unpredictable and
 // ignored. With no such instruction the prefetch falls back to the next
-// line, which is what the plain sequential prefetcher does.
+// line.
 //
 // This is what lets the RTL run a loop whose body just exceeds the cache:
 // the line holding the back edge names the loop top, so the top is
-// refetched before the branch is even taken. A next-line prefetcher stalls
-// there, which is the whole of the model's dp-fconv2d_M32 gap.
-void SnitchIcache::arm_prefetch_from_line(cache_line_t *line, unsigned int addr)
+// refetched before the branch is even taken.
+unsigned int SnitchIcache::prefetch_target(cache_line_t *line, unsigned int addr)
 {
-    if (!this->cfg.prefetch)
-    {
-        return;
-    }
-
-    if (!this->cfg.prefetch_branch_target || line == nullptr)
-    {
-        this->arm_prefetch(addr);
-        return;
-    }
-
     unsigned int line_size = 1U << this->line_size_bits;
     unsigned int line_base = addr & ~(line_size - 1);
 
@@ -605,80 +854,114 @@ void SnitchIcache::arm_prefetch_from_line(cache_line_t *line, unsigned int addr)
             continue;
         }
 
-        // Immediates are memory-space deltas; the cache may work in a
-        // shifted address space (refill_shift).
-        unsigned int target = (unsigned int)((int64_t)(line_base + off) +
-            (imm >> this->cfg.refill_shift));
-
-        this->prefetch_wanted = true;
-        this->prefetch_addr = target & ~(line_size - 1);
-        return;
+        unsigned int target = (unsigned int)((int64_t)(line_base + off) + imm);
+        return target & ~(line_size - 1);
     }
 
-    this->arm_prefetch(addr);
+    return line_base + line_size;
 }
 
 
-void SnitchIcache::arm_prefetch(unsigned int addr)
+void SnitchIcache::decide_prefetch(cache_line_t *line, unsigned int addr)
 {
-    if (!this->cfg.prefetch)
-    {
-        return;
-    }
-    this->prefetch_wanted = true;
-    this->prefetch_addr = (addr & ~((1U << this->line_size_bits) - 1))
-        + (1U << this->line_size_bits);
-}
-
-
-void SnitchIcache::try_prefetch()
-{
-    if (!this->prefetch_wanted || !this->enabled)
+    // No decision while a refill is pending (demand or prefetch)
+    if (!this->refill_slot_available())
     {
         return;
     }
 
-    unsigned int addr = this->prefetch_addr;
-    unsigned int tag = addr >> this->line_size_bits;
+    unsigned int target = this->prefetch_target(line, addr);
+    unsigned int tag = target >> this->line_size_bits;
     unsigned int line_index = tag & (this->nb_sets - 1);
 
-    this->prefetch_wanted = false;
-
-    // Already cached: nothing to do.
-    for (unsigned int i = 0; i < this->cfg.ways; i++)
+    // Already in the cache (hit_prefetch_any): no prefetch
+    for (unsigned int i = 0; i < this->nb_ways; i++)
     {
-        if (this->lines[line_index * this->cfg.ways + i].tag == tag)
+        if (this->lines[line_index * this->nb_ways + i].tag == tag)
         {
             return;
         }
     }
 
-    // Already on its way: nothing to do.
-    if (this->slot_for_tag(tag) != nullptr)
+    cache_line_t *victim = this->refill_victim(line_index, line);
+    if (victim == nullptr)
     {
         return;
     }
 
-    unsigned int way = this->step_lru() % this->cfg.ways;
-    cache_line_t *line = &this->lines[line_index * this->cfg.ways + way];
-
-    uint32_t full_addr = ((addr & ~((1U << this->line_size_bits) - 1))
-                          << this->cfg.refill_shift) + this->cfg.refill_offset;
-
-    this->trace.msg(vp::Trace::LEVEL_DEBUG,
-        "Prefetching line (addr: 0x%x, index: %d, way: %d)\n",
-        full_addr, line_index, way);
-
-    line->tag_event.event((uint8_t *)&full_addr);
-
+    // The prefetch takes the refill slot and evicts its line now, its
+    // request goes out from the next cycle
     RefillSlot *slot = this->alloc_refill_slot();
+    slot->is_prefetch = true;
+    slot->line = victim;
+    slot->tag = tag;
+    victim->tag = -1;
+    this->prefetch_slot = slot;
+    this->prefetch_event.enqueue(1);
+
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Prefetch decided (addr: 0x%x)\n", target);
+}
+
+
+void SnitchIcache::miss_decide_handler(vp::Block *__this, vp::ClockEvent *event)
+{
+    SnitchIcache *_this = (SnitchIcache *)__this;
+    cache_line_t *line = _this->miss_decide_line;
+    _this->miss_decide_line = nullptr;
+    if (line != nullptr && line->tag == (_this->miss_decide_addr >> _this->line_size_bits))
+    {
+        _this->decide_prefetch(line, _this->miss_decide_addr);
+    }
+}
+
+
+void SnitchIcache::idle_handler(vp::Block *__this, vp::ClockEvent *event)
+{
+    SnitchIcache *_this = (SnitchIcache *)__this;
+    uint64_t addr = _this->idle_addr;
+
+    if (addr == ~(uint64_t)0 || !_this->enabled || !_this->cacheable(addr))
+    {
+        return;
+    }
+
+    // Same decision as on a hit; nothing happens on a miss, which needs the
+    // request
+    unsigned int tag = addr >> _this->line_size_bits;
+    unsigned int line_index = tag & (_this->nb_sets - 1);
+    for (unsigned int i = 0; i < _this->nb_ways; i++)
+    {
+        cache_line_t *line = &_this->lines[line_index * _this->nb_ways + i];
+        if (line->tag == tag)
+        {
+            _this->decide_prefetch(line, (unsigned int)addr);
+            return;
+        }
+    }
+}
+
+
+void SnitchIcache::prefetch_handler(vp::Block *__this, vp::ClockEvent *event)
+{
+    SnitchIcache *_this = (SnitchIcache *)__this;
+    _this->send_prefetch();
+}
+
+
+void SnitchIcache::send_prefetch()
+{
+    RefillSlot *slot = this->prefetch_slot;
     if (slot == nullptr)
     {
-        // No free MSHR: keep the intent armed, check_state retries later.
-        this->prefetch_wanted = true;
         return;
     }
-    slot->is_prefetch = true;
+
+    cache_line_t *line = slot->line;
+    uint32_t full_addr = (uint32_t)slot->tag << this->line_size_bits;
+
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Prefetching line (addr: 0x%x)\n", full_addr);
+
+    line->tag_event.event((uint8_t *)&full_addr);
 
     vp::IoReq *r = &slot->req;
     r->prepare();
@@ -692,38 +975,34 @@ void SnitchIcache::try_prefetch()
 
     vp::IoReqStatus st = this->refill_itf.req(r);
 
-    if (st == vp::IO_REQ_GRANTED)
+    if (st == vp::IO_REQ_DENIED)
     {
-        slot->line = line;
-        slot->tag = tag;
+        // It stays until the refill port takes it (refill_retry)
         return;
     }
 
-    this->free_refill_slot(slot);
+    this->prefetch_slot = nullptr;
 
-    if (st == vp::IO_REQ_DENIED)
+    if (st == vp::IO_REQ_GRANTED)
     {
-        // Best effort: drop the prefetch. The downstream will emit a
-        // spurious retry() which refill_retry tolerates.
         return;
     }
 
     // Synchronous completion: the line lands after the accumulated refill
-    // window; demand hits arriving before that pay the remaining time
-    // (this is exactly how the prefetch hides the refill latency), and a
-    // demand miss serialises behind the port occupancy.
+    // window; demand hits arriving before that pay the remaining time.
     int64_t now = this->clock.get_cycles();
     int64_t latency = 0;
     if (now < this->refill_timestamp)
     {
         latency += this->refill_timestamp - now;
     }
-    latency += r->get_full_latency() + this->cfg.refill_latency;
+    latency += r->get_full_latency();
 
     this->refill_timestamp = now + latency;
-    line->tag = tag;
-    line->prefetched = true;
+    line->tag = slot->tag;
     line->timestamp = now + latency;
+    this->free_refill_slot(slot);
+    this->check_state();
 }
 
 
@@ -746,8 +1025,12 @@ cache_line_t *SnitchIcache::refill(int line_index, unsigned int addr, unsigned i
         return nullptr;
     }
 
-    // All miss-status registers in flight: queue the CPU req and back off.
-    RefillSlot *slot = this->alloc_refill_slot();
+    // All miss-status registers in flight, or every way of the set being
+    // refilled: queue the CPU req and back off. The victim is only chosen
+    // once the refill can go, as the RTL L0 evicts nothing for a miss while
+    // a refill is pending.
+    cache_line_t *line = this->refill_slot_available() ? this->refill_victim(line_index) : nullptr;
+    RefillSlot *slot = line != nullptr ? this->alloc_refill_slot() : nullptr;
     if (slot == nullptr)
     {
         this->refill_pending_reqs.push_back(cpu_req);
@@ -755,15 +1038,10 @@ cache_line_t *SnitchIcache::refill(int line_index, unsigned int addr, unsigned i
         return nullptr;
     }
 
-    unsigned int refill_way = this->step_lru() % this->cfg.ways;
-    cache_line_t *line = &this->lines[line_index * this->cfg.ways + refill_way];
-
-    uint32_t full_addr = ((addr & ~((1U << this->line_size_bits) - 1))
-                          << this->cfg.refill_shift) + this->cfg.refill_offset;
+    uint32_t full_addr = addr & ~((1U << this->line_size_bits) - 1);
 
     this->trace.msg(vp::Trace::LEVEL_DEBUG,
-        "Refilling line (addr: 0x%x, index: %d, way: %d)\n",
-        full_addr, line_index, refill_way);
+        "Refilling line (addr: 0x%x, index: %d)\n", full_addr, line_index);
 
     line->tag_event.event((uint8_t *)&full_addr);
 
@@ -795,13 +1073,8 @@ cache_line_t *SnitchIcache::refill(int line_index, unsigned int addr, unsigned i
         slot->cpu_req = cpu_req;
         slot->line_offset = line_offset;
         *pending = true;
-        // With more than one MSHR the armed prefetch does not have to wait
-        // for this refill to come back: send it out now, behind the demand
-        // miss. This is the whole point of the second register -- the RTL
-        // has a dedicated prefetch request id alongside the demand one, and
-        // without this the refills serialise and each line pays the full
-        // memory round trip.
-        this->check_state();
+        // The line is evicted until it lands, as the RTL invalidates it
+        line->tag = -1;
         return nullptr;
     }
 
@@ -829,7 +1102,7 @@ cache_line_t *SnitchIcache::refill(int line_index, unsigned int addr, unsigned i
     }
     // get_full_latency() so a bandwidth router on the refill path contributes
     // its (max-combined) transfer time, not just the head latency.
-    latency += r->get_full_latency() + this->cfg.refill_latency;
+    latency += r->get_full_latency();
 
     this->refill_timestamp = now + latency;
     this->refill_event_clear_event.enqueue(latency);
@@ -847,9 +1120,9 @@ void SnitchIcache::flush_line_op(unsigned int addr)
     this->trace.msg(vp::Trace::LEVEL_INFO, "Flushing cache line (addr: 0x%x)\n", addr);
     unsigned int tag = addr >> this->line_size_bits;
     unsigned int line_index = tag & (this->nb_sets - 1);
-    for (unsigned int i = 0; i < this->cfg.ways; i++)
+    for (unsigned int i = 0; i < this->nb_ways; i++)
     {
-        cache_line_t *line = &this->lines[line_index * this->cfg.ways + i];
+        cache_line_t *line = &this->lines[line_index * this->nb_ways + i];
         if (line->tag == tag)
             line->tag = -1;
     }
@@ -861,9 +1134,9 @@ void SnitchIcache::flush()
     this->trace.msg(vp::Trace::LEVEL_INFO, "Flushing whole cache\n");
     for (unsigned int i = 0; i < this->nb_sets; i++)
     {
-        for (unsigned int j = 0; j < this->cfg.ways; j++)
+        for (unsigned int j = 0; j < this->nb_ways; j++)
         {
-            this->lines[i * this->cfg.ways + j].tag = -1;
+            this->lines[i * this->nb_ways + j].tag = -1;
         }
     }
 
@@ -900,8 +1173,8 @@ cache_line_t *SnitchIcache::get_line(vp::IoReq *req, unsigned int *line_index,
         "index: %d, line_offset: 0x%x)\n",
         is_write, offset, size, *tag, *line_index, *line_offset);
 
-    cache_line_t *line = &this->lines[*line_index * this->cfg.ways];
-    for (unsigned int i = 0; i < this->cfg.ways; i++)
+    cache_line_t *line = &this->lines[*line_index * this->nb_ways];
+    for (unsigned int i = 0; i < this->nb_ways; i++)
     {
         if (line->tag == *tag)
         {
@@ -930,7 +1203,6 @@ vp::IoReqStatus SnitchIcache::handle_req(vp::IoReq *req)
         this->trace.msg(vp::Trace::LEVEL_DEBUG, "SnitchIcache miss\n");
         uint64_t offset = req->get_addr();
         this->refill_event.set(offset);
-        this->arm_prefetch(offset);
         bool pending = false;
         hit_line = this->refill(line_index, offset, tag, req, line_offset,
                                 &pending);
@@ -955,19 +1227,8 @@ vp::IoReqStatus SnitchIcache::handle_req(vp::IoReq *req)
         {
             req->inc_latency(hit_line->timestamp - now);
         }
-        // The RTL prefetcher looks at every line the core fetches, not
-        // only at the ones it brought in itself, and latches a new target
-        // only once the previous one has been issued (latch_prefetch in
-        // snitch_icache_l0.sv). Keeping the stream alive across hits is
-        // what matters in a partially resident loop: with tagged
-        // prefetching the chain dies on the first hit on a resident line,
-        // and the model then pays a full-latency demand miss on the next
-        // one.
-        hit_line->prefetched = false;
-        if (!this->prefetch_wanted)
-        {
-            this->arm_prefetch_from_line(hit_line, req->get_addr());
-        }
+        // The RTL prefetcher looks at every line the core fetches
+        this->decide_prefetch(hit_line, req->get_addr());
     }
 
     if (data)
@@ -994,24 +1255,30 @@ vp::IoReqStatus SnitchIcache::input_req(vp::Block *__this, vp::IoReq *req)
     uint64_t size = req->get_size();
     bool is_write = req->get_is_write();
 
+    if (size == 0)
+    {
+        // The address the core shows while it waits, which asks for nothing
+        _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Core idle (addr: 0x%lx)\n", offset);
+        _this->idle_addr = offset;
+        _this->idle_event.enqueue(1);
+        return vp::IO_REQ_DONE;
+    }
+
     _this->trace.msg(vp::Trace::LEVEL_TRACE,
         "Received req (req: %p, is_write: %d, addr: 0x%lx, size: 0x%lx)\n",
         req, is_write, offset, size);
 
     _this->req_event.set_and_release(offset);
 
-    // Bypass: forward the CPU request verbatim through the refill port after
-    // address transformation. The response comes back on our refill_resp
-    // callback, which recognises a non-&refill_req req as a bypass forward
-    // and replies to the master on our own slave port.
-    if (!_this->enabled)
+    // Bypass: forward the CPU request verbatim through the refill port. The
+    // response comes back on our refill_resp callback, which recognises a
+    // request owned by no refill slot as a bypass forward and replies to the
+    // master on our own slave port.
+    if (!_this->enabled || !_this->cacheable(offset))
     {
-        req->set_addr((offset << _this->cfg.refill_shift) + _this->cfg.refill_offset);
         vp::IoReqStatus st = _this->refill_itf.req(req);
         if (st == vp::IO_REQ_DENIED)
         {
-            // Undo the address rewrite so the master can retry cleanly.
-            req->set_addr(offset);
             _this->input_needs_retry = true;
         }
         return st;
@@ -1019,10 +1286,15 @@ vp::IoReqStatus SnitchIcache::input_req(vp::Block *__this, vp::IoReq *req)
 
     _this->io_event.event((uint8_t *)&offset);
 
-    // Cached path. If a refill is pending we must not start another one: queue
-    // this request and ack upstream with GRANTED. When the current refill
-    // resolves, fsm_handler will re-enter handle_req for this request.
-    if (_this->pending_refill.get() || _this->refill_retry_pending)
+    // The core fetches again
+    _this->idle_addr = ~(uint64_t)0;
+    _this->idle_event.cancel();
+
+    // Cached path. The hits are served during a refill, as the RTL L0 does
+    // during its prefetch: only the requests behind queued ones wait (to keep
+    // their order), and a miss finds a refill slot or queues itself in
+    // refill(). A queued request is re-entered by fsm_handler.
+    if (_this->refill_pending_reqs.has_reqs() || _this->refill_retry_pending)
     {
         _this->refill_pending_reqs.push_back(req);
         _this->check_state();
@@ -1037,26 +1309,355 @@ vp::IoReqStatus SnitchIcache::input_req(vp::Block *__this, vp::IoReq *req)
         // input.retry() once the refill port wakes up.
         _this->input_needs_retry = true;
     }
-    else if (_this->refill_slot_available() && !_this->refill_retry_pending)
-    {
-        _this->try_prefetch();
-    }
     return st;
 }
 
 
 // ---------------------------------------------------------------------------
-// Pseudo-random LRU (8-bit LFSR, matches cache_v3)
+// Arbitrated L1
 // ---------------------------------------------------------------------------
 
-unsigned int SnitchIcache::step_lru()
+vp::IoReqStatus SnitchIcache::input_req_muxed(vp::Block *__this, vp::IoReq *req, int port)
 {
-    int feedback = !(((this->lru_out >> 7) & 1)
-                  ^ ((this->lru_out >> 3) & 1)
-                  ^ ((this->lru_out >> 2) & 1)
-                  ^ ((this->lru_out >> 1) & 1));
-    this->lru_out = (this->lru_out << 1) | (feedback & 1);
-    return (this->lru_out >> 1) & (this->cfg.ways - 1);
+    SnitchIcache *_this = (SnitchIcache *)__this;
+    uint64_t offset = req->get_addr();
+
+    _this->trace.msg(vp::Trace::LEVEL_TRACE,
+        "Received req (req: %p, port: %d, addr: 0x%lx, size: 0x%lx)\n",
+        req, port, offset, req->get_size());
+
+    _this->req_event.set_and_release(offset);
+
+    if (!_this->enabled || !_this->cacheable(offset))
+    {
+        vp::IoReqStatus st = _this->refill_itf.req(req);
+        if (st == vp::IO_REQ_DENIED)
+        {
+            _this->input_needs_retry = true;
+        }
+        else if (st == vp::IO_REQ_GRANTED)
+        {
+            _this->bypass_ports[req] = port;
+        }
+        return st;
+    }
+
+    _this->io_event.event((uint8_t *)&offset);
+
+    // The request goes through the port register of the RTL before it can
+    // be granted, the next cycle at the earliest
+    _this->port_reqs[port].push_back({req, port, _this->clock.get_cycles() + 1});
+    _this->lookup_event.enqueue(1);
+    return vp::IO_REQ_GRANTED;
+}
+
+
+void SnitchIcache::lookup_handler(vp::Block *__this, vp::ClockEvent *event)
+{
+    SnitchIcache *_this = (SnitchIcache *)__this;
+    int64_t cycles = _this->clock.get_cycles();
+    int nb_ports = _this->ports.size();
+    bool pending = false;
+
+    // The ports whose head request can go
+    std::vector<bool> req(nb_ports, false);
+    bool any = false;
+    for (int i = 0; i < nb_ports; i++)
+    {
+        std::deque<PortReq> &q = _this->port_reqs[i];
+        req[i] = !q.empty() && q.front().cycle <= cycles;
+        any |= req[i];
+    }
+
+    bool in_handler = _this->locked_port >= 0 && _this->locked_in_handler;
+    if (any && cycles == _this->lookup_block_cycle && !in_handler)
+    {
+        // The arbiter output is not taken: its choice is locked as in the RTL
+        if (_this->locked_port < 0)
+        {
+            _this->locked_port = _this->rr_tree_winner(req);
+        }
+        _this->lookup_event.enqueue(1);
+        return;
+    }
+
+    if (any)
+    {
+        int port = _this->locked_port >= 0 ? _this->locked_port : _this->rr_tree_winner(req);
+        std::deque<PortReq> &q = _this->port_reqs[port];
+        if (_this->lookup(q.front()))
+        {
+            q.pop_front();
+            _this->locked_port = -1;
+            _this->locked_in_handler = false;
+            // The pointer goes to the first requesting port after it, or the
+            // lowest one
+            for (int k = 1; k <= nb_ports; k++)
+            {
+                int j = (_this->rr_q + k) % nb_ports;
+                if (j == port || req[j])
+                {
+                    _this->rr_q = j;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            _this->locked_port = port;
+            _this->locked_in_handler = true;
+        }
+    }
+
+    for (auto &q : _this->port_reqs)
+    {
+        pending |= !q.empty();
+    }
+    if (pending)
+    {
+        _this->lookup_event.enqueue(1);
+    }
+}
+
+
+// rr_arb_tree pick: down the tree from the root, the right half when the
+// left one has no request, or both have and the pointer bit of the level is
+// set
+int SnitchIcache::rr_tree_winner(std::vector<bool> &req)
+{
+    int n = (int)req.size();
+    int nb_levels = 0;
+    while ((1 << nb_levels) < n) nb_levels++;
+    auto any_in = [&](int lo, int hi) {
+        for (int j = lo; j < hi && j < n; j++) if (req[j]) return true;
+        return false;
+    };
+    int lo = 0;
+    for (int bit = nb_levels - 1; bit >= 0; bit--)
+    {
+        int half = 1 << bit;
+        bool left = any_in(lo, lo + half);
+        bool right = any_in(lo + half, lo + 2 * half);
+        if (!left || (right && ((this->rr_q >> bit) & 1))) lo += half;
+    }
+    return lo;
+}
+
+
+bool SnitchIcache::lookup(PortReq &pr)
+{
+    vp::IoReq *req = pr.req;
+    unsigned int line_index, tag, line_offset;
+    int64_t cycles = this->clock.get_cycles();
+
+    // A previous refill was denied: the lookups wait for the retry
+    if (this->refill_retry_pending)
+    {
+        this->trace.msg(vp::Trace::LEVEL_TRACE, "Lookup stalled, refill denied (port: %d)\n",
+            pr.port);
+        return false;
+    }
+
+    cache_line_t *line = this->get_line(req, &line_index, &tag, &line_offset);
+    if (line != nullptr)
+    {
+        // Answered in the cycle of the lookup
+        Resp resp{{req, pr.port, cycles}, {}};
+        if (!req->get_is_write())
+        {
+            resp.data.assign(&line->data[line_offset], &line->data[line_offset] + req->get_size());
+        }
+        this->resps.push_back(std::move(resp));
+        this->resp_event.enqueue(0);
+        return true;
+    }
+
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "SnitchIcache miss (port: %d)\n", pr.port);
+    this->refill_event.set(req->get_addr());
+
+    // A miss on a line already on its way waits for it
+    RefillSlot *slot = this->slot_for_tag(tag);
+    if (slot != nullptr)
+    {
+        slot->waiters.push_back(pr);
+        return true;
+    }
+
+    // Every refill slot busy: the lookup stalls
+    slot = this->alloc_refill_slot();
+    if (slot == nullptr)
+    {
+        this->trace.msg(vp::Trace::LEVEL_TRACE, "Lookup stalled, no refill slot (port: %d)\n",
+            pr.port);
+        return false;
+    }
+
+    uint32_t full_addr = req->get_addr() & ~((1U << this->line_size_bits) - 1);
+
+    this->trace.msg(vp::Trace::LEVEL_DEBUG,
+        "Refilling line (addr: 0x%x, index: %d)\n", full_addr, line_index);
+
+    // The way is only chosen when the line lands: slot->line just marks the
+    // slot as refilling a line, for slot_for_tag
+    slot->line = &this->lines[line_index * this->nb_ways];
+    slot->line_index = line_index;
+    slot->tag = tag;
+    slot->waiters.clear();
+    slot->waiters.push_back(pr);
+    slot->done_cycle = -1;
+
+    vp::IoReq *r = &slot->req;
+    r->prepare();
+    r->is_first = true;
+    r->is_last = true;
+    r->burst_id = -1;
+    r->set_addr(full_addr);
+    r->set_is_write(false);
+    r->set_size(1U << this->line_size_bits);
+    r->set_data(slot->data.data());
+
+    vp::IoReqStatus st = this->refill_itf.req(r);
+    if (st == vp::IO_REQ_DENIED)
+    {
+        slot->waiters.clear();
+        slot->line = nullptr;
+        this->free_refill_slot(slot);
+        this->refill_retry_pending = true;
+        return false;
+    }
+
+    if (st == vp::IO_REQ_DONE)
+    {
+        // Synchronous refill: it lands after its latency
+        int64_t latency = r->get_full_latency();
+        slot->done_cycle = cycles + latency;
+        this->refill_done_event.enqueue(latency);
+    }
+
+    return true;
+}
+
+
+void SnitchIcache::complete_refill(RefillSlot *slot)
+{
+    this->lookup_block_cycle = this->clock.get_cycles() + 1;
+    unsigned int way = this->rtl_evict_way();
+    cache_line_t *line = &this->lines[slot->line_index * this->nb_ways + way];
+    memcpy(line->data, slot->data.data(), this->line_bytes);
+    line->tag = slot->tag;
+    line->timestamp = -1;
+    this->refill_event.release();
+    uint32_t full_addr = slot->req.get_addr();
+    line->tag_event.event((uint8_t *)&full_addr);
+
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Refill done (addr: 0x%x, way: %d, waiters: %d)\n",
+        (unsigned int)slot->req.get_addr(), way, (int)slot->waiters.size());
+
+    // The line answers every request waiting for it at once
+    for (PortReq &w : slot->waiters)
+    {
+        unsigned int line_offset = w.req->get_addr() & ((1U << this->line_size_bits) - 1);
+        if (!w.req->get_is_write())
+        {
+            memcpy(w.req->get_data(), &line->data[line_offset], w.req->get_size());
+        }
+        this->ports[w.port]->resp(w.req);
+    }
+
+    slot->waiters.clear();
+    slot->done_cycle = -1;
+    slot->reuse_cycle = this->clock.get_cycles() + 1;
+    this->free_refill_slot(slot);
+
+    // Lookups stalled on the refill slots can go again
+    this->lookup_event.enqueue(1);
+}
+
+
+unsigned int SnitchIcache::rtl_evict_way()
+{
+    int n = ceil_log2(this->nb_ways);
+    if (n == 0)
+    {
+        return 0;
+    }
+
+    unsigned int way = this->evict_lfsr;
+    if (n == 1)
+    {
+        this->evict_lfsr ^= 1;
+    }
+    else
+    {
+        static const uint32_t taps[9] = {0, 0, 0x3, 0x6, 0xc, 0x14, 0x30, 0x60, 0xb8};
+        uint32_t mask = (1U << n) - 1;
+        uint32_t tap = n <= 8 ? taps[n] : 1U << (n - 1);
+        uint32_t q = this->evict_lfsr, d;
+        if (q == 0)
+        {
+            d = mask;
+        }
+        else
+        {
+            d = q >> 1;
+            if (q & 1) d ^= tap;
+            if (d == mask) d = 0;
+        }
+        this->evict_lfsr = d;
+    }
+    return way % this->nb_ways;
+}
+
+
+void SnitchIcache::refill_done_handler(vp::Block *__this, vp::ClockEvent *event)
+{
+    SnitchIcache *_this = (SnitchIcache *)__this;
+    int64_t cycles = _this->clock.get_cycles();
+    int64_t next = -1;
+
+    for (RefillSlot &slot : _this->refill_slots)
+    {
+        if (!slot.busy || slot.done_cycle < 0)
+        {
+            continue;
+        }
+        if (slot.done_cycle <= cycles)
+        {
+            _this->complete_refill(&slot);
+        }
+        else if (next < 0 || slot.done_cycle < next)
+        {
+            next = slot.done_cycle;
+        }
+    }
+
+    if (next >= 0)
+    {
+        _this->refill_done_event.enqueue(next - cycles);
+    }
+}
+
+
+void SnitchIcache::resp_handler(vp::Block *__this, vp::ClockEvent *event)
+{
+    SnitchIcache *_this = (SnitchIcache *)__this;
+    int64_t cycles = _this->clock.get_cycles();
+
+    while (!_this->resps.empty() && _this->resps.front().pr.cycle <= cycles)
+    {
+        Resp resp = std::move(_this->resps.front());
+        _this->resps.pop_front();
+        if (!resp.data.empty())
+        {
+            memcpy(resp.pr.req->get_data(), resp.data.data(), resp.data.size());
+        }
+        _this->ports[resp.pr.port]->resp(resp.pr.req);
+    }
+
+    if (!_this->resps.empty())
+    {
+        _this->resp_event.enqueue(_this->resps.front().pr.cycle - cycles);
+    }
 }
 
 

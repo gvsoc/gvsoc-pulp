@@ -74,7 +74,6 @@ inline void Ri5kyEvents::event_cycle_disable() {
 inline void Ri5kyEvents::event_imiss_account(int cycles)
 {
     Events::event_imiss_account(cycles);
-    this->iss.exec.stall_cycles_inc(cycles);
     this->iss.csr.pccr_account(CSR_PCER_IMISS, cycles);
 }
 

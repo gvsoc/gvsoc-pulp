@@ -119,6 +119,18 @@ iss_reg_t SnitchV2::csr_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
     return iss_stub_handler<fast>(insn)(iss, insn, pc);
 }
 
+void SnitchV2::idle_hook(iss_insn_t *insn)
+{
+    // The L0 answers it inline
+    vp::IoReq *req = &this->fetch_hint_req;
+    req->prepare();
+    req->set_addr(insn->addr + insn->size);
+    req->set_size(0);
+    req->set_is_write(false);
+    req->set_data(NULL);
+    this->iss.prefetch.fetch_itf.req(req);
+}
+
 bool SnitchV2::barrier_update(iss_insn_t *insn, bool is_write, iss_reg_t &value)
 {
     if (!is_write && this->barrier_req_itf.is_bound())
@@ -129,6 +141,10 @@ bool SnitchV2::barrier_update(iss_insn_t *insn, bool is_write, iss_reg_t &value)
         // the notification: flag the wait first so that it is seen.
         this->barrier_waiting = true;
         this->barrier_req_itf.sync(1);
+
+        // The RTL core drops its fetch request while the barrier CSR stalls
+        // it, and shows the address of the next instruction instead
+        this->idle_hook(insn);
 
         if (!this->barrier_waiting)
         {

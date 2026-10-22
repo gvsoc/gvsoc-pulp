@@ -205,7 +205,10 @@ class SnitchV2(RiscvCommon):
             'arch': ArchSnitchV2(config),
             'exec': ExecInOrder(scoreboard=True),
             'regfile': RegfileSnitchV2(scoreboard=True),
-            'prefetch': PrefetchSingleLine(),
+            # The RTL core fetches one 32-bit word at its PC each cycle
+            # (snitch_icache FETCH_DW), which is also what the L0 prefetcher
+            # decides from
+            'prefetch': PrefetchSingleLine(size=4),
             'offload': Offload(),
             'lsu': LsuV2(nb_outstanding=config.lsu_nb_outstanding,
                          nb_outstanding_loads=config.lsu_nb_outstanding_loads,
