@@ -84,6 +84,14 @@ class MagiaArch:
     SPATZ_BOOTROM_ADDR         = 0x1000_0000
     SPATZ_BOOTROM_SIZE         = 0x100
     SPATZ_ROMFILE              = ''
+    # Default VLEN in bits, as in the RTL (SPATZ_VLEN), overridden by spatz_vlen
+    SPATZ_VLEN                 = 256
+
+    # RedMulE array, as in the RTL (ARRAY_HEIGHT, ARRAY_WIDTH, PIPE_REGS), overridden by
+    # redmule_h and redmule_w
+    REDMULE_H           = 8
+    REDMULE_W           = 8
+    REDMULE_PIPE        = 1
 
     # Pulp Cores
     PULP_ENABLE         = True
@@ -139,6 +147,21 @@ class MagiaTree(Tree):
         if self.l2_size % 4096 != 0 or not 0 < self.l2_size <= MagiaArch.L2_MAX_SIZE:
             raise RuntimeError(f'l2_size must be a multiple of 4 KiB in '
                 f'(0, {MagiaArch.L2_MAX_SIZE:#x}] (got {self.l2_size:#x})')
+
+        # Design-space knobs: Spatz VLEN and RedMulE array size
+        self.spatz_vlen = TargetParameter(parent, name='spatz_vlen',
+            value=MagiaArch.SPATZ_VLEN, cast=int,
+            description='Spatz VLEN in bits').value
+        self.redmule_h = TargetParameter(parent, name='redmule_h',
+            value=MagiaArch.REDMULE_H, cast=int,
+            description='RedMulE array height (RTL ARRAY_HEIGHT)').value
+        self.redmule_w = TargetParameter(parent, name='redmule_w',
+            value=MagiaArch.REDMULE_W, cast=int,
+            description='RedMulE array width (RTL ARRAY_WIDTH)').value
+        for name in ('spatz_vlen', 'redmule_h', 'redmule_w'):
+            v = getattr(self, name)
+            if v <= 0 or v & (v - 1):
+                raise RuntimeError(f'{name} must be a power of two (got {v})')
 
         if MagiaArch.SPATZ_ENABLE:
             self.romfile = Value(self, 'spatz_romfile', MagiaArch.SPATZ_ROMFILE, cast=str,
