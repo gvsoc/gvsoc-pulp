@@ -58,6 +58,7 @@ void IdmaBackend::reset(bool active)
     if (active)
     {
         this->legalizer.reset();
+        this->wake_targets.clear();
         this->r_fifo.reset();
         this->w_fifo.reset();
         this->wlast.reset();
@@ -267,11 +268,7 @@ void IdmaBackend::write_burst_done(IdmaWriteManager *manager, bool error)
 // re-armed by the tick itself when it runs.
 void IdmaBackend::wake(int cycles)
 {
-    int64_t target = this->cycles() + cycles;
-    if (this->wake_target <= this->cycles() || target < this->wake_target)
-    {
-        this->wake_target = target;
-    }
+    this->wake_targets.insert(this->cycles() + cycles);
     this->tick.enqueue(cycles);
 }
 
@@ -287,9 +284,9 @@ void IdmaBackend::tick_handler(vp::Block *__this, vp::ClockEvent *event)
     int64_t now = _this->cycles();
     bool active = false;
 
-    // A wake requested for a later cycle while this tick was pending
-    int64_t pending_wake = _this->wake_target > now ? _this->wake_target : -1;
-    _this->wake_target = -1;
+    // The wakes for this cycle are served by this tick
+    _this->wake_targets.erase(_this->wake_targets.begin(),
+        _this->wake_targets.upper_bound(now));
 
     // 1. Legalizer: at most one read and one write split
     active |= _this->legalizer.step(now);
@@ -316,9 +313,10 @@ void IdmaBackend::tick_handler(vp::Block *__this, vp::ClockEvent *event)
     {
         _this->tick.enqueue();
     }
-    if (pending_wake > 0)
+    // A wake asked for a later cycle while this tick was pending
+    if (!_this->wake_targets.empty())
     {
-        _this->wake(pending_wake - now);
+        _this->tick.enqueue(*_this->wake_targets.begin() - now);
     }
 
     _this->busy.set(_this->is_busy());

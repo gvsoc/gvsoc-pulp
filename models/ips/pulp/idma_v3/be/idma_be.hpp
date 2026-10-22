@@ -21,6 +21,7 @@
 #pragma once
 
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 #include <vp/vp.hpp>
@@ -167,10 +168,9 @@ private:
     vp::Trace trace;
     /// The single per-cycle event of the back-end.
     vp::ClockEvent tick;
-    /// Earliest cycle a wake() asked for; the engine keeps only the earliest
-    /// pending enqueue, so a later request made while the tick is pending
-    /// must be re-armed by the tick itself.
-    int64_t wake_target = -1;
+    /// Cycles wake() asked for. The engine keeps only the earliest pending
+    /// enqueue, so the tick re-arms itself for the next one still to come.
+    std::set<int64_t> wake_targets;
 
     IdmaLegalizer legalizer;
     /// Outstanding read bursts (r_dp_req), depth num_ax_in_flight.

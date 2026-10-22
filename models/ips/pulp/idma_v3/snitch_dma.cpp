@@ -59,7 +59,7 @@ private:
 
 SnitchDma::SnitchDma(vp::ComponentConf &config)
 :   vp::Component(config, this->cfg),
-    fe(this, &this->me),
+    fe(this, &this->me, this->cfg.offload_req_latency),
     me(this, "me", this->cfg.req_fifo_depth, this->cfg.nb_dims, &this->fe),
     be(this, "be", backend_params(this->cfg), &this->me),
     axi_read(this, "axi_read", &this->be, this->cfg.axi_width, this->cfg.burst_len,

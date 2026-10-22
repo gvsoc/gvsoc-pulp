@@ -27,9 +27,10 @@
 
 
 
-IdmaFeXdma::IdmaFeXdma(vp::Component *top, IdmaFeSink *me)
+IdmaFeXdma::IdmaFeXdma(vp::Component *top, IdmaFeSink *me, int push_delay)
 :   Block(top, "fe"),
     me(me),
+    push_delay(push_delay),
     done_event(this, &IdmaFeXdma::done_handler),
     src(*this, "src", 64),
     dst(*this, "dst", 64),
@@ -163,7 +164,7 @@ uint32_t IdmaFeXdma::enqueue_copy(uint32_t config, uint32_t size, bool &granted)
     if (this->me->can_accept_nd())
     {
         granted = true;
-        this->me->push_nd(req, 0);
+        this->me->push_nd(req, this->push_delay);
     }
     else
     {
@@ -189,7 +190,7 @@ void IdmaFeXdma::me_ready()
         IdmaNdReq *req = this->stalled;
         this->stalled = nullptr;
 
-        this->me->push_nd(req, 0);
+        this->me->push_nd(req, this->push_delay);
         IssOffloadInsnGrant<uint32_t> offload_grant = { .result = req->id };
         this->offload_grant_itf.sync(&offload_grant);
     }

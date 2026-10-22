@@ -52,7 +52,8 @@ public:
     /// @param top Owning component; the offload, offload_grant, irq and busy
     ///            ports are created on it.
     /// @param me  Mid-end the transfers are pushed into.
-    IdmaFeXdma(vp::Component *top, IdmaFeSink *me);
+    /// @param push_delay Cycles before a transfer enters the mid-end.
+    IdmaFeXdma(vp::Component *top, IdmaFeSink *me, int push_delay = 0);
 
     /// Hardware reset: drops a stalled transfer.
     void reset(bool active) override;
@@ -77,6 +78,7 @@ private:
     void update_busy();
 
     IdmaFeSink *me;
+    int push_delay;
     IdmaBackend *be = nullptr;
     vp::Trace trace;
     /// The core's offload wire and the grant wire back to it.

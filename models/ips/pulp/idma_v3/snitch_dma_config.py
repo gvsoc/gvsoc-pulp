@@ -66,3 +66,9 @@ class SnitchDmaV3Config(Config):
     nb_dims: int = cfg_field(default=2, desc=(
         "Dimensions the mid-end iterates (1 to 3)."
     ))
+
+    offload_req_latency: int = cfg_field(default=0, desc=(
+        "Cycles between the offload of a dmcpy by the core and the entry of "
+        "its transfer into the mid-end (1 for the Snitch RegisterOffloadReq "
+        "register)."
+    ))

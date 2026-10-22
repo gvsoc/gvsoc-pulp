@@ -197,9 +197,11 @@ class SnitchCluster(gvsoc.systree.Component):
 
         # The Snitch cluster default config: 24 bursts in flight
         # (dma_axi_req_fifo_depth) and an 8-entry request FIFO
-        # (dma_req_fifo_depth). The write meta FIFO derives from them.
+        # (dma_req_fifo_depth). The write meta FIFO derives from them. The
+        # offload request goes through a register (RegisterOffloadReq).
         idma = SnitchDmaV3(self, 'idma', config=SnitchDmaV3Config(axi_width=64,
-            num_ax_in_flight=24, req_fifo_depth=8, meta_fifo_depth=0))
+            num_ax_in_flight=24, req_fifo_depth=8, meta_fifo_depth=0,
+            offload_req_latency=1))
 
         #
         # Bindings
@@ -224,13 +226,25 @@ class SnitchCluster(gvsoc.systree.Component):
         # cluster with everything else
         narrow_axi.o_MAP_DEFAULT(self.i_NARROW_SOC(), name='soc')
 
-        # Wide crossbar: icache refills and DMA
-        wide_axi.o_MAP(tcdm.i_WIDE_INPUT(),
+        # Wide crossbar: icache refills and DMA. The RTL crossbar registers
+        # all its ports: 2 cycles through it each way, where the beat router
+        # and its single-request adapter take 1. The cluster slaves get the
+        # difference from a register stage (the testbench memory latency
+        # already includes it for the SoC port).
+        wide_tcdm_reg = Fifo(self, 'wide_tcdm_reg', config=FifoConfig(
+            depth=8, latency=1, resp_latency=1, max_outstanding=8,
+            done_annotated_latency=True))
+        wide_zero_mem_reg = Fifo(self, 'wide_zero_mem_reg', config=FifoConfig(
+            depth=8, latency=1, resp_latency=1, max_outstanding=8,
+            done_annotated_latency=True))
+        wide_axi.o_MAP(wide_tcdm_reg.i_INPUT(),
             RouterMapping(base=arch.tcdm.area.base, size=arch.tcdm.area.size,
                 remove_base=False), name='tcdm')
-        wide_axi.o_MAP(zero_mem.i_INPUT(),
+        wide_tcdm_reg.o_OUTPUT(tcdm.i_WIDE_INPUT())
+        wide_axi.o_MAP(wide_zero_mem_reg.i_INPUT(),
             RouterMapping(base=arch.zero_mem.base, size=arch.zero_mem.size),
             name='zero_mem')
+        wide_zero_mem_reg.o_OUTPUT(zero_mem.i_INPUT())
         wide_axi.o_MAP_DEFAULT(self.i_WIDE_SOC(), name='soc')
         # Wide accesses from the SoC (other clusters' DMAs), left unbound on a
         # single-cluster SoC
