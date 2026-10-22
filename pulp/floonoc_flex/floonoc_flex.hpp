@@ -23,6 +23,7 @@
 
 #pragma once
 
+#include "floonoc_collective_policy.hpp"
 #include <vp/itf/io.hpp>
 #include <vp/signal.hpp>
 
@@ -181,6 +182,9 @@ class FlooNoc : public vp::Component
     int nb_nodes;
     int router_degrees;
     std::vector<std::vector<int>> links; // source node, dest node, latency
+
+    // Topology-specific collective fan-out policy, nullptr when disabled 
+    CollectiveRoutingPolicy *collective_policy = nullptr;
 
   private:
     void router_init_neighbours(Router *router, std::vector<Router *> &routers);
