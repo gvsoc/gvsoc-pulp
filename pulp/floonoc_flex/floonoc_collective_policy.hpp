@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+/*
+ * Authors: Rafael Medina, ETH (medinar@iis.ee.ethz.ch)
+ */
+
 #pragma once
 
 #include <cstdint>
