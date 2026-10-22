@@ -393,6 +393,101 @@ Entry *FlooNoc::get_entry(uint64_t base, uint64_t size)
     return NULL;
 }
 
+// Merges `req` (a completed forked collective child) into `parent`
+// (either the collective's root, or an intermediate fork point one level
+// up) according to `parent`'s REQ_COLL_OP
+void FlooNoc::process_collective_operations(vp::IoReq *parent, vp::IoReq *req)
+{
+    int collective_op = parent->get_int(FlooNoc::REQ_COLL_OP);
+    uint64_t size = req->get_size();
+
+    switch (collective_op)
+    {
+        case FlooNoc::COLL_OP_MULTICAST:
+            // Broadcast: nothing to combine
+            break;
+
+        case FlooNoc::COLL_OP_REDADD_UINT16:
+        {
+            uint16_t *dst = (uint16_t *)parent->get_data();
+            uint16_t *src = (uint16_t *)req->get_data();
+            for (uint64_t i = 0; i < size / sizeof(uint16_t); i++)
+            {
+                dst[i] = dst[i] + src[i];
+            }
+            break;
+        }
+        case FlooNoc::COLL_OP_REDADD_INT16:
+        {
+            int16_t *dst = (int16_t *)parent->get_data();
+            int16_t *src = (int16_t *)req->get_data();
+            for (uint64_t i = 0; i < size / sizeof(int16_t); i++)
+            {
+                dst[i] = dst[i] + src[i];
+            }
+            break;
+        }
+        case FlooNoc::COLL_OP_REDADD_FP16:
+        {
+            uint16_t *dst = (uint16_t *)parent->get_data();
+            uint16_t *src = (uint16_t *)req->get_data();
+            for (uint64_t i = 0; i < size / sizeof(uint16_t); i++)
+            {
+                flexfloat_t a, b, result;
+                ff_init(&a, FlooNoc::fp16_desc);
+                ff_init(&b, FlooNoc::fp16_desc);
+                ff_init(&result, FlooNoc::fp16_desc);
+                flexfloat_set_bits(&a, dst[i]);
+                flexfloat_set_bits(&b, src[i]);
+                ff_add(&result, &a, &b);
+                dst[i] = (uint16_t)flexfloat_get_bits(&result);
+            }
+            break;
+        }
+        case FlooNoc::COLL_OP_REDMAX_UINT16:
+        {
+            uint16_t *dst = (uint16_t *)parent->get_data();
+            uint16_t *src = (uint16_t *)req->get_data();
+            for (uint64_t i = 0; i < size / sizeof(uint16_t); i++)
+            {
+                dst[i] = dst[i] > src[i] ? dst[i] : src[i];
+            }
+            break;
+        }
+        case FlooNoc::COLL_OP_REDMAX_INT16:
+        {
+            int16_t *dst = (int16_t *)parent->get_data();
+            int16_t *src = (int16_t *)req->get_data();
+            for (uint64_t i = 0; i < size / sizeof(int16_t); i++)
+            {
+                dst[i] = dst[i] > src[i] ? dst[i] : src[i];
+            }
+            break;
+        }
+        case FlooNoc::COLL_OP_REDMAX_FP16:
+        {
+            uint16_t *dst = (uint16_t *)parent->get_data();
+            uint16_t *src = (uint16_t *)req->get_data();
+            for (uint64_t i = 0; i < size / sizeof(uint16_t); i++)
+            {
+                flexfloat_t a, b, result;
+                ff_init(&a, FlooNoc::fp16_desc);
+                ff_init(&b, FlooNoc::fp16_desc);
+                ff_init(&result, FlooNoc::fp16_desc);
+                flexfloat_set_bits(&a, dst[i]);
+                flexfloat_set_bits(&b, src[i]);
+                ff_max(&result, &a, &b);
+                dst[i] = (uint16_t)flexfloat_get_bits(&result);
+            }
+            break;
+        }
+        default:
+            this->trace.fatal(
+                "Collective completion with unsupported REQ_COLL_OP %d\n",
+                collective_op);
+    }
+}
+
 extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
     return new FlooNoc(config);

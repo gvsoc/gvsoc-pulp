@@ -24,6 +24,7 @@
 #pragma once
 
 #include "floonoc_collective_policy.hpp"
+#include <cpu/iss/flexfloat/flexfloat.h>
 #include <vp/itf/io.hpp>
 #include <vp/signal.hpp>
 
@@ -188,6 +189,13 @@ class FlooNoc : public vp::Component
 
   private:
     void router_init_neighbours(Router *router, std::vector<Router *> &routers);
+
+    // [Collective Only] fp16 format descriptor
+    static constexpr flexfloat_desc_t fp16_desc = {5, 10};
+
+    // [Collective Only] Merges a forked collective child's response data
+    // into its parent's buffer according to the parent's REQ_COLL_OP..
+    void process_collective_operations(vp::IoReq *parent, vp::IoReq *req);
 
     // This block trace
     vp::Trace trace;
