@@ -258,10 +258,50 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
             }
         }
     }
+
+    // Topology-specific collective fan-out policy
+    std::string collective_route_algo =
+        get_js_config()->get("collective_route_algo")->get_str();
+
+    if (collective_route_algo != "none")
+    {
+        std::unordered_map<int, std::pair<int, int>> node_coords;
+        js::Config *coords_cfg = get_js_config()->get("collective_coords");
+        if (coords_cfg != NULL)
+        {
+            // Build a map of node_id -> (x, y) coordinates for the collective routingy
+            for (js::Config *entry : coords_cfg->get_elems())
+            {
+                int node_id = entry->get_elem(0)->get_int();
+                int x = entry->get_elem(1)->get_int();
+                int y = entry->get_elem(2)->get_int();
+                node_coords[node_id] = {x, y};
+            }
+        }
+
+        if (collective_route_algo == "xy_mesh")
+        {
+            this->collective_policy =
+                new MeshXYCollectivePolicy(true, node_coords);
+        }
+        else if (collective_route_algo == "yx_mesh")
+        {
+            this->collective_policy =
+                new MeshXYCollectivePolicy(false, node_coords);
+        }
+        else
+        {
+            this->trace.fatal(
+                "Unknown collective_route_algo '%s'\n",
+                collective_route_algo.c_str());
+        }
+    }
 }
 
 FlooNoc::~FlooNoc()
 {
+    delete this->collective_policy;
+
     for (Router *router : this->req_routers)
     {
         delete router;
