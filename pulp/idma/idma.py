@@ -15,6 +15,7 @@
 #
 
 import gvsoc.systree
+from gvsoc.signature import IoV2Sync
 
 class IDma(gvsoc.systree.Component):
 
@@ -28,10 +29,10 @@ class IDma(gvsoc.systree.Component):
         })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'input', signature='io')
+        return gvsoc.systree.SlaveItf(self, 'input', signature=IoV2Sync())
 
     def i_OFFLOAD(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'offload', signature='wire<IssOffloadInsn<uint32_t>*>')
 
     def o_ICO(self, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind('ico', itf, signature='io')
+        self.itf_bind('ico', itf, signature=IoV2Sync())

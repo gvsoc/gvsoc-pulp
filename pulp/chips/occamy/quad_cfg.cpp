@@ -19,7 +19,7 @@
  */
 
 #include <vp/vp.hpp>
-#include <vp/itf/io.hpp>
+#include <vp/itf/io_v2.hpp>
 #include <vp/itf/wire.hpp>
 #include <stdio.h>
 #include <string.h>
@@ -43,7 +43,7 @@ private:
     void reset_n_req(uint64_t reg_offset, int size, uint8_t *value, bool is_write);
 
     vp::Trace trace;
-    vp::IoSlave input_itf;
+    vp::IoSlave input_itf{&QuadCfg::req};
     vp::WireMaster<bool> reset_itf;
 
     vp_regmap_quad_cfg regmap;
@@ -56,7 +56,6 @@ QuadCfg::QuadCfg(vp::ComponentConf &config)
     : vp::Component(config), regmap(*this, "regmap")
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
-    this->input_itf.set_req_meth(&QuadCfg::req);
     this->new_slave_port("input", &this->input_itf);
 
     this->new_master_port("quadrant_reset", &this->reset_itf);
@@ -85,7 +84,8 @@ vp::IoReqStatus QuadCfg::req(vp::Block *__this, vp::IoReq *req)
 
     _this->regmap.access(offset, size, data, is_write);
 
-    return vp::IO_REQ_OK;
+    req->set_resp_status(vp::IO_RESP_OK);
+    return vp::IO_REQ_DONE;
 }
 
 

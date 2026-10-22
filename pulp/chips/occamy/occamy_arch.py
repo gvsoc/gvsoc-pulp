@@ -16,19 +16,16 @@
 
 import os
 
-from pulp.snitch.snitch_cluster.snitch_cluster import ClusterArch
+from gvrun.attribute import Tree
+from pulp.snitch.snitch_cluster.snitch_v2_cluster import ClusterArch
 
-if os.environ.get('USE_GVRUN') is None:
-    from pulp.snitch.snitch_cluster.snitch_cluster import Area
-else:
-    from gvrun.attribute import Tree
 
-    class Area:
-        # The occamy address map is pure data, so a plain area is enough under
-        # gvrun too; only the cluster arch is exposed as an attribute tree.
-        def __init__(self, base, size):
-            self.base = base
-            self.size = size
+class Area:
+    # The occamy address map is pure data, so a plain area is enough; only the
+    # cluster arch is exposed as an attribute tree.
+    def __init__(self, base, size):
+        self.base = base
+        self.size = size
 
 
 class OccamyArchProperties:
@@ -39,7 +36,6 @@ class OccamyArchProperties:
         self.nb_core_per_cluster     = 9
         self.hbm_size                = 0x80000000
         self.hbm_type                = 'simple'
-        self.core_type               = 'accurate'
         self.use_spatz               = spatz
         self.spatz_nb_lanes          = 4
         self.isa                     = 'rv32imfdcav' if spatz else 'rv32imfdca'
@@ -68,10 +64,6 @@ class OccamyArchProperties:
             name='soc/quadrant/cluster/nb_core', value=self.nb_core_per_cluster, cast=int, description='Number of cores per cluster'
         )
 
-        self.core_type = target.declare_user_property(
-                    name='core_type', value=self.core_type, allowed_values=['accurate', 'fast'], description='Type of the snitch model'
-        )
-
 
 
 class OccamyArch:
@@ -82,13 +74,10 @@ class OccamyArch:
             properties = OccamyArchProperties()
 
         # With the legacy gvsoc launcher, the architecture can be tuned through user
-        # properties. With gvrun, the defaults are used and the cluster arch is rooted
-        # in an attribute tree.
+        # properties. With gvrun, the defaults are used.
         if os.environ.get('USE_GVRUN') is None:
             properties.declare_target_properties(target)
-            attr_parent = None
-        else:
-            attr_parent = Tree(target, 'occamy')
+        attr_parent = Tree(target, 'occamy')
 
         self.chip = OccamyArch.Chip(properties, attr_parent)
         self.hbm = OccamyArch.Hbm(properties)
@@ -184,14 +173,10 @@ class OccamyArch:
                 self.clusters = []
                 current_hardid = first_hartid
                 for id in range(0, self.nb_cluster):
-                    if attr_parent is None:
-                        cluster_arch = ClusterArch(properties, self.get_cluster_base(id),
-                            current_hardid, auto_fetch=True, boot_addr=0x0100_0000)
-                    else:
-                        cluster_arch = ClusterArch(attr_parent, 'cluster', self.get_cluster_base(id),
-                            current_hardid, auto_fetch=True, boot_addr=0x0100_0000,
-                            nb_core_per_cluster=properties.nb_core_per_cluster,
-                            core_type=properties.core_type)
+                    cluster_arch = ClusterArch(attr_parent, 'cluster', self.get_cluster_base(id),
+                        current_hardid, auto_fetch=True, boot_addr=0x0100_0000,
+                        nb_core_per_cluster=properties.nb_core_per_cluster,
+                        isa=properties.isa, peripheral_offset=0x0002_0000)
                     self.clusters.append(cluster_arch)
                     current_hardid += self.clusters[id].nb_core
 

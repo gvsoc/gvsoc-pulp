@@ -15,6 +15,7 @@
 #
 
 import gvsoc.systree
+from gvsoc.signature import IoV2Sync
 import regmap.regmap
 import regmap.regmap_hjson
 import regmap.regmap_c_header
@@ -41,7 +42,7 @@ class QuadCfg(gvsoc.systree.Component):
 
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'input', signature='io')
+        return gvsoc.systree.SlaveItf(self, 'input', signature=IoV2Sync())
 
     def o_QUADRANT_RESET(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('quadrant_reset', itf, signature='wire<bool>')

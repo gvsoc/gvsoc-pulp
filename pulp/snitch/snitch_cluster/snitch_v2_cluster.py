@@ -62,7 +62,8 @@ class ClusterArch(Tree):
     """Architectural description of the Snitch cluster."""
 
     def __init__(self, parent, name, base, first_hartid, auto_fetch=False,
-            boot_addr=0x0000_1000, nb_core_per_cluster=9, isa='rv32imfdca'):
+            boot_addr=0x0000_1000, nb_core_per_cluster=9, isa='rv32imfdca',
+            peripheral_offset=0x0002_1000):
         super().__init__(parent, name)
 
         self.nb_core = nb_core_per_cluster
@@ -81,8 +82,10 @@ class ClusterArch(Tree):
         self.tcdm          = ClusterArch.Tcdm(self, 'tcdm', base, nb_masters)
         # RTL map: a 4 KiB cluster bootrom window at 0x2_0000 (not modeled,
         # the boot ROM is on the SoC), then the peripherals up to the zero
-        # memory
-        self.peripheral    = Area(self, 'peripheral', base + 0x0002_1000, 0x0000_F000, 'peripheral range')
+        # memory. Older clusters (Occamy) have no bootrom window and their
+        # peripherals at 0x2_0000.
+        self.peripheral    = Area(self, 'peripheral', base + peripheral_offset,
+            0x0003_0000 - peripheral_offset, 'peripheral range')
         self.zero_mem      = Area(self, 'zero_mem', base + 0x0003_0000, 0x0001_0000, 'zero mem range')
 
     class Tcdm(Tree):
@@ -209,6 +212,9 @@ class SnitchCluster(gvsoc.systree.Component):
             RouterMapping(base=arch.zero_mem.base, size=arch.zero_mem.size),
             name='zero_mem')
         wide_axi.o_MAP_DEFAULT(self.i_WIDE_SOC(), name='soc')
+        # Wide accesses from the SoC (other clusters' DMAs), left unbound on a
+        # single-cluster SoC
+        self.o_WIDE_INPUT(wide_axi.i_INPUT(4))
 
         # Icache hierarchy
         for core_id in range(0, arch.nb_core):
@@ -300,6 +306,12 @@ class SnitchCluster(gvsoc.systree.Component):
 
     def o_NARROW_SOC(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('narrow_soc', itf, signature=IoV2Beat(8))
+
+    def i_WIDE_INPUT(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'wide_input', signature=IoV2Beat(64))
+
+    def o_WIDE_INPUT(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('wide_input', itf, signature=IoV2Beat(64), composite_bind=True)
 
     def i_WIDE_SOC(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'wide_soc', signature=IoV2Beat(64))

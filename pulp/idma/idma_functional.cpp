@@ -19,7 +19,7 @@
  */
 
 #include <vp/vp.hpp>
-#include <vp/itf/io.hpp>
+#include <vp/itf/io_v2.hpp>
 #include <vp/itf/wire.hpp>
 #include <vp/register.hpp>
 #include <stdio.h>
@@ -40,11 +40,13 @@ private:
     uint32_t get_status(uint32_t status);
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
     static void offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *insn);
+    static void ico_retry(vp::Block *__this, vp::IoRetryChannel channel);
+    static vp::IoRespAck ico_resp(vp::Block *__this, vp::IoReq *req);
 
     vp::Trace trace;
-    vp::IoSlave input_itf;
+    vp::IoSlave input_itf{&IDma::req};
 
-    vp::IoMaster ico_itf;
+    vp::IoMaster ico_itf{&IDma::ico_retry, &IDma::ico_resp};
 
     vp::WireSlave<IssOffloadInsn<uint32_t> *> offload_itf;
 
@@ -64,8 +66,6 @@ IDma::IDma(vp::ComponentConf &config)
     reps(*this, "REPS", 32)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
-    this->input_itf.set_req_meth(&IDma::req);
-
     this->new_slave_port("input", &this->input_itf);
 
     this->new_master_port("ico", &this->ico_itf);
@@ -84,25 +84,23 @@ void IDma::trigger_copy(uint32_t config, uint32_t size)
 {
     vp::IoReq req;
 
-    req.init();
-
     req.set_addr(this->src.get());
     req.set_size(size);
     req.set_data(new uint8_t[size]);
-    req.set_is_write(false);
+    req.set_opcode(vp::IoReqOpcode::READ);
 
-    int err = this->ico_itf.req(&req);
-    if (err == vp::IO_REQ_OK)
+    vp::IoReqStatus err = this->ico_itf.req(&req);
+    if (err == vp::IO_REQ_DONE && req.get_resp_status() == vp::IO_RESP_OK)
     {
         req.prepare();
         req.set_addr(this->dst.get());
-        req.set_is_write(true);
+        req.set_opcode(vp::IoReqOpcode::WRITE);
 
-        int err = this->ico_itf.req(&req);
-        if (err == vp::IO_REQ_OK)
+        vp::IoReqStatus err = this->ico_itf.req(&req);
+        if (err == vp::IO_REQ_DONE && req.get_resp_status() == vp::IO_RESP_OK)
         {
         }
-        else if (err == vp::IO_REQ_INVALID)
+        else if (err == vp::IO_REQ_DONE)
         {
             this->trace.force_warning("Invalid access (addr: 0x%lx, size: 0x%lx)\n", this->dst.get(), size);
         }
@@ -111,7 +109,7 @@ void IDma::trigger_copy(uint32_t config, uint32_t size)
             this->trace.fatal("Unsupported pending or denied access (addr: 0x%lx, size: 0x%lx)\n", this->dst.get(), size);
         }
     }
-    else if (err == vp::IO_REQ_INVALID)
+    else if (err == vp::IO_REQ_DONE)
     {
         this->trace.force_warning("Invalid access (addr: 0x%lx, size: 0x%lx)\n", this->src.get(), size);
     }
@@ -188,7 +186,21 @@ vp::IoReqStatus IDma::req(vp::Block *__this, vp::IoReq *req)
         *(uint64_t *)data = 0;
     }
 
-    return vp::IO_REQ_OK;
+    req->set_resp_status(vp::IO_RESP_OK);
+    return vp::IO_REQ_DONE;
+}
+
+
+// The copy only supports targets answering inline
+void IDma::ico_retry(vp::Block *__this, vp::IoRetryChannel channel)
+{
+}
+
+vp::IoRespAck IDma::ico_resp(vp::Block *__this, vp::IoReq *req)
+{
+    IDma *_this = (IDma *)__this;
+    _this->trace.fatal("Unsupported asynchronous response\n");
+    return vp::IO_RESP_ACCEPTED;
 }
 
 

@@ -19,7 +19,7 @@
  */
 
 #include <vp/vp.hpp>
-#include <vp/itf/io.hpp>
+#include <vp/itf/io_v2.hpp>
 #include <vp/itf/wire.hpp>
 #include <stdio.h>
 #include <string.h>
@@ -42,7 +42,7 @@ private:
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
     vp::Trace trace;
-    vp::IoSlave input_itf;
+    vp::IoSlave input_itf{&SocReg::req};
 
     vp_regmap_soc_reg regmap;
 };
@@ -54,7 +54,6 @@ SocReg::SocReg(vp::ComponentConf &config)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
-    this->input_itf.set_req_meth(&SocReg::req);
     this->new_slave_port("input", &this->input_itf);
 
     this->regmap.build(this, &this->trace, "regmap");
@@ -79,7 +78,8 @@ vp::IoReqStatus SocReg::req(vp::Block *__this, vp::IoReq *req)
 
     _this->regmap.access(offset, size, data, is_write);
 
-    return vp::IO_REQ_OK;
+    req->set_resp_status(vp::IO_RESP_OK);
+    return vp::IO_REQ_DONE;
 }
 
 
