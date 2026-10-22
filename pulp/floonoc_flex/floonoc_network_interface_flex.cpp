@@ -125,6 +125,50 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address,
         *router_req->arg_get(FlooNoc::REQ_BURST) = (void *)req;
         *router_req->arg_get(FlooNoc::REQ_IS_ADDRESS) = (void *)is_address;
         *router_req->arg_get(FlooNoc::REQ_WIDE) = (void *)wide;
+
+        // Collective primitives metadata
+        *router_req->arg_get(FlooNoc::REQ_SRC_ID) =
+            (void *)(long)this->ni.node_id;
+        // Initialize all collective metadata to default values
+        *router_req->arg_get(FlooNoc::REQ_COLL_OP) =
+            (void *)(long)FlooNoc::COLL_OP_UNICAST;
+        *router_req->arg_get(FlooNoc::REQ_COLL_MASK) = (void *)(long)0;
+        *router_req->arg_get(FlooNoc::REQ_COLL_STATE) = (void *)(long)0;
+        *router_req->arg_get(FlooNoc::REQ_PARENT) = NULL;
+        *router_req->arg_get(FlooNoc::REQ_PEND_KIDS) = (void *)(long)0;
+
+        if (is_req && this->ni.noc->collective_policy != NULL)
+        {
+            // Read the sideband collective descriptor from the burst:
+            // 1 byte op code + 8 bytes mask
+            uint8_t *burst_payload = req->get_payload();
+            uint8_t user_op = burst_payload[0];
+            uint64_t mask = 0;
+            for (int i = 0; i < 8; i++)
+            {
+                mask |= ((uint64_t)burst_payload[1 + i]) << (8 * i);
+            }
+
+            int effective_op;
+            switch (user_op)
+            {
+                case FlooNoc::COLL_OP_UNICAST:
+                    // Software didn't request a specific collective op.
+                    // Unicast if mask is zero, otherwise multicast.
+                    effective_op = (mask != 0) ? FlooNoc::COLL_OP_MULTICAST
+                                                : FlooNoc::COLL_OP_UNICAST;
+                    break;
+                default:
+                    // Take the sw-specified op code.
+                    effective_op = user_op;
+                    break;
+            }
+
+            *router_req->arg_get(FlooNoc::REQ_COLL_OP) =
+                (void *)(long)effective_op;
+            *router_req->arg_get(FlooNoc::REQ_COLL_MASK) = (void *)(long)mask;
+        }
+
         router_req->set_size(size);
         router_req->set_data(burst_data);
         router_req->set_addr(burst_base);
