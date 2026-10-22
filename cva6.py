@@ -57,17 +57,20 @@ class Soc(st.Component):
         # be set from the build process.
         binary = None
         if os.environ.get('USE_GVRUN') is None and parser is not None:
-            parser.add_argument("--isa", dest="isa", type=str, default="rv64imafdc",
-                help="RISCV-V ISA string (default: %(default)s)")
+            parser.add_argument("--isa", dest="isa", type=str, default=None,
+                help="RISCV-V ISA string (default: rv64imafdc)")
 
             [args, __] = parser.parse_known_args()
             binary = args.binary
-            isa = args.isa
+            # The build also generates the tree through this path, with the isa
+            # coming as a target parameter (e.g. cva6:soc/isa=rv32imafc)
+            isa = args.isa if args.isa is not None else self.get_parameter('isa')
         else:
             isa = self.get_parameter('isa')
 
         mem = memory.Memory(self, 'mem', size=0x80000000, atomics=True)
         rom = memory.Memory(self, 'rom', size=0x10000, stim_file=self.get_file_path('pulp/chips/rv64/rom.bin'))
+        debug = memory.Memory(self, 'debug', size=0x1000)
         uart = ns16550.Ns16550(self, 'uart')
         clint = cpu.clint.Clint(self, 'clint')
         plic = cpu.plic.Plic(self, 'plic', ndev=1)
@@ -79,6 +82,11 @@ class Soc(st.Component):
 
         ico.add_mapping('rom', base=0x00001000, remove_offset=0x00001000, size=0x10000)
         self.bind(ico, 'rom', rom, 'input')
+
+        # Debug module region of the RTL, the core enters debug mode at 0x800. Plain memory
+        # so that software can install a debug handler there.
+        ico.add_mapping('debug', base=0x0, remove_offset=0x0, size=0x1000)
+        self.bind(ico, 'debug', debug, 'input')
 
         ico.add_mapping('uart', base=0x10000000, remove_offset=0x10000000, size=0x100)
         self.bind(ico, 'uart', uart, 'input')
@@ -92,7 +100,10 @@ class Soc(st.Component):
 
         # HTIF like the CVA6 RTL testharness, so that bare-metal programs exit through tohost.
         # Binaries without a tohost symbol are not polled.
-        host = Cva6(self, 'host', config=Cva6Config(isa=isa, boot_addr=0x1000, htif=True))
+        # The boot ROM is RV64 code (it loads the entry point with ld), RV32 cores start
+        # directly at the entry point it would jump to
+        boot_addr = 0x80000000 if isa.startswith('rv32') else 0x1000
+        host = Cva6(self, 'host', config=Cva6Config(isa=isa, boot_addr=boot_addr, htif=True))
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary)
 

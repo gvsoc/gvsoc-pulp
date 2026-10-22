@@ -70,7 +70,8 @@ class Cva6(RiscvCommon):
             modules['arch'] = Arch('Ara')
             modules['offload'] = Offload()
 
-        super().__init__(parent, name, config=config, isa=isa_instance, modules=modules)
+        super().__init__(parent, name, config=config, isa=isa_instance, modules=modules,
+            riscv_dbg_unit=True, debug_handler=config.debug_handler)
 
         # The core supports user mode, so that mret/sret fall back to it
         self.add_c_flags(['-DCONFIG_GVSOC_ISS_USER_MODE=1'])

@@ -41,3 +41,7 @@ class Cva6Config(RiscvConfig):
     mmu: bool = cfg_field(default=True, dump=True, desc=(
         "True if the ISS should include the MMU."
     ))
+    debug_handler: int = cfg_field(default=0x800, dump=True, desc=(
+        "Address the core jumps to when it enters debug mode (the debug module halt "
+        "address on the RTL)."
+    ))
