@@ -73,6 +73,9 @@ class FlooNocFlex(gvsoc.systree.Component):
         self.add_property('nb_nodes', nb_nodes)
         self.add_property('links', [])
         self.add_property('router_degrees', router_degrees)
+        self.add_property('collective_enable', False)
+        self.add_property('collective_route_algo', 'none')
+        self.add_property('collective_coords', [])
         self.id_map = {}
         # floogen's own schema has no per-link timing field, so per-link
         # latencies are sourced from an optional side file keyed
@@ -679,22 +682,42 @@ class FlooNocFlex(gvsoc.systree.Component):
         Falls back to generic shortest-path BFS if any router name lacks
         a parseable coordinate suffix.
         """
+
+        def _parse_router_coords():
+            """
+            Parses trailing `_x_y` coordinates out of each router's floogen
+            graph node name (e.g. "router_2_3" -> (2, 3)). Returns None if
+            any router's name doesn't end in a parseable `_x_y` suffix.
+            """
+            coords = {}
+            for r in routers:
+                parts = id_to_name.get(r, '').rsplit('_', 2)
+                try:
+                    x, y = int(parts[-2]), int(parts[-1])
+                except (IndexError, ValueError):
+                    return None
+                coords[r] = (x, y)
+            return coords
+        
         nb_nodes = self.get_property('nb_nodes')
         links = self.get_property('links')
         routers = [r[0] for r in self.get_property('routers')]
         nis = [n[0] for n in self.get_property('network_interfaces')]
         id_to_name = {v: k for k, v in node_to_id.items()}
 
-        id_to_coord = {}
-        for r in routers:
-            parts = id_to_name.get(r, '').rsplit('_', 2)
-            try:
-                x, y = int(parts[-2]), int(parts[-1])
-            except (IndexError, ValueError):
-                self.generate_routing_tables_shortest_path()
-                return
-            id_to_coord[r] = (x, y)
+        id_to_coord = _parse_router_coords()
+        if id_to_coord is None:
+            if self.get_property('collective_enable'):
+                raise ValueError(
+                    "routing.collective is enabled but router node names "
+                    "don't carry parseable '_x_y' coordinates")
+            self.generate_routing_tables_shortest_path()
+            return
         coord_to_id = {c: r for r, c in id_to_coord.items()}
+
+        if self.get_property('collective_enable'):
+            self.add_property('collective_coords',
+                [[node_id, x, y] for node_id, (x, y) in id_to_coord.items()])
 
         ni_to_router = {}
         for link in links:
@@ -793,7 +816,20 @@ class FlooNocFlex(gvsoc.systree.Component):
                 self._check_ni_router_links()
 
             algo_name = floo_net.routing.route_algo.name
-            
+
+            # Collective primitives configuration and check
+            collective_cfg = floo_net.routing.collective
+            if collective_cfg.en_collective:
+                if algo_name not in ("XY", "YX"):
+                    raise ValueError(
+                        f"routing.collective is enabled but route_algo is "
+                        f"'{algo_name}'. Currently only support plain 'XY'/'YX' "
+                        f"dimension-order mesh routing")
+
+                self.add_property('collective_enable', True)
+                self.add_property('collective_route_algo',
+                    'xy_mesh' if algo_name == 'XY' else 'yx_mesh')
+
             match algo_name:
                 case "XY":
                     self.generate_routing_tables_dimension_order(node_to_id, first_axis='x')
