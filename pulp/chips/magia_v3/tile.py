@@ -163,7 +163,8 @@ class MagiaV3Tile(gvsoc.systree.Component):
             # as soon as we issue the fetch enable)
             config = SpatzConfig(isa="rv32imfdcav", fetch_enable=False,
                 boot_addr=MagiaArch.SPATZ_BOOTROM_ADDR, hart_id=tid + tree.nb_clusters,
-                htif=False, nb_lanes=MagiaTileTcdm.NB_SPATZ_VLSU, lane_width=4, vlsu_v2=True)
+                htif=False, nb_lanes=MagiaTileTcdm.NB_SPATZ_VLSU, lane_width=4, vlsu_v2=True,
+                vlen=256, nb_ipus=1)
 
             snitch_spatz = Spatz(self, f'tile-{tid}-snitch-spatz', config=config)
 
