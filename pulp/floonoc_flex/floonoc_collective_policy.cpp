@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+/*
+ * Authors: Rafael Medina, ETH (medinar@iis.ee.ethz.ch)
+ */
+
 #include "floonoc_collective_policy.hpp"
 #include "floonoc_flex.hpp"
 
