@@ -33,11 +33,18 @@ class LightRedmule(gvsoc.systree.Component):
                 ce_pipe: int,
                 queue_depth: int=128,
                 fold_tiles_mapping: int=0,
-                loc_base=0): #here we might add also local size to check that tcdm requests do not overflow...
+                loc_base=0, #here we might add also local size to check that tcdm requests do not overflow...
+                outstanding: bool=False): # outstanding-request model (TensorPool)
 
         super().__init__(parent, name)
 
-        self.add_sources(['pulp/light_redmule/light_redmule.cpp', 'cpu/iss/flexfloat/flexfloat.c'])
+        # outstanding: model of light_redmule_outstanding.cpp, which issues the
+        # TCDM requests ahead of the array and keeps them outstanding in a
+        # request queue (TensorPool, MemPool L1 interconnect)
+        if outstanding:
+            self.add_sources(['pulp/light_redmule/light_redmule_outstanding.cpp', 'cpu/iss/flexfloat/flexfloat.c'])
+        else:
+            self.add_sources(['pulp/light_redmule/light_redmule.cpp', 'cpu/iss/flexfloat/flexfloat.c'])
 
         self.add_properties({
             'tcdm_bank_width'   : tcdm_bank_width,

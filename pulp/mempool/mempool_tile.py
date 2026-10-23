@@ -46,7 +46,8 @@ class Tile(st.Component):
                                     ce_height           = redmule_config.redmule_height,
                                     ce_width            = redmule_config.redmule_width,
                                     ce_pipe             = redmule_config.redmule_regs,
-                                    queue_depth         = 64
+                                    queue_depth         = 64,
+                                    outstanding         = True
                                     )
 
         [args, __] = parser.parse_known_args()
