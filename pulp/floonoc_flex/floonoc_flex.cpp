@@ -297,6 +297,22 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
                 collective_route_algo.c_str());
         }
     }
+
+    this->stats.register_stat(&this->stat_collective_requests,
+        "collective_requests",
+        "Number of collective requests injected");
+    this->stats.register_stat(&this->stat_collective_children_total,
+        "collective_children_total",
+        "Total forked children as part of collective requests");
+    this->stats.register_stat(&this->stat_collective_reduction_merges,
+        "collective_reduction_merges",
+        "Total arithmetic reduction merges performed");
+    this->stats.register_stat(&this->stat_collective_completed,
+        "collective_completed",
+        "Number of collective requests fully resolved");
+    this->stats.register_stat(&this->stat_collective_completion_latency,
+        "collective_completion_latency",
+        "Total collective completion latencies (cycles)");
 }
 
 FlooNoc::~FlooNoc()
@@ -352,6 +368,7 @@ void FlooNoc::router_init_neighbours(Router *router,
                 router->set_neighbour(current_port,
                                       this->network_interfaces[neighbor_id],
                                       neighbor_id, latency);
+                router->set_local_ni(neighbor_id);
                 current_port++;
             }
             // The neighbor is another Router
@@ -392,6 +409,52 @@ Entry *FlooNoc::get_entry(uint64_t base, uint64_t size)
         }
     }
     return NULL;
+}
+
+// Resolves the completion of a collective request. See COLLECTIVES.md,
+// "Completion / fold", and the "Router changes" section for the two call
+// sites (a router finding a dead end, and the NI intercepting a forked
+// child's response).
+void FlooNoc::handle_collective_completion(vp::IoReq *req)
+{
+    void *parent_ptr = *req->arg_get(FlooNoc::REQ_PARENT);
+    if (parent_ptr == NULL)
+    {
+        // Root (or a degenerate zero-member request): never had a real
+        // target of its own, so finalize it exactly as if its response
+        // had just arrived back at the originating NI, with no
+        // fictitious extra network hop.
+        NetworkInterface *origin_ni =
+            *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);
+
+        int64_t inject_time =
+            (int64_t)(long)*req->arg_get(FlooNoc::REQ_INJECT_TIME);
+        this->stat_collective_completed++;
+        this->stat_collective_completion_latency +=
+            this->time.get_engine()->get_time() - inject_time;
+
+        *req->arg_get(FlooNoc::REQ_SRC_NI) = NULL;
+        origin_ni->handle_response(req);
+        return;
+    }
+
+    vp::IoReq *parent = (vp::IoReq *)parent_ptr;
+
+    if (parent->get_int(FlooNoc::REQ_COLL_OP) >= FlooNoc::COLL_OP_FIRST_ARITH_OP)
+    {
+        this->stat_collective_reduction_merges++;
+    }
+    this->process_collective_operations(parent, req);
+
+    delete[] req->get_data();
+    delete req;
+
+    int pending = parent->get_int(FlooNoc::REQ_PEND_KIDS) - 1;
+    parent->set_int(FlooNoc::REQ_PEND_KIDS, pending);
+    if (pending <= 0)
+    {
+        this->handle_collective_completion(parent);
+    }
 }
 
 // Merges `req` (a completed forked collective child) into `parent`
