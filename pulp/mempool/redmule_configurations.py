@@ -20,9 +20,21 @@ _DEFAULT_REDMULE_REGS = int(os.environ.get('REDMULE_REGS', 3))
 _DEFAULT_OPOPE_P = int(os.environ.get('OPOPE_P', 8))
 _DEFAULT_OPOPE_MAC_LATENCY = int(os.environ.get('OPOPE_MAC_LATENCY', 0))
 
+# Timing calibration per engine: (request queue entries, L1 bank hold cycles).
+# RedMulE: fitted to RTL on gemm_f16 PARALLEL with 16 RedMulE 8 x 32 on 256
+# cores (M x N x P = 2048x128x128, 2048x256x256, 512x512x512, 512x1024x512),
+# with the bank parts of a wide access served one after the other (serial
+# L1_BankArbiter): mean absolute error 9.1%, at most 21.3%, bias +2.3%. The
+# other engines keep the uncalibrated defaults.
+_CALIBRATION = {'redmule': (112, 8)}
+_DEFAULT_CALIBRATION = _CALIBRATION.get(_DEFAULT_ENGINE, (128, 10))
+
 # Request queue entries of the tensor engine (both models): a request holds an
 # entry until the array uses its data (or, for a store, until it is done).
-_DEFAULT_QUEUE_DEPTH = int(os.environ.get('TE_QUEUE_DEPTH', 128))
+_DEFAULT_QUEUE_DEPTH = int(os.environ.get('TE_QUEUE_DEPTH', _DEFAULT_CALIBRATION[0]))
+
+# Cycles an L1 bank is held per tensor-engine access (see l1_subsystem.py)
+DEFAULT_BANK_HOLD = int(os.environ.get('L1_BANK_HOLD', _DEFAULT_CALIBRATION[1]))
 
 class RedmuleParam:
     def __init__(
