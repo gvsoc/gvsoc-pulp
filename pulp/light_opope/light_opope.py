@@ -14,6 +14,7 @@
 # limitations under the License.
 #
 
+import os
 import gvsoc.systree
 
 class LightOpope(gvsoc.systree.Component):
@@ -46,6 +47,8 @@ class LightOpope(gvsoc.systree.Component):
             'mac_latency'       : mac_latency,
             'queue_depth'       : queue_depth,
             'loc_base'          : loc_base,
+            # TE_REPORT=1: print a [TE] line (start/end cycle) per job
+            'report_jobs'       : int(os.environ.get('TE_REPORT', 0)),
         })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
