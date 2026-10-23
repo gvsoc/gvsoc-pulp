@@ -21,6 +21,10 @@ GAPY_TARGET = True
 
 class Target(gvsoc.Target):
 
-    def __init__(self, parser, options):
+    gapy_description = "TensorpoolSystem"
+    model = TensorpoolSystem
+    name = "tensorpool"
+
+    def __init__(self, parser, options=None, name=None):
         super(Target, self).__init__(parser, options,
-            model=TensorpoolSystem, description="TensorpoolSystem")
+            model=TensorpoolSystem, description="TensorpoolSystem", name=name)
