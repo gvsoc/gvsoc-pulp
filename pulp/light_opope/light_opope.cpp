@@ -55,6 +55,7 @@
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
 #include <stdint.h>
+#include <cinttypes>
 #include <cstring>
 #include <queue>
 #include <vector>
@@ -124,6 +125,7 @@ private:
     uint32_t            queue_depth;    // request queue entries (beats)
     uint64_t            loc_base;
     uint32_t            compute_able;
+    bool                report_jobs;    // print a [TE] line per job
     bool                use_y;          // GEMM loads Y, MATMUL starts from 0
 
     // Registers
@@ -212,6 +214,7 @@ LightOpope::LightOpope(vp::ComponentConf &config)
     this->mac_latency       = get_js_config()->get("mac_latency")->get_int();
     this->queue_depth       = get_js_config()->get("queue_depth")->get_int();
     this->loc_base          = get_js_config()->get("loc_base")->get_double();
+    this->report_jobs       = get_js_config()->get("report_jobs")->get_int() != 0;
     this->tile              = 2 * this->p;
     this->compute_able      = 0;
 
@@ -531,6 +534,12 @@ void LightOpope::report()
     this->trace.msg("[LightOpope] Finished : %0d ns ---> %0d ns | period = %0d ns (%0d cyc) | uti = %0.3f | stall = %0d cyc | runtime = %0d ns | GEMM id = %0d | FMT = %0d | M-N-K = %0d-%0d-%0d | X-W-Y = 0x%5x-0x%5x-0x%5x\n",
         start_time_ns, end_time_ns, period_ns, period_clk, period_uti, this->stall_cycles, this->total_runtime, this->num_matmul,
         this->compute_able, this->m_size, this->n_size, this->k_size, this->x_addr, this->w_addr, this->y_addr);
+    if (this->report_jobs)
+    {
+        printf("[TE] start=%" PRId64 " end=%" PRId64 " stall=%" PRIu64 " M=%d N=%d K=%d path=%s\n",
+            this->cycle_start, this->clock.get_cycles(), this->stall_cycles,
+            this->m_size, this->n_size, this->k_size, this->get_path().c_str());
+    }
 }
 
 void LightOpope::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
