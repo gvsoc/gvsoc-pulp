@@ -11,9 +11,10 @@ _DEFAULT_ENGINE = os.environ.get('TENSOR_ENGINE', 'redmule')
 # (pulp/pulp/mempool/mempool_system.py) instantiates RedmuleParam() with no
 # arguments, so these env vars are the only way to resize RedMulE for that
 # target without editing this file; the app must be rebuilt with matching
-# redmule_height=/redmule_width=/redmule_regs= values.
-_DEFAULT_REDMULE_HEIGHT = int(os.environ.get('REDMULE_HEIGHT', 4))
-_DEFAULT_REDMULE_WIDTH = int(os.environ.get('REDMULE_WIDTH', 8))
+# redmule_height=/redmule_width=/redmule_regs= values. The defaults are the
+# RedMulE of MemPool's config/tensorpool.mk (8 x 32, 3 pipeline registers).
+_DEFAULT_REDMULE_HEIGHT = int(os.environ.get('REDMULE_HEIGHT', 8))
+_DEFAULT_REDMULE_WIDTH = int(os.environ.get('REDMULE_WIDTH', 32))
 _DEFAULT_REDMULE_REGS = int(os.environ.get('REDMULE_REGS', 3))
 
 _DEFAULT_OPOPE_P = int(os.environ.get('OPOPE_P', 8))
