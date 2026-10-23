@@ -168,6 +168,11 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address,
             *router_req->arg_get(FlooNoc::REQ_COLL_OP) =
                 (void *)(long)effective_op;
             *router_req->arg_get(FlooNoc::REQ_COLL_MASK) = (void *)(long)mask;
+
+            if (effective_op != FlooNoc::COLL_OP_UNICAST)
+            {
+                this->ni.noc->stat_collective_requests++;
+            }
         }
 
         router_req->set_size(size);
@@ -648,6 +653,13 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req,
 
 void NetworkInterface::handle_response(vp::IoReq *req)
 {
+    if (*req->arg_get(FlooNoc::REQ_PARENT) != NULL)
+    {
+        // Handle response for a forked collective child
+        this->noc->handle_collective_completion(req);
+        return;
+    }
+
     NetworkInterface *origin_ni =
         *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);
     if (origin_ni == NULL)

@@ -26,6 +26,7 @@
 
 #include "floonoc_flex.hpp"
 #include <array>
+#include <queue>
 #include <vp/signal.hpp>
 #include <vp/stats/stats.hpp>
 #include <vp/vp.hpp>
@@ -77,11 +78,24 @@ class Router : public FloonocNode
     // Pass the routing table during initialization
     void set_routing_table(std::vector<int> table);
 
+    // [Collective Only] Sets which neighbor is this router's own NI (-1 if none)
+    void set_local_ni(int ni_id) { this->local_ni_id = ni_id; }
+
     // Performance statistics, dumped by the stats engine when --stats is passed
     vp::StatScalar stat_routed_packets;
     vp::StatScalar stat_stall_cycles;
 
   private:
+    // [Collective Only] Node id of this router's directly attached NI, -1 if none
+    int local_ni_id = -1;
+    // [Collective Only] Per-output-queue pending queues for forked
+    // collective child requests
+    std::vector<std::queue<vp::IoReq *>> collective_pending_queues;
+    // [Collective Only] Allocates a forked child of `parent` and increments
+    // parent's REQ_PEND_KIDS.
+    vp::IoReq *fork_collective_child(vp::IoReq *parent, int dest_node,
+                                     int next_state);
+
     std::vector<int> routing_table; // Index: dest_node -> Value: next_hop_node
     std::vector<int> input_latencies; // Index: queue_index -> Value: latency
     std::unordered_map<int, int>

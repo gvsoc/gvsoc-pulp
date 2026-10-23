@@ -28,6 +28,7 @@
 #include <cpu/iss/flexfloat/flexfloat.h>
 #include <vp/itf/io.hpp>
 #include <vp/signal.hpp>
+#include <vp/stats/stats.hpp>
 
 class Router;
 class NetworkInterface;
@@ -187,6 +188,15 @@ class FlooNoc : public vp::Component
 
     // Topology-specific collective fan-out policy, nullptr when disabled 
     CollectiveRoutingPolicy *collective_policy = nullptr;
+
+    // [Collective Only] Handles the completion of a collective request
+    void handle_collective_completion(vp::IoReq *req);
+
+    vp::StatScalar stat_collective_requests;         // Number of collective requests injected
+    vp::StatScalar stat_collective_children_total;   // Total forked children allocated
+    vp::StatScalar stat_collective_reduction_merges;  // Total arithmetic reduction merges performed
+    vp::StatScalar stat_collective_completed;         // Number of collective requests fully resolved
+    vp::StatScalar stat_collective_completion_latency; // Sum of per-request completion latencies (cycles)
 
   private:
     void router_init_neighbours(Router *router, std::vector<Router *> &routers);

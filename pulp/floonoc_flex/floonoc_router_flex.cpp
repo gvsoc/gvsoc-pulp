@@ -25,6 +25,7 @@
 #include "floonoc_router_flex.hpp"
 #include "floonoc_flex.hpp"
 #include "floonoc_network_interface_flex.hpp"
+#include <cstring>
 #include <vp/itf/io.hpp>
 #include <vp/vp.hpp>
 
@@ -48,6 +49,7 @@ Router::Router(FlooNoc *noc, std::string name, int node_id, int num_queues,
     this->output_nodes.resize(this->num_queues, nullptr);
     this->stalled_queues.resize(this->num_queues, nullptr);
     this->input_latencies.resize(this->num_queues, 1);
+    this->collective_pending_queues.resize(this->num_queues);
 
     // Create a queue for each direction
     for (int i = 0; i < this->num_queues; i++)
@@ -178,6 +180,79 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
             int to_node = req->get_int(FlooNoc::REQ_DEST_ID);
 
+            // Collective primitives fan-out
+            int collective_op = req->get_int(FlooNoc::REQ_COLL_OP);
+            if (collective_op != FlooNoc::COLL_OP_UNICAST)
+            {
+                std::vector<std::pair<int, int>> fanout;
+                bool local_member = false;
+                uint64_t mask =
+                    (uint64_t)(long)*req->arg_get(FlooNoc::REQ_COLL_MASK);
+                _this->noc->collective_policy->analyze(
+                    _this->node_id, req->get_int(FlooNoc::REQ_SRC_ID), mask,
+                    req->get_int(FlooNoc::REQ_COLL_STATE), fanout,
+                    local_member);
+
+                if (local_member && _this->local_ni_id != -1)
+                {
+                    fanout.push_back({_this->local_ni_id, 0});
+                }
+
+                if (fanout.empty())
+                {
+                    // A mask should never reach this for a root request 
+                    // (REQ_PARENT == NULL), throuw a warning
+                    if (*req->arg_get(FlooNoc::REQ_PARENT) == NULL)
+                    {
+                        _this->trace.msg(
+                            vp::Trace::LEVEL_WARNING,
+                            "[Collective] Request has zero members (src: "
+                            "%d, mask: 0x%llx) - completing immediately\n",
+                            req->get_int(FlooNoc::REQ_SRC_ID), mask);
+                    }
+                    queue->queue.pop();
+                    _this->noc->handle_collective_completion(req);
+                    in_queue_index += 1;
+                    if (in_queue_index == _this->num_queues)
+                    {
+                        in_queue_index = 0;
+                    }
+                    _this->fsm_event.enqueue();
+                    continue;
+                }
+                else if (fanout.size() > 1)
+                {
+                    // Fork the request and keep track of the children 
+                    queue->queue.pop();
+                    for (auto &dest : fanout)
+                    {
+                        vp::IoReq *child = _this->fork_collective_child(
+                            req, dest.first, dest.second);
+                        int child_queue = _this->get_req_queue(dest.first);
+                        _this->collective_pending_queues[child_queue].push(
+                            child);
+                    }
+                    _this->noc->stat_collective_children_total +=
+                        fanout.size();
+                    in_queue_index += 1;
+                    if (in_queue_index == _this->num_queues)
+                    {
+                        in_queue_index = 0;
+                    }
+                    _this->fsm_event.enqueue();
+                    continue;
+                }
+                else
+                {
+                    // Exactly one destination: redirect the same request
+                    // object, no fork needed - falls through into the
+                    // normal unicast forwarding code below.
+                    to_node = fanout[0].first;
+                    req->set_int(FlooNoc::REQ_DEST_ID, to_node);
+                    req->set_int(FlooNoc::REQ_COLL_STATE, fanout[0].second);
+                }
+            }
+
             // Get the next node id. This takes care of deciding
             // which path is taken to go to the destination
             int next_node;
@@ -303,6 +378,31 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             in_queue_index = 0;
         }
     }
+
+    // Drain forked collective children into the normal per-neighbor output arbitration
+    for (int q = 0; q < _this->num_queues; q++)
+    {
+        std::queue<vp::IoReq *> &pending = _this->collective_pending_queues[q];
+        if (pending.empty())
+        {
+            continue;
+        }
+        if (output_full[q] || *(_this->stalled_queues[q]))
+        {
+            _this->fsm_event.enqueue();
+            continue;
+        }
+
+        vp::IoReq *child = pending.front();
+        pending.pop();
+
+        FloonocNode *node = _this->output_nodes[q];
+        if (node->handle_request(_this, child, _this->node_id))
+        {
+            *(_this->stalled_queues[q]) = true;
+        }
+        _this->fsm_event.enqueue();
+    }
 }
 
 // This is determining the routes the requests will take in the network
@@ -378,6 +478,46 @@ int Router::get_req_queue(int from_node)
     this->trace.msg(vp::Trace::LEVEL_ERROR, "Unknown from_node %d\n",
                     from_node);
     return -1;
+}
+
+// [Collective Only] Allocates a forked child of `parent`
+vp::IoReq *Router::fork_collective_child(vp::IoReq *parent, int dest_node,
+                                         int next_state)
+{
+    vp::IoReq *child = new vp::IoReq();
+    child->init();
+    child->arg_alloc(FlooNoc::REQ_NB_ARGS);
+
+    *child->arg_get(FlooNoc::REQ_SRC_NI) = *parent->arg_get(FlooNoc::REQ_SRC_NI);
+    *child->arg_get(FlooNoc::REQ_BURST) = *parent->arg_get(FlooNoc::REQ_BURST);
+    *child->arg_get(FlooNoc::REQ_IS_ADDRESS) =
+        *parent->arg_get(FlooNoc::REQ_IS_ADDRESS);
+    *child->arg_get(FlooNoc::REQ_WIDE) = *parent->arg_get(FlooNoc::REQ_WIDE);
+    *child->arg_get(FlooNoc::REQ_SRC_ID) = *parent->arg_get(FlooNoc::REQ_SRC_ID);
+    *child->arg_get(FlooNoc::REQ_COLL_OP) = *parent->arg_get(FlooNoc::REQ_COLL_OP);
+    *child->arg_get(FlooNoc::REQ_COLL_MASK) =
+        *parent->arg_get(FlooNoc::REQ_COLL_MASK);
+    child->set_int(FlooNoc::REQ_COLL_STATE, next_state);
+    *child->arg_get(FlooNoc::REQ_PARENT) = (void *)parent;
+    *child->arg_get(FlooNoc::REQ_PEND_KIDS) = (void *)(long)0;
+    *child->arg_get(FlooNoc::REQ_INJECT_TIME) =
+        *parent->arg_get(FlooNoc::REQ_INJECT_TIME);
+    child->set_int(FlooNoc::REQ_DEST_ID, dest_node);
+
+    uint64_t size = parent->get_size();
+    uint8_t *data_copy = new uint8_t[size];
+    std::memcpy(data_copy, parent->get_data(), size);
+    child->set_size(size);
+    child->set_data(data_copy);
+    child->set_addr(parent->get_addr());
+    child->set_is_write(parent->get_is_write());
+    child->set_opcode(parent->get_opcode());
+    child->set_second_data(parent->get_second_data());
+
+    parent->set_int(FlooNoc::REQ_PEND_KIDS,
+                    parent->get_int(FlooNoc::REQ_PEND_KIDS) + 1);
+
+    return child;
 }
 
 void Router::reset(bool active)
