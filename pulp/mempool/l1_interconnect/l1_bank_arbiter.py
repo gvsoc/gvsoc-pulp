@@ -27,11 +27,13 @@ class L1_BankArbiter(gvsoc.systree.Component):
     lockstep, so shared-W contention emerges; PE traffic shares the timeline (real PE<->TE
     interaction) without paying the wide-read hold. No-op when uncontended.
     """
-    def __init__(self, parent: gvsoc.systree.Component, name: str, hold: int=1, hold_pe: int=1, queue_depth: int=16):
+    def __init__(self, parent: gvsoc.systree.Component, name: str, hold: int=1, hold_pe: int=1, queue_depth: int=16,
+                 serial: bool=False):
         super(L1_BankArbiter, self).__init__(parent, name)
 
         self.add_property('hold', hold)              # reserve per wide (TE) access = service time S
         self.add_property('hold_pe', hold_pe)        # reserve per narrow (PE) access (0 = straight to bank)
         self.add_property('queue_depth', queue_depth)  # buffered wide reads; bounds backlog to depth*S
+        self.add_property('serial', serial)          # bank parts of one wide access served one after the other
 
         self.add_sources(['pulp/mempool/l1_interconnect/l1_bank_arbiter.cpp'])

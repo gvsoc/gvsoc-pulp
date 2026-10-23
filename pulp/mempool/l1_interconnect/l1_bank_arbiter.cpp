@@ -27,6 +27,10 @@
  * model's ~1-cycle/TE de-sync, trailing TEs wait
  * for the bank and re-sync into lockstep, so shared-W contention emerges; PE traffic still contends
  * (delays / is delayed by TEs) without paying the wide-read hold. No-op when uncontended.
+ *
+ * With `serial`, the bank parts of one wide access (the same request, forwarded part by part by the
+ * interleavers in the same cycle) are served one after the other: each part starts from the latency
+ * of the previous part, so the waits of the banks of one wide access add up.
  */
 class L1_BankArbiter : public vp::Component
 {
@@ -43,6 +47,7 @@ private:
     int64_t hold;         // reserve per wide (TE) access = service time S
     int64_t hold_pe;      // reserve per narrow (PE) access (0 = originally wired straight to bank)
     int64_t queue_depth;  // buffered wide reads; bounds observable backlog to depth*S (backpressure)
+    bool serial;          // the bank parts of one wide access are served one after the other
     int64_t next_free = 0;   // cyclestamp at which the bank is free again
     // Per-cycle fairness snapshot: same-cycle issues see the same backlog (event order can't bias
     // who pays); the reference re-snaps after an idle gap.
@@ -52,7 +57,16 @@ private:
     vp::IoSlave input_itf;
     vp::IoSlave input_pe_itf;
     vp::IoMaster output_itf;
+
+    // Last wide part served by any arbiter, to chain the next part of the same access
+    static vp::IoReq *serial_req;
+    static int64_t serial_cycle;
+    static uint64_t serial_latency;
 };
+
+vp::IoReq *L1_BankArbiter::serial_req = nullptr;
+int64_t L1_BankArbiter::serial_cycle = -1;
+uint64_t L1_BankArbiter::serial_latency = 0;
 
 
 L1_BankArbiter::L1_BankArbiter(vp::ComponentConf &config)
@@ -63,6 +77,7 @@ L1_BankArbiter::L1_BankArbiter(vp::ComponentConf &config)
     this->hold = this->get_js_config()->get_int("hold");
     this->hold_pe = this->get_js_config()->get_int("hold_pe");
     this->queue_depth = this->get_js_config()->get_int("queue_depth");
+    this->serial = this->get_js_config()->get_child_bool("serial");
 
     this->input_itf.set_req_meth(&L1_BankArbiter::req);
     this->new_slave_port("input", &this->input_itf);
@@ -73,7 +88,26 @@ L1_BankArbiter::L1_BankArbiter(vp::ComponentConf &config)
 
 vp::IoReqStatus L1_BankArbiter::req(vp::Block *__this, vp::IoReq *req)
 {
-    return ((L1_BankArbiter *)__this)->arbitrate(req, ((L1_BankArbiter *)__this)->hold);
+    L1_BankArbiter *_this = (L1_BankArbiter *)__this;
+
+    if (!_this->serial)
+    {
+        return _this->arbitrate(req, _this->hold);
+    }
+
+    // Next part of the wide access served just before: start from its latency
+    int64_t cycles = _this->clock.get_cycles();
+    if (req == serial_req && cycles == serial_cycle)
+    {
+        req->set_latency(serial_latency);
+    }
+
+    vp::IoReqStatus err = _this->arbitrate(req, _this->hold);
+
+    serial_req = req;
+    serial_cycle = cycles;
+    serial_latency = req->get_latency();
+    return err;
 }
 
 vp::IoReqStatus L1_BankArbiter::req_pe(vp::Block *__this, vp::IoReq *req)

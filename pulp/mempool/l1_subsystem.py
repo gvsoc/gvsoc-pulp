@@ -23,9 +23,9 @@ from interco.interleaver import Interleaver
 from pulp.mempool.xbar.mempool_xbar import MempoolXbar
 from pulp.mempool.l1_interconnect.l1_remote_itf import L1_RemoteItf
 from pulp.mempool.l1_interconnect.l1_bank_arbiter import L1_BankArbiter
+from pulp.mempool.redmule_configurations import DEFAULT_BANK_HOLD
 from pulp.mempool.xbar.mempool_xbar_selector import MempoolXbarSelector
 import math
-import os
 
 class L1_subsystem(gvsoc.systree.Component):
     """
@@ -75,8 +75,9 @@ class L1_subsystem(gvsoc.systree.Component):
             "RedMulE (tensorpool) is only supported on the synchronous L1 interconnect"
         redmule_path = tensorpool
         # Per-bank hold arbiter: cycles a bank is reserved per wide (TE) / narrow (PE) access.
-        # The TE hold can be overridden from the environment (L1_BANK_HOLD).
-        bank_hold = int(os.environ.get('L1_BANK_HOLD', 10))
+        # The TE hold is calibrated per engine and can be overridden from the
+        # environment (L1_BANK_HOLD), see redmule_configurations.py.
+        bank_hold = DEFAULT_BANK_HOLD
         bank_hold_pe = 0
         bank_queue_depth = 4
         l1_bank_size = size / nb_banks_per_tile
@@ -342,7 +343,8 @@ class L1_subsystem(gvsoc.systree.Component):
                 # 'input_pe' port (hold_pe cycles), wide RedMulE reads use 'input' (hold cycles), all
                 # on one shared timeline. Off redmule_path the PE feeds bind straight to remove_offset.
                 if redmule_path:
-                    bank_arb = L1_BankArbiter(self, f'bank_arbiter{i}', hold=bank_hold, hold_pe=bank_hold_pe, queue_depth=bank_queue_depth)
+                    bank_arb = L1_BankArbiter(self, f'bank_arbiter{i}', hold=bank_hold, hold_pe=bank_hold_pe, queue_depth=bank_queue_depth,
+                                              serial=True)
                     pe_dst, pe_port = bank_arb, 'input_pe'
                 else:
                     pe_dst, pe_port = remove_offset, 'in_0'
