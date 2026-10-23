@@ -40,6 +40,7 @@ public:
 
 private:
     static void barrier_sync(vp::Block *__this, bool value);
+    bool bench_access(iss_insn_t *insn, bool is_write, iss_reg_t &value);
 
     Iss &iss;
 
@@ -50,6 +51,12 @@ private:
     CsrReg stack_start;
     CsrReg stack_end;
     vp::WireSlave<bool> barrier_ack_itf;
+
+    // Benchmark regions, see bench_access()
+    int64_t bench_start_cycles = 0;
+    int64_t bench_start_time = 0;
+    uint32_t bench_region = 0;
+    bool bench_active = false;
 
     vp::Trace trace;
 };
