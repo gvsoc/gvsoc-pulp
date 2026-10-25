@@ -44,10 +44,10 @@
 #include <vector>
 
 #define REG_CONF        0x000
-// Per-stream registers: STATUS block, NEXT_ID block, DONE_ID block
+// Per-stream registers: STATUS, NEXT_ID and DONE_ID arrays of max_num_streams
 #define REG_STATUS(s)   (0x004 + 4 * (s))
-#define REG_NEXT_ID(s)  (0x004 + 4 * (this->nb_streams + (s)))
-#define REG_DONE_ID(s)  (0x004 + 4 * (2 * this->nb_streams + (s)))
+#define REG_NEXT_ID(s)  (0x004 + 4 * (this->max_num_streams + (s)))
+#define REG_DONE_ID(s)  (0x004 + 4 * (2 * this->max_num_streams + (s)))
 #define REG_DST         0x0D0
 #define REG_SRC         0x0D8
 #define REG_LENGTH      0x0E0
@@ -133,7 +133,7 @@ private:
     uint64_t regs_addr;
     std::vector<Transfer> transfers;
     int nb_events;
-    int nb_streams;
+    int max_num_streams;
     bool enable_gate;
     int64_t quit_after_cycles;
 
@@ -171,8 +171,7 @@ ClusterDmaTester::ClusterDmaTester(vp::ComponentConf &config)
     js::Config *cfg = this->get_js_config();
     this->regs_addr = cfg->get_child_int("regs_addr");
     this->nb_events = cfg->get_child_int("nb_events");
-    this->nb_streams = cfg->get_child_int("nb_streams");
-    if (this->nb_streams <= 0) this->nb_streams = 2;
+    this->max_num_streams = cfg->get_child_int("max_num_streams");
     this->enable_gate = cfg->get_child_int("enable_gate") != 0;
     this->quit_after_cycles = cfg->get_child_int("quit_after_cycles");
     if (this->quit_after_cycles <= 0) this->quit_after_cycles = 1000000;

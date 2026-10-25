@@ -83,7 +83,8 @@ private:
 
 ClusterDma::ClusterDma(vp::ComponentConf &config)
 :   vp::Component(config, this->cfg),
-    fe(this, this->cfg.nb_reg_ports, 2, this->cfg.nb_events, this->cfg.launch_bubble),
+    fe(this, this->cfg.nb_reg_ports, 2, this->cfg.nb_events, this->cfg.launch_bubble,
+        this->cfg.max_num_streams),
     me0(this, "me0", this->cfg.req_fifo_depth, this->cfg.nb_dims, this->fe.stream(0)),
     me1(this, "me1", this->cfg.req_fifo_depth, this->cfg.nb_dims, this->fe.stream(1)),
     be0(this, "be0", backend_params(this->cfg), &this->me0),

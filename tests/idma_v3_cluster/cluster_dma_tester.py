@@ -28,7 +28,7 @@ class ClusterDmaTester(gvsoc.systree.Component):
     """
 
     def __init__(self, parent, name, *, regs_addr: int, transfers: list, nb_events: int,
-                 nb_streams: int = 2, enable_gate: int = 0, quit_after_cycles: int = 1_000_000):
+                 max_num_streams: int = 16, enable_gate: int = 0, quit_after_cycles: int = 1_000_000):
         super().__init__(parent, name)
 
         self.add_sources(['cluster_dma_tester.cpp'])
@@ -36,7 +36,7 @@ class ClusterDmaTester(gvsoc.systree.Component):
         self.add_property('regs_addr', regs_addr)
         self.add_property('transfers', transfers)
         self.add_property('nb_events', nb_events)
-        self.add_property('nb_streams', nb_streams)
+        self.add_property('max_num_streams', max_num_streams)
         self.add_property('enable_gate', enable_gate)
         self.add_property('quit_after_cycles', quit_after_cycles)
 

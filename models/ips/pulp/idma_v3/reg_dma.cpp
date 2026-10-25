@@ -59,7 +59,7 @@ private:
 
 RegDma::RegDma(vp::ComponentConf &config)
 :   vp::Component(config, this->cfg),
-    fe(this, 1, 1, 0, this->cfg.launch_bubble),
+    fe(this, 1, 1, 0, this->cfg.launch_bubble, this->cfg.max_num_streams),
     me(this, "me", this->cfg.req_fifo_depth, this->cfg.nb_dims, this->fe.stream(0)),
     be(this, "be", backend_params(this->cfg), &this->me),
     axi_read(this, "axi_read", &this->be, this->cfg.axi_width, this->cfg.burst_len,

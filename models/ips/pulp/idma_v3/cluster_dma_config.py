@@ -88,3 +88,10 @@ class ClusterDmaV3Config(Config):
         "Cycles a launch from idle spends waking the datapath (the RTL "
         "datapath clock gate); 0 disables it."
     ))
+
+    max_num_streams: int = cfg_field(default=16, desc=(
+        "Length N of the STATUS / NEXT_ID / DONE_ID register arrays, which puts "
+        "NEXT_ID_s at 0x004 + 4 (N + s) and DONE_ID_s at 0x004 + 4 (2N + s): "
+        "16 in the upstream iDMA register file whatever the number of "
+        "streams, at most 17. The entries of missing streams read as 0."
+    ))

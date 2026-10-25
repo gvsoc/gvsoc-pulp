@@ -50,18 +50,22 @@ class ClusterDmaV3(gvsoc.systree.Component):
     0x000   CONF            bits 11:10 enable_nd (0 1D, 1 2D, 2 3D), 14:12
                             source protocol, 17:15 destination protocol
                             (AXI 0, OBI 1), bit 0 decouple_rw
-    0x004   STATUS_0        busy bits of stream 0
-    0x008   STATUS_1        busy bits of stream 1
-    0x00C   NEXT_ID_0       read: launch on stream 0, returns the id
-    0x010   NEXT_ID_1       read: launch on stream 1, returns the id
-    0x014   DONE_ID_0       completion counter of stream 0
-    0x018   DONE_ID_1       completion counter of stream 1
+    0x004   STATUS_0        busy bits of stream 0 (STATUS_1 at 0x008)
+    0x044   NEXT_ID_0       read: launch on stream 0, returns the id
+                            (NEXT_ID_1 at 0x048)
+    0x084   DONE_ID_0       completion counter of stream 0 (DONE_ID_1 at
+                            0x088)
     0x0D0   DST_ADDR        destination address
     0x0D8   SRC_ADDR        source address
     0x0E0   LENGTH          bytes of one 1D transfer
     0x0E8   DST_STRIDE_2    0x0F0 SRC_STRIDE_2, 0x0F8 REPS_2
     0x100   DST_STRIDE_3    0x108 SRC_STRIDE_3, 0x110 REPS_3
     ======  ==============  ==============================================
+
+    The STATUS / NEXT_ID / DONE_ID offsets are those of the default
+    ``max_num_streams`` of 16: STATUS_s is at 0x004 + 4 s, NEXT_ID_s at
+    0x004 + 4 (N + s) and DONE_ID_s at 0x004 + 4 (2N + s), N being
+    ``max_num_streams`` (el1: 2, NEXT_ID_0 at 0x00C and DONE_ID_0 at 0x014).
 
     The stream is selected by the NEXT_ID register that is read; the
     protocols must match the stream (stream 0: OBI to AXI, stream 1: AXI to

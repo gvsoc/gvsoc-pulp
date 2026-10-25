@@ -72,7 +72,7 @@ def transfer(kind, src, dst, length, *, src_stride=0, dst_stride=0, reps=1, nd=0
 
 def build_case(case_name: str) -> dict:
     """Return the transfers of a case plus its bench options."""
-    common = dict(l2_latency=1, tcdm_latency=1, enable_gate=0, port=0)
+    common = dict(l2_latency=1, tcdm_latency=1, enable_gate=0, port=0, max_num_streams=16)
     l1 = TCDM_BASE
     l2 = L2_BASE
 
@@ -139,6 +139,12 @@ def build_case(case_name: str) -> dict:
     if case_name == 'both_streams':
         # L1->L2 and L1->L1 at the same time share the read ports
         return {**common, 'transfers': [
+            transfer(S0_L1_TO_L2, l1, l2, 2048, seed=0x90),
+            transfer(S1_L1_TO_L1, l1 + 0x4000, l1 + 0xc000, 2048, seed=0x91)]}
+
+    if case_name == 'el1_layout':
+        # Register arrays of 2 entries (el1): NEXT_ID at 0x00C, DONE_ID at 0x014
+        return {**common, 'max_num_streams': 2, 'transfers': [
             transfer(S0_L1_TO_L2, l1, l2, 2048, seed=0x90),
             transfer(S1_L1_TO_L1, l1 + 0x4000, l1 + 0xc000, 2048, seed=0x91)]}
 
@@ -233,6 +239,7 @@ class Chip(gvsoc.systree.Component):
 
         dma_config = ClusterDmaV3Config()
         dma_config.obi_addr_width = TCDM_SIZE.bit_length() - 1
+        dma_config.max_num_streams = spec['max_num_streams']
         dma = ClusterDmaV3(self, 'dma', config=dma_config)
         clock.o_CLOCK(dma.i_CLOCK())
 
@@ -240,6 +247,7 @@ class Chip(gvsoc.systree.Component):
             regs_addr=REGS_BASE,
             transfers=spec['transfers'],
             nb_events=dma_config.nb_events,
+            max_num_streams=spec['max_num_streams'],
             enable_gate=spec['enable_gate'],
         )
         clock.o_CLOCK(tester.i_CLOCK())

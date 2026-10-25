@@ -245,7 +245,6 @@ class Chip(gvsoc.systree.Component):
                 regs_addr=REGS_BASE,
                 transfers=spec['transfers'],
                 nb_events=0,
-                nb_streams=1,
             )
             dma.o_IRQ(tester.i_FC_EVENT())
         clock.o_CLOCK(dma.i_CLOCK())

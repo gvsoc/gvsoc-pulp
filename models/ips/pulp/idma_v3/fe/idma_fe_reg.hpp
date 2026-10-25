@@ -40,13 +40,17 @@ class IdmaBackend;
  *                      source protocol, 17:15 destination protocol, bit 0
  *                      decouple_rw, bit 1 decouple_aw
  *   0x004 + 4 s        STATUS_s: bits 7:0 back-end busy, bit 8 mid-end busy
- *   0x004 + 4 (M + s)  NEXT_ID_s: a read launches the transfer on stream s
+ *   0x004 + 4 (N + s)  NEXT_ID_s: a read launches the transfer on stream s
  *                      and returns its id
- *   0x004 + 4 (2M + s) DONE_ID_s: completion counter of stream s
+ *   0x004 + 4 (2N + s) DONE_ID_s: completion counter of stream s
  *   0x0D0 / 0x0D8      destination / source address
  *   0x0E0              length
  *   0x0E8 / 0x0F0 / 0x0F8  dst stride 2 / src stride 2 / reps 2
  *   0x100 / 0x108 / 0x110  dst stride 3 / src stride 3 / reps 3
+ *
+ * N is the length of the STATUS / NEXT_ID / DONE_ID arrays of the register
+ * file (max_num_streams): 16 in the upstream one, whatever the number of
+ * streams, and the entries of missing streams read as 0.
  *
  * Ids start at 2 and skip 0 and 1 on wrap; DONE_ID counts completions the
  * same way and is updated one cycle after the completion (registered
@@ -94,7 +98,10 @@ public:
     /// @param nb_streams    Streams (id counters, STATUS / NEXT_ID / DONE_ID).
     /// @param nb_events     Completion event outputs (event_<n>).
     /// @param launch_bubble Extra cycles of a launch from idle (clock gate).
-    IdmaFeReg(vp::Component *top, int nb_ports, int nb_streams, int nb_events, int launch_bubble);
+    /// @param max_num_streams Length N of the STATUS / NEXT_ID / DONE_ID
+    ///                      arrays, from nb_streams to 17.
+    IdmaFeReg(vp::Component *top, int nb_ports, int nb_streams, int nb_events, int launch_bubble,
+        int max_num_streams);
 
     /// Hardware reset; the block starts gated when the enable wire is bound.
     void reset(bool active) override;
@@ -168,4 +175,6 @@ private:
     int launch_bubble;
     /// Round-robin position among the ports waiting for a stream.
     int rr_port = 0;
+    /// Length of the STATUS / NEXT_ID / DONE_ID arrays.
+    int max_num_streams;
 };

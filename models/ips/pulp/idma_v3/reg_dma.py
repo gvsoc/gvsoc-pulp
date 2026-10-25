@@ -52,14 +52,18 @@ class RegDmaV3(gvsoc.systree.Component):
                             source protocol, 17:15 destination protocol
                             (AXI 0), bit 0 decouple_rw, bit 1 decouple_aw
     0x004   STATUS          bits 7:0 back-end busy, bit 8 mid-end busy
-    0x008   NEXT_ID         read: launch, returns the id
-    0x00C   DONE_ID         completion counter
+    0x044   NEXT_ID         read: launch, returns the id
+    0x084   DONE_ID         completion counter
     0x0D0   DST_ADDR        destination address
     0x0D8   SRC_ADDR        source address
     0x0E0   LENGTH          bytes of one 1D transfer
     0x0E8   DST_STRIDE_2    0x0F0 SRC_STRIDE_2, 0x0F8 REPS_2
     0x100   DST_STRIDE_3    0x108 SRC_STRIDE_3, 0x110 REPS_3
     ======  ==============  ==============================================
+
+    The NEXT_ID / DONE_ID offsets are those of the default ``max_num_streams``
+    of 16: they are at 0x004 + 4 N and 0x004 + 8 N, N being
+    ``max_num_streams``; the entries of the other streams read as 0.
 
     Identifiers start at 2 and DONE_ID counts completions the same way, so a
     transfer with id ``i`` is done once ``(int32) (DONE_ID - i) >= 0``. A

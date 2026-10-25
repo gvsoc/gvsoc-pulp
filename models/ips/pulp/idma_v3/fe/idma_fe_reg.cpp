@@ -97,13 +97,21 @@ IdmaFeReg::RegPort::RegPort(IdmaFeReg *top, int id)
 
 
 IdmaFeReg::IdmaFeReg(vp::Component *top, int nb_ports, int nb_streams, int nb_events,
-    int launch_bubble)
+    int launch_bubble, int max_num_streams)
 :   Block(top, "fe"),
     trace_irq(*this, "irq", 1, vp::SignalCommon::ResetKind::HighZ),
     done_event(this, &IdmaFeReg::done_handler),
-    launch_bubble(launch_bubble)
+    launch_bubble(launch_bubble),
+    max_num_streams(max_num_streams)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
+
+    // The three arrays must end before the transfer registers at 0x0D0
+    if (max_num_streams < nb_streams || REG_STREAM_BASE + 12 * max_num_streams > REG_DST_ADDR)
+    {
+        this->trace.fatal("Invalid max_num_streams %d (streams: %d, at most %d)\n",
+            max_num_streams, nb_streams, (REG_DST_ADDR - REG_STREAM_BASE) / 12);
+    }
 
     for (int i = 0; i < nb_ports; i++)
     {
@@ -186,6 +194,7 @@ vp::IoReqStatus IdmaFeReg::req(vp::Block *__this, vp::IoReq *req, int port_id)
     bool is_write = req->get_is_write();
     uint32_t *data = (uint32_t *)req->get_data();
     int nb_streams = _this->streams.size();
+    int max_num_streams = _this->max_num_streams;
 
     if (!_this->enabled)
     {
@@ -207,12 +216,24 @@ vp::IoReqStatus IdmaFeReg::req(vp::Block *__this, vp::IoReq *req, int port_id)
 
     req->set_resp_status(vp::IO_RESP_OK);
 
-    // Per-stream registers: STATUS, then NEXT_ID, then DONE_ID blocks
-    if (offset >= REG_STREAM_BASE && offset < REG_STREAM_BASE + 12 * nb_streams)
+    // Per-stream registers: STATUS, then NEXT_ID, then DONE_ID arrays of
+    // max_num_streams entries
+    if (offset >= REG_STREAM_BASE && offset < REG_STREAM_BASE + 12 * max_num_streams)
     {
         int index = (offset - REG_STREAM_BASE) / 4;
-        int kind = index / nb_streams;
-        int stream = index % nb_streams;
+        int kind = index / max_num_streams;
+        int stream = index % max_num_streams;
+
+        if (stream >= nb_streams)
+        {
+            // Entry of a missing stream, tied to 0 in the RTL
+            if (!is_write)
+            {
+                *data = 0;
+            }
+            return vp::IO_REQ_DONE;
+        }
+
         Stream *s = _this->streams[stream];
 
         if (kind == 0)
