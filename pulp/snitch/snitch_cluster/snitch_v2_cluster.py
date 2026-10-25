@@ -62,7 +62,7 @@ from pulp.snitch.snitch_cluster.cluster_registers_v2 import (ClusterRegisters,
 from ips.pulp.idma_v3.snitch_dma import SnitchDmaV3
 from ips.pulp.idma_v3.snitch_dma_config import SnitchDmaV3Config
 
-from gvrun.attribute import Tree, Area
+from gvrun.attribute import Tree, Area, Value
 
 
 class ClusterArch(Tree):
@@ -96,6 +96,9 @@ class ClusterArch(Tree):
         self.zero_mem      = Area(self, 'zero_mem', base + 0x0003_0000, 0x0001_0000, 'zero mem range')
         # The only region the PMA marks cacheable for the icaches: the DRAM
         self.cacheable     = Area(self, 'cacheable', 0x8000_0000, 0x8000_0000, 'icache cacheable range')
+        # SERIAL_LOOKUP of the shared L1 icache, 0 in the Snitch cluster
+        self.icache_serial_lookup = Value(self, 'icache_serial_lookup', 0, cast=int,
+            description='L1 icache serial lookup (SERIAL_LOOKUP), 0 or 1')
 
     class Tcdm(Tree):
         def __init__(self, parent, name, base, nb_masters):
@@ -171,7 +174,7 @@ class SnitchCluster(gvsoc.systree.Component):
                 cacheable_size=arch.cacheable.size))
         l1_icache = SnitchIcacheL1(self, 'l1_icache', line_count=128, way_count=2,
             line_width=256, nr_fetch_ports=arch.nb_core, num_axi_outstanding=2,
-            cacheable_base=arch.cacheable.base, cacheable_size=arch.cacheable.size)
+            serial_lookup=bool(arch.icache_serial_lookup), cacheable_base=arch.cacheable.base, cacheable_size=arch.cacheable.size)
 
         cores = []
         cores_demux = []

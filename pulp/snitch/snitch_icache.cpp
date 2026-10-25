@@ -23,7 +23,8 @@
  *   - L1 (snitch_icache_lookup and snitch_icache_handler), shared: LINE_COUNT
  *     sets of WAY_COUNT ways, one input port per L0 (NR_FETCH_PORTS), one
  *     lookup per cycle granted round-robin among them and answered in its
- *     cycle. A miss goes to one of NUM_AXI_OUTSTANDING refill slots (merged
+ *     cycle, one cycle later with SERIAL_LOOKUP (tags, then the data of the
+ *     hitting way). A miss goes to one of NUM_AXI_OUTSTANDING refill slots (merged
  *     with a miss on the same line) and the lookups go on; they only stall
  *     when every slot is busy. A landed refill answers all the requests
  *     waiting for its line at once.
@@ -1345,8 +1346,11 @@ vp::IoReqStatus SnitchIcache::input_req_muxed(vp::Block *__this, vp::IoReq *req,
     _this->io_event.event((uint8_t *)&offset);
 
     // The request goes through the port register of the RTL before it can
-    // be granted, the next cycle at the earliest
-    _this->port_reqs[port].push_back({req, port, _this->clock.get_cycles() + 1});
+    // be granted, the next cycle at the earliest. The serial lookup reads the
+    // tags, then the data of the hitting way the cycle after: hit or miss,
+    // the request reaches the handler one cycle later.
+    int64_t delay = 1 + (_this->cfg.serial_lookup ? 1 : 0);
+    _this->port_reqs[port].push_back({req, port, _this->clock.get_cycles() + delay});
     _this->lookup_event.enqueue(1);
     return vp::IO_REQ_GRANTED;
 }

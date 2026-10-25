@@ -44,6 +44,11 @@ class SnitchIcacheConfig(Config):
     num_axi_outstanding: int = cfg_field(default=2, dump=True, desc=(
         "L1: number of line refills in flight (NUM_AXI_OUTSTANDING). The L0 "
         "always has one"))
+    serial_lookup: bool = cfg_field(default=False, dump=True, desc=(
+        "L1: serialized lookup (SERIAL_LOOKUP), the tags of all the ways read "
+        "in one cycle and the data of the hitting way the next one, instead of "
+        "the tags and data of all the ways at once. One more cycle for every "
+        "lookup, hit or miss, still one lookup per cycle"))
     cacheable_base: int = cfg_field(default=0, dump=True, desc=(
         "Base of the cacheable window (the PMA of the cluster). The other "
         "fetches are forwarded through the refill port without touching the "
@@ -71,9 +76,9 @@ class SnitchIcache(Component):
     L1 (``snitch_icache_lookup`` and ``snitch_icache_handler``)
         Shared by the L0s, one input port each (``input``, ``input_1``, ...).
         One lookup per cycle, granted round-robin among the ports and answered
-        in its cycle. A miss takes one of ``num_axi_outstanding`` refill slots
-        (merged with a miss on the same line) and the lookups go on; they only
-        stall when every slot is busy. The way is chosen when the line lands,
+        in its cycle, one cycle later with ``serial_lookup``. A miss takes one
+        of ``num_axi_outstanding`` refill slots (merged with a miss on the same
+        line) and the lookups go on; they only stall when every slot is busy. The way is chosen when the line lands,
         by the eviction LFSR of the RTL, and the line answers all the requests
         waiting for it at once.
 
@@ -234,14 +239,17 @@ class SnitchIcacheL1(SnitchIcache):
         Number of input ports, one per L0 (NR_FETCH_PORTS).
     num_axi_outstanding : int
         Number of line refills in flight (NUM_AXI_OUTSTANDING).
+    serial_lookup : bool
+        Tags then data in two cycles instead of both at once (SERIAL_LOOKUP).
     cacheable_base, cacheable_size : int
         Cacheable window (PMA), size 0 for everything cacheable.
     """
 
     def __init__(self, parent: Component, name: str, line_count: int, way_count: int,
             line_width: int, nr_fetch_ports: int, num_axi_outstanding: int,
-            cacheable_base: int=0, cacheable_size: int=0):
+            serial_lookup: bool=False, cacheable_base: int=0, cacheable_size: int=0):
         super().__init__(parent, name, config=SnitchIcacheConfig(level=1,
             line_count=line_count, way_count=way_count, line_width=line_width,
             nr_fetch_ports=nr_fetch_ports, num_axi_outstanding=num_axi_outstanding,
-            cacheable_base=cacheable_base, cacheable_size=cacheable_size))
+            serial_lookup=serial_lookup, cacheable_base=cacheable_base,
+            cacheable_size=cacheable_size))
