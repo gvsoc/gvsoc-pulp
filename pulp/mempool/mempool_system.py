@@ -74,7 +74,7 @@ class System(st.Component):
                             nb_fus_per_core=nb_fus_per_core, redmule_bandwidth=redmule_bandwidth)
 
         # Boot Rom
-        rom = memory.Memory(self, 'rom', size=0x1000, width_log2=(axi_data_width - 1).bit_length(), stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
+        rom = memory.Memory(self, 'rom', size=0x1000, width_log2=(axi_data_width - 1).bit_length(), stim_file=self.get_file_path('pulp/mempool/bootrom.bin'))
 
         # L2 Memory
         # Efficient bandwidth of each port is only 1/4 of axi_data_width in current design
