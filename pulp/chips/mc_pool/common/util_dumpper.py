@@ -27,7 +27,7 @@ class UtilDumpper(gvsoc.systree.Component):
 
         super().__init__(parent, name)
 
-        self.add_sources(['pulp/chips/mc_pool/util_dumpper.cpp'])
+        self.add_sources(['pulp/chips/mc_pool/common/util_dumpper.cpp'])
 
         self.add_properties({
             'dumpper_id'   : dumpper_id,

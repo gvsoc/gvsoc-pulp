@@ -14,9 +14,7 @@
 #define DMSRC_FUNCT7    0b0000000
 #define DMDST_FUNCT7    0b0000001
 #define DMCPYI_FUNCT7   0b0000010
-#define DMCPYC_FUNCT7   0b0000011
 #define DMSTATI_FUNCT7  0b0000100
-#define DMMASK_FUNCT7   0b0000101
 #define DMSTR_FUNCT7    0b0000110
 #define DMREP_FUNCT7    0b0000111
 
@@ -43,10 +41,10 @@ enum FlexDmaMode {
 #define REG_STATUS       0x30
 
 
-class FlexMemPoolDmaCtrl : public vp::Component
+class McPoolDmaCtrl : public vp::Component
 {
 public:
-    FlexMemPoolDmaCtrl(vp::ComponentConf &config);
+    McPoolDmaCtrl(vp::ComponentConf &config);
 
 private:
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
@@ -75,17 +73,17 @@ private:
 };
 
 
-FlexMemPoolDmaCtrl::FlexMemPoolDmaCtrl(vp::ComponentConf &config)
+McPoolDmaCtrl::McPoolDmaCtrl(vp::ComponentConf &config)
     : vp::Component(config)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
-    this->input_itf.set_req_meth(&FlexMemPoolDmaCtrl::req);
+    this->input_itf.set_req_meth(&McPoolDmaCtrl::req);
     this->new_slave_port("input", &this->input_itf);
     this->new_master_port("dma_offload", &this->dma_offload_itf);
 }
 
 
-void FlexMemPoolDmaCtrl::emit(uint32_t funct7, uint32_t imm5,
+void McPoolDmaCtrl::emit(uint32_t funct7, uint32_t imm5,
                               uint32_t arg_a, uint32_t arg_b, uint32_t *result_out)
 {
     IssOffloadInsn<uint32_t> insn;
@@ -98,7 +96,7 @@ void FlexMemPoolDmaCtrl::emit(uint32_t funct7, uint32_t imm5,
 }
 
 
-uint32_t FlexMemPoolDmaCtrl::launch()
+uint32_t McPoolDmaCtrl::launch()
 {
     uint32_t tx_id = 0;
 
@@ -127,27 +125,17 @@ uint32_t FlexMemPoolDmaCtrl::launch()
         }
 
         case FLEX_DMA_MODE_BCAST:
-        {
-            // dmmask: masks packed in arg_b (col_mask<<16 | row_mask)
-            this->emit(DMMASK_FUNCT7, 0, 0, this->mask, nullptr);
-            // Re-issue src/dst after mask (frontend keeps them sticky but harmless)
-            // dmcpyc: collective_type=1 (broadcast) in imm5, size in arg_a
-            this->emit(DMCPYC_FUNCT7, 0b00001, this->size, 0, &tx_id);
-            break;
-        }
-
         case FLEX_DMA_MODE_REDUCE:
         {
-            this->emit(DMMASK_FUNCT7, 0, 0, this->mask, nullptr);
-            // reduction collective_type: 0=REDADD_UINT16 -> imm=2, 1=REDADD_INT16 -> 3,
-            // 2=REDADD_FP16 -> 4, 3=REDMAX_UINT16 -> 5, 4=REDMAX_INT16 -> 6, 5=REDMAX_FP16 -> 7
-            uint32_t imm = (this->reduct_fmt + 2) & 0x1f;
-            this->emit(DMCPYC_FUNCT7, imm, this->size, 0, &tx_id);
+            // The shared FlooNoC has no collective support, so broadcasts and reductions can
+            // not be modelled
+            this->trace.fatal("McPoolDmaCtrl: collective transfers are not supported "
+                              "(mode: %d)\n", this->mode);
             break;
         }
 
         default:
-            this->trace.msg("FlexMemPoolDmaCtrl: unknown mode %d\n", this->mode);
+            this->trace.msg("McPoolDmaCtrl: unknown mode %d\n", this->mode);
             break;
     }
 
@@ -155,7 +143,7 @@ uint32_t FlexMemPoolDmaCtrl::launch()
 }
 
 
-uint32_t FlexMemPoolDmaCtrl::status()
+uint32_t McPoolDmaCtrl::status()
 {
     // dmstati arg_b=2 -> "any in-flight transfer"
     uint32_t busy = 0;
@@ -170,9 +158,9 @@ uint32_t FlexMemPoolDmaCtrl::status()
 }
 
 
-vp::IoReqStatus FlexMemPoolDmaCtrl::req(vp::Block *__this, vp::IoReq *req)
+vp::IoReqStatus McPoolDmaCtrl::req(vp::Block *__this, vp::IoReq *req)
 {
-    FlexMemPoolDmaCtrl *_this = (FlexMemPoolDmaCtrl *)__this;
+    McPoolDmaCtrl *_this = (McPoolDmaCtrl *)__this;
 
     uint64_t offset  = req->get_addr();
     uint8_t *data    = req->get_data();
@@ -232,5 +220,5 @@ vp::IoReqStatus FlexMemPoolDmaCtrl::req(vp::Block *__this, vp::IoReq *req)
 
 extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
-    return new FlexMemPoolDmaCtrl(config);
+    return new McPoolDmaCtrl(config);
 }
