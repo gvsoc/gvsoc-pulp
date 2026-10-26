@@ -40,10 +40,11 @@ private:
     static IdmaBackendParams backend_params(const SnitchDmaV3Config &cfg)
     {
         IdmaBackendParams params;
-        params.width = cfg.axi_width;
+        params.width = cfg.data_width;
         params.num_ax_in_flight = cfg.num_ax_in_flight;
         params.buffer_depth = cfg.buffer_depth;
         params.meta_fifo_depth = cfg.meta_fifo_depth;
+        params.raw_coupling = cfg.raw_coupling;
         return params;
     }
 
@@ -62,10 +63,8 @@ SnitchDma::SnitchDma(vp::ComponentConf &config)
     fe(this, &this->me, this->cfg.offload_req_latency),
     me(this, "me", this->cfg.req_fifo_depth, this->cfg.nb_dims, &this->fe),
     be(this, "be", backend_params(this->cfg), &this->me),
-    axi_read(this, "axi_read", &this->be, this->cfg.axi_width, this->cfg.burst_len,
-        this->cfg.num_ax_in_flight),
-    axi_write(this, "axi_write", &this->be, this->cfg.axi_width, this->cfg.burst_len,
-        this->cfg.num_ax_in_flight, this->cfg.meta_fifo_depth, this->cfg.raw_coupling)
+    axi_read(this, "axi_read", &this->be, backend_params(this->cfg), this->cfg.axi),
+    axi_write(this, "axi_write", &this->be, backend_params(this->cfg), this->cfg.axi)
 {
     this->be.add_read_manager(&this->axi_read);
     this->be.add_write_manager(&this->axi_write);

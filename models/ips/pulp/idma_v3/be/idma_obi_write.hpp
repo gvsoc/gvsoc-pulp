@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 #include <vp/vp.hpp>
@@ -50,6 +51,13 @@ public:
     ///              its client.
     IdmaObiWrite(vp::Component *top, std::string name, IdmaBackend *be, IdmaObiPortGroup *ports);
 
+    /// Manager with a port group of its own, named @p name (its ports are
+    /// name_0, name_1, ...); the manager block is name_mgr.
+    /// @param data_width Data path width in bytes, the access of the group.
+    /// @param cfg        OBI parameters of the group.
+    IdmaObiWrite(vp::Component *top, std::string name, IdmaBackend *be, int data_width,
+        const IdmaObiConfig &cfg);
+
     /// Hardware reset: empties the address FIFO and the word slots.
     void reset(bool active) override;
 
@@ -79,6 +87,8 @@ private:
 
     IdmaBackend *be;
     IdmaObiPortGroup *ports;
+    /// The port group, when the manager owns it.
+    std::unique_ptr<IdmaObiPortGroup> own_ports;
     vp::Trace trace;
     /// Access width of the port group in bytes (the data path width).
     int width;

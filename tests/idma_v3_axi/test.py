@@ -40,6 +40,7 @@ from ips.pulp.idma_v3.reg_dma import RegDmaV3
 from ips.pulp.idma_v3.reg_dma_config import RegDmaV3Config
 from ips.pulp.idma_v3.snitch_dma import SnitchDmaV3
 from ips.pulp.idma_v3.snitch_dma_config import SnitchDmaV3Config
+from ips.pulp.idma_v3.protocol_config import IdmaAxiConfig, IdmaObiConfig, IdmaPortConfig
 from xdma_tester import XdmaTester
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'idma_v3_cluster'))
@@ -54,6 +55,9 @@ REGS_SIZE = 0x400
 AXI_WIDTH = 64
 
 PROT_AXI = 0
+PROT_OBI = 1
+# Width of one OBI port of the DMA (the access spans axi_width / OBI_PORT_WIDTH)
+OBI_PORT_WIDTH = 8
 
 
 def transfer(src, dst, length, *, src_stride=0, dst_stride=0, reps=1, nd=0,
@@ -69,7 +73,8 @@ def transfer(src, dst, length, *, src_stride=0, dst_stride=0, reps=1, nd=0,
 
 def build_case(case_name: str) -> dict:
     """Return the transfers of a case plus its bench options."""
-    common = dict(latency=1, raw_coupling=1, max_pending=4, axi_width=AXI_WIDTH, xdma=0)
+    common = dict(latency=1, raw_coupling=1, max_pending=4, axi_width=AXI_WIDTH, xdma=0,
+                  read_prot=PROT_AXI, write_prot=PROT_AXI)
     src = MEM_A_BASE
     dst = MEM_B_BASE
 
@@ -143,6 +148,23 @@ def build_case(case_name: str) -> dict:
     if case_name == 'no_coupler':
         # Same as 1d_32k without the RAW coupler: the AWs leave at once
         return {**common, 'raw_coupling': 0, 'transfers': [transfer(src, dst, 32768, seed=0x71)]}
+
+    # Back-ends with OBI on one side or both (r_axi_w_obi, r_obi_w_axi, rw_obi)
+    obi_cases = {
+        'obi_w_1d_4k':        (PROT_AXI, PROT_OBI, [transfer(src, dst, 4096, seed=0xa1)]),
+        'obi_w_1d_unaligned': (PROT_AXI, PROT_OBI, [transfer(src + 5, dst + 17, 1000, seed=0xa2)]),
+        'obi_r_1d_4k':        (PROT_OBI, PROT_AXI, [transfer(src, dst, 4096, seed=0xa3)]),
+        'obi_r_2d_16x256':    (PROT_OBI, PROT_AXI, [transfer(src, dst, 256, src_stride=512,
+                                  dst_stride=256, reps=16, nd=1, seed=0xa4)]),
+        'obi_rw_1d_4k':       (PROT_OBI, PROT_OBI, [transfer(src, dst, 4096, seed=0xa5)]),
+    }
+    if case_name in obi_cases:
+        read_prot, write_prot, transfers = obi_cases[case_name]
+        for t in transfers:
+            t['src_prot'] = read_prot
+            t['dst_prot'] = write_prot
+        return {**common, 'raw_coupling': 0, 'read_prot': read_prot, 'write_prot': write_prot,
+                'transfers': transfers}
 
     # The same transfers driven through the xdma offload front-end (SnitchDmaV3)
     if case_name.startswith('xdma_'):
@@ -227,9 +249,9 @@ class Chip(gvsoc.systree.Component):
         axi_width = spec['axi_width']
         if spec['xdma']:
             dma_config = SnitchDmaV3Config(
-                axi_width=axi_width, num_ax_in_flight=3, buffer_depth=3, meta_fifo_depth=6,
-                burst_len=spec.get('burst_len', 6), raw_coupling=bool(spec['raw_coupling']),
-                req_fifo_depth=3, nb_dims=2)
+                data_width=axi_width, num_ax_in_flight=3, buffer_depth=3, meta_fifo_depth=6,
+                axi=IdmaAxiConfig(burst_len=spec.get('burst_len', 6)),
+                raw_coupling=bool(spec['raw_coupling']), req_fifo_depth=3, nb_dims=2)
             dma = SnitchDmaV3(self, 'dma', config=dma_config)
             tester = XdmaTester(self, 'tester', transfers=spec['transfers'],
                 quit_after_cycles=spec.get('quit', 1_000_000))
@@ -237,9 +259,13 @@ class Chip(gvsoc.systree.Component):
             dma.o_OFFLOAD_GRANT(tester.i_OFFLOAD_GRANT())
             dma.o_IRQ(tester.i_IRQ())
         else:
+            sides = [IdmaPortConfig(protocol=prot, axi=IdmaAxiConfig(burst_len=6),
+                    obi=IdmaObiConfig(port_width=OBI_PORT_WIDTH))
+                for prot in (spec['read_prot'], spec['write_prot'])]
             dma_config = RegDmaV3Config(
-                axi_width=axi_width, num_ax_in_flight=3, buffer_depth=3, meta_fifo_depth=6,
-                burst_len=6, raw_coupling=bool(spec['raw_coupling']), req_fifo_depth=3, nb_dims=2)
+                data_width=axi_width, num_ax_in_flight=3, buffer_depth=3, meta_fifo_depth=6,
+                raw_coupling=bool(spec['raw_coupling']), req_fifo_depth=3, nb_dims=2,
+                read=sides[0], write=sides[1])
             dma = RegDmaV3(self, 'dma', config=dma_config)
             tester = ClusterDmaTester(self, 'tester',
                 regs_addr=REGS_BASE,
@@ -258,10 +284,27 @@ class Chip(gvsoc.systree.Component):
             axi = Router(self, 'axi', config=RouterConfig(kind=KIND_BEAT, width=axi_width,
                 max_pending_bursts_per_input=spec['max_pending']))
         clock.o_CLOCK(axi.i_CLOCK())
-        axi.o_MAP(mem_a.i_INPUT(), mapping=RouterMapping(name='mem_a', base=MEM_A_BASE, size=MEM_SIZE))
-        axi.o_MAP(mem_b.i_INPUT(), mapping=RouterMapping(name='mem_b', base=MEM_B_BASE, size=MEM_SIZE))
-        dma.o_AXI_READ(axi.i_INPUT(0))
-        dma.o_AXI_WRITE(axi.i_INPUT(1))
+        # An OBI side reads mem_a or writes mem_b directly, answered inline like
+        # a TCDM: an untimed router in front of that memory takes its ports and
+        # the AXI, a memory having a single master
+        nb_obi_ports = axi_width // OBI_PORT_WIDTH
+        for side, prot, mem, base, axi_input in (
+                ('read', spec['read_prot'], mem_a, MEM_A_BASE, 0),
+                ('write', spec['write_prot'], mem_b, MEM_B_BASE, 1)):
+            name = mem.name
+            if prot == PROT_AXI:
+                axi.o_MAP(mem.i_INPUT(), mapping=RouterMapping(name=name, base=base,
+                    size=MEM_SIZE))
+                getattr(dma, f'o_AXI_{side.upper()}')(axi.i_INPUT(axi_input))
+            else:
+                front = Router(self, f'{name}_front', config=RouterConfig(kind=KIND_UNTIMED))
+                clock.o_CLOCK(front.i_CLOCK())
+                front.o_MAP(mem.i_INPUT(), mapping=RouterMapping(name=name, base=base,
+                    size=MEM_SIZE))
+                axi.o_MAP(front.i_INPUT(nb_obi_ports), mapping=RouterMapping(name=name,
+                    base=base, size=MEM_SIZE, remove_base=False))
+                for port in range(nb_obi_ports):
+                    getattr(dma, f'o_OBI_{side.upper()}')(port, front.i_INPUT(port))
 
         # Tester paths: registers directly, memory through the AXI
         tester_ico = Router(self, 'tester_ico', config=RouterConfig(kind=KIND_UNTIMED))

@@ -130,11 +130,11 @@ class ClusterDmaV3(gvsoc.systree.Component):
 
     def o_AXI_READ(self, itf: gvsoc.systree.SlaveItf):
         """Binds the AXI read master (stream 1 sources)."""
-        self.itf_bind('axi_read', itf, signature=IoV2Beat(self.cfg.axi_width))
+        self.itf_bind('axi_read', itf, signature=IoV2Beat(self.cfg.data_width))
 
     def o_AXI_WRITE(self, itf: gvsoc.systree.SlaveItf):
         """Binds the AXI write master (stream 0 destinations)."""
-        self.itf_bind('axi_write', itf, signature=IoV2Beat(self.cfg.axi_width))
+        self.itf_bind('axi_write', itf, signature=IoV2Beat(self.cfg.data_width))
 
     def o_EVENT(self, core: int, itf: gvsoc.systree.SlaveItf):
         """Binds the completion event of one core (pulsed on every completion)."""
@@ -229,7 +229,7 @@ class ClusterDmaV3(gvsoc.systree.Component):
             _ = Signal(self, tcdm, name='size', path=f'{name}/size', groups='regmap')
             _ = Signal(self, tcdm, name='grant_wait', path=f'{name}/grant_wait',
                 groups='regmap', display=DisplayLogicBox('WAIT'))
-            for port in range(self.cfg.obi_ports_per_access):
+            for port in range(self.cfg.obi.nb_ports(self.cfg.data_width)):
                 _ = Signal(self, tcdm, name=f'port[{port}]', path=f'{name}/port_{port}',
                     groups='regmap')
 

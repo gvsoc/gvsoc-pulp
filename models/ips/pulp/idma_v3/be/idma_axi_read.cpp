@@ -23,12 +23,12 @@
 
 
 
-IdmaAxiRead::IdmaAxiRead(vp::Component *top, std::string itf_name, IdmaBackend *be, int width,
-    int burst_len, int num_ax_in_flight)
+IdmaAxiRead::IdmaAxiRead(vp::Component *top, std::string itf_name, IdmaBackend *be,
+    const IdmaBackendParams &params, const IdmaAxiConfig &cfg)
 :   vp::Block(top, itf_name),
     be(be),
     bus(&IdmaAxiRead::retry_meth, &IdmaAxiRead::resp_meth),
-    width(width),
+    width(params.width),
     sig_ar_addr(*this, "ar_addr", 32, vp::SignalCommon::ResetKind::HighZ),
     sig_ar_beats(*this, "ar_beats", 16, vp::SignalCommon::ResetKind::HighZ),
     sig_ar_wait(*this, "ar_wait", 1, vp::SignalCommon::ResetKind::HighZ),
@@ -45,11 +45,11 @@ IdmaAxiRead::IdmaAxiRead(vp::Component *top, std::string itf_name, IdmaBackend *
     this->req_allocator = vp::IoReqAllocator::get(0);
 
     int log2_width = 0;
-    while ((1 << log2_width) < width)
+    while ((1 << log2_width) < this->width)
     {
         log2_width++;
     }
-    int page_bits = log2_width + burst_len;
+    int page_bits = log2_width + cfg.burst_len;
     if (page_bits > 12)
     {
         page_bits = 12;
@@ -58,7 +58,7 @@ IdmaAxiRead::IdmaAxiRead(vp::Component *top, std::string itf_name, IdmaBackend *
 
     // One context per outstanding burst, plus one so a slot released in the
     // same cycle a split is issued is never needed
-    this->ctxs.resize(num_ax_in_flight + 1);
+    this->ctxs.resize(params.num_ax_in_flight + 1);
     this->sig_burst.reserve(this->ctxs.size());
     for (int i = 0; i < (int)this->ctxs.size(); i++)
     {
@@ -67,7 +67,7 @@ IdmaAxiRead::IdmaAxiRead(vp::Component *top, std::string itf_name, IdmaBackend *
             vp::SignalCommon::ResetKind::HighZ);
     }
 
-    this->bus_word.resize(width);
+    this->bus_word.resize(this->width);
 }
 
 

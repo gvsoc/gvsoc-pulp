@@ -223,7 +223,7 @@ class SnitchCluster(gvsoc.systree.Component):
         # defaults are this cluster's DMA). The AXI width is the
         # wide-crossbar width; TCDM accesses loop back through the wide
         # crossbar like in RTL.
-        idma = SnitchDmaV3(self, 'idma', config=SnitchDmaV3Config(axi_width=64))
+        idma = SnitchDmaV3(self, 'idma', config=SnitchDmaV3Config(data_width=64))
 
         #
         # Bindings

@@ -26,6 +26,7 @@
 #include <vp/signal.hpp>
 #include <vp/itf/io_v2.hpp>
 #include "../idma.hpp"
+#include <ips/pulp/idma_v3/protocol_config/idma_obi_config.hpp>
 
 
 
@@ -90,6 +91,13 @@ class IdmaObiPortGroup : public vp::Block
 public:
     IdmaObiPortGroup(vp::Component *idma, std::string name, int nb_ports, int port_width,
         uint64_t addr_mask);
+
+    /**
+     * @brief Group of data_width / cfg.port_width ports, the addresses masked
+     * to cfg.addr_width bits
+     */
+    IdmaObiPortGroup(vp::Component *idma, std::string name, int data_width,
+        const IdmaObiConfig &cfg);
 
     void reset(bool active) override;
 

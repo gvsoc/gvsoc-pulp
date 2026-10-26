@@ -48,20 +48,11 @@ private:
     static IdmaBackendParams backend_params(const ClusterDmaV3Config &cfg)
     {
         IdmaBackendParams params;
-        params.width = cfg.axi_width;
+        params.width = cfg.data_width;
         params.num_ax_in_flight = cfg.num_ax_in_flight;
         params.buffer_depth = cfg.buffer_depth;
         params.meta_fifo_depth = cfg.meta_fifo_depth;
         return params;
-    }
-
-    static uint64_t obi_addr_mask(const ClusterDmaV3Config &cfg)
-    {
-        if (cfg.obi_addr_width <= 0 || cfg.obi_addr_width >= 64)
-        {
-            return ~(uint64_t)0;
-        }
-        return ((uint64_t)1 << cfg.obi_addr_width) - 1;
     }
 
     ClusterDmaV3Config cfg;
@@ -89,25 +80,14 @@ ClusterDma::ClusterDma(vp::ComponentConf &config)
     me1(this, "me1", this->cfg.req_fifo_depth, this->cfg.nb_dims, this->fe.stream(1)),
     be0(this, "be0", backend_params(this->cfg), &this->me0),
     be1(this, "be1", backend_params(this->cfg), &this->me1),
-    axi_write(this, "axi_write", &this->be0, this->cfg.axi_width, this->cfg.burst_len,
-        this->cfg.num_ax_in_flight, this->cfg.meta_fifo_depth, false),
-    axi_read(this, "axi_read", &this->be1, this->cfg.axi_width, this->cfg.burst_len,
-        this->cfg.num_ax_in_flight),
-    tcdm_write_ports(this, "tcdm_write", this->cfg.obi_ports_per_access,
-        this->cfg.obi_port_width, obi_addr_mask(this->cfg)),
-    tcdm_read_ports(this, "tcdm_read", this->cfg.obi_ports_per_access,
-        this->cfg.obi_port_width, obi_addr_mask(this->cfg)),
+    axi_write(this, "axi_write", &this->be0, backend_params(this->cfg), this->cfg.axi),
+    axi_read(this, "axi_read", &this->be1, backend_params(this->cfg), this->cfg.axi),
+    tcdm_write_ports(this, "tcdm_write", this->cfg.data_width, this->cfg.obi),
+    tcdm_read_ports(this, "tcdm_read", this->cfg.data_width, this->cfg.obi),
     obi_write(this, "obi_write", &this->be1, &this->tcdm_write_ports),
     obi_read_s0(this, "obi_read_s0", &this->be0, &this->tcdm_read_ports),
     obi_read_s1(this, "obi_read_s1", &this->be1, &this->tcdm_read_ports)
 {
-    if (this->cfg.obi_ports_per_access * this->cfg.obi_port_width != this->cfg.axi_width)
-    {
-        this->get_trace()->fatal("idma_v3: the OBI access width (%ld x %ld) must equal "
-            "axi_width (%ld)\n", this->cfg.obi_ports_per_access, this->cfg.obi_port_width,
-            this->cfg.axi_width);
-    }
-
     // Stream 0: OBI -> AXI; stream 1: AXI -> OBI and OBI -> OBI, the two read
     // managers of stream 1 queue in the same read FIFO
     this->be0.add_read_manager(&this->obi_read_s0);

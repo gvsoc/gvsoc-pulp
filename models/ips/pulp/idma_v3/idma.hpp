@@ -177,6 +177,8 @@ struct IdmaBackendParams
     int buffer_depth = 3;
     /// Depth of the w_last FIFO (writes awaiting their B).
     int meta_fifo_depth = 11;
+    /// Read/write channel coupler (RAWCouplingAvail, AXI writes only).
+    bool raw_coupling = false;
 };
 
 /**

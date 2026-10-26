@@ -69,6 +69,31 @@ IdmaObiPortGroup::IdmaObiPortGroup(vp::Component *idma, std::string name, int nb
 
 
 
+static uint64_t obi_addr_mask(int addr_width)
+{
+    if (addr_width <= 0 || addr_width >= 64)
+    {
+        return ~(uint64_t)0;
+    }
+    return ((uint64_t)1 << addr_width) - 1;
+}
+
+
+
+IdmaObiPortGroup::IdmaObiPortGroup(vp::Component *idma, std::string name, int data_width,
+    const IdmaObiConfig &cfg)
+:   IdmaObiPortGroup(idma, name, data_width / cfg.port_width, cfg.port_width,
+        obi_addr_mask(cfg.addr_width))
+{
+    if (cfg.port_width <= 0 || data_width % cfg.port_width != 0)
+    {
+        this->trace.fatal("idma_v3: the OBI port width (%ld) must divide the data width (%d)\n",
+            cfg.port_width, data_width);
+    }
+}
+
+
+
 void IdmaObiPortGroup::reset(bool active)
 {
     if (active)

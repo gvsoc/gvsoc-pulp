@@ -202,7 +202,7 @@ class SnitchCluster(gvsoc.systree.Component):
         # (dma_axi_req_fifo_depth) and an 8-entry request FIFO
         # (dma_req_fifo_depth). The write meta FIFO derives from them. The
         # offload request goes through a register (RegisterOffloadReq).
-        idma = SnitchDmaV3(self, 'idma', config=SnitchDmaV3Config(axi_width=64,
+        idma = SnitchDmaV3(self, 'idma', config=SnitchDmaV3Config(data_width=64,
             num_ax_in_flight=24, req_fifo_depth=8, meta_fifo_depth=0,
             offload_req_latency=1))
 

@@ -238,9 +238,10 @@ class Chip(gvsoc.systree.Component):
         clock.o_CLOCK(l2.i_CLOCK())
 
         dma_config = ClusterDmaV3Config()
-        dma_config.obi_addr_width = TCDM_SIZE.bit_length() - 1
+        dma_config.obi.addr_width = TCDM_SIZE.bit_length() - 1
         dma_config.max_num_streams = spec['max_num_streams']
         dma = ClusterDmaV3(self, 'dma', config=dma_config)
+        nb_obi_ports = dma_config.obi.nb_ports(dma_config.data_width)
         clock.o_CLOCK(dma.i_CLOCK())
 
         tester = ClusterDmaTester(self, 'tester',
@@ -257,12 +258,12 @@ class Chip(gvsoc.systree.Component):
         clock.o_CLOCK(tcdm_ico.i_CLOCK())
         tcdm_ico.o_MAP(tcdm.i_INPUT(),
             mapping=RouterMapping(name='tcdm', base=0, size=TCDM_SIZE, remove_base=False))
-        for i in range(dma_config.obi_ports_per_access):
+        for i in range(nb_obi_ports):
             dma.o_TCDM_WRITE(i, tcdm_ico.i_INPUT(i))
-            dma.o_TCDM_READ(i, tcdm_ico.i_INPUT(dma_config.obi_ports_per_access + i))
+            dma.o_TCDM_READ(i, tcdm_ico.i_INPUT(nb_obi_ports + i))
 
         # Cluster AXI stand-in: beat router of the AXI width
-        axi = Router(self, 'axi', config=RouterConfig(kind=KIND_BEAT, width=dma_config.axi_width,
+        axi = Router(self, 'axi', config=RouterConfig(kind=KIND_BEAT, width=dma_config.data_width,
             max_pending_bursts_per_input=8))
         clock.o_CLOCK(axi.i_CLOCK())
         axi.o_MAP(l2.i_INPUT(), mapping=RouterMapping(name='l2', base=L2_BASE, size=L2_SIZE))
@@ -273,7 +274,7 @@ class Chip(gvsoc.systree.Component):
         # so the tester's 4-byte accesses reach both memories
         tester_ico = Router(self, 'tester_ico', config=RouterConfig(kind=KIND_UNTIMED))
         clock.o_CLOCK(tester_ico.i_CLOCK())
-        tester_ico.o_MAP(tcdm_ico.i_INPUT(2 * dma_config.obi_ports_per_access),
+        tester_ico.o_MAP(tcdm_ico.i_INPUT(2 * nb_obi_ports),
             mapping=RouterMapping(name='tcdm', base=TCDM_BASE, size=TCDM_SIZE))
         tester_ico.o_MAP(axi.i_INPUT(2),
             mapping=RouterMapping(name='l2', base=L2_BASE, size=L2_SIZE, remove_base=False))

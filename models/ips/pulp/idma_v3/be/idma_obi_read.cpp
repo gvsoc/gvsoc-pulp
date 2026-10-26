@@ -46,6 +46,15 @@ IdmaObiRead::IdmaObiRead(vp::Component *top, std::string name, IdmaBackend *be,
 
 
 
+IdmaObiRead::IdmaObiRead(vp::Component *top, std::string name, IdmaBackend *be, int data_width,
+    const IdmaObiConfig &cfg)
+:   IdmaObiRead(top, name + "_mgr", be, new IdmaObiPortGroup(top, name, data_width, cfg))
+{
+    this->own_ports.reset(this->ports);
+}
+
+
+
 void IdmaObiRead::reset(bool active)
 {
     if (active)

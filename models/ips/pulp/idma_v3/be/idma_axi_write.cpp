@@ -22,14 +22,14 @@
 
 
 
-IdmaAxiWrite::IdmaAxiWrite(vp::Component *top, std::string itf_name, IdmaBackend *be, int width,
-    int burst_len, int num_ax_in_flight, int meta_fifo_depth, bool raw_coupling)
+IdmaAxiWrite::IdmaAxiWrite(vp::Component *top, std::string itf_name, IdmaBackend *be,
+    const IdmaBackendParams &params, const IdmaAxiConfig &cfg)
 :   vp::Block(top, itf_name),
     be(be),
     bus(&IdmaAxiWrite::retry_meth, &IdmaAxiWrite::resp_meth),
-    width(width),
-    num_ax_in_flight(num_ax_in_flight),
-    raw_coupling(raw_coupling),
+    width(params.width),
+    num_ax_in_flight(params.num_ax_in_flight),
+    raw_coupling(params.raw_coupling),
     sig_w_addr(*this, "w_addr", 32, vp::SignalCommon::ResetKind::HighZ),
     sig_w_size(*this, "w_size", 8, vp::SignalCommon::ResetKind::HighZ),
     sig_w_last(*this, "w_last", 1, vp::SignalCommon::ResetKind::HighZ),
@@ -43,11 +43,11 @@ IdmaAxiWrite::IdmaAxiWrite(vp::Component *top, std::string itf_name, IdmaBackend
     this->req_allocator = vp::IoReqAllocator::get(0);
 
     int log2_width = 0;
-    while ((1 << log2_width) < width)
+    while ((1 << log2_width) < this->width)
     {
         log2_width++;
     }
-    int page_bits = log2_width + burst_len;
+    int page_bits = log2_width + cfg.burst_len;
     if (page_bits > 12)
     {
         page_bits = 12;
@@ -56,7 +56,8 @@ IdmaAxiWrite::IdmaAxiWrite(vp::Component *top, std::string itf_name, IdmaBackend
 
     // A burst lives from its AW to its B: at most meta_fifo_depth of them
     // (the w_last FIFO bounds them), plus one for same-cycle recycling
-    int nb_ctxs = (meta_fifo_depth > 0 ? meta_fifo_depth : num_ax_in_flight + 3) + 1;
+    int nb_ctxs = (params.meta_fifo_depth > 0 ? params.meta_fifo_depth
+        : params.num_ax_in_flight + 3) + 1;
     this->ctxs.resize(nb_ctxs);
     this->sig_burst.reserve(nb_ctxs);
     for (int i = 0; i < nb_ctxs; i++)
@@ -64,7 +65,7 @@ IdmaAxiWrite::IdmaAxiWrite(vp::Component *top, std::string itf_name, IdmaBackend
         this->sig_burst.emplace_back(*this, "burst_" + std::to_string(i), 32,
             vp::SignalCommon::ResetKind::HighZ);
         this->ctxs[i].slot = i;
-        this->ctxs[i].stage.resize(this->page_size + width);
+        this->ctxs[i].stage.resize(this->page_size + this->width);
     }
 }
 

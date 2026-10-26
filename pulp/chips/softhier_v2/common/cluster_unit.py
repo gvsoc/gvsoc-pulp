@@ -217,7 +217,7 @@ class ClusterUnit(gvsoc.systree.Component):
         # iDMA, offloaded from the last core: idma_outstand_txn transfers
         # queued in front of the mid-end, idma_outstand_burst bursts in flight
         idma = SnitchDmaV3(self, 'idma', config=SnitchDmaV3Config(
-            axi_width=arch.wide_width, req_fifo_depth=arch.idma_outstand_txn,
+            data_width=arch.wide_width, req_fifo_depth=arch.idma_outstand_txn,
             num_ax_in_flight=arch.idma_outstand_burst,
             meta_fifo_depth=arch.idma_outstand_burst))
 

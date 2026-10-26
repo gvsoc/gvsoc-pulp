@@ -17,6 +17,7 @@
 """Configuration dataclass for :class:`ips.pulp.idma_v3.snitch_dma.SnitchDmaV3`."""
 
 from config_tree import Config, cfg_field
+from ips.pulp.idma_v3.protocol_config import IdmaAxiConfig
 
 
 class SnitchDmaV3Config(Config):
@@ -27,7 +28,7 @@ class SnitchDmaV3Config(Config):
     mid-end.
     """
 
-    axi_width: int = cfg_field(default=64, desc=(
+    data_width: int = cfg_field(default=64, desc=(
         "Width of the data path and of the AXI masters in bytes, a power of "
         "two (the RTL DataWidth / 8)."
     ))
@@ -47,11 +48,8 @@ class SnitchDmaV3Config(Config):
         "derives it as buffer_depth + num_ax_in_flight."
     ))
 
-    burst_len: int = cfg_field(default=6, desc=(
-        "log2 of the AXI burst length in bus words: a burst never crosses a "
-        "2^(log2(axi_width) + burst_len) byte boundary, capped at the 4 KiB "
-        "AXI page (the RTL Burst_len, 8 upstream)."
-    ))
+    axi: IdmaAxiConfig = cfg_field(default_factory=lambda: IdmaAxiConfig(burst_len=6),
+        desc="Parameters of the AXI read and write managers.")
 
     raw_coupling: bool = cfg_field(default=True, desc=(
         "Read/write channel coupler (the RTL RAWCouplingAvail): the address "

@@ -62,11 +62,11 @@ class SnitchDmaV3(gvsoc.systree.Component):
 
     def o_AXI_READ(self, itf: gvsoc.systree.SlaveItf):
         """Binds the AXI read master."""
-        self.itf_bind('axi_read', itf, signature=IoV2Beat(self.cfg.axi_width))
+        self.itf_bind('axi_read', itf, signature=IoV2Beat(self.cfg.data_width))
 
     def o_AXI_WRITE(self, itf: gvsoc.systree.SlaveItf):
         """Binds the AXI write master."""
-        self.itf_bind('axi_write', itf, signature=IoV2Beat(self.cfg.axi_width))
+        self.itf_bind('axi_write', itf, signature=IoV2Beat(self.cfg.data_width))
 
     def o_IRQ(self, itf: gvsoc.systree.SlaveItf):
         """Binds the completion pulse (one per completed transfer)."""

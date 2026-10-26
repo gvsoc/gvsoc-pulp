@@ -49,6 +49,15 @@ IdmaObiWrite::IdmaObiWrite(vp::Component *top, std::string name, IdmaBackend *be
 
 
 
+IdmaObiWrite::IdmaObiWrite(vp::Component *top, std::string name, IdmaBackend *be, int data_width,
+    const IdmaObiConfig &cfg)
+:   IdmaObiWrite(top, name + "_mgr", be, new IdmaObiPortGroup(top, name, data_width, cfg))
+{
+    this->own_ports.reset(this->ports);
+}
+
+
+
 void IdmaObiWrite::reset(bool active)
 {
     if (active)

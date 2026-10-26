@@ -17,20 +17,21 @@
 """Configuration dataclass for :class:`ips.pulp.idma_v3.reg_dma.RegDmaV3`."""
 
 from config_tree import Config, cfg_field
+from ips.pulp.idma_v3.protocol_config import IdmaPortConfig
 
 
 class RegDmaV3Config(Config):
     """Configuration of the single-stream register-driven iDMA (v3).
 
-    The defaults describe an AXI-to-AXI instance with the RTL default
-    back-end parameters; the Spatz cluster DMA is this with ``axi_width=64``,
-    ``num_ax_in_flight=3``, ``meta_fifo_depth=6``, ``burst_len=6``,
-    ``raw_coupling=True``, ``req_fifo_depth=3`` and ``nb_dims=2``.
+    ``read.protocol`` and ``write.protocol`` select the upstream back-end:
+    rw_axi (AXI, AXI, the default), r_axi_w_obi (AXI, OBI), r_obi_w_axi (OBI,
+    AXI) or rw_obi (OBI, OBI). The defaults describe an AXI-to-AXI instance
+    with the RTL default back-end parameters.
     """
 
-    axi_width: int = cfg_field(default=8, desc=(
-        "Width of the data path and of the AXI masters in bytes, a power of "
-        "two (the RTL DataWidth / 8)."
+    data_width: int = cfg_field(default=8, desc=(
+        "Width of the data path in bytes, a power of two (the RTL DataWidth "
+        "/ 8): the beat of an AXI side, the access of an OBI side."
     ))
 
     num_ax_in_flight: int = cfg_field(default=8, desc=(
@@ -48,16 +49,18 @@ class RegDmaV3Config(Config):
         "derives it as buffer_depth + num_ax_in_flight."
     ))
 
-    burst_len: int = cfg_field(default=8, desc=(
-        "log2 of the AXI burst length in bus words: a burst never crosses a "
-        "2^(log2(axi_width) + burst_len) byte boundary, capped at the 4 KiB "
-        "AXI page (the RTL Burst_len, 8 upstream)."
-    ))
-
     raw_coupling: bool = cfg_field(default=False, desc=(
         "Read/write channel coupler (the RTL RAWCouplingAvail): the address "
         "phase of a write burst waits for the first response beat of a read "
-        "burst unless the transfer decouples it."
+        "burst unless the transfer decouples it. Only rw_axi has it."
+    ))
+
+    read: IdmaPortConfig = cfg_field(default_factory=IdmaPortConfig, desc=(
+        "Read side: protocol and its parameters."
+    ))
+
+    write: IdmaPortConfig = cfg_field(default_factory=IdmaPortConfig, desc=(
+        "Write side: protocol and its parameters."
     ))
 
     req_fifo_depth: int = cfg_field(default=8, desc=(

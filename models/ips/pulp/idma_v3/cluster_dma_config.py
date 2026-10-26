@@ -17,6 +17,7 @@
 """Configuration dataclass for :class:`ips.pulp.idma_v3.cluster_dma.ClusterDmaV3`."""
 
 from config_tree import Config, cfg_field
+from ips.pulp.idma_v3.protocol_config import IdmaAxiConfig, IdmaObiConfig
 
 
 class ClusterDmaV3Config(Config):
@@ -26,9 +27,9 @@ class ClusterDmaV3Config(Config):
     64-bit AXI, 32-bit TCDM ports and the RTL parameters of its two back-ends.
     """
 
-    axi_width: int = cfg_field(default=8, desc=(
-        "Width of the data path and of the AXI masters in bytes, a power of "
-        "two (the RTL DataWidth / 8)."
+    data_width: int = cfg_field(default=8, desc=(
+        "Width of the data path in bytes, a power of two (the RTL DataWidth "
+        "/ 8): the AXI beat and the TCDM access."
     ))
 
     num_ax_in_flight: int = cfg_field(default=8, desc=(
@@ -46,11 +47,8 @@ class ClusterDmaV3Config(Config):
         "MetaFifoDepth); 0 derives it as buffer_depth + num_ax_in_flight."
     ))
 
-    burst_len: int = cfg_field(default=5, desc=(
-        "log2 of the AXI burst length in bus words: a burst never crosses a "
-        "2^(log2(axi_width) + burst_len) byte boundary (the RTL Burst_len, "
-        "256 B with the defaults)."
-    ))
+    axi: IdmaAxiConfig = cfg_field(default_factory=lambda: IdmaAxiConfig(burst_len=5),
+        desc="Parameters of the AXI managers (256 B bursts at 64 bits).")
 
     req_fifo_depth: int = cfg_field(default=8, desc=(
         "Transfers each stream's request FIFO can hold."
@@ -60,20 +58,10 @@ class ClusterDmaV3Config(Config):
         "Dimensions the mid-end iterates (1 to 3)."
     ))
 
-    obi_port_width: int = cfg_field(default=4, desc=(
-        "Width of one TCDM port in bytes."
-    ))
-
-    obi_ports_per_access: int = cfg_field(default=2, desc=(
-        "TCDM ports driven together for one OBI access (the RTL "
-        "mem_to_banks): access width = obi_port_width * obi_ports_per_access, "
-        "which must equal axi_width."
-    ))
-
-    obi_addr_width: int = cfg_field(default=17, desc=(
-        "Address bits kept on the TCDM ports: the cluster-absolute address "
-        "is masked to the crossbar's local space (0 keeps it whole)."
-    ))
+    obi: IdmaObiConfig = cfg_field(
+        default_factory=lambda: IdmaObiConfig(port_width=4, addr_width=17), desc=(
+        "Parameters of the TCDM (OBI) managers: 32-bit ports, the "
+        "cluster-absolute address masked to the crossbar's local space."))
 
     nb_reg_ports: int = cfg_field(default=2, desc=(
         "Register access ports, each with its own copy of the transfer "

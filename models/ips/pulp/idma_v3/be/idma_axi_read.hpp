@@ -27,6 +27,7 @@
 #include <vp/signal.hpp>
 #include "idma_manager.hpp"
 #include "idma_be.hpp"
+#include <ips/pulp/idma_v3/protocol_config/idma_axi_config.hpp>
 
 /**
  * @brief AXI read manager (idma_axi_read + its AR channel), an io_v2 beat
@@ -51,11 +52,12 @@ public:
     ///                         it under @p itf_name.
     /// @param itf_name         Port and block name (axi_read).
     /// @param be               Back-end the beats are pushed into.
-    /// @param width            Data path width in bytes (the beat size).
-    /// @param burst_len        log2 of the burst length in bus words.
-    /// @param num_ax_in_flight Outstanding bursts (contexts kept).
-    IdmaAxiRead(vp::Component *top, std::string itf_name, IdmaBackend *be, int width,
-        int burst_len, int num_ax_in_flight);
+    /// @param params           Back-end parameters: the data path width (the
+    ///                         beat size) and the outstanding bursts
+    ///                         (contexts kept).
+    /// @param cfg              AXI parameters (burst length).
+    IdmaAxiRead(vp::Component *top, std::string itf_name, IdmaBackend *be,
+        const IdmaBackendParams &params, const IdmaAxiConfig &cfg);
 
     /// Hardware reset: frees every outstanding request.
     void reset(bool active) override;

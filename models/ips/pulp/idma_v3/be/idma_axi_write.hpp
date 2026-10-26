@@ -28,6 +28,7 @@
 #include <vp/signal.hpp>
 #include "idma_manager.hpp"
 #include "idma_be.hpp"
+#include <ips/pulp/idma_v3/protocol_config/idma_axi_config.hpp>
 
 /**
  * @brief AXI write manager (idma_axi_write + its AW channel, optionally the
@@ -54,14 +55,15 @@ public:
     ///                         it under @p itf_name.
     /// @param itf_name         Port and block name (axi_write).
     /// @param be               Back-end the data beats are popped from.
-    /// @param width            Data path width in bytes (the beat size).
-    /// @param burst_len        log2 of the burst length in bus words.
-    /// @param num_ax_in_flight Depth of the coupler's AW store.
-    /// @param meta_fifo_depth  Bursts alive from AW to B (contexts kept); 0
-    ///                         derives it from num_ax_in_flight.
-    /// @param raw_coupling     Insert the read/write channel coupler.
-    IdmaAxiWrite(vp::Component *top, std::string itf_name, IdmaBackend *be, int width,
-        int burst_len, int num_ax_in_flight, int meta_fifo_depth, bool raw_coupling);
+    /// @param params           Back-end parameters: the data path width (the
+    ///                         beat size), num_ax_in_flight (depth of the
+    ///                         coupler's AW store), meta_fifo_depth (bursts
+    ///                         alive from AW to B, 0 derives it from
+    ///                         num_ax_in_flight) and raw_coupling (insert the
+    ///                         read/write channel coupler).
+    /// @param cfg              AXI parameters (burst length).
+    IdmaAxiWrite(vp::Component *top, std::string itf_name, IdmaBackend *be,
+        const IdmaBackendParams &params, const IdmaAxiConfig &cfg);
 
     /// Hardware reset: frees every burst context and held beat.
     void reset(bool active) override;
