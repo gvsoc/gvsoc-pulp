@@ -16,15 +16,16 @@
 
 import gvsoc.systree
 
-class ClusterRegisters(gvsoc.systree.Component):
+class ClusterCSR(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, wakeup_latency: int=0,
                  cluster_id: int=0, num_cluster_x: int=1, num_cluster_y: int=1,
-                 global_barrier_addr=0, soc_register_base: int=0x90000000):
+                 global_barrier_addr=0, global_barrier_stride: int=0,
+                 soc_register_base: int=0x90000000):
 
         super().__init__(parent, name)
 
-        self.add_sources(['pulp/chips/mc_pool/cluster_registers.cpp'])
+        self.add_sources(['pulp/chips/mc_pool/common/cluster_csr.cpp'])
 
         self.add_properties({
             'wakeup_latency': wakeup_latency,
@@ -32,6 +33,7 @@ class ClusterRegisters(gvsoc.systree.Component):
             'num_cluster_x': num_cluster_x,
             'num_cluster_y': num_cluster_y,
             'global_barrier_addr' : global_barrier_addr,
+            'global_barrier_stride' : global_barrier_stride,
             'soc_register_base': soc_register_base,
         })
 

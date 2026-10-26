@@ -24,16 +24,18 @@
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
 #include <cpu/iss/include/offload.hpp>
+#include <queue>
+#include <vector>
 
 
 #define MAX_CLUSTERS 16
 #define CLUSTER_LOCAL_EOC_NOTIFY_OFFSET 24
 
-class ClusterRegisters : public vp::Component
+class ClusterCSR : public vp::Component
 {
 
 public:
-    ClusterRegisters(vp::ComponentConf &config);
+    ClusterCSR(vp::ComponentConf &config);
 
     void reset(bool active);
 
@@ -71,9 +73,18 @@ private:
 
     vp::IoSlave  global_barrier_slave_itf;
     vp::IoMaster global_barrier_master_itf;
-    vp::IoReq*   global_barrier_master_req;
     uint32_t     global_barrier_addr;
-    uint8_t *    global_barrier_buffer;
+    // Distance between the global barrier slots of two consecutive clusters
+    uint32_t     global_barrier_stride;
+    // The wakeup is sent as one write to the global barrier slot of each target cluster, since
+    // the NoC has no broadcast. One request per cluster, so that they can all be in flight
+    std::vector<vp::IoReq> wakeup_reqs;
+    std::vector<uint32_t> wakeup_data;
+    // Clusters whose wakeup still has to be sent
+    std::queue<int> wakeup_queue;
+    // True when the first request of wakeup_queue has been denied and is waiting for its grant
+    bool wakeup_denied;
+    void wakeup_send();
 
     vp::WireSlave<bool> hbm_preload_done_itf;
     vp::WireSlave<bool> inst_preheat_done_itf;
@@ -88,7 +99,7 @@ private:
     uint16_t global_sync_enable;
     uint64_t global_sync_timestamp;
 
-    // Pre-allocated IoReq for cluster-local EOC notification to top-level ctrl_registers.
+    // Pre-allocated IoReq for cluster-local EOC notification to the top-level mc_pool_ctrl.
     bool eoc_reached;
     vp::IoMaster cluster_eoc_itf;
     vp::IoReq eoc_notify_req;
@@ -97,38 +108,40 @@ private:
 
 
 
-ClusterRegisters::ClusterRegisters(vp::ComponentConf &config)
+ClusterCSR::ClusterCSR(vp::ComponentConf &config)
     : vp::Component(config)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
     // Mempool (0x40000000)
-    this->input_itf.set_req_meth(&ClusterRegisters::req);
+    this->input_itf.set_req_meth(&ClusterCSR::req);
     this->new_slave_port("input", &this->input_itf);
     this->new_master_port("barrier_ack", &this->barrier_ack_itf);
     this->new_master_port("rocache_cfg", &this->rocache_cfg_itf);
     this->new_master_port("cluster_eoc", &this->cluster_eoc_itf);
     this->soc_register_base = get_js_config()->get_child_int("soc_register_base");
-    this->wakeup_event = this->event_new(&ClusterRegisters::wakeup_event_handler);
+    this->wakeup_event = this->event_new(&ClusterCSR::wakeup_event_handler);
     wakeup_latency = get_js_config()->get_child_int("wakeup_latency");
     eoc_reached = false;
 
     // Inter-cluster (ARCH_CLUSTER_REG_BASE)
-    this->barrier_reg_input_itf.set_req_meth(&ClusterRegisters::barrier_reg_req);
+    this->barrier_reg_input_itf.set_req_meth(&ClusterCSR::barrier_reg_req);
     this->new_slave_port("barrier_reg_input", &this->barrier_reg_input_itf);
 
     this->cluster_id = this->get_js_config()->get("cluster_id")->get_int();
     this->num_cluster_x = this->get_js_config()->get("num_cluster_x")->get_int();
     this->num_cluster_y = this->get_js_config()->get("num_cluster_y")->get_int();
 
-    this->global_barrier_slave_itf.set_req_meth(&ClusterRegisters::global_barrier_sync);
+    this->global_barrier_slave_itf.set_req_meth(&ClusterCSR::global_barrier_sync);
     this->new_slave_port("global_barrier_slave", &this->global_barrier_slave_itf);
     this->new_master_port("global_barrier_master", &this->global_barrier_master_itf);
-    this->global_barrier_master_req = this->global_barrier_master_itf.req_new(0, 0, 0, 0);
     this->global_barrier_addr = this->get_js_config()->get("global_barrier_addr")->get_int();
-    this->global_barrier_buffer = new uint8_t[4];
-    this->global_barrier_master_itf.set_resp_meth(&ClusterRegisters::response);
-    this->global_barrier_master_itf.set_grant_meth(&ClusterRegisters::grant);
+    this->global_barrier_stride = this->get_js_config()->get("global_barrier_stride")->get_int();
+    this->wakeup_reqs.resize(this->num_cluster_x * this->num_cluster_y);
+    this->wakeup_data.resize(this->num_cluster_x * this->num_cluster_y);
+    this->wakeup_denied = false;
+    this->global_barrier_master_itf.set_resp_meth(&ClusterCSR::response);
+    this->global_barrier_master_itf.set_grant_meth(&ClusterCSR::grant);
 
     this->global_barrier_query = NULL;
     this->global_barrier_mutex = 0;
@@ -139,22 +152,22 @@ ClusterRegisters::ClusterRegisters(vp::ComponentConf &config)
     this->new_slave_port("hbm_preload_done", &this->hbm_preload_done_itf);
     this->new_slave_port("inst_preheat_done", &this->inst_preheat_done_itf);
     this->new_master_port("fetch_start", &this->fetch_start_itf);
-    this->hbm_preload_done_itf.set_sync_meth(&ClusterRegisters::hbm_preload_done_handler);
-    this->inst_preheat_done_itf.set_sync_meth(&ClusterRegisters::inst_preheat_done_handler);
+    this->hbm_preload_done_itf.set_sync_meth(&ClusterCSR::hbm_preload_done_handler);
+    this->inst_preheat_done_itf.set_sync_meth(&ClusterCSR::inst_preheat_done_handler);
     this->hbm_preload_done = 0;
     this->inst_preheat_done = 0;
     this->fetch_started = 0;
 }
 
-void ClusterRegisters::wakeup_event_handler(vp::Block *__this, vp::ClockEvent *event) {
-    ClusterRegisters *_this = (ClusterRegisters *)__this;
+void ClusterCSR::wakeup_event_handler(vp::Block *__this, vp::ClockEvent *event) {
+    ClusterCSR *_this = (ClusterCSR *)__this;
     _this->barrier_ack_itf.sync(1);
     _this->trace.msg("Control registers wake up signal work and write %d to barrier ack output\n", 1);
 }
 
-vp::IoReqStatus ClusterRegisters::req(vp::Block *__this, vp::IoReq *req)
+vp::IoReqStatus ClusterCSR::req(vp::Block *__this, vp::IoReq *req)
 {
-    ClusterRegisters *_this = (ClusterRegisters *)__this;
+    ClusterCSR *_this = (ClusterCSR *)__this;
 
     uint64_t offset = req->get_addr();
     uint8_t *data = req->get_data();
@@ -208,9 +221,9 @@ vp::IoReqStatus ClusterRegisters::req(vp::Block *__this, vp::IoReq *req)
     return vp::IO_REQ_OK;
 }
 
-vp::IoReqStatus ClusterRegisters::barrier_reg_req(vp::Block *__this, vp::IoReq *req)
+vp::IoReqStatus ClusterCSR::barrier_reg_req(vp::Block *__this, vp::IoReq *req)
 {
-    ClusterRegisters *_this = (ClusterRegisters *)__this;
+    ClusterCSR *_this = (ClusterCSR *)__this;
     uint64_t offset = req->get_addr();
     bool is_write = req->get_is_write();
     uint64_t size = req->get_size();
@@ -280,23 +293,22 @@ vp::IoReqStatus ClusterRegisters::barrier_reg_req(vp::Block *__this, vp::IoReq *
 
         // _this->trace.msg(vp::Trace::LEVEL_DEBUG, "[Global Sync] start wakeup with row_mask: %d and col_mask: %d\n", row_mask, col_mask);
 
-        _this->global_barrier_master_req->prepare();
-        _this->global_barrier_master_req->set_is_write(true);
-        _this->global_barrier_master_req->set_addr(_this->global_barrier_addr);
-        _this->global_barrier_master_req->set_size(4);
-        _this->global_barrier_master_req->set_data(_this->global_barrier_buffer);
-
-        uint8_t * payload_ptr = _this->global_barrier_master_req->get_payload();
-        payload_ptr[0] = 1; //broadcast
-        payload_ptr[1] = row_mask;
-        payload_ptr[2] = col_mask;
-
-        vp::IoReqStatus status = _this->global_barrier_master_itf.req(_this->global_barrier_master_req);
-
-        if (status == vp::IO_REQ_INVALID)
+        // Wake up the clusters selected by the masks, the same as a FlooNoC broadcast did: a
+        // cluster is selected if its position matches the one of this cluster on the bits set
+        // in the masks, so that null masks select all clusters. Positions are taken in the NoC
+        // grid, where clusters start at (1, 1)
+        uint32_t src_x = _this->cluster_id % _this->num_cluster_x + 1;
+        uint32_t src_y = _this->cluster_id / _this->num_cluster_x + 1;
+        for (uint32_t id = 0; id < _this->num_cluster_x * _this->num_cluster_y; id++)
         {
-            _this->trace.fatal("[Global Sync] There was an error while broadcating wakeup signal\n");
+            uint32_t x = id % _this->num_cluster_x + 1;
+            uint32_t y = id / _this->num_cluster_x + 1;
+            if ((x & row_mask) == (src_x & row_mask) && (y & col_mask) == (src_y & col_mask))
+            {
+                _this->wakeup_queue.push(id);
+            }
         }
+        _this->wakeup_send();
     }
 
     // _this->regmap.access(offset, size, data, is_write);
@@ -304,23 +316,23 @@ vp::IoReqStatus ClusterRegisters::barrier_reg_req(vp::Block *__this, vp::IoReq *
     return vp::IO_REQ_OK;
 }
 
-void ClusterRegisters::hbm_preload_done_handler(vp::Block *__this, bool value)
+void ClusterCSR::hbm_preload_done_handler(vp::Block *__this, bool value)
 {
-    ClusterRegisters *_this = (ClusterRegisters *)__this;
+    ClusterCSR *_this = (ClusterCSR *)__this;
     _this->hbm_preload_done = 1;
     _this->trace.msg(vp::Trace::LEVEL_DEBUG, "HBM Preloading Done\n");
     _this->fetch_start_check();
 }
 
-void ClusterRegisters::inst_preheat_done_handler(vp::Block *__this, bool value)
+void ClusterCSR::inst_preheat_done_handler(vp::Block *__this, bool value)
 {
-    ClusterRegisters *_this = (ClusterRegisters *)__this;
+    ClusterCSR *_this = (ClusterCSR *)__this;
     _this->inst_preheat_done = 1;
     _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Instruction Preheating Done\n");
     _this->fetch_start_check();
 }
 
-void ClusterRegisters::fetch_start_check()
+void ClusterCSR::fetch_start_check()
 {
     if (this->hbm_preload_done && this->inst_preheat_done)
     {
@@ -331,9 +343,9 @@ void ClusterRegisters::fetch_start_check()
     }
 }
 
-vp::IoReqStatus ClusterRegisters::global_barrier_sync(vp::Block *__this, vp::IoReq *req)
+vp::IoReqStatus ClusterCSR::global_barrier_sync(vp::Block *__this, vp::IoReq *req)
 {
-    ClusterRegisters *_this = (ClusterRegisters *)__this;
+    ClusterCSR *_this = (ClusterCSR *)__this;
 
     // _this->trace.msg(vp::Trace::LEVEL_DEBUG, "[Global Sync] Globale Barrier Triggered\n");
 
@@ -350,25 +362,62 @@ vp::IoReqStatus ClusterRegisters::global_barrier_sync(vp::Block *__this, vp::IoR
 
 }
 
-void ClusterRegisters::reset(bool active)
+void ClusterCSR::reset(bool active)
 {
     this->new_reg("barrier_status", &this->barrier_status, 0, true);
 }
 
 
-void ClusterRegisters::response(vp::Block *__this, vp::IoReq *req)
+void ClusterCSR::response(vp::Block *__this, vp::IoReq *req)
 {
 
 }
 
 
-void ClusterRegisters::grant(vp::Block *__this, vp::IoReq *req)
+void ClusterCSR::grant(vp::Block *__this, vp::IoReq *req)
 {
+    ClusterCSR *_this = (ClusterCSR *)__this;
 
+    // The denied wakeup is now accepted, go on with the next ones
+    _this->wakeup_denied = false;
+    _this->wakeup_queue.pop();
+    _this->wakeup_send();
+}
+
+
+void ClusterCSR::wakeup_send()
+{
+    while (!this->wakeup_queue.empty() && !this->wakeup_denied)
+    {
+        int id = this->wakeup_queue.front();
+        vp::IoReq *req = &this->wakeup_reqs[id];
+
+        req->init();
+        req->set_is_write(true);
+        req->set_addr(this->global_barrier_addr + id * this->global_barrier_stride);
+        req->set_size(4);
+        req->set_data((uint8_t *)&this->wakeup_data[id]);
+
+        vp::IoReqStatus status = this->global_barrier_master_itf.req(req);
+
+        if (status == vp::IO_REQ_INVALID)
+        {
+            this->trace.fatal("[Global Sync] There was an error while sending wakeup signal "
+                "(cluster: %d)\n", id);
+        }
+        else if (status == vp::IO_REQ_DENIED)
+        {
+            this->wakeup_denied = true;
+        }
+        else
+        {
+            this->wakeup_queue.pop();
+        }
+    }
 }
 
 
 extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
-    return new ClusterRegisters(config);
+    return new ClusterCSR(config);
 }

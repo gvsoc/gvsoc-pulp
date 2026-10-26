@@ -16,13 +16,14 @@
 
 import gvsoc.systree
 
-class CtrlRegisters(gvsoc.systree.Component):
+class McPoolCtrl(gvsoc.systree.Component):
 
-    def __init__(self, parent: gvsoc.systree.Component, name: str, num_cluster_x: int, num_cluster_y: int, has_preload_binary: int=0):
+    def __init__(self, parent: gvsoc.systree.Component, name: str, num_cluster_x: int,
+            num_cluster_y: int, has_preload_binary: int=0):
 
         super().__init__(parent, name)
 
-        self.add_sources(['pulp/chips/mc_pool/ctrl_registers.cpp'])
+        self.add_sources(['pulp/chips/mc_pool/common/mc_pool_ctrl.cpp'])
 
         self.add_properties({
             'num_cluster_x': num_cluster_x,
@@ -32,9 +33,6 @@ class CtrlRegisters(gvsoc.systree.Component):
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')
-
-    def o_BARRIER_ACK(self, itf: gvsoc.systree.SlaveItf):
-        self.itf_bind(f'barrier_ack', itf, signature='io')
 
     def i_HBM_PRELOAD_DONE(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'hbm_preload_done', signature='wire<bool>')

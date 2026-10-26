@@ -22,7 +22,7 @@ class hbm_ctrl(st.Component):
 
         super(hbm_ctrl, self).__init__(parent, slave)
 
-        self.add_sources(['pulp/chips/mc_pool/hbm_ctrl.cpp'])
+        self.add_sources(['pulp/chips/mc_pool/common/hbm_ctrl.cpp'])
 
         self.add_properties({
             'nb_slaves': nb_slaves,
