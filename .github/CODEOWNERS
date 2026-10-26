@@ -5,6 +5,8 @@
 /requirements.txt @haugoug
 /.gitignore @haugoug
 /.github/CODEOWNERS @haugoug
+/CONTRIBUTING.md @haugoug
+/.github/maintainers/haugoug.md @haugoug
 /examples/ @haugoug
 /tests/ @haugoug
 
