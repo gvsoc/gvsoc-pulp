@@ -1,9 +1,102 @@
+# Repository files, examples and tests
+/CMakeLists.txt @haugoug
+/README.md @haugoug
+/LICENSE @haugoug
+/requirements.txt @haugoug
+/.gitignore @haugoug
+/.github/CODEOWNERS @haugoug
+/examples/ @haugoug
+/tests/ @haugoug
+
 # SoftEx model
 /pulp/softex/ @AlessandroNadalini
 /softex_tb.py @AlessandroNadalini
 /pulp/floonoc_flex/ @rfamedina
+# ISS v2 cores
+/cpu/iss_v2/ @haugoug
 # CV32E40P core
 /cpu/iss_v2/include/cores/cv32e40p/ @marpac3
 /cpu/iss_v2/src/cores/cv32e40p/ @marpac3
 /pulp/cv32e40p/ @marpac3
 /examples/cv32e40p/ @marpac3
+
+# Cores and ISS wrappers
+/pulp/cpu/ @haugoug
+/pulp/ri5ky/ @haugoug
+/pulp/cva6/ @haugoug
+/pulp/ara/ @haugoug
+
+# Snitch / Spatz cluster
+/pulp/snitch/ @haugoug
+
+# Accelerators
+/pulp/ne16/ @haugoug
+
+# DMA and interconnects
+/pulp/idma/ @haugoug
+/pulp/mchan/ @haugoug
+/pulp/floonoc_v2/ @haugoug
+
+# SoC and cluster peripherals
+/pulp/cluster/ @haugoug
+/pulp/event_unit/ @haugoug
+/pulp/soc_eu/ @haugoug
+/pulp/itc/ @haugoug
+/pulp/timer/ @haugoug
+/pulp/fll/ @haugoug
+/pulp/gpio/ @haugoug
+/pulp/padframe/ @haugoug
+/pulp/udma/ @haugoug
+/pulp/icache_ctrl/ @haugoug
+/pulp/adv_dbg_unit/ @haugoug
+/pulp/stdout/ @haugoug
+
+# Chips
+/pulp/chips/pulp_open/ @haugoug
+/pulp/chips/pulp_open_v2/ @haugoug
+/pulp/chips/siracusa/ @haugoug
+/pulp/chips/occamy/ @haugoug
+/pulp/chips/snitch/ @haugoug
+/pulp/chips/spatz/ @haugoug
+/pulp/chips/softhier_v2/ @haugoug
+/pulp/chips/rv64/ @haugoug
+/pulp/chips/arnold/ @haugoug
+/pulp/chips/bigpulp/ @haugoug
+/pulp/chips/multino/ @haugoug
+/pulp/chips/oprecompkw/ @haugoug
+/pulp/chips/oprecompkw_sa/ @haugoug
+/pulp/chips/pulp/ @haugoug
+/pulp/chips/pulp_v1/ @haugoug
+/pulp/chips/pulpissimo/ @haugoug
+/pulp/chips/pulpissimo_v1/ @haugoug
+/pulp/chips/usoc_v1/ @haugoug
+/pulp/chips/vivosoc3_1/ @haugoug
+/pulp/chips/wolfe/ @haugoug
+
+# Targets
+/pulp-open.py @haugoug
+/pulp-open_v2.py @haugoug
+/pulp-open-ddr.py @haugoug
+/pulp-open-nn.py @haugoug
+/pulp-open-nn_v2.py @haugoug
+/pulp-open-pim.py @haugoug
+/siracusa.py @haugoug
+/occamy.py @haugoug
+/pulp/occamy.py @haugoug
+/snitch.py @haugoug
+/snitch_v2.py @haugoug
+/spatz.py @haugoug
+/spatz_v2.py @haugoug
+/spatz_v3.py @haugoug
+/ara.py @haugoug
+/ara_v2.py @haugoug
+/cva6.py @haugoug
+/cva6_v2.py @haugoug
+/rv32.py @haugoug
+/rv64.py @haugoug
+/rv64_untimed.py @haugoug
+/targets/ @haugoug
+
+# Register maps, docs
+/models/ @haugoug
+/docs/ @haugoug
