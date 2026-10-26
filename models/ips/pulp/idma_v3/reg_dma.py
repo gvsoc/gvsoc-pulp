@@ -105,7 +105,7 @@ class RegDmaV3(gvsoc.systree.Component):
         'title': 'iDMA (v3)',
         'static_page': '../ips/pulp/idma_v3',
         'tests_dirs': [
-            {'dir':       'gvsoc/pulp/tests/idma_v3_axi',
+            {'dir':       'tests/functional/models/idma_v3_axi',
              'component': 'ips.pulp.idma_v3.reg_dma'},
         ],
     }

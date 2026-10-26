@@ -94,7 +94,7 @@ class ClusterDmaV3(gvsoc.systree.Component):
         'title': 'Cluster iDMA (v3)',
         'static_page': '../ips/pulp/idma_v3',
         'tests_dirs': [
-            {'dir':       'gvsoc/pulp/tests/idma_v3_cluster',
+            {'dir':       'tests/functional/models/idma_v3_cluster',
              'component': 'ips.pulp.idma_v3.cluster_dma'},
         ],
     }
