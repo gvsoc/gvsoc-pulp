@@ -182,7 +182,7 @@ class ClusterUnit(gvsoc.systree.Component):
                                  nb_dmas_per_group=nb_dmas_per_group)
 
         # Boot Rom
-        rom = memory.Memory(self, 'rom', size=0x1000, width_log2=(arch.axi_data_width - 1).bit_length(), stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
+        rom = memory.Memory(self, 'rom', size=0x1000, width_log2=(arch.axi_data_width - 1).bit_length(), stim_file=self.get_file_path('pulp/mempool/bootrom.bin'))
 
         #stack memory
         stack_mem = memory.Memory(self, 'stack_mem', size=arch.stack_area.size)
