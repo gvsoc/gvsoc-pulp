@@ -34,18 +34,11 @@ class LightRedmule(gvsoc.systree.Component):
                 queue_depth: int=128,
                 fold_tiles_mapping: int=0,
                 loc_base=0, #here we might add also local size to check that tcdm requests do not overflow...
-                outstanding: bool=False, # outstanding-request model (TensorPool)
-                stream_loads: bool=False): # outstanding model: send the requests ahead of the array (timing only)
+                stream_loads: bool=False): # send the ROUTINE requests ahead of the array (synchronous TCDM only)
 
         super().__init__(parent, name)
 
-        # outstanding: model of light_redmule_outstanding.cpp, which issues the
-        # TCDM requests ahead of the array and keeps them outstanding in a
-        # request queue (TensorPool, MemPool L1 interconnect)
-        if outstanding:
-            self.add_sources(['pulp/light_redmule/light_redmule_outstanding.cpp', 'cpu/iss/flexfloat/flexfloat.c'])
-        else:
-            self.add_sources(['pulp/light_redmule/light_redmule.cpp', 'cpu/iss/flexfloat/flexfloat.c'])
+        self.add_sources(['pulp/light_redmule/light_redmule.cpp', 'cpu/iss/flexfloat/flexfloat.c'])
 
         self.add_properties({
             'tcdm_bank_width'   : tcdm_bank_width,
@@ -60,12 +53,8 @@ class LightRedmule(gvsoc.systree.Component):
             'queue_depth'       : queue_depth,
             'fold_tiles_mapping': fold_tiles_mapping,
             'loc_base'          : loc_base,
+            'stream_loads'      : int(stream_loads),
         })
-
-        if outstanding:
-            self.add_properties({
-                'stream_loads'      : int(stream_loads),
-            })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')
