@@ -47,7 +47,7 @@ class McPoolArchBase:
     configuration.
 
     Every attribute is also exported to the software as an ARCH_<NAME> define
-    (see gen_mc_arch.py in the MemPool runtime).
+    (see common/utils/config.py).
     """
 
     def __init__(self):
