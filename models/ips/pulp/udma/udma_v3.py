@@ -38,6 +38,8 @@ class UdmaV3Config(Config):
     nb_hyper: int = cfg_field(default=1, dump=True, desc="Number of HyperBus interfaces")
     hyper_id: int = cfg_field(default=8, dump=True,
         desc="Peripheral id of HyperBus 0 (followed by its other transfer ids and its common registers)")
+    hyper_nb_tran_ids: int = cfg_field(default=8, dump=True,
+        desc="Number of transfer ids of each HyperBus, each one a peripheral area, the common registers being in the next one")
 
 
 class UdmaV3(Component):
@@ -46,9 +48,6 @@ class UdmaV3(Component):
         if config is None:
             config = UdmaV3Config()
         super().__init__(parent, name, config=config)
-
-        # The pulp-open event numbers and HyperBus transfer ids
-        self.add_c_flags(['-DPULP_OPEN_UDMA=1'])
 
         self.add_sources([
             'ips/pulp/udma/udma_v3.cpp',

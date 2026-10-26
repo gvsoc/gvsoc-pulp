@@ -435,12 +435,19 @@ udma::udma(vp::ComponentConf &config)
 
   for (int i=0; i<this->cfg.nb_hyper; i++)
   {
-    int id = this->cfg.hyper_id + i * (HYPER_NB_CHANNELS + 1);
+    int nb_tran_ids = this->cfg.hyper_nb_tran_ids;
+    int id = this->cfg.hyper_id + i * (nb_tran_ids + 1);
     trace.msg("Instantiating HYPER channel (id: %d)\n", id);
-    Hyper_periph_v3 *periph = new Hyper_periph_v3(this, id, i);
+    if (nb_tran_ids < 1 || id + nb_tran_ids >= this->cfg.nb_periphs)
+    {
+      throw std::logic_error("Hyper periph does not fit in udma (id: " + std::to_string(id) +
+        ", nb_tran_ids: " + std::to_string(nb_tran_ids) +
+        ", nb_periphs: " + std::to_string(this->cfg.nb_periphs) + ")");
+    }
+    Hyper_periph_v3 *periph = new Hyper_periph_v3(this, id, i, nb_tran_ids);
     // The peripheral spans the areas of its transfer ids and of its common
     // registers
-    for (int channel = 0; channel <= HYPER_NB_CHANNELS; channel++)
+    for (int channel = 0; channel <= nb_tran_ids; channel++)
     {
       periphs[id + channel] = periph;
     }

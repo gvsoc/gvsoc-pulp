@@ -381,7 +381,7 @@ class Hyper_periph_v3 : public Udma_periph
   friend class Hyper_v3_rx_channel;
 
 public:
-  Hyper_periph_v3(udma *top, int id, int itf_id);
+  Hyper_periph_v3(udma *top, int id, int itf_id, int nb_tran_ids);
   vp::IoRespStatus req(vp::IoReq *req, uint64_t offset);
   void reset(bool active);
   static void rx_sync(vp::Block *__this, int data);
@@ -407,7 +407,8 @@ private:
   vp::IoRespStatus access_private_regs(vp::IoReq *req, uint64_t offset, int id);
 
   vp::HyperMaster hyper_itf;
-  unsigned int regs[HYPER_NB_CHANNELS][HYPER_NB_CONFIG_REGS];
+  int nb_tran_ids;
+  std::vector<std::vector<unsigned int>> regs;
   unsigned int common_regs[HYPER_NB_COMMON_REGS];
   int clkdiv;
   Hyper_v3_tx_channel *tx_channel;
@@ -440,16 +441,16 @@ private:
     uint8_t raw[6];
   } ca;
 
-  bool cfg_setup[HYPER_NB_CHANNELS];
-  bool command_word[HYPER_NB_CHANNELS];
+  std::vector<bool> cfg_setup;
+  std::vector<bool> command_word;
   bool ending;
   bool command_mode;
   int twd_count;
   bool write_trans;
   bool continuous_mode;
   int transfer_size_mode;
-  Udma_queue<Hyper_transfer> *free_fifo[HYPER_NB_CHANNELS];
-  Udma_queue<Hyper_transfer> *pending_fifo[HYPER_NB_CHANNELS];
+  std::vector<Udma_queue<Hyper_transfer> *> free_fifo;
+  std::vector<Udma_queue<Hyper_transfer> *> pending_fifo;
   Hyper_transfer *current_command;
   int channel_id;
   int mem_sel;
