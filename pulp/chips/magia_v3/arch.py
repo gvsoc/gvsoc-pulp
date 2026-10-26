@@ -87,12 +87,6 @@ class MagiaArch:
     # Default VLEN in bits, as in the RTL (SPATZ_VLEN), overridden by spatz_vlen
     SPATZ_VLEN                 = 256
 
-    # RedMulE array, as in the RTL (ARRAY_HEIGHT, ARRAY_WIDTH, PIPE_REGS), overridden by
-    # redmule_h and redmule_w
-    REDMULE_H           = 8
-    REDMULE_W           = 8
-    REDMULE_PIPE        = 1
-
     # Pulp Cores
     PULP_ENABLE         = True
     NB_PULP_CORES       = 8
@@ -153,10 +147,10 @@ class MagiaTree(Tree):
             value=MagiaArch.SPATZ_VLEN, cast=int,
             description='Spatz VLEN in bits').value
         self.redmule_h = TargetParameter(parent, name='redmule_h',
-            value=MagiaArch.REDMULE_H, cast=int,
+            value=MagiaDSE.REDMULE_H, cast=int,
             description='RedMulE array height (RTL ARRAY_HEIGHT)').value
         self.redmule_w = TargetParameter(parent, name='redmule_w',
-            value=MagiaArch.REDMULE_W, cast=int,
+            value=MagiaDSE.REDMULE_W, cast=int,
             description='RedMulE array width (RTL ARRAY_WIDTH)').value
         for name in ('spatz_vlen', 'redmule_h', 'redmule_w'):
             v = getattr(self, name)
@@ -198,3 +192,9 @@ class MagiaDSE:
     TILE_IDMA_NUM_AX_IN_FLIGHT  = 16
     TILE_IDMA_BUFFER_DEPTH      = 3
     TILE_IDMA_JOB_FIFO_DEPTH    = 16
+
+    # RedMulE array, as in the RTL (ARRAY_HEIGHT, ARRAY_WIDTH, PIPE_REGS), overridden by
+    # redmule_h and redmule_w
+    REDMULE_H                   = 8
+    REDMULE_W                   = 8
+    REDMULE_PIPE                = 1
