@@ -21,6 +21,8 @@
 #pragma once
 
 #include <vp/vp.hpp>
+#include <queue>
+#include <set>
 #include "../idma.hpp"
 
 
@@ -54,6 +56,8 @@ public:
 
 private:
     static unsigned int clog2(int value);
+    // Retire, in order, the transfers at the head of pending_transfers which are done
+    void retire_transfers();
 
     // Pointer to frontend
     IdmaTransferProducer *fe;
@@ -70,4 +74,10 @@ private:
     // Queue of enqueued transfers. The number of transfers which can be enqueued is defined by
     // transfer_queue_size
     std::vector<std::queue<IdmaTransfer *>> transfer_queue;
+    // Enqueued transfers, in order. Each one has a burst at the head of every queue of
+    // transfer_queue when it is the oldest, so they are retired in this order
+    std::queue<IdmaTransfer *> pending_transfers;
+    // Transfers whose bursts are all done, but which wait for an older transfer to be retired:
+    // the backends are independent, so a transfer can complete before an older one
+    std::set<IdmaTransfer *> done_transfers;
 };
