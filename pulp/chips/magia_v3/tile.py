@@ -264,14 +264,14 @@ class MagiaV3Tile(gvsoc.systree.Component):
         # (DATA_W): 8 x 2 x 2 B = 32 B = 256 bits in the default configuration. tcdm_bank_width x
         # tcdm_bank_number is the size of that port, not of the TCDM.
         redmule_elem_size = 2 # max number of bytes per element (FP16)
-        redmule_port_bytes = tree.redmule_h * (MagiaArch.REDMULE_PIPE + 1) * redmule_elem_size
+        redmule_port_bytes = tree.redmule_h * (MagiaDSE.REDMULE_PIPE + 1) * redmule_elem_size
         redmule = LightRedmule(self, f'tile-{tid}-redmule',
                                     tcdm_bank_width     = MagiaArch.BYTES_PER_WORD,
                                     tcdm_bank_number    = redmule_port_bytes // MagiaArch.BYTES_PER_WORD,
                                     elem_size           = redmule_elem_size,
                                     ce_height           = tree.redmule_h,
                                     ce_width            = tree.redmule_w,
-                                    ce_pipe             = MagiaArch.REDMULE_PIPE,
+                                    ce_pipe             = MagiaDSE.REDMULE_PIPE,
                                     queue_depth         = 1)
 
         # Fsync mm controller
