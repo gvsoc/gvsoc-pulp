@@ -43,8 +43,6 @@ from utils.io_v2_shared_clock_bridge import IoV2SharedClockBridge
 from pulp.stdout.stdout_v3_v2 import StdoutV2
 from pulp.cpu.iss.spatz import Spatz
 from pulp.cpu.iss.spatz_config import SpatzConfig
-from pulp.snitch.snitch_cluster.spatz.spatz_tcdm_interco import (SpatzTcdmInterco,
-                                                                SpatzTcdmIntercoConfig)
 from pulp.light_redmule.light_redmule_v2 import LightRedmule
 from pulp.event_unit.event_unit_v3_v2 import Event_unit
 from ips.pulp.idma_v3.axi_obi_dma import AxiObiDmaV3
@@ -57,17 +55,20 @@ from pulp.chips.magia_v3.pulp_core.core import CV32PulpCore
 from pulp.chips.magia_v3.fractal_sync_mm_ctrl.fractal_sync_mm_ctrl import FSync_mm_ctrl
 from pulp.chips.magia_v3.idma_mm_ctrl.idma_mm_ctrl import iDMA_mm_ctrl
 from pulp.chips.magia_v3.obi_cut.obi_cut import ObiCut
+from pulp.chips.magia_v3.tcdm_interco.tcdm_interco import (MagiaTcdmInterco,
+                                                          MagiaTcdmIntercoConfig)
 from pulp.chips.magia_v3.cluster_regs.cluster_regs import ClusterRegs
 
 
 class MagiaTileTcdm(gvsoc.systree.Component):
     """Tile TCDM: the banks behind a single io_v2 crossbar.
 
-    The crossbar is ``SpatzTcdmInterco``: a word-interleaved crossbar with
-    round-robin arbitration, one master per bank per cycle, and wide masters
-    which reserve every bank their access spans and take priority over the
-    narrow ones. Bank conflicts are therefore modelled, and a denied master
-    re-issues from its retry callback.
+    The crossbar is ``MagiaTcdmInterco``, the hci_interconnect of the RTL
+    (local_interconnect.sv): a word-interleaved crossbar with round-robin
+    arbitration, one master per bank per cycle, and wide masters which
+    reserve every bank their access spans and take priority over the narrow
+    ones. Each wide master has its own HCI branch, so wide masters only
+    conflict on banks. A denied master re-issues from its retry callback.
 
     The banks receive the address decoded by the crossbar, whose upper bits
     still hold the tile offset; the banks truncate it, since the bank size is
@@ -99,15 +100,11 @@ class MagiaTileTcdm(gvsoc.systree.Component):
         nb_banks = MagiaArch.N_MEM_BANKS
         bank_size = MagiaArch.N_WORDS_BANK * MagiaArch.BYTES_PER_WORD
 
-        ico = SpatzTcdmInterco(self, 'ico', config=SpatzTcdmIntercoConfig(
+        ico = MagiaTcdmInterco(self, 'ico', config=MagiaTcdmIntercoConfig(
             nb_masters=self.NB_NARROW,
             nb_slaves=nb_banks,
             interleaving_width=int(math.log2(MagiaArch.BYTES_PER_WORD)),
-            nb_wide_masters=self.NB_WIDE,
-            # RedMulE (HWPE branch) and the iDMA (DMA branch) reach the banks
-            # through separate HCI branches, arbitrated bank by bank
-            # (local_interconnect.sv), not through one shared wide port
-            wide_shared_port=False))
+            nb_wide_masters=self.NB_WIDE))
 
         for i in range(nb_banks):
             bank = Memory(self, f'bank_{i}', config=MemoryV3Config(
