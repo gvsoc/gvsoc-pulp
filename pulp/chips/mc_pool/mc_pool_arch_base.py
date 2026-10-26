@@ -112,19 +112,22 @@ class McPoolArchTensorPool(McPoolArchBase):
         super().__init__()
         self.num_cluster_x           = 2
         self.num_cluster_y           = 5
-        self.cluster_tcdm_size       = 0x00400000
 
-        # Heterogeneous: num_cores PE (default 256, from the environment, as
-        # the MemPool make variable) + 16 RedMulE tensor engines, sub-group
-        # division (as Terapool) and a 4 MB L1 (as Terapool).
+        # Heterogeneous: num_cores PE + RedMulE/O-POPE tensor engines, with
+        # sub-group division (as Terapool). The cluster parameters come from
+        # the environment, with the variables and defaults of the
+        # single-cluster tensorpool model (mempool_system.py), so that both
+        # models and the MemPool software describe the same cluster.
         self.terapool                = False
         self.num_core_per_cluster    = int(os.environ.get('NUM_CORES', 256))
-        self.nb_cores_per_tile       = 4
-        self.nb_sub_groups_per_group = 4
-        self.bank_factor             = 8
-        # Bank size keeping the L1 at cluster_tcdm_size
-        self.bank_size               = self.cluster_tcdm_size // (
-            self.num_core_per_cluster * self.bank_factor)
+        self.nb_cores_per_tile       = int(os.environ.get('NUM_CORES_PER_TILE', 4))
+        self.nb_sub_groups_per_group = int(os.environ.get('NUM_SUB_GROUPS_PER_GROUP', 4))
+        self.bank_factor             = int(os.environ.get('BANK_FACTOR', 8))
+        # Default bank size: a 4 MB L1 (as Terapool)
+        self.bank_size               = int(os.environ.get('BANK_SIZE',
+            0x00400000 // (self.num_core_per_cluster * self.bank_factor)))
+        self.cluster_tcdm_size       = (self.num_core_per_cluster * self.bank_factor *
+                                        self.bank_size)
         self.axi_data_width          = 64
         self.dma_burst_queue_size    = 32
         self.nb_axi_masters_per_group = 4
@@ -135,7 +138,7 @@ class McPoolArchTensorPool(McPoolArchBase):
         self.nb_redmule_tiles        = int(os.environ.get('NUM_REDMULE_TILES', 16))
         self.redmule_height          = int(os.environ.get('REDMULE_HEIGHT', 8))
         self.redmule_width           = int(os.environ.get('REDMULE_WIDTH', 32))
-        self.redmule_regs            = 3
+        self.redmule_regs            = int(os.environ.get('REDMULE_REGS', 3))
         # Request queue entries (TE_QUEUE_DEPTH, as the single-cluster model)
         self.redmule_queue_depth     = int(os.environ.get('TE_QUEUE_DEPTH', 128))
         self.redmule_stream_loads    = True

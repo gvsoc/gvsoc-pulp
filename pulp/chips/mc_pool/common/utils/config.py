@@ -27,8 +27,10 @@ tool and point the runtime to them:
     NUM_CORES=512 python3 config.py tensorpool <out_dir>
     make <app> MC_ARCH_DIR=<out_dir> ...
 
-The tensorpool configuration reads NUM_CORES, NUM_REDMULE_TILES, REDMULE_HEIGHT,
-REDMULE_WIDTH and TE_QUEUE_DEPTH from the environment, as the gvsoc model does.
+The tensorpool configuration reads NUM_CORES, NUM_CORES_PER_TILE,
+NUM_SUB_GROUPS_PER_GROUP, BANK_FACTOR, BANK_SIZE, NUM_REDMULE_TILES,
+REDMULE_HEIGHT, REDMULE_WIDTH, REDMULE_REGS and TE_QUEUE_DEPTH from the
+environment, as the gvsoc model does.
 """
 
 import argparse
@@ -86,7 +88,8 @@ def header_value(value):
 
 
 environment = ' '.join(f'{name}={os.environ[name]}' for name in
-    ('NUM_CORES', 'NUM_REDMULE_TILES', 'REDMULE_HEIGHT', 'REDMULE_WIDTH', 'TE_QUEUE_DEPTH')
+    ('NUM_CORES', 'NUM_CORES_PER_TILE', 'NUM_SUB_GROUPS_PER_GROUP', 'BANK_FACTOR', 'BANK_SIZE',
+     'NUM_REDMULE_TILES', 'REDMULE_HEIGHT', 'REDMULE_WIDTH', 'REDMULE_REGS', 'TE_QUEUE_DEPTH')
     if name in os.environ)
 command = ' '.join(['python3 config.py', args.config, '<out_dir>'] +
                    [f'--param {item}' for item in args.param])
