@@ -390,9 +390,11 @@ Each group of cores has a two-level instruction cache (`icache.py`, built on
 
 ### Local Memory
 - **TCDM (L1 scratchpad)**
-  - 32 banks behind a single crossbar (`SpatzTcdmInterco`) with bank
-    conflicts modelled; wide masters (NoC wide channel, iDMA, RedMulE) span
-    several banks and take priority over the narrow ones
+  - 32 banks behind a single crossbar (`tcdm_interco/`, the
+    `hci_interconnect` of the RTL) with bank conflicts modelled; wide
+    masters (NoC wide channel, iDMA, RedMulE) span several banks, take
+    priority over the narrow ones and, each having its own HCI branch,
+    only conflict on banks
   - Shared by cores, DMA, accelerators, and PULP cluster
 
 ### Accelerators
