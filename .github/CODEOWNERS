@@ -102,3 +102,15 @@
 # Register maps, docs
 /models/ @haugoug
 /docs/ @haugoug
+
+# MAGIA platforms
+/pulp/chips/magia/ @TheSSDGuy
+/pulp/chips/magia_v2/ @TheSSDGuy
+/pulp/chips/magia_v3/ @TheSSDGuy
+/magia.py @TheSSDGuy
+/magia_v2.py @TheSSDGuy
+/magia_v3.py @TheSSDGuy
+# Light RedMulE and its HWPE interleaver
+/pulp/light_redmule/ @TheSSDGuy
+# PCIe/VFIO memory bridge (io v1 and io_v2)
+/pulp/pcie_vfio_bridge/ @TheSSDGuy
