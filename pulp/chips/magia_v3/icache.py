@@ -17,73 +17,46 @@
 # Authors: Lorenzo Zuolo, Chips-IT (lorenzo.zuolo@chips.it)
 
 import gvsoc.systree
-from pulp.snitch.snitch_icache import SnitchIcache, SnitchIcacheConfig
-from interco.router_v2 import Router, RouterConfig, KIND_UNTIMED
+from pulp.snitch.snitch_icache import SnitchIcacheL0, SnitchIcacheL1
 from gvsoc.signature import IoV2SingleReq
 from utils.common_cells import And
 
 
 class MagiaIcache(gvsoc.systree.Component):
-    """Two-level instruction cache: one private L0 per core in front of one
-    shared L1, which refills from the tile interconnect.
+    """Two-level instruction cache (snitch_icache): one private L0 per core in
+    front of one shared L1, which refills from the tile interconnect.
 
-    Both levels are SnitchIcache. The geometry is given in bytes. With
-    several cores, the L0 refills reach the L1 through an untimed router, since
-    an io_v2 slave binds a single master; with one core the L0 refills the L1
-    directly.
+    The parameters are those of the RTL instance: ``l0_line_count`` lines in
+    each fully associative L0, ``l1_line_count`` sets of ``l1_way_count``
+    ways in the L1, ``line_width`` bits per line, ``serial_lookup`` and
+    ``num_axi_outstanding`` refills in flight in the L1. MAGIA ties
+    enable_prefetching_i to 0 for all its instruction caches (magia_tile.sv),
+    so the L0 prefetcher is off.
 
     The flush input flushes every level, and the flush acknowledge is raised
     once all of them acknowledged.
-
-    ``l0_refill_latency`` is what an L0 miss costs on top of the L1 access,
-    i.e. the cycles the RTL (snitch_icache) takes to send the refill to the L1,
-    look the line up there and write it into the L0.
-
-    The RTL L0 is fully associative (give ``l0_ways`` = number of L0 lines)
-    and replaces its lines in turn (snitch_icache_l0.sv), hence a
-    SnitchIcache with round_robin. The RTL L1 picks the way to replace with
-    one eviction LFSR for the whole cache, whether the set has free ways or
-    not (snitch_icache_handler.sv): ``l1_rtl_lfsr``.
-
-    The L0 answers asynchronously when an access has a latency
-    (async_latency): the iss_v2 prefetcher ignores the latency of an inline
-    fetch answer (it only goes to its statistics,
-    core/models/cpu/iss_v2/src/prefetch/prefetch_single_line.cpp), so an L0
-    miss refilled from the L1 would cost the core nothing.
     """
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, nb_cores: int,
-            l0_size: int, l0_line_size: int, l0_ways: int,
-            l1_size: int, l1_line_size: int, l1_ways: int, l1_refill_latency: int,
-            l0_refill_latency: int=0, l1_rtl_lfsr: bool=False):
+            l0_line_count: int, l1_line_count: int, l1_way_count: int, line_width: int,
+            serial_lookup: bool, num_axi_outstanding: int):
 
         super().__init__(parent, name)
 
-        l0_caches = []
-        for i in range(0, nb_cores):
-            l0_caches.append(SnitchIcache(self, f'l0_{i}', config=SnitchIcacheConfig(
-                size=l0_size, line_size=l0_line_size, ways=l0_ways,
-                refill_latency=l0_refill_latency, round_robin=True,
-                async_latency=True)))
-
-        l1_cache = SnitchIcache(self, 'l1', config=SnitchIcacheConfig(
-            size=l1_size, line_size=l1_line_size, ways=l1_ways,
-            refill_latency=l1_refill_latency, rtl_lfsr=l1_rtl_lfsr))
+        l1_cache = SnitchIcacheL1(self, 'l1', line_count=l1_line_count,
+            way_count=l1_way_count, line_width=line_width, nr_fetch_ports=nb_cores,
+            num_axi_outstanding=num_axi_outstanding, serial_lookup=serial_lookup)
 
         flush_ack = And(self, 'flush_ack', nb_input=nb_cores+1)
 
-        if nb_cores > 1:
-            refill_ico = Router(self, 'refill_ico', config=RouterConfig(kind=KIND_UNTIMED))
-            refill_ico.o_MAP_DEFAULT(l1_cache.i_INPUT(), name='l1')
-
         for i in range(0, nb_cores):
-            self.__o_INPUT(i, l0_caches[i].i_INPUT())
-            if nb_cores > 1:
-                l0_caches[i].o_REFILL(refill_ico.i_INPUT(i))
-            else:
-                l0_caches[i].o_REFILL(l1_cache.i_INPUT())
-            self.__o_FLUSH(l0_caches[i].i_FLUSH())
-            l0_caches[i].o_FLUSH_ACK(flush_ack.i_INPUT(i))
+            l0_cache = SnitchIcacheL0(self, f'l0_{i}', line_count=l0_line_count,
+                line_width=line_width)
+            l0_cache.i_ENABLE_PREFETCHING().tie(False)
+            self.__o_INPUT(i, l0_cache.i_INPUT())
+            l0_cache.o_REFILL(l1_cache.i_INPUT(i))
+            self.__o_FLUSH(l0_cache.i_FLUSH())
+            l0_cache.o_FLUSH_ACK(flush_ack.i_INPUT(i))
 
         l1_cache.o_REFILL(self.__i_REFILL())
         self.__o_FLUSH(l1_cache.i_FLUSH())

@@ -147,13 +147,6 @@ class MagiaDSE:
     # reach the memory directly)
     SOC_L2_LATENCY              = 1
     SOC_L2_NARROW_UPSIZER_LATENCY = 2
-    TILE_ICACHE_REFILL_LATENCY  = 2
-    # Cost of an L0 miss on top of the L1 access in snitch_icache: refill
-    # request to the L1, lookup (tag then data with SERIAL_LOOKUP, measured on
-    # the RTL control core: L0 miss -> L1 hit -> L0 hit in 3 cycles; one less
-    # with the parallel lookup of the Spatz i$), write into the L0
-    TILE_ICACHE_L0_REFILL_LATENCY_SERIAL   = 3
-    TILE_ICACHE_L0_REFILL_LATENCY_PARALLEL = 2
     TILE_TCDM_LATENCY           = 1
 
     # Outstanding bursts allowed per input port of the tile beat x-bars (the

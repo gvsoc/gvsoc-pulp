@@ -375,9 +375,13 @@ The control core and the PULP cores are the **CV32E40P** model of the iss_v2
 subsets. With `COREV_CLUSTER`, `cv.elw` sleeps until the event unit answers,
 and an interrupt taken meanwhile replays it after the handler.
 
-- The control core reaches the Event Unit on a direct link (RTL
+- The control core reaches the Event Unit (`event_unit/`, the io_v2 port of
+  the v3 event unit of `pulp/event_unit`, with one core) on a direct link (RTL
   `core_data_demux_eu_direct`); the Event Unit request drives its machine
-  external interrupt (`mei`) and the core acknowledges it (`irq_ack`). Its
+  external interrupt (`mei`) as a level and the core acknowledges it
+  (`irq_ack`), which clears the requested event. A wait on the Event Unit
+  (`cv.elw`) is answered `wakeup_req_latency` = 1 cycle after the wake-up, as
+  measured on the RTL. Its
   `mtvec` starts at the boot address (`MagiaArch.BOOT_ADDR`, `mtvec_addr` of
   the core configuration), as the RTL ties `mtvec_addr_i` to `boot_addr_i`:
   the SDK crt0 relies on it (vector table at the start of the binary).
@@ -386,7 +390,9 @@ and an interrupt taken meanwhile replays it after the handler.
   (`irq_ack`), as `cluster_start_irq_pending` in the RTL.
 
 Each group of cores has a two-level instruction cache (`icache.py`, built on
-`cache_v4`): one private L0 per core in front of a shared L1.
+the `snitch_icache` L0 and L1): one private L0 per core in front of a shared
+L1, with the parameters of the RTL instances and the L0 prefetcher off, as
+MAGIA ties `enable_prefetching_i` to 0.
 
 ### Local Memory
 - **TCDM (L1 scratchpad)**
@@ -402,8 +408,9 @@ Each group of cores has a two-level instruction cache (`icache.py`, built on
 - Memory-mapped control interface
 
 ### DMA Engines
-- Two **iDMA** channels per tile (`AxiObiDmaV3`, RTL `idma_axi_obi_transfer_ch`):
-  AXI to OBI (L2 to L1) and OBI to AXI (L1 to L2)
+- Two **iDMA** channels per tile (`RegDmaV3`, RTL `idma_axi_obi_transfer_ch`):
+  AXI to OBI (L2 to L1, back-end `r_axi_w_obi`) and OBI to AXI (L1 to L2,
+  back-end `r_obi_w_axi`)
 - Programmed through their `idma_reg32_3d` register file (iDMA v0.6.4 layout:
   `NEXT_ID_0` at `0x44`, `DONE_ID_0` at `0x84`); the iDMA controller window
   decodes `+0x000` to the AXI to OBI channel and `+0x200` to the OBI to AXI
@@ -621,6 +628,9 @@ pulp/pulp/chips/magia_v3/
 ├── pulp_core/                     # CV32E40P PULP worker cores
 │   └── core.py                    # CV32PulpCore class
 ├── idma_mm_ctrl/                  # Decoder of the two iDMA channel windows
+├── event_unit/                    # Event Unit of the tile (io_v2)
+│   ├── event_unit.py
+│   └── event_unit.cpp
 ├── fractal_sync/                  # Fractal synchronization module
 ├── kill_module/                   # Simulation termination module
 │   ├── kill_module.py

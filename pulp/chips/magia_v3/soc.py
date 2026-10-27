@@ -172,10 +172,7 @@ class MagiaV3Soc(gvsoc.systree.Component):
         # range splits a page, which holds since the tile L1 windows and the L2
         # window are whole pages, so a burst always has a single destination.
         # As in the RTL, the routers have input FIFOs of 2 entries (floo_nw_router
-        # InFifoDepth) and the chimneys have no cut on the request channels
-        # (ChimneyDefaultCfg CutAx = 0). Write bursts travel as in floo_nw_chimney
-        # (write_burst_packet): one AW per burst, AW and W beats in one wormhole
-        # packet.
+        # InFifoDepth).
         noc = FlooNocV22dMeshNarrowWide(self,
                                     name='magia-noc',
                                     narrow_width=MagiaArch.BYTES_PER_WORD,
@@ -184,8 +181,7 @@ class MagiaV3Soc(gvsoc.systree.Component):
                                     ni_outstanding_reqs=32,
                                     router_input_queue_size=2,
                                     dim_x=tree.n_tiles_x+1, dim_y=tree.n_tiles_y,
-                                    max_burst_size=4096, cut_ax=False,
-                                    write_burst_packet=True)
+                                    max_burst_size=4096)
 
 
         # Create noc routers
@@ -255,8 +251,6 @@ class MagiaV3Soc(gvsoc.systree.Component):
             l2_wide_port = L2Port(self, f'L2-wide-port-{y}', width=MagiaArch.TILE_WIDE_WIDTH)
             l2_wide_port.o_OUTPUT(l2_xbar.i_INPUT(2*y + 1))
             noc.o_WIDE_BIND(l2_wide_port.i_INPUT(), x=0, y=y)
-            # axi_sim_mem takes a W beat once the AW of its burst is queued
-            noc.o_WIDE_AW_BIND(l2_wide_port.i_AW(), x=0, y=y)
 
         noc.o_MAP_DIR(base=MagiaArch.L2_ADDR_START,size=MagiaArch.L2_SIZE, dir=FlooNocV2Direction.LEFT,name=f'mem_left', rm_base=True)
 
