@@ -95,8 +95,8 @@ bool IdmaLegalizer::take_request(int64_t now)
         return false;
     }
 
-    // The write side of the previous requests may still hold two splits, no
-    // more: on a protocol without an address channel the hardware only takes a
+    // The write side of the previous requests may still hold as many splits as
+    // its address FIFO, no more (2 on the RTL before iDMA 5fdba1b): on a protocol without an address channel the hardware only takes a
     // split when the word is written, so a request with several words is not
     // finished until its data is there. This is what costs one read latency
     // per line of an ND transfer into the TCDM. Measured on the RTL: an ND
@@ -104,7 +104,7 @@ bool IdmaLegalizer::take_request(int64_t now)
     // addresses in a row, the next three once the first is written), and one
     // of 64-byte lines issues the next line's read before the previous line's
     // last beat.
-    if (this->wm != nullptr && this->wm->aw_unissued() > 2)
+    if (this->wm != nullptr && this->wm->aw_unissued() > this->wm->aw_depth())
     {
         return false;
     }

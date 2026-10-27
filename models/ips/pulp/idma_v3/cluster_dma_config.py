@@ -47,6 +47,15 @@ class ClusterDmaV3Config(Config):
         "MetaFifoDepth); 0 derives it as buffer_depth + num_ax_in_flight."
     ))
 
+    aw_fifo_depth: int = cfg_field(default=2, desc=(
+        "Write splits the back-end of the AXI -> TCDM stream queues ahead of "
+        "the TCDM write manager (the RTL aw_fifo_depth of "
+        "idma_backend_r_axi_rw_init_rw_obi, 2 before iDMA 5fdba1b). The TCDM "
+        "only takes a split when its word is written, so with 2 every line "
+        "of a multi-word ND transfer into the L1 waits for the previous "
+        "line's data and pays the read latency again."
+    ))
+
     axi: IdmaAxiConfig = cfg_field(default_factory=lambda: IdmaAxiConfig(burst_len=5),
         desc="Parameters of the AXI managers (256 B bursts at 64 bits).")
 

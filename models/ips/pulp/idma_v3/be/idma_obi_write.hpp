@@ -49,7 +49,8 @@ public:
     /// @param be    Back-end the words are popped from.
     /// @param ports Port group the words are written through; registers as
     ///              its client.
-    IdmaObiWrite(vp::Component *top, std::string name, IdmaBackend *be, IdmaObiPortGroup *ports);
+    IdmaObiWrite(vp::Component *top, std::string name, IdmaBackend *be, IdmaObiPortGroup *ports,
+        int aw_fifo_depth=2);
 
     /// Manager with a port group of its own, named @p name (its ports are
     /// name_0, name_1, ...); the manager block is name_mgr.
@@ -69,6 +70,7 @@ public:
     void issue_aw(const IdmaSplit &split) override;
     bool tick(int64_t now) override;
     int aw_unissued() override;
+    int aw_depth() override { return this->aw_fifo_depth; }
     bool busy() override;
 
     // IdmaObiClient (see idma_obi_port_group.hpp)
@@ -93,7 +95,9 @@ private:
     /// Access width of the port group in bytes (the data path width).
     int width;
 
-    /// Address FIFO (the split of each pending write), registered, depth 2.
+    /// Depth of the address FIFO.
+    int aw_fifo_depth;
+    /// Address FIFO (the split of each pending write), registered.
     IdmaTimedFifo<IdmaSplit> aw_fifo;
     /// Word slots (a few, one transaction is outstanding at a time) and the
     /// number in use.

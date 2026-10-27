@@ -23,18 +23,17 @@
 // Words alive at once: one being granted, one awaiting its response, plus
 // margin
 #define NB_WORDS 4
-// The RTL aw FIFO in front of the OBI write manager
-#define AW_FIFO_DEPTH 2
 
 
 
 IdmaObiWrite::IdmaObiWrite(vp::Component *top, std::string name, IdmaBackend *be,
-    IdmaObiPortGroup *ports)
+    IdmaObiPortGroup *ports, int aw_fifo_depth)
 :   vp::Block(top, name),
     be(be),
     ports(ports),
     width(ports->access_width()),
-    aw_fifo(AW_FIFO_DEPTH)
+    aw_fifo_depth(aw_fifo_depth),
+    aw_fifo(aw_fifo_depth)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 

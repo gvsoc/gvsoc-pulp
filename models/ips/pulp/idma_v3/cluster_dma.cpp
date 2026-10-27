@@ -84,7 +84,7 @@ ClusterDma::ClusterDma(vp::ComponentConf &config)
     axi_read(this, "axi_read", &this->be1, backend_params(this->cfg), this->cfg.axi),
     tcdm_write_ports(this, "tcdm_write", this->cfg.data_width, this->cfg.obi),
     tcdm_read_ports(this, "tcdm_read", this->cfg.data_width, this->cfg.obi),
-    obi_write(this, "obi_write", &this->be1, &this->tcdm_write_ports),
+    obi_write(this, "obi_write", &this->be1, &this->tcdm_write_ports, this->cfg.aw_fifo_depth),
     obi_read_s0(this, "obi_read_s0", &this->be0, &this->tcdm_read_ports),
     obi_read_s1(this, "obi_read_s1", &this->be1, &this->tcdm_read_ports)
 {
