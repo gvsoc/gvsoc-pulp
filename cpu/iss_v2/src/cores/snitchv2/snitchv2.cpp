@@ -98,6 +98,7 @@ void SnitchV2::decode_hook(iss_insn_t *insn)
     }
 
     insn->sb_reg_mask = in_mask | out_mask;
+    insn->sb_in_reg_mask = in_mask;
     insn->sb_out_reg_mask = out_mask;
 }
 
