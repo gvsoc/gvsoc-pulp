@@ -22,7 +22,7 @@ void Cv32e40pException::raise(iss_reg_t pc, int id)
     /* An exception in debug mode jumps to dm_exception_addr and leaves mepc,
      * mcause, mstatus and the privilege mode unchanged (user manual,
      * debug.rst). */
-    if (id != ISS_EXCEPT_DEBUG && this->iss.exec.debug_mode)
+    if (this->iss.exec.debug_mode)
     {
         this->iss.exec.switch_to_full_mode();
         this->iss.exec.has_exception = true;
@@ -39,13 +39,10 @@ void Cv32e40pException::raise(iss_reg_t pc, int id)
 
     /* Exceptions enter at the mtvec base, but the generic raise copies the
      * mode bits of mtvec (01) into the entry PC. */
-    if (id != ISS_EXCEPT_DEBUG)
+    this->iss.exec.exception_pc &= ~(iss_reg_t)0x3;
+    if (this->iss.exec.cosim->enabled())
     {
-        this->iss.exec.exception_pc &= ~(iss_reg_t)0x3;
-        if (this->iss.exec.cosim->enabled())
-        {
-            this->iss.exec.cosim->trap(this->iss.csr.mcause.value, this->iss.exec.exception_pc,
-                false);
-        }
+        this->iss.exec.cosim->trap(this->iss.csr.mcause.value, this->iss.exec.exception_pc,
+            false);
     }
 }
