@@ -27,6 +27,18 @@ bool Ri5kyLsu::elw(iss_insn_t *insn, iss_addr_t addr, int size, int reg)
         return true;
     }
 
+    // Answered at once (the event was already there, or the register never
+    // waits): the pipeline refill of the event load still costs its cycles,
+    // when they are configured. On RI5CY the next instruction issues
+    // resume + 2 cycles after the elw (response the next cycle, then the
+    // refill), whether it uses the loaded value or not; the latency annotated
+    // on the response already delays it that much.
+    if (this->granted_entry == NULL && this->iss.cfg.lsu_elw_resume_cycles >= 0)
+    {
+        int64_t stall = this->iss.cfg.lsu_elw_resume_cycles + 1 - this->sync_latency;
+        if (stall > 0) this->iss.exec.stall_cycles_inc((int)stall);
+    }
+
     // If the event unit parked the request (event not ready), clock-gate
     // the whole core, as p.elw does in hardware. The core is woken either
     // by the event-unit response (req_retire_hook -> elw_wake) or by an
@@ -59,6 +71,13 @@ void Ri5kyLsu::elw_wake()
     int64_t park = this->iss.clock.get_cycles() - this->elw_park_cyclestamp;
     int64_t counter = park + 1;
     if (counter < 3) counter = 3;
+    if (this->iss.cfg.lsu_elw_resume_cycles >= 0)
+    {
+        // Configured refill cost, the same whether the core slept or not. The
+        // stall counts from the response cycle, which the held core would not
+        // have used anyway (it resumes the next cycle), hence the + 1.
+        counter = park + this->iss.cfg.lsu_elw_resume_cycles + 1;
+    }
     this->iss.exec.stall_cycles_inc((int)(counter - park));
     this->iss.timing.event_elw_account((int)counter, (int)park);
 
