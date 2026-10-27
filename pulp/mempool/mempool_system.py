@@ -81,7 +81,8 @@ class System(st.Component):
         l2_mem = L2_subsystem(self, 'l2_mem', nb_banks=nb_l2_banks, bank_width=axi_data_width, size=l2_size, nb_masters=nb_axi_masters, port_bandwidth=axi_data_width)
 
         # CSR
-        csr = CtrlRegisters(self, 'ctrl_registers', wakeup_latency=18 if (nb_sub_groups_per_group > 1) else 15) 
+        csr = CtrlRegisters(self, 'ctrl_registers', wakeup_latency=18 if (nb_sub_groups_per_group > 1) else 15,
+            nb_cores=total_cores)
         #that if statement was terapool before.
 
         # UART        
@@ -173,7 +174,7 @@ class System(st.Component):
 
         #Cluster Registers for synchronization barrier
         for i in range(0, total_cores):
-            self.bind(csr, f'barrier_ack', mempool_cluster, f'barrier_ack_{i}')
+            self.bind(csr, f'barrier_ack_{i}', mempool_cluster, f'barrier_ack_{i}')
 
         #L2 ro-cache configuration
         self.bind(csr, 'rocache_cfg', mempool_cluster, 'rocache_cfg')
