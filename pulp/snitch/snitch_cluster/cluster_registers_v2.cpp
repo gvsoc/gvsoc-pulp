@@ -16,17 +16,18 @@
  */
 
 /*
- * io_v2 port of the Snitch cluster peripheral registers. Same regmap and
- * behaviour as cluster_registers.cpp, the accesses are answered inline with
- * IO_REQ_DONE.
+ * io_v2 port of the Snitch cluster peripheral registers, with the regmap of
+ * the current Snitch cluster RTL (snitch_cluster_peripheral_v2_reg.hjson) and
+ * the behaviour of cluster_registers.cpp. The accesses are answered inline
+ * with IO_REQ_DONE.
  */
 
 #include <vector>
 #include <vp/vp.hpp>
 #include <vp/itf/io_v2.hpp>
 #include <vp/itf/wire.hpp>
-#include <pulp/snitch/snitch_cluster/cluster_periph_regfields.h>
-#include <pulp/snitch/snitch_cluster/cluster_periph_gvsoc.h>
+#include <pulp/snitch/snitch_cluster/cluster_periph_v2_regfields.h>
+#include <pulp/snitch/snitch_cluster/cluster_periph_v2_gvsoc.h>
 #include <pulp/snitch/snitch_cluster/cluster_registers_v2/cluster_registers_config.hpp>
 
 
@@ -53,7 +54,7 @@ private:
 
     vp::Trace     trace;
 
-    vp_regmap_cluster_periph regmap;
+    vp_regmap_cluster_periph_v2 regmap;
 
     vp::IoSlave in{&ClusterRegisters::req};
     int nb_cores;

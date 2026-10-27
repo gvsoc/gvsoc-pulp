@@ -16,8 +16,10 @@
 
 """io_v2 port of the Snitch cluster peripheral registers.
 
-Same regmap (``snitch_cluster_peripheral_reg.hjson``) and behaviour as the
-v1 ``cluster_registers.py``: the CLINT set / clear registers drive the core
+The regmap of the current Snitch cluster RTL
+(``snitch_cluster_peripheral_v2_reg.hjson``, the v1 ``cluster_registers.py``
+keeps the older one) and the behaviour of the v1 model: the CLINT set /
+clear registers drive the core
 interrupts, and the barrier unit releases all the cores once each of them
 has read its barrier CSR. The ``input`` port speaks io_v2.
 """
@@ -46,11 +48,11 @@ class ClusterRegisters(gvsoc.systree.Component):
 
     def gen(self, builddir, installdir):
         comp_path = 'pulp/snitch/snitch_cluster'
-        regmap_path = f'{comp_path}/snitch_cluster_peripheral_reg.hjson'
-        regmap_instance = regmap.regmap.Regmap('cluster_periph')
+        regmap_path = f'{comp_path}/snitch_cluster_peripheral_v2_reg.hjson'
+        regmap_instance = regmap.regmap.Regmap('cluster_periph_v2')
         regmap.regmap_hjson.import_hjson(regmap_instance, self.get_file_path(regmap_path))
-        regmap.regmap_c_header.dump_to_header(regmap=regmap_instance, name='cluster_periph',
-            header_path=f'{builddir}/{comp_path}/cluster_periph', headers=['regfields', 'gvsoc'])
+        regmap.regmap_c_header.dump_to_header(regmap=regmap_instance, name='cluster_periph_v2',
+            header_path=f'{builddir}/{comp_path}/cluster_periph_v2', headers=['regfields', 'gvsoc'])
 
     def o_EXTERNAL_IRQ(self, core: int, itf: gvsoc.systree.SlaveItf):
         self.itf_bind(f'external_irq_{core}', itf, signature='wire<bool>')
