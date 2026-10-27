@@ -52,6 +52,11 @@ class ClusterRegisters(gvsoc.systree.Component):
     def o_EXTERNAL_IRQ(self, core: int, itf: gvsoc.systree.SlaveItf):
         self.itf_bind(f'external_irq_{core}', itf, signature='wire<bool>')
 
+    def o_ICACHE_PREFETCH_ENABLE(self, itf: gvsoc.systree.SlaveItf):
+        """ICACHE_PREFETCH_ENABLE register (reset 1), to the
+        ``i_ENABLE_PREFETCHING`` of every L0."""
+        self.itf_bind('icache_prefetch_enable', itf, signature='wire<bool>')
+
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature=gvsoc.signature.IoV2SingleReq())
 

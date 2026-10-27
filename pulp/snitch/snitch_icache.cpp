@@ -85,6 +85,7 @@ private:
     static void flush_sync(vp::Block *_this, bool active);
     static void flush_line_sync(vp::Block *_this, bool active);
     static void flush_line_addr_sync(vp::Block *_this, uint32_t addr);
+    static void enable_prefetching_sync(vp::Block *_this, bool active);
 
     // io_v2 callbacks
     static vp::IoReqStatus input_req(vp::Block *__this, vp::IoReq *req);
@@ -141,6 +142,11 @@ private:
     vp::WireMaster<bool>    flush_ack_itf;
     vp::WireSlave<bool>     flush_line_itf;
     vp::WireSlave<uint32_t> flush_line_addr_itf;
+    // L0: enable_prefetching_i, driven by the platform (a register or a tie)
+    vp::WireSlave<bool>     enable_prefetching_itf;
+    // Last value of enable_prefetching_i, 0 while nothing drives it. Not reset
+    // here: it is a wire, its driver sends it at its reset release
+    bool enable_prefetching = false;
 
     // One miss-status holding register. The L0 has 1 in flight at once, the
     // L1 NUM_AXI_OUTSTANDING; each owns the request vehicle used downstream,
@@ -366,6 +372,12 @@ SnitchIcache::SnitchIcache(vp::ComponentConf &config)
     this->new_slave_port("flush_line_addr", &this->flush_line_addr_itf);
 
     this->new_master_port("flush_ack", &this->flush_ack_itf);
+
+    if (!this->is_l1)
+    {
+        this->enable_prefetching_itf.set_sync_meth(&SnitchIcache::enable_prefetching_sync);
+        this->new_slave_port("enable_prefetching", &this->enable_prefetching_itf);
+    }
 
     this->lines = new cache_line_t[this->nb_sets * this->nb_ways];
     for (unsigned int i = 0; i < this->nb_sets; i++)
@@ -865,8 +877,9 @@ unsigned int SnitchIcache::prefetch_target(cache_line_t *line, unsigned int addr
 
 void SnitchIcache::decide_prefetch(cache_line_t *line, unsigned int addr)
 {
-    // No decision while a refill is pending (demand or prefetch)
-    if (!this->refill_slot_available())
+    // No decision with the prefetcher disabled (enable_prefetching_i) or
+    // while a refill is pending (demand or prefetch)
+    if (!this->enable_prefetching || !this->refill_slot_available())
     {
         return;
     }
@@ -1673,6 +1686,13 @@ void SnitchIcache::enable_sync(vp::Block *__this, bool active)
 {
     SnitchIcache *_this = (SnitchIcache *)__this;
     _this->enable(active);
+}
+
+void SnitchIcache::enable_prefetching_sync(vp::Block *__this, bool active)
+{
+    SnitchIcache *_this = (SnitchIcache *)__this;
+    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Prefetcher %s\n", active ? "enabled" : "disabled");
+    _this->enable_prefetching = active;
 }
 
 void SnitchIcache::flush_sync(vp::Block *__this, bool active)

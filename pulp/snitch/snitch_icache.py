@@ -159,6 +159,17 @@ class SnitchIcache(Component):
         """
         return SlaveItf(self, 'enable', signature='wire<bool>')
 
+    def i_ENABLE_PREFETCHING(self) -> SlaveItf:
+        """Returns the prefetcher enable slave port of the L0
+        (``enable_prefetching_i``).
+
+        It can be driven by a register (the cluster peripheral
+        ``ICACHE_PREFETCH_ENABLE``) or tied with
+        ``i_ENABLE_PREFETCHING().tie(value)``. Left unconnected, the input is
+        0 and the L0 only refills its misses.
+        """
+        return SlaveItf(self, 'enable_prefetching', signature='wire<bool>')
+
     def o_FLUSH_ACK(self, itf: SlaveItf):
         """Binds the flush-ack master port.
 

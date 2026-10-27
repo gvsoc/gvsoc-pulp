@@ -64,6 +64,7 @@ private:
     static vp::IoReqStatus core_req(vp::Block *__this, vp::IoReq *req, int id);
     void cl_clint_set_req(uint64_t reg_offset, int size, uint8_t *value, bool is_write);
     void cl_clint_clear_req(uint64_t reg_offset, int size, uint8_t *value, bool is_write);
+    void icache_prefetch_enable_req(uint64_t reg_offset, int size, uint8_t *value, bool is_write);
     void hw_barrier_req(uint64_t reg_offset, int size, uint8_t *value, bool is_write);
     static void release_handler(vp::Block *__this, vp::ClockEvent *event);
     void schedule_release();
@@ -87,6 +88,8 @@ private:
     vp::reg_32 barrier_status;
 
     std::vector<vp::WireMaster<bool>> external_irq_itf;
+    // icache_prefetch_enable_o, to the enable_prefetching_i of every L0
+    vp::WireMaster<bool> icache_prefetch_enable_itf;
 
     int core_access;
     bool stall_core;
@@ -134,6 +137,8 @@ ClusterRegisters::ClusterRegisters(vp::ComponentConf &config)
     this->regmap.build(this, &this->trace, "regmap");
     this->regmap.cl_clint_set.register_callback(std::bind(&ClusterRegisters::cl_clint_set_req, this, _1, _2, _3, _4));
     this->regmap.cl_clint_clear.register_callback(std::bind(&ClusterRegisters::cl_clint_clear_req, this, _1, _2, _3, _4));
+    this->regmap.icache_prefetch_enable.register_callback(std::bind(&ClusterRegisters::icache_prefetch_enable_req, this, _1, _2, _3, _4));
+    this->new_master_port("icache_prefetch_enable", &this->icache_prefetch_enable_itf);
     this->regmap.hw_barrier.register_callback(std::bind(&ClusterRegisters::hw_barrier_req, this, _1, _2, _3, _4));
 }
 
@@ -195,6 +200,14 @@ void ClusterRegisters::reset(bool active)
         this->waiting_cores = 0;
         this->stall_core = false;
         this->releases.clear();
+
+        // RTL reset value 1 (resval of the register, missed by the regmap
+        // generator, which only takes the field ones)
+        this->regmap.icache_prefetch_enable.set(1);
+        if (this->icache_prefetch_enable_itf.is_bound())
+        {
+            this->icache_prefetch_enable_itf.sync(true);
+        }
     }
 }
 
@@ -298,6 +311,16 @@ void ClusterRegisters::cl_clint_clear_req(uint64_t reg_offset, int size, uint8_t
         {
             this->external_irq_itf[i].sync(false);
         }
+    }
+}
+
+void ClusterRegisters::icache_prefetch_enable_req(uint64_t reg_offset, int size, uint8_t *value, bool is_write)
+{
+    this->regmap.icache_prefetch_enable.update(reg_offset, size, value, is_write);
+    if (this->icache_prefetch_enable_itf.is_bound())
+    {
+        this->icache_prefetch_enable_itf.sync(
+            this->regmap.icache_prefetch_enable.icache_prefetch_enable_get());
     }
 }
 

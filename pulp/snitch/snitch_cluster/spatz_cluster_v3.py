@@ -270,6 +270,8 @@ class SnitchCluster(gvsoc.systree.Component):
         for core_id in range(0, arch.nb_core):
             cores[core_id].o_FETCH(l0_caches[core_id].i_INPUT())
             l0_caches[core_id].o_REFILL(l1_icache.i_INPUT(core_id))
+            cluster_registers.o_ICACHE_PREFETCH_ENABLE(
+                l0_caches[core_id].i_ENABLE_PREFETCHING())
             # fence.i flushes the core's own L0 and the whole shared L1, as
             # the RTL does (snitch_icache: flush_valid = |flush_valid_i)
             cores[core_id].o_FLUSH_CACHE(l0_caches[core_id].i_FLUSH())

@@ -47,6 +47,7 @@ private:
     static void barrier_sync(vp::Block *__this, bool value, int id);
     void cl_clint_set_req(uint64_t reg_offset, int size, uint8_t *value, bool is_write);
     void cl_clint_clear_req(uint64_t reg_offset, int size, uint8_t *value, bool is_write);
+    void icache_prefetch_enable_req(uint64_t reg_offset, int size, uint8_t *value, bool is_write);
 
     ClusterRegistersConfig cfg;
 
@@ -62,6 +63,8 @@ private:
     vp::WireMaster<bool> barrier_ack_itf;
 
     std::vector<vp::WireMaster<bool>> external_irq_itf;
+    // icache_prefetch_enable_o, to the enable_prefetching_i of every L0
+    vp::WireMaster<bool> icache_prefetch_enable_itf;
 };
 
 ClusterRegisters::ClusterRegisters(vp::ComponentConf &config)
@@ -93,6 +96,8 @@ ClusterRegisters::ClusterRegisters(vp::ComponentConf &config)
     this->regmap.build(this, &this->trace, "regmap");
     this->regmap.cl_clint_set.register_callback(std::bind(&ClusterRegisters::cl_clint_set_req, this, _1, _2, _3, _4));
     this->regmap.cl_clint_clear.register_callback(std::bind(&ClusterRegisters::cl_clint_clear_req, this, _1, _2, _3, _4));
+    this->regmap.icache_prefetch_enable.register_callback(std::bind(&ClusterRegisters::icache_prefetch_enable_req, this, _1, _2, _3, _4));
+    this->new_master_port("icache_prefetch_enable", &this->icache_prefetch_enable_itf);
 }
 
 vp::IoReqStatus ClusterRegisters::req(vp::Block *__this, vp::IoReq *req)
@@ -133,6 +138,17 @@ void ClusterRegisters::reset(bool active)
     {
         this->barrier_status.set(0);
     }
+
+    if (!active)
+    {
+        // RTL reset value 1 (resval of the register, missed by the regmap
+        // generator, which only takes the field ones)
+        this->regmap.icache_prefetch_enable.set(1);
+        if (this->icache_prefetch_enable_itf.is_bound())
+        {
+            this->icache_prefetch_enable_itf.sync(true);
+        }
+    }
 }
 
 
@@ -159,6 +175,16 @@ void ClusterRegisters::cl_clint_clear_req(uint64_t reg_offset, int size, uint8_t
         {
             this->external_irq_itf[i].sync(false);
         }
+    }
+}
+
+void ClusterRegisters::icache_prefetch_enable_req(uint64_t reg_offset, int size, uint8_t *value, bool is_write)
+{
+    this->regmap.icache_prefetch_enable.update(reg_offset, size, value, is_write);
+    if (this->icache_prefetch_enable_itf.is_bound())
+    {
+        this->icache_prefetch_enable_itf.sync(
+            this->regmap.icache_prefetch_enable.icache_prefetch_enable_get());
     }
 }
 
