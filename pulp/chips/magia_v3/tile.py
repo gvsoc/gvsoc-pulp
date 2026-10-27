@@ -29,7 +29,6 @@ mapping per remote tile: same routing, one master port. An address that has no
 mapping at all therefore goes off-tile instead of raising a decode error.
 """
 
-import json
 import math
 from typing import List
 import gvsoc.systree
@@ -44,9 +43,11 @@ from pulp.stdout.stdout_v3_v2 import StdoutV2
 from pulp.cpu.iss.spatz import Spatz
 from pulp.cpu.iss.spatz_config import SpatzConfig
 from pulp.light_redmule.light_redmule_v2 import LightRedmule
-from pulp.event_unit.event_unit_v3_v2 import Event_unit
-from ips.pulp.idma_v3.axi_obi_dma import AxiObiDmaV3
-from ips.pulp.idma_v3.axi_obi_dma_config import AxiObiDmaV3Config
+from ips.pulp.idma_v3.reg_dma import RegDmaV3
+from ips.pulp.idma_v3.reg_dma_config import RegDmaV3Config
+from ips.pulp.idma_v3.protocol_config import (IdmaPortConfig, IdmaObiConfig,
+    PROTOCOL_AXI, PROTOCOL_OBI)
+from pulp.chips.magia_v3.event_unit.event_unit import MagiaEventUnit
 
 from pulp.chips.magia_v3.arch import *
 from pulp.chips.magia_v3.icache import MagiaIcache
@@ -131,34 +132,6 @@ class MagiaTileTcdm(gvsoc.systree.Component):
 
 
 class MagiaV3Tile(gvsoc.systree.Component):
-    def ev_unit_config(self):
-        event_unit_json = {
-            "event_unit": {
-                "version": "4",
-                "config": {
-                    "nb_core": 1,
-                    # Measured on the RTL (control core parked on cv.elw):
-                    # event -> grant 2 cycles (the wake-up latency), read
-                    # data one cycle later, plus the eu-direct cut. The
-                    # default of 6 is for the PULP cluster cores.
-                    "wakeup_req_latency": 1,
-                    "properties": {
-                        "dispatch": {"size": 8},
-                        "mutex": {"nb_mutexes": 0},
-                        "barriers": {"nb_barriers": 0},
-                        "soc_event": {"nb_fifo_events": 8, "fifo_event": 8},
-                        "events": {
-                            "dispatch": 8,
-                            "mutex": 0,
-                            "barrier": 0
-                        }
-                    }
-                }
-            }
-        }
-        json_data = json.dumps(event_unit_json)
-        return json.loads(json_data)
-
     def __init__(self, parent, name, tree, parser, tid: int=0):
         super().__init__(parent, name)
         self.tid_name = f'tile-{tid}'
@@ -171,14 +144,12 @@ class MagiaV3Tile(gvsoc.systree.Component):
         core_cv32 = CV32CtrlCore(self, f'tile-{tid}-cv32-core', core_id=tid,
             mtvec_addr=MagiaArch.BOOT_ADDR)
 
-        # Instruction cache of the control core (magia_tile_pkg i$ parameters):
-        # fully associative 32 x 16 B L0, 32 sets x 32 ways x 16 B L1
+        # Instruction cache of the control core (pulp_icache_wrap with the
+        # magia_tile_pkg i$ parameters): fully associative 32 x 128-bit L0,
+        # 32 sets x 32 ways x 128-bit L1, serial lookup, 4 refills in flight
         cv32_i_cache = MagiaIcache(self, f'tile-{tid}-cv32-icache', nb_cores=1,
-            l0_size=512, l0_line_size=16, l0_ways=32,
-            l1_size=16384, l1_line_size=16, l1_ways=32,
-            l1_refill_latency=MagiaDSE.TILE_ICACHE_REFILL_LATENCY,
-            l0_refill_latency=MagiaDSE.TILE_ICACHE_L0_REFILL_LATENCY_SERIAL,
-            l1_rtl_lfsr=True)
+            l0_line_count=32, l1_line_count=32, l1_way_count=32, line_width=128,
+            serial_lookup=True, num_axi_outstanding=4)
 
         if MagiaArch.SPATZ_ENABLE:
 
@@ -197,12 +168,11 @@ class MagiaV3Tile(gvsoc.systree.Component):
             snitch_spatz = Spatz(self, f'tile-{tid}-snitch-spatz', config=config)
 
             # Instruction cache of Spatz (i_spatz_cc_icache): fully associative
-            # 8 x 32 B L0, 32 sets x 2 ways x 32 B L1, parallel lookup
+            # 8 x 256-bit L0, 32 sets x 2 ways x 256-bit L1, parallel lookup,
+            # 2 refills in flight
             snitch_spatz_i_cache = MagiaIcache(self, f'tile-{tid}-snitch-spatz-icache',
-                nb_cores=1, l0_size=256, l0_line_size=32, l0_ways=8,
-                l1_size=2048, l1_line_size=32, l1_ways=2, l1_refill_latency=2,
-                l0_refill_latency=MagiaDSE.TILE_ICACHE_L0_REFILL_LATENCY_PARALLEL,
-                l1_rtl_lfsr=True)
+                nb_cores=1, l0_line_count=8, l1_line_count=32, l1_way_count=2,
+                line_width=256, serial_lookup=False, num_axi_outstanding=2)
 
         if MagiaArch.PULP_ENABLE:
             # PULP cluster cores
@@ -214,15 +184,12 @@ class MagiaV3Tile(gvsoc.systree.Component):
 
             # Instruction cache of the cluster (magia_tile_pkg CLUSTER_* i$
             # parameters): per core a fully associative L0 of 32 * nb_cores x
-            # 16 B lines, shared L1 of 32 * nb_cores sets x 32 ways x 16 B
-            pulp_l0_lines = 32 * tree.nb_pulp_cores
+            # 128-bit lines, shared L1 of 32 * nb_cores sets x 32 ways x
+            # 128-bit, serial lookup, 4 refills in flight
             pulp_i_cache = MagiaIcache(self, f'tile-{tid}-pulp-icache',
-                nb_cores=tree.nb_pulp_cores, l0_size=pulp_l0_lines * 16, l0_line_size=16,
-                l0_ways=pulp_l0_lines,
-                l1_size=32 * tree.nb_pulp_cores * 32 * 16, l1_line_size=16, l1_ways=32,
-                l1_refill_latency=MagiaDSE.TILE_ICACHE_REFILL_LATENCY,
-                l0_refill_latency=MagiaDSE.TILE_ICACHE_L0_REFILL_LATENCY_SERIAL,
-            l1_rtl_lfsr=True)
+                nb_cores=tree.nb_pulp_cores, l0_line_count=32 * tree.nb_pulp_cores,
+                l1_line_count=32 * tree.nb_pulp_cores, l1_way_count=32, line_width=128,
+                serial_lookup=True, num_axi_outstanding=4)
 
         if MagiaArch.PULP_ENABLE or MagiaArch.SPATZ_ENABLE:
             # Cluster control registers
@@ -286,10 +253,10 @@ class MagiaV3Tile(gvsoc.systree.Component):
         idma_mm_ctrl = iDMA_mm_ctrl(self, f'tile-{tid}-idma-ctrl-mm')
 
         # iDMA channels (idma_axi_obi_transfer_ch): L2 to L1 and L1 to L2
-        idma_axi2obi = AxiObiDmaV3(self, f'tile-{tid}-idma-axi2obi', config=AxiObiDmaV3Config(
-            axi_to_obi=True, **self.idma_config()))
-        idma_obi2axi = AxiObiDmaV3(self, f'tile-{tid}-idma-obi2axi', config=AxiObiDmaV3Config(
-            axi_to_obi=False, **self.idma_config()))
+        idma_axi2obi = RegDmaV3(self, f'tile-{tid}-idma-axi2obi',
+            config=self.idma_config(axi_to_obi=True))
+        idma_obi2axi = RegDmaV3(self, f'tile-{tid}-idma-obi2axi',
+            config=self.idma_config(axi_to_obi=False))
 
         # Redmule
         redmule = LightRedmule(self, f'tile-{tid}-redmule',
@@ -304,9 +271,15 @@ class MagiaV3Tile(gvsoc.systree.Component):
         # Fsync mm controller
         fsync_mm_ctrl = FSync_mm_ctrl(self, f'tile-{tid}-fs-ctrl-mm')
 
-        # Event Unit
-        self.add_properties(self.ev_unit_config())
-        event_unit = Event_unit(self, f'tile-{tid}-event-unit', self.get_property('event_unit/config'))
+        # Event Unit: one core, no barrier and no mutex, dispatch and SoC
+        # event FIFO on event 8. Measured on the RTL (control core parked on
+        # cv.elw): event -> grant 2 cycles (the wake-up latency), read data one
+        # cycle later, plus the eu-direct cut. The default of 6 is for the
+        # PULP cluster cores.
+        event_unit = MagiaEventUnit(self, f'tile-{tid}-event-unit', nb_core=1,
+            nb_mutexes=0, nb_barriers=0, dispatch_size=8, nb_fifo_events=8,
+            fifo_event=8, dispatch_event=8, mutex_event=0, barrier_event=0,
+            wakeup_req_latency=1)
 
         # UART
         stdout = StdoutV2(self, f'tile-{tid}-stdout', max_cluster=tree.nb_clusters,
@@ -509,7 +482,7 @@ class MagiaV3Tile(gvsoc.systree.Component):
         # control core and the core acknowledges it (magia_tile.sv
         # core_irq_vec, irq_ack_o).
         event_unit.o_IRQ_LINE(0, core_cv32.i_IRQ(11))
-        self.bind(core_cv32, 'irq_ack', event_unit, 'irq_ack_0')
+        core_cv32.o_IRQ_ACK(event_unit.i_IRQ_ACK(0))
         idma_axi2obi.o_IRQ(event_unit.i_EVENT(0, 2))
         idma_obi2axi.o_IRQ(event_unit.i_EVENT(0, 3))
         if MagiaArch.SPATZ_ENABLE:
@@ -562,19 +535,23 @@ class MagiaV3Tile(gvsoc.systree.Component):
         return cut.i_INPUT()
 
     @staticmethod
-    def idma_config() -> dict:
-        """Parameters shared by the two iDMA channels (magia_tile_pkg.sv): a
-        wide data path, one OBI port of the same width towards the TCDM, and
-        the idma_reg32_3d register file of iDMA v0.6.4."""
-        return dict(
-            axi_width=MagiaArch.TILE_WIDE_WIDTH,
+    def idma_config(axi_to_obi: bool) -> RegDmaV3Config:
+        """Configuration of an iDMA channel (magia_tile_pkg.sv): a wide data
+        path, one OBI port of the same width towards the TCDM, and the
+        idma_reg32_3d register file of iDMA v0.6.4. ``axi_to_obi`` reads the
+        L2 on AXI and writes the TCDM on OBI, otherwise the other way round."""
+        axi = IdmaPortConfig(protocol=PROTOCOL_AXI)
+        obi = IdmaPortConfig(protocol=PROTOCOL_OBI,
+            obi=IdmaObiConfig(port_width=MagiaArch.TILE_WIDE_WIDTH))
+        return RegDmaV3Config(
+            data_width=MagiaArch.TILE_WIDE_WIDTH,
             num_ax_in_flight=MagiaDSE.TILE_IDMA_NUM_AX_IN_FLIGHT,
             buffer_depth=MagiaDSE.TILE_IDMA_BUFFER_DEPTH,
             req_fifo_depth=MagiaDSE.TILE_IDMA_JOB_FIFO_DEPTH,
             nb_dims=3,
-            multireg_count=16,
-            obi_port_width=MagiaArch.TILE_WIDE_WIDTH,
-            obi_ports_per_access=1)
+            max_num_streams=16,
+            read=axi if axi_to_obi else obi,
+            write=obi if axi_to_obi else axi)
 
     # east west port to fractalsync
     def __o_SLAVE_EAST_WEST_FRACTAL(self) -> gvsoc.systree.SlaveItf:
