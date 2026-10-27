@@ -176,7 +176,8 @@ class OccamyArch:
                     cluster_arch = ClusterArch(attr_parent, 'cluster', self.get_cluster_base(id),
                         current_hardid, auto_fetch=True, boot_addr=0x0100_0000,
                         nb_core_per_cluster=properties.nb_core_per_cluster,
-                        isa=properties.isa, peripheral_offset=0x0002_0000)
+                        isa=properties.isa, peripheral_offset=0x0002_0000,
+                        old_periph_regmap=True)
                     self.clusters.append(cluster_arch)
                     current_hardid += self.clusters[id].nb_core
 

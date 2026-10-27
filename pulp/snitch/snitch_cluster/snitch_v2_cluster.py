@@ -70,7 +70,7 @@ class ClusterArch(Tree):
 
     def __init__(self, parent, name, base, first_hartid, auto_fetch=False,
             boot_addr=0x0000_1000, nb_core_per_cluster=9, isa='rv32imfdca',
-            peripheral_offset=0x0002_1000):
+            peripheral_offset=0x0002_1000, old_periph_regmap=False):
         super().__init__(parent, name)
 
         self.nb_core = nb_core_per_cluster
@@ -93,6 +93,9 @@ class ClusterArch(Tree):
         # peripherals at 0x2_0000.
         self.peripheral    = Area(self, 'peripheral', base + peripheral_offset,
             0x0003_0000 - peripheral_offset, 'peripheral range')
+        # Register map of the peripherals: the one of the current RTL, or the
+        # older one of these clusters (CL_CLINT_SET/CLEAR at 0x180/0x188)
+        self.old_periph_regmap = old_periph_regmap
         self.zero_mem      = Area(self, 'zero_mem', base + 0x0003_0000, 0x0001_0000, 'zero mem range')
         # The only region the PMA marks cacheable for the icaches: the DRAM
         self.cacheable     = Area(self, 'cacheable', 0x8000_0000, 0x8000_0000, 'icache cacheable range')
@@ -196,7 +199,8 @@ class SnitchCluster(gvsoc.systree.Component):
             rr_arb_tree=True, lock_in=True, max_pending_bursts=64))
 
         cluster_registers = ClusterRegisters(self, 'cluster_registers',
-            config=ClusterRegistersConfig(nb_cores=arch.nb_core))
+            config=ClusterRegistersConfig(nb_cores=arch.nb_core),
+            old_regmap=arch.old_periph_regmap)
 
         # The Snitch cluster default config: 24 bursts in flight
         # (dma_axi_req_fifo_depth) and an 8-entry request FIFO

@@ -17,8 +17,9 @@
 """io_v2 port of the Snitch cluster peripheral registers.
 
 The regmap of the current Snitch cluster RTL
-(``snitch_cluster_peripheral_v2_reg.hjson``, the v1 ``cluster_registers.py``
-keeps the older one) and the behaviour of the v1 model: the CLINT set /
+(``snitch_cluster_peripheral_v2_reg.hjson``), or the older one of Occamy
+(``old_regmap``, the one of the v1 ``cluster_registers.py``), and the
+behaviour of the v1 model: the CLINT set /
 clear registers drive the core
 interrupts, and the barrier unit releases all the cores once each of them
 has read its barrier CSR. The ``input`` port speaks io_v2.
@@ -41,18 +42,27 @@ class ClusterRegistersConfig(Config):
 
 class ClusterRegisters(gvsoc.systree.Component):
 
-    def __init__(self, parent, name, config: ClusterRegistersConfig):
+    def __init__(self, parent, name, config: ClusterRegistersConfig, old_regmap: bool=False):
+        """old_regmap: the register map of the older Snitch clusters (Occamy,
+        snitch_cluster_peripheral_reg.hjson) instead of the one of the current
+        RTL (snitch_cluster_peripheral_v2_reg.hjson)."""
         super().__init__(parent, name, config=config)
 
+        self.old_regmap = old_regmap
         self.add_sources(['pulp/snitch/snitch_cluster/cluster_registers_v2.cpp'])
+        if old_regmap:
+            self.add_c_flags(['-DCLUSTER_PERIPH_OLD_REGMAP=1'])
 
     def gen(self, builddir, installdir):
         comp_path = 'pulp/snitch/snitch_cluster'
-        regmap_path = f'{comp_path}/snitch_cluster_peripheral_v2_reg.hjson'
-        regmap_instance = regmap.regmap.Regmap('cluster_periph_v2')
-        regmap.regmap_hjson.import_hjson(regmap_instance, self.get_file_path(regmap_path))
-        regmap.regmap_c_header.dump_to_header(regmap=regmap_instance, name='cluster_periph_v2',
-            header_path=f'{builddir}/{comp_path}/cluster_periph_v2', headers=['regfields', 'gvsoc'])
+        if self.old_regmap:
+            hjson, name = 'snitch_cluster_peripheral_reg.hjson', 'cluster_periph'
+        else:
+            hjson, name = 'snitch_cluster_peripheral_v2_reg.hjson', 'cluster_periph_v2'
+        regmap_instance = regmap.regmap.Regmap(name)
+        regmap.regmap_hjson.import_hjson(regmap_instance, self.get_file_path(f'{comp_path}/{hjson}'))
+        regmap.regmap_c_header.dump_to_header(regmap=regmap_instance, name=name,
+            header_path=f'{builddir}/{comp_path}/{name}', headers=['regfields', 'gvsoc'])
 
     def o_EXTERNAL_IRQ(self, core: int, itf: gvsoc.systree.SlaveItf):
         self.itf_bind(f'external_irq_{core}', itf, signature='wire<bool>')
