@@ -79,12 +79,19 @@ void CtrlRegisters::wakeup_event_handler(vp::Block *__this, vp::ClockEvent *even
     while (!_this->wake_ups.empty() && _this->wake_ups.front().first <= cycle)
     {
         int core = _this->wake_ups.front().second;
-        for (int i = 0; i < _this->nb_cores; i++)
+        if (core == -1)
         {
-            if (core == -1 || core == i)
+            // Wake up core 0 last, as when all the cores shared a single wire, so that the cores
+            // woken up in the same cycle keep their order
+            for (int i = 1; i < _this->nb_cores; i++)
             {
                 _this->barrier_ack_itf[i].sync(1);
             }
+            _this->barrier_ack_itf[0].sync(1);
+        }
+        else
+        {
+            _this->barrier_ack_itf[core].sync(1);
         }
         _this->wake_ups.pop_front();
     }
