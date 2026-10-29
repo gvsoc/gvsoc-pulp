@@ -1,0 +1,216 @@
+# Copyright (C) 2025 Fondazione Chips-IT
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+
+# Authors: Lorenzo Zuolo, Chips-IT (lorenzo.zuolo@chips.it)
+
+from gvrun.attribute import Tree, Value
+from gvrun.parameter import TargetParameter
+
+class MagiaArch:
+    # Single tile address map from magia_tile_pkg.sv
+    #
+    # Convention: *_SIZE is the real size of the window in bytes and *_ADDR_END
+    # is its last byte, so a window covers [START, START + SIZE - 1] and the
+    # next one opens at END + 1. The addresses seen by software are the ones of
+    # the RTL map, so the SDK's own copy of the map stays valid.
+    #
+    # With true sizes the tile L1 windows and the L2 window are whole,
+    # page-aligned multiples of the 4 KiB AXI page, which lets the NoC keep its
+    # burst-legality check enabled: a burst can never straddle two targets.
+    REDMULE_CTRL_ADDR_START = 0x0000_0100
+    REDMULE_CTRL_SIZE       = 0x0000_0100
+    REDMULE_CTRL_ADDR_END   = REDMULE_CTRL_ADDR_START + REDMULE_CTRL_SIZE - 1
+    IDMA_CTRL_ADDR_START    = REDMULE_CTRL_ADDR_END + 1
+    IDMA_CTRL_SIZE          = 0x0000_0400
+    IDMA_CTRL_ADDR_END      = IDMA_CTRL_ADDR_START + IDMA_CTRL_SIZE - 1
+    FSYNC_CTRL_ADDR_START   = IDMA_CTRL_ADDR_END + 1
+    FSYNC_CTRL_SIZE         = 0x0000_0100
+    FSYNC_CTRL_ADDR_END     = FSYNC_CTRL_ADDR_START + FSYNC_CTRL_SIZE - 1
+    CTRL_EU_ADDR_START      = FSYNC_CTRL_ADDR_END + 1
+    CTRL_EU_SIZE            = 0x0000_1000
+    CTRL_EU_ADDR_END        = CTRL_EU_ADDR_START + CTRL_EU_SIZE - 1
+    # Control registers of Spatz (0x1700), of the cluster (0x1740) and of
+    # the collectives (0x1800), one window for tile_ctrl
+    TILE_CTRL_ADDR_START    = CTRL_EU_ADDR_END + 1
+    TILE_CTRL_SIZE          = 0x0000_0200
+    TILE_CTRL_ADDR_END      = TILE_CTRL_ADDR_START + TILE_CTRL_SIZE - 1
+    # Cluster event unit: the direct links of the cluster cores, then the
+    # view of the other masters
+    CLUSTER_EU_DIRECT_START = TILE_CTRL_ADDR_END + 1
+    CLUSTER_EU_DIRECT_SIZE  = 0x0000_1000
+    CLUSTER_EU_DIRECT_END   = CLUSTER_EU_DIRECT_START + CLUSTER_EU_DIRECT_SIZE - 1
+    CLUSTER_EU_ADDR_START   = CLUSTER_EU_DIRECT_END + 1
+    CLUSTER_EU_SIZE         = 0x0000_1000
+    CLUSTER_EU_ADDR_END     = CLUSTER_EU_ADDR_START + CLUSTER_EU_SIZE - 1
+    TILE_PERIPH_ADDR_END    = CLUSTER_EU_ADDR_END
+    RESERVED_ADDR_START     = TILE_PERIPH_ADDR_END + 1
+    RESERVED_SIZE           = 0x0001_0000 - RESERVED_ADDR_START
+    RESERVED_ADDR_END       = RESERVED_ADDR_START + RESERVED_SIZE - 1
+    STACK_ADDR_START        = RESERVED_ADDR_END + 1
+    STACK_SIZE              = 0x0001_0000
+    STACK_ADDR_END          = STACK_ADDR_START + STACK_SIZE - 1
+    L1_ADDR_START           = STACK_ADDR_END + 1
+    L1_SIZE                 = 0x000E_0000
+    L1_ADDR_END             = L1_ADDR_START + L1_SIZE - 1
+    L1_TILE_OFFSET          = 0x0010_0000
+    L2_ADDR_START           = 0xC000_0000
+    # Default L2 size, overridden by the l2_size target parameter
+    L2_SIZE                 = 0x0CFF_0000
+    L2_MAX_SIZE             = 0xFFFF_0000 - L2_ADDR_START
+    L2_ADDR_END             = L2_ADDR_START + L2_SIZE - 1
+    # Fixed, as in the RTL and SDK
+    TEST_END_ADDR_START     = 0xCCFF_0000
+    TEST_END_SIZE           = 0x400
+    STDOUT_ADDR_START       = 0xFFFF_0004
+    STDOUT_SIZE             = 0x100
+
+    # Boot address of the tile (magia.sv boot_addr_i, the start of the code in
+    # L2 for the SDK), which is also the reset value of mtvec (mtvec_addr_i)
+    BOOT_ADDR               = 0xCC00_0000
+
+    # From magia_pkg.sv
+    N_MEM_BANKS         = 32        # Number of TCDM banks
+    N_WORDS_BANK        = 8192      # Number of words per TCDM bank
+
+    # Extra
+    BYTES_PER_WORD      = 4
+    TILE_WIDE_WIDTH     = 32        # WIDE_DATA_W / 8, the wide NoC channel and the iDMA data path
+    TILE_CLK_FREQ       = 200 * (10 ** 6)
+
+    # Snitch_Spatz
+    SPATZ_ENABLE               = True
+    SPATZ_BOOTROM_ADDR         = 0x1000_0000
+    SPATZ_BOOTROM_SIZE         = 0x100
+    # The boot ROM of the RTL (spatz_bootrom.sv): it jumps to SPATZ_TASKBIN
+    SPATZ_ROMFILE              = 'pulp/chips/magia_v4/spatz_bootrom.bin'
+    # Default VLEN in bits, as in the RTL (SPATZ_VLEN), overridden by spatz_vlen
+    SPATZ_VLEN                 = 256
+
+    # Pulp Cores
+    PULP_ENABLE         = True
+    NB_PULP_CORES       = 8
+
+    # Tiles assignment
+    N_TILES_X           = 1
+    N_TILES_Y           = 1
+
+    ENABLE_PCIE_VFIO            = False
+
+class MagiaTree(Tree):
+    """Customizable knobs of the platform.
+
+    The tree-reshaping knobs (mesh size n_tiles_x/n_tiles_y and the per-tile
+    nb_pulp_cores) are **target parameters**, i.e. they belong to the target
+    *name*, not to the run command line:
+
+        make TARGETS="magia_v4:n_tiles_x=2,n_tiles_y=2" build
+        gvrun --target=magia_v4:n_tiles_x=2,n_tiles_y=2 --param binary=<elf> run
+
+    gvsoc bakes the whole component tree (its shape + every model's typed
+    config) into libplatform_tree_<target>.so and checks it against the systree
+    it rebuilds at run time. Reshaping the tree from a run-time --attr
+    invalidates that library and drops to the JSON fallback, which cannot carry
+    the typed (io_v2 / iss_v2) configurations -> a component comes up with an
+    uninitialized config and the sim dies (std::bad_alloc) for no visible
+    reason. Embedding the reshaping knobs in the target name makes build and run
+    coherent by construction. Hence these are TargetParameters, not Values:
+    --attr magia_v4/n_tiles_x=... is now rejected instead of silently
+    mismatching.
+
+    spatz_romfile stays a plain run-time attribute (--attr
+    magia_v4/spatz_romfile=<path>) on purpose: it is a stim_file path that
+    differs between build and run and is overlaid at run time, never entering
+    the compiled tree.
+    """
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
+        self.n_tiles_x = TargetParameter(parent, name='n_tiles_x',
+            value=MagiaArch.N_TILES_X, cast=int,
+            description='Number of tiles on X dimension').value
+        self.n_tiles_y = TargetParameter(parent, name='n_tiles_y',
+            value=MagiaArch.N_TILES_Y, cast=int,
+            description='Number of tiles on Y dimension').value
+
+        self.nb_clusters = self.n_tiles_x*self.n_tiles_y
+        # Tiles the hart ids count (RTL InstanceCount): those of the mesh, or
+        # 16 for one tile, as the single-tile testbench of the RTL (a tile of
+        # a 4x4 mesh), which its tile tests are built for
+        self.instance_count = self.nb_clusters if self.nb_clusters > 1 else 16
+
+        # L2 size in bytes, a multiple of 4 KiB up to L2_MAX_SIZE
+        self.l2_size = TargetParameter(parent, name='l2_size',
+            value=MagiaArch.L2_SIZE, cast=int,
+            description='L2 size in bytes').value
+        if self.l2_size % 4096 != 0 or not 0 < self.l2_size <= MagiaArch.L2_MAX_SIZE:
+            raise RuntimeError(f'l2_size must be a multiple of 4 KiB in '
+                f'(0, {MagiaArch.L2_MAX_SIZE:#x}] (got {self.l2_size:#x})')
+
+        # Design-space knobs: Spatz VLEN and RedMulE array size
+        self.spatz_vlen = TargetParameter(parent, name='spatz_vlen',
+            value=MagiaArch.SPATZ_VLEN, cast=int,
+            description='Spatz VLEN in bits').value
+        self.redmule_h = TargetParameter(parent, name='redmule_h',
+            value=MagiaDSE.REDMULE_H, cast=int,
+            description='RedMulE array height (RTL ARRAY_HEIGHT)').value
+        self.redmule_w = TargetParameter(parent, name='redmule_w',
+            value=MagiaDSE.REDMULE_W, cast=int,
+            description='RedMulE array width (RTL ARRAY_WIDTH)').value
+        for name in ('spatz_vlen', 'redmule_h', 'redmule_w'):
+            v = getattr(self, name)
+            if v <= 0 or v & (v - 1):
+                raise RuntimeError(f'{name} must be a power of two (got {v})')
+
+        if MagiaArch.SPATZ_ENABLE:
+            self.romfile = Value(self, 'spatz_romfile', MagiaArch.SPATZ_ROMFILE, cast=str,
+                description='Snitch_Spatz rom file')
+            print("SNITCH_SPATZ complex enabled")
+
+        if MagiaArch.PULP_ENABLE:
+            self.nb_pulp_cores = TargetParameter(parent, name='nb_pulp_cores',
+                value=MagiaArch.NB_PULP_CORES, cast=int,
+                description='Number of pulp cores').value
+            print(f"PULP complex enabled with {self.nb_pulp_cores} cores")
+
+class MagiaDSE:
+    # L2 of the testbench (magia_l2_mem_wrapper.sv): an axi_sim_mem answering
+    # one cycle after the request, behind an axi_dw_upsizer on each narrow
+    # port, which delays the narrow requests by two cycles (the wide ports
+    # reach the memory directly)
+    SOC_L2_LATENCY              = 1
+    SOC_L2_NARROW_UPSIZER_LATENCY = 2
+    TILE_TCDM_LATENCY           = 1
+
+    # Outstanding bursts allowed per input port of the tile beat x-bars (the
+    # RTL AXI x-bars register all ports and allow a few outstanding
+    # transactions each). Per input, so one busy master cannot starve the
+    # others.
+    TILE_AXI_XBAR_MAX_BURSTS    = 4
+    TILE_OBI_XBAR_MAX_BURSTS    = 4
+    # The wide x-bar only joins the two iDMA channels onto the NoC wide
+    # channel: in the RTL this is axi_rw_join, combinational and with no limit
+    # of its own, so the bound is the iDMA one (iDMA_NumAxInFlight)
+    TILE_WIDE_XBAR_MAX_BURSTS   = 16
+
+    # iDMA channels (magia_tile_pkg.sv iDMA_* parameters)
+    TILE_IDMA_NUM_AX_IN_FLIGHT  = 16
+    TILE_IDMA_BUFFER_DEPTH      = 3
+    TILE_IDMA_JOB_FIFO_DEPTH    = 16
+
+    # RedMulE array, as in the RTL (ARRAY_HEIGHT, ARRAY_WIDTH, PIPE_REGS), overridden by
+    # redmule_h and redmule_w
+    REDMULE_H                   = 8
+    REDMULE_W                   = 8
+    REDMULE_PIPE                = 1
