@@ -1438,7 +1438,16 @@ vp::IoReqStatus LightRedmule::req_v2(vp::Block *__this, vp::IoReq *req)
                     _this->trace.fatal("[LightRedmule] Unsupported gemm_ops %d (only MATMUL=0 and GEMM=1)\n", gemm_ops);
                 }
                 _this->cxt_gemm_ops[_this->cxt_cfg_ptr] = gemm_ops;
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set mcfg_reg1 -- N size %d, gemm_ops %d)\n", _this->cxt_n_size[_this->cxt_cfg_ptr], gemm_ops);
+                //Input (bits 24:23) and output (bits 27:25) formats, as the RTL: FP16
+                //(format 1) on both sides enables the FP16 data path, as an ARITH write
+                //of 0x480 does
+                uint32_t in_fmt = (value >> 23) & 0x3;
+                uint32_t out_fmt = (value >> 25) & 0x7;
+                if ((in_fmt == 1) && (out_fmt == 1))
+                {
+                    _this->cxt_compute_able[_this->cxt_cfg_ptr] = _this->op_foramt_parser(9);
+                }
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set mcfg_reg1 -- N size %d, gemm_ops %d, formats %d/%d)\n", _this->cxt_n_size[_this->cxt_cfg_ptr], gemm_ops, in_fmt, out_fmt);
                 break;
             }
             case 0x28: { //REDMULE_MCFG2_PTR
@@ -1483,8 +1492,10 @@ vp::IoReqStatus LightRedmule::req_v2(vp::Block *__this, vp::IoReq *req)
                 _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] ACQUIRE -> job id %d\n", id);
                 break;
             }
-            case 0x0C: { //REDMULE_STATUS - per-slot busy bitfield (bit0 slot0, bit8 slot1)
-                uint32_t status = (_this->cxt_job_id[0] >= 0 ? 0x1 : 0) | (_this->cxt_job_id[1] >= 0 ? 0x100 : 0);
+            case 0x0C: { //REDMULE_STATUS - 1 from the start of a job to its end (RTL job_status).
+                //An acquired job which is not committed yet does not count: its core
+                //may wait for the engine to be idle before configuring it.
+                uint32_t status = _this->reg_fsm_state.get() != IDLE;
                 memcpy((void *)data, (void *)&status, size);
                 _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] read status reg 0x%x\n",status);
                 break;
