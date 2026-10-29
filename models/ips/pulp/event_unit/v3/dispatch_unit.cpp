@@ -152,6 +152,15 @@ vp::IoReqStatus Dispatch_unit::req(vp::IoReq *req, uint64_t offset, bool is_writ
         top->trace.msg("Getting ready dispatch value (dispatch: %d, value: %x, dispatchStatus: 0x%x)\n", id, dispatch->value, dispatch->status_mask);
         core[core_id].tail++;
         if (core[core_id].tail == size) core[core_id].tail = 0;
+
+        // The read of a ready value still completes through the dispatch
+        // event of the core: hw_dispatch raises it on the pop request and the
+        // event unit grants the read the cycle after
+        Core_event_unit *core_eu = &top->core_eu[core_id];
+        core_eu->clear_evt_mask = 1<<dispatch_event;
+        vp::IoReqStatus status = core_eu->put_to_sleep(req);
+        top->trigger_event(1<<dispatch_event, 1<<core_id);
+        return status;
       }
       else
       {

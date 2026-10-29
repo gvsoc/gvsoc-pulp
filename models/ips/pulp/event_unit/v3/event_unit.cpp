@@ -122,23 +122,24 @@ vp::IoReqStatus Event_unit::sw_events_req(vp::IoReq *req, uint64_t offset, bool 
 }
 
 
-void Event_unit::trigger_event(int event_mask, uint32_t core_mask)
+void Event_unit::trigger_event(int event_mask, uint32_t core_mask, int delay)
 {
   for (unsigned int i=0; i<nb_core; i++) {
     if (core_mask == 0 || (core_mask & (1 << i))) {
-      send_event(i, event_mask);
+      send_event(i, event_mask, delay);
     }
   }
 }
 
-void Event_unit::send_event(int core, uint32_t mask)
+void Event_unit::send_event(int core, uint32_t mask, int delay)
 {
   trace.msg("Triggering event (core: %d, mask: 0x%x)\n", core, mask);
   Core_event_unit *eu = &core_eu[core];
   eu->set_status(eu->status | mask);
+  eu->wakeup_delay = delay;
   eu->check_state();
+  eu->wakeup_delay = 0;
 }
-
 
 void Event_unit::irq_ack_sync(vp::Block *__this, int irq, int core)
 {

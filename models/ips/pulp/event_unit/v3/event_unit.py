@@ -9,7 +9,12 @@ from gvsoc.signature import IoV2Sync
 
 
 class EventUnit(Component):
-    """PULP cluster hardware event unit (io_v2).
+    """PULP cluster hardware event unit (io_v2), with the timing of
+    event_unit_flex: a wait read finding its software event already buffered
+    is answered as a plain 1-cycle read, a sleeping core is answered one cycle
+    after its event is buffered, a barrier event comes one cycle later than a
+    software one, and mutex and dispatch reads always complete through the
+    event of the core.
 
     Barriers, dispatch FIFO, hardware mutexes, per-core event/IRQ buffers and
     the SoC-event FIFO. Each core has a shared register view (i_INPUT) and a

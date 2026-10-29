@@ -94,9 +94,10 @@ vp::IoReqStatus Core_event_unit::req(vp::IoReq *req, uint64_t offset, bool is_wr
     if (is_write) return eu_io_resp(req, vp::IO_RESP_INVALID);
     top->trace.msg("Wait\n");
     // The return value (masked status) is filled by wait_event /
-    // check_state at wake time.
+    // check_state at wake time. An event already buffered is answered at
+    // once, as a plain load.
     pending_req_is_wait = true;
-    return wait_event(req);
+    return wait_event(req, CORE_STATE_WAITING_EVENT, true);
   }
 
   else if (offset == EU_CORE_EVENT_WAIT_CLEAR)
@@ -104,9 +105,10 @@ vp::IoReqStatus Core_event_unit::req(vp::IoReq *req, uint64_t offset, bool is_wr
     top->trace.msg("Wait and clear\n");
     clear_evt_mask = evt_mask;
     // The return value (masked status) is filled by wait_event /
-    // check_state at wake time.
+    // check_state at wake time. An event already buffered is answered at
+    // once, as a plain load.
     pending_req_is_wait = true;
-    return wait_event(req);
+    return wait_event(req, CORE_STATE_WAITING_EVENT, true);
   }
   else if (offset == EU_CORE_MASK_IRQ)
   {
@@ -205,9 +207,22 @@ vp::IoReqStatus Core_event_unit::put_to_sleep(vp::IoReq *req, Event_unit_core_st
   return vp::IO_REQ_GRANTED;
 }
 
-vp::IoReqStatus Core_event_unit::wait_event(vp::IoReq *req, Event_unit_core_state_e wait_state)
+vp::IoReqStatus Core_event_unit::wait_event(vp::IoReq *req, Event_unit_core_state_e wait_state,
+  bool sync_if_ready)
 {
   top->trace.msg("Wait request (status: 0x%x, evt_mask: 0x%x)\n", status, evt_mask);
+
+  // With a masked event already in the buffer, event_unit_core grants the
+  // read at once and answers it the next cycle, like any 1-cycle register read
+  // (the core is not stopped), then clears the buffer if asked to.
+  if (sync_if_ready && (evt_mask & status))
+  {
+    *(uint32_t *)req->get_data() = evt_mask & status;
+    check_wait_mask();
+    this->check_state();
+    req->inc_latency(1);
+    return eu_io_resp(req, vp::IO_RESP_OK);
+  }
 
   // This takes a couple of cycles for the event unit to clock-gate the core
   // before replying, seen as a latency from the core point of view.
@@ -232,6 +247,19 @@ vp::IoReqStatus Core_event_unit::wait_event(vp::IoReq *req, Event_unit_core_stat
   {
     return this->put_to_sleep(req, wait_state);
   }
+}
+
+bool Core_event_unit::unwake(int event)
+{
+  if (!this->wakeup_event->is_enqueued() || this->pending_req == NULL)
+  {
+    return false;
+  }
+  top->event_cancel(this->wakeup_event);
+  this->state = CORE_STATE_WAITING_EVENT;
+  this->clear_evt_mask = 1 << event;
+  this->status &= ~(1 << event);
+  return true;
 }
 
 void Core_event_unit::reset()
@@ -318,11 +346,12 @@ void Core_event_unit::check_state()
               top->trace.msg("Activating clock (core: %d)\n", core_id);
               // Refresh the wait read's return value with the masked status
               // at wake time (the value stored at park time predates the
-              // waking event), before the wait-clear mask wipes it. Only
-              // the wait registers carry this semantic; barrier/dispatch/
+              // waking event), before the wait-clear mask wipes it. The
+              // wait and barrier registers carry this semantic (a
+              // barrier read returns the masked buffer too); dispatch and
               // mutex parked reads fill their own value.
-              if (state == CORE_STATE_WAITING_EVENT && pending_req
-                  && pending_req_is_wait)
+              if (pending_req && ((state == CORE_STATE_WAITING_EVENT
+                  && pending_req_is_wait) || state == CORE_STATE_WAITING_BARRIER))
               {
                 *(uint32_t *)pending_req->get_data() = evt_mask & status;
               }
@@ -330,7 +359,7 @@ void Core_event_unit::check_state()
               check_wait_mask();
               if (!wakeup_event->is_enqueued())
               {
-                top->event_enqueue(wakeup_event, EU_WAKEUP_LATENCY);
+                top->event_enqueue(wakeup_event, EU_EVENT_WAKEUP_LATENCY + wakeup_delay);
               }
               break;
 

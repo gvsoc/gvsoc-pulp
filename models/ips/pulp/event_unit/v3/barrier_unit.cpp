@@ -27,7 +27,10 @@ void Barrier_unit::check_barrier(int barrier_id)
     trace.msg("Barrier reached, triggering event (barrier: %d, coreMask: 0x%x, targetMask: 0x%x)\n", barrier_id, barrier->core_mask, barrier->target_mask);
     barrier->status = 0;
 
-    top->trigger_event(1<<barrier_event, barrier->target_mask);
+    // The barrier is matched on its registered status, one cycle after
+    // the last trigger, so its event reaches the cores one cycle later than a
+    // software event.
+    top->trigger_event(1<<barrier_event, barrier->target_mask, 1);
   }
 }
 

@@ -44,8 +44,27 @@ void Mutex::reset()
 {
   locked = false;
   waiting_mask = 0;
+  elected = -1;
+  elect_cycle = -1;
 }
 
+
+// Give the mutex to `core`, which reads it with `req`: the lock read
+// always completes through the mutex event of the core, answered the cycle
+// after the election (hw_mutex_unit raises the event in the cycle of the
+// election, the event unit grants the read the cycle after).
+vp::IoReqStatus Mutex_unit::give(Mutex *mutex, vp::IoReq *req, int core_id)
+{
+  Core_event_unit *core_eu = &top->core_eu[core_id];
+  mutex->locked = true;
+  mutex->elected = core_id;
+  mutex->elect_cycle = top->clock.get_cycles();
+  *(uint32_t *)req->get_data() = mutex->value;
+  core_eu->clear_evt_mask = 1<<mutex_event;
+  vp::IoReqStatus status = core_eu->put_to_sleep(req);
+  top->trigger_event(1<<mutex_event, 1<<core_id);
+  return status;
+}
 
 vp::IoReqStatus Mutex_unit::req(vp::IoReq *req, uint64_t offset, bool is_write, uint32_t *data, int core)
 {
@@ -53,21 +72,31 @@ vp::IoReqStatus Mutex_unit::req(vp::IoReq *req, uint64_t offset, bool is_write, 
   offset = offset - (id << 2);
   if (id >= nb_mutexes) return eu_io_resp(req, vp::IO_RESP_INVALID);
 
-
   Mutex *mutex = &mutexes[id];
+
   top->trace.msg("Received mutex IO access (offset: 0x%x, mutex: %d, is_write: %d)\n", offset, id, is_write);
 
   if (!is_write)
   {
     if (!mutex->locked)
     {
-      // The mutex is free, just lock it
       top->trace.msg("Locking mutex (mutex: %d, coreId: %d)\n", id, core);
-      mutex->locked = 1;
+      return this->give(mutex, req, core);
+    }
+    else if (mutex->elect_cycle == top->clock.get_cycles() && core < mutex->elected &&
+      top->core_eu[mutex->elected].unwake(mutex_event))
+    {
+      // Asking in the cycle the mutex was given to a higher core, which has
+      // not been answered yet: the election goes to this one
+      int prev = mutex->elected;
+      Core_event_unit *prev_eu = &top->core_eu[prev];
+      top->trace.msg("Taking mutex over (mutex: %d, coreId: %d, fromCore: %d)\n", id, core, prev);
+      mutex->waiting_reqs[prev] = prev_eu->pending_req_get();
+      mutex->waiting_mask |= 1<<prev;
+      return this->give(mutex, req, core);
     }
     else
     {
-      // The mutex is locked, put the core to sleep
       top->trace.msg("Mutex already locked, waiting (mutex: %d, coreId: %d)\n", id, core);
       return enqueue_sleep(mutex, req, core);
     }
@@ -75,40 +104,22 @@ vp::IoReqStatus Mutex_unit::req(vp::IoReq *req, uint64_t offset, bool is_write, 
   else
   {
     mutex->value = *(uint32_t *)req->get_data();
-
-    // The core is unlocking the mutex, check if we have to wake-up someone
     unsigned int waiting_mask = mutex->waiting_mask;
     if (waiting_mask)
     {
-      // We have to wake-up one core, take the first one
-      for (unsigned int i=0; i<32; i++)
-      {
-        if (waiting_mask & (1<<i))
-        {
-          top->trace.msg("Transfering mutex lock (mutex: %d, fromCore: %d, toCore: %d)\n", id, core, i);
-          // Clear the mask and wake-up the elected core. Don't unlock the mutex,
-          // as it is taken by the new core
-          top->trace.msg("Waking-up core waiting for mutex (coreId: %d)\n", i);
-          vp::IoReq *waiting_req = mutex->waiting_reqs[i];
-
-          mutex->waiting_mask &= ~(1<<i);
-
-          // Store the mutex value into the pending request. Don't reply now;
-          // the wakeup event will introduce the reply delay.
-          *(uint32_t *)waiting_req->get_data() = mutex->value;
-
-          // And trigger the event to the core
-          top->trigger_event(1<<mutex_event, 1<<i);
-
-          break;
-        }
-      }
+      int i = __builtin_ctz(waiting_mask);
+      top->trace.msg("Transfering mutex lock (mutex: %d, fromCore: %d, toCore: %d)\n", id, core, i);
+      vp::IoReq *waiting_req = mutex->waiting_reqs[i];
+      mutex->waiting_mask &= ~(1<<i);
+      mutex->elected = i;
+      mutex->elect_cycle = top->clock.get_cycles();
+      *(uint32_t *)waiting_req->get_data() = mutex->value;
+      top->trigger_event(1<<mutex_event, 1<<i);
     }
     else
     {
-      // No one waiting, just unlock the mutex
       top->trace.msg("Unlocking mutex (mutex: %d, coreId: %d)\n", id, core);
-      mutex->locked = 0;
+      mutex->locked = false;
     }
   }
 

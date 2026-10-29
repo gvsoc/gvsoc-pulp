@@ -116,12 +116,20 @@ class PulpOpenV2Cluster(Component):
         # SoC when its response is about to come back, so the core cannot
         # execute anything meanwhile, load or store alike (lsu_hold_on_async).
         # The TCDM grants at once and is not concerned (it answers
-        # synchronously).
+        # synchronously). A p.elw event load costs 2 cycles more than a plain
+        # load once answered, slept or not (lsu_elw_resume_cycles). An
+        # instruction writing the destination of a load does not wait for its
+        # load-use delay (scoreboard_waw_after_writeback). A core gets 32 bits
+        # per fetch (INSTR_RDATA_WIDTH = 32), so after a jump a 32-bit
+        # instruction at a halfword address waits one more cycle for its
+        # second word (fetch_width, fetch_split_jump_stall).
         core_class = Ri5kyNn if config.pulpnn else Ri5ky
         pes = [
             core_class(self, f'pe{i}', config=Ri5kyConfig(
                 isa=config.isa, hart_id=i, fetch_enable=False,
-                lsu_hold_on_async=True))
+                lsu_hold_on_async=True, lsu_elw_resume_cycles=2,
+                scoreboard_waw_after_writeback=True,
+                fetch_split_jump_stall=True, fetch_width=4))
             for i in range(nb_pe)
         ]
 

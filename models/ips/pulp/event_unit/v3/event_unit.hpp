@@ -8,7 +8,11 @@
 // hardware mutexes, dispatch FIFO, barriers, software events and the SoC-event
 // FIFO, without the semaphores and bitfields of the GAP9 one. Ported from the
 // legacy `pulp.event_unit.eu_v3_impl` io-protocol model and split into
-// one translation unit per sub-block. The behaviour is identical; the io->io_v2
+// one translation unit per sub-block, with the timing of event_unit_flex: a
+// wait read finding its event already buffered is answered as a plain 1-cycle
+// read, a sleeping core is answered one cycle after its event is buffered, a
+// barrier event comes one cycle later than a software one, and mutex and
+// dispatch reads always complete through the event of the core. The io->io_v2
 // changes are:
 //   * requests complete with eu_io_resp(req, status) returning IO_REQ_DONE,
 //   * blocking ops return IO_REQ_GRANTED and are woken with resp() on the
@@ -38,6 +42,13 @@ class Mutex_unit;
 
 // Cycles needed by the event unit to send back the clock once a core is woken.
 #define EU_WAKEUP_LATENCY 2
+
+// Cycles from the event reaching the buffer of a waiting core to the
+// response to its read. The response stands for the grant of the read (the
+// core is held until it, see lsu_hold_on_async), which event_unit_core gives
+// in the cycle after the event is buffered: the trigger store is granted at t,
+// the event is in the buffer at t+1, so is the grant.
+#define EU_EVENT_WAKEUP_LATENCY 1
 
 
 // io_v2 helper: complete a request synchronously with the given response
@@ -84,6 +95,11 @@ public:
   uint32_t waiting_mask;
   uint32_t value;
   vp::IoReq *waiting_reqs[32];
+  // Core the mutex was last given to and the cycle it was, so that a
+  // lower core asking in the same cycle can take it over (hw_mutex_unit elects
+  // the first core among the waiting ones and the ones asking that cycle)
+  int elected = -1;
+  int64_t elect_cycle = -1;
 };
 
 class Mutex_unit {
@@ -97,6 +113,7 @@ public:
 
 private:
   vp::IoReqStatus enqueue_sleep(Mutex *mutex, vp::IoReq *req, int core_id) ;
+  vp::IoReqStatus give(Mutex *mutex, vp::IoReq *req, int core_id);
   Event_unit *top;
   vp::Trace     trace;
   int nb_mutexes;
@@ -210,8 +227,10 @@ protected:
 
 
   vp::IoReqStatus sw_events_req(vp::IoReq *req, uint64_t offset, bool is_write, uint32_t *data);
-  void trigger_event(int event, uint32_t core_mask);
-  void send_event(int core, uint32_t mask);
+  // `delay`: cycles the event takes to reach the buffers on top of a software
+  // event (a barrier event comes from the registered barrier status).
+  void trigger_event(int event, uint32_t core_mask, int delay=0);
+  void send_event(int core, uint32_t mask, int delay=0);
   static void in_event_sync(vp::Block *__this, bool active, int id);
 
 };
@@ -231,9 +250,14 @@ public:
   void check_wait_mask();
   void check_pending_req();
   void cancel_pending_req();
-  vp::IoReqStatus wait_event(vp::IoReq *req, Event_unit_core_state_e wait_state=CORE_STATE_WAITING_EVENT);
+  vp::IoReqStatus wait_event(vp::IoReq *req, Event_unit_core_state_e wait_state=CORE_STATE_WAITING_EVENT,
+    bool sync_if_ready=false);
   vp::IoReqStatus put_to_sleep(vp::IoReq *req, Event_unit_core_state_e wait_state=CORE_STATE_WAITING_EVENT);
   Event_unit_core_state_e get_state() { return state; }
+  // The event which was about to wake this core goes to another one: the
+  // core sleeps again on its parked request, waiting for `event`
+  bool unwake(int event);
+  vp::IoReq *pending_req_get() { return this->pending_req; }
   void set_state(Event_unit_core_state_e state) { this->state = state; }
   void irq_ack_sync(int irq, int core);
   static void wakeup_handler(vp::Block *__this, vp::ClockEvent *event);
@@ -255,6 +279,9 @@ public:
   uint32_t clear_evt_mask;
 
   int sync_irq;
+  // Extra cycles before a sleeping core is answered, for the event being
+  // delivered (see Event_unit::trigger_event)
+  int wakeup_delay = 0;
   int pending_elw;
 
   // True when the parked request is a core WAIT register read, whose return
