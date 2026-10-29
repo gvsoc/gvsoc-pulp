@@ -24,15 +24,30 @@ class FSync_mm_ctrl(gvsoc.systree.Component):
 
     The memory-mapped input port speaks io_v2 and answers inline, hence the
     IoV2Sync signature.
+
+    As the RTL (obi_slave_fsync), a request carries the low ``aggr_width``
+    bits of the aggregate register and the low ``id_width`` bits of the id
+    register on the tree, ``nbr_aggr_width`` and ``nbr_id_width`` towards a
+    neighbour node (the defaults keep the whole registers).
     """
 
     def __init__(self,
                 parent: gvsoc.systree.Component,
-                name: str):
+                name: str,
+                aggr_width: int=32,
+                id_width: int=32,
+                nbr_aggr_width: int=32,
+                nbr_id_width: int=32):
 
         super().__init__(parent, name)
 
         self.add_sources(['pulp/chips/magia_common/fractal_sync_mm_ctrl/fractal_sync_mm_ctrl.cpp'])
+        self.add_properties({
+            'aggr_width': aggr_width,
+            'id_width': id_width,
+            'nbr_aggr_width': nbr_aggr_width,
+            'nbr_id_width': nbr_id_width,
+        })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature=IoV2Sync())
@@ -74,3 +89,19 @@ class FSync_mm_ctrl(gvsoc.systree.Component):
     def o_IRQ_FSYNC(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('fsync_done_irq', itf, signature='wire<bool>')
     
+
+def fsync_widths(n_tiles_x: int, n_tiles_y: int, n_tiles: int) -> dict:
+    """Widths of the FractalSync requests of a tile (magia_pkg): the tree has
+    FSYNC_LVL = clog2(N_TILES) levels on a square mesh, 2 otherwise; a tree
+    request carries FSYNC_LVL + 1 bits of aggregate and max(FSYNC_LVL - 1, 2)
+    bits of id, a neighbour request 1 and 2. Keyword arguments of
+    FSync_mm_ctrl."""
+    fsync_lvl = 2
+    if n_tiles_x == n_tiles_y:
+        fsync_lvl = (n_tiles - 1).bit_length()
+    return {
+        'aggr_width': fsync_lvl + 1,
+        'id_width': max(fsync_lvl - 1, 2),
+        'nbr_aggr_width': 1,
+        'nbr_id_width': 2,
+    }

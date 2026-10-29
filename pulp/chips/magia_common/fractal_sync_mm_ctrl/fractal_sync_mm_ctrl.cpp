@@ -93,11 +93,25 @@ protected:
 
     vp::ClockEvent *clear_irq;
 
+    // Bits of the aggregate and id registers a request carries, on the tree
+    // and towards a neighbour node (obi_slave_fsync AGGR_W, ID_W, NBR_AGGR_W,
+    // NBR_ID_W)
+    uint32_t aggr_mask;
+    uint32_t id_mask;
+    uint32_t nbr_aggr_mask;
+    uint32_t nbr_id_mask;
+    static uint32_t width_mask(int width);
+
 };
 
 extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 {
     return new FSync_mm_ctrl(config);
+}
+
+uint32_t FSync_mm_ctrl::width_mask(int width)
+{
+    return width >= 32 ? 0xFFFFFFFF : (1u << width) - 1;
 }
 
 FSync_mm_ctrl::FSync_mm_ctrl(vp::ComponentConf &config)
@@ -130,6 +144,11 @@ FSync_mm_ctrl::FSync_mm_ctrl(vp::ComponentConf &config)
     this->status_reg.set(0x00);
 
     this->clear_irq = this->event_new(&FSync_mm_ctrl::fsm_irq_clear);
+
+    this->aggr_mask = width_mask(get_js_config()->get_child_int("aggr_width"));
+    this->id_mask = width_mask(get_js_config()->get_child_int("id_width"));
+    this->nbr_aggr_mask = width_mask(get_js_config()->get_child_int("nbr_aggr_width"));
+    this->nbr_id_mask = width_mask(get_js_config()->get_child_int("nbr_id_width"));
 
     this->trace.msg(vp::Trace::LEVEL_TRACE,"[FSync_mm_ctrl] Instantiated\n");
 }
@@ -227,33 +246,42 @@ vp::IoReqStatus FSync_mm_ctrl::req(vp::Block *__this, vp::IoReq *req)
     else if (offset == FSYNC_MM_CONTROL_REG_OFFSET) {
         //Note: No check on what the user writes on the control register. It is just used as a "trigger" to start the sync procedure.
         if ((is_write == 1) && (_this->status_reg.get_field(BUSY_BIT,1) == 0b0)) {
+            // As obi_slave_fsync: an aggregate of 1 selects the node with
+            // bits 1:0 of the id (tree or neighbour, horizontal or vertical),
+            // any other aggregate a tree node with bit 0; the request carries
+            // the bits of the registers that node takes
+            uint32_t aggr = _this->aggr_reg.get();
+            uint32_t id = _this->id_reg.get();
             PortReq<uint32_t> req = {
                 .sync=true,
-                .aggr=_this->aggr_reg.get(),
-                .id_req=_this->id_reg.get()
+                .aggr=aggr & _this->aggr_mask,
+                .id_req=id & _this->id_mask
             };
-            if (req.aggr==0b1) {
-                if (req.id_req == 0) {
+            PortReq<uint32_t> nbr_req = {
+                .sync=true,
+                .aggr=aggr & _this->nbr_aggr_mask,
+                .id_req=id & _this->nbr_id_mask
+            };
+            if (aggr==0b1) {
+                if ((id & 0x3) == 0) {
                     _this->trace.msg("[FSync_mm_ctrl] Enable fsync EAST-WEST\n");
                     _this->fractal_ew_input_port.sync(&req);
                 }
-                else if (req.id_req == 1) {
+                else if ((id & 0x3) == 1) {
                     _this->trace.msg("[FSync_mm_ctrl] Enable fsync NORD-SUD\n");
                     _this->fractal_ns_input_port.sync(&req);
                 }
-                else if (req.id_req == 2) {
+                else if ((id & 0x3) == 2) {
                     _this->trace.msg("[FSync_mm_ctrl] Enable neighbour-fsync EAST-WEST\n");
-                    _this->neighbour_fractal_ew_input_port.sync(&req);
+                    _this->neighbour_fractal_ew_input_port.sync(&nbr_req);
                 }
-                else if (req.id_req == 3) {
+                else {
                     _this->trace.msg("[FSync_mm_ctrl] Enable neighbour-fsync NORD-SUD\n");
-                    _this->neighbour_fractal_ns_input_port.sync(&req);
+                    _this->neighbour_fractal_ns_input_port.sync(&nbr_req);
                 }
-                else
-                    _this->trace.fatal("[FSync_mm_ctrl] wrong direction with aggr=0b1");
             }
             else {
-                if (req.id_req % 2 == 0)
+                if ((id & 0x1) == 0)
                     _this->fractal_ew_input_port.sync(&req);
                 else
                     _this->fractal_ns_input_port.sync(&req);

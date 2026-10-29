@@ -53,7 +53,8 @@ from pulp.chips.magia_v3.arch import *
 from pulp.chips.magia_common.icache import MagiaIcache
 from pulp.chips.magia_common.ctrl_core.core import CV32CtrlCore
 from pulp.chips.magia_common.pulp_core.core import CV32PulpCore
-from pulp.chips.magia_common.fractal_sync_mm_ctrl.fractal_sync_mm_ctrl import FSync_mm_ctrl
+from pulp.chips.magia_common.fractal_sync_mm_ctrl.fractal_sync_mm_ctrl import (FSync_mm_ctrl,
+    fsync_widths)
 from pulp.chips.magia_common.idma_mm_ctrl.idma_mm_ctrl import iDMA_mm_ctrl
 from pulp.chips.magia_common.obi_cut.obi_cut import ObiCut
 from pulp.chips.magia_common.tcdm_interco.tcdm_interco import (MagiaTcdmInterco,
@@ -275,7 +276,8 @@ class MagiaV3Tile(gvsoc.systree.Component):
                                     queue_depth         = 1)
 
         # Fsync mm controller
-        fsync_mm_ctrl = FSync_mm_ctrl(self, f'tile-{tid}-fs-ctrl-mm')
+        fsync_mm_ctrl = FSync_mm_ctrl(self, f'tile-{tid}-fs-ctrl-mm',
+            **fsync_widths(tree.n_tiles_x, tree.n_tiles_y, tree.nb_clusters))
 
         # Event Unit: one core, no barrier and no mutex, dispatch and SoC
         # event FIFO on event 8. Measured on the RTL (control core parked on
