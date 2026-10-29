@@ -35,7 +35,7 @@ class iDMA_mm_ctrl(gvsoc.systree.Component):
 
         super().__init__(parent, name)
 
-        self.add_sources(['pulp/chips/magia_v3/idma_mm_ctrl/idma_mm_ctrl.cpp'])
+        self.add_sources(['pulp/chips/magia_common/idma_mm_ctrl/idma_mm_ctrl.cpp'])
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature=IoV2SingleReq())

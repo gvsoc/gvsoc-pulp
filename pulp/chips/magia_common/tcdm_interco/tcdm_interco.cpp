@@ -76,7 +76,7 @@
 #include <vp/vp.hpp>
 #include <vp/itf/io_v2.hpp>
 #include <vp/debug_mem.hpp>
-#include <pulp/chips/magia_v3/tcdm_interco/tcdm_interco/magia_tcdm_interco_config.hpp>
+#include <pulp/chips/magia_common/tcdm_interco/tcdm_interco/magia_tcdm_interco_config.hpp>
 
 // Pulse a GUI signal to `v` now (+`delay` sub-cycle offset) and back to high-Z
 // one cycle later, so each bank access shows as a one-cycle marker in the GUI.

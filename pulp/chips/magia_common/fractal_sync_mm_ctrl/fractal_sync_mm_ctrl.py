@@ -32,7 +32,7 @@ class FSync_mm_ctrl(gvsoc.systree.Component):
 
         super().__init__(parent, name)
 
-        self.add_sources(['pulp/chips/magia_v3/fractal_sync_mm_ctrl/fractal_sync_mm_ctrl.cpp'])
+        self.add_sources(['pulp/chips/magia_common/fractal_sync_mm_ctrl/fractal_sync_mm_ctrl.cpp'])
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature=IoV2Sync())

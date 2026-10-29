@@ -72,7 +72,7 @@ class MagiaEventUnit(st.Component):
 
         super().__init__(parent, name)
 
-        self.add_sources(['pulp/chips/magia_v3/event_unit/event_unit.cpp'])
+        self.add_sources(['pulp/chips/magia_common/event_unit/event_unit.cpp'])
 
         self.add_properties({
             'nb_core': nb_core,
