@@ -1,0 +1,95 @@
+# 4x4 narrow-wide mesh with both narrow and wide multicast + reduction
+# enabled.
+# route_algo must stay literally "XY" to execute the correct routing logic
+# in load_from_floogen() to populate collective_coords.
+# Router/endpoint names are coordinate-based ("router_{x}_{y}",
+# "cluster_{x}_{y}").
+#
+# Copyright 2023 ETH Zurich and University of Bologna (original example).
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+
+name: mesh_4x4_collective
+description: "4x4 NW mesh with narrow + wide multicast and reduction"
+network_type: "narrow-wide"
+
+routing:
+  route_algo: "XY"
+  use_id_table: true
+  collective:
+    en_narrow_multicast: true
+    en_wide_multicast: true
+    en_narrow_reduction:
+      num_ops: 6
+    en_wide_reduction:
+      num_ops: 6
+
+protocols:
+  - name: "narrow_in"
+    type: "narrow"
+    protocol: "AXI4"
+    data_width: 64
+    addr_width: 48
+    id_width: 5
+    user_width:
+      collective_mask: 48
+      collective_op: 4
+      user: 5
+  - name: "narrow_out"
+    type: "narrow"
+    protocol: "AXI4"
+    data_width: 64
+    addr_width: 48
+    id_width: 2
+    user_width:
+      collective_mask: 48
+      collective_op: 4
+      user: 5
+  - name: "wide_in"
+    type: "wide"
+    protocol: "AXI4"
+    data_width: 512
+    addr_width: 48
+    id_width: 3
+    user_width:
+      collective_mask: 48
+      collective_op: 4
+  - name: "wide_out"
+    type: "wide"
+    protocol: "AXI4"
+    data_width: 512
+    addr_width: 48
+    id_width: 1
+    user_width:
+      collective_mask: 48
+      collective_op: 4
+
+endpoints:
+  - name: "cluster"
+    array: [4, 4]
+    addr_range:
+      base: 0x2000_0000
+      size: 0x0004_0000
+      en_collective: true
+    mgr_port_protocol:
+      - "narrow_in"
+      - "wide_in"
+    sbr_port_protocol:
+      - "narrow_out"
+      - "wide_out"
+
+routers:
+  - name: "router"
+    array: [4, 4]
+    degree: 5
+
+connections:
+  - src: "cluster"
+    dst: "router"
+    src_range:
+    - [0, 3]
+    - [0, 3]
+    dst_range:
+    - [0, 3]
+    - [0, 3]
+    dst_dir: "Eject"
