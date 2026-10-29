@@ -279,6 +279,9 @@ protected:
   int nb_core;
   // Latency added to the reply of an event wait (EU_WAKEUP_REQ_LATENCY)
   int wakeup_req_latency;
+  // Event raised by SW event 0, the next ones above it (the event map of the
+  // instance: 0 for the v1 model, 4 for the cluster map of event_unit_flex)
+  int sw_event_base;
 
 
   vp::IoReqStatus sw_events_req(vp::IoReq *req, uint64_t offset, bool is_write, uint32_t *data);
@@ -357,6 +360,8 @@ Event_unit::Event_unit(vp::ComponentConf &config)
 : vp::Component(config)
 {
   nb_core = get_js_config()->get_child_int("nb_core");
+  js::Config *sw_event_base_cfg = get_js_config()->get("sw_event_base");
+  sw_event_base = sw_event_base_cfg ? sw_event_base_cfg->get_int() : 0;
   js::Config *wakeup_req_latency_cfg = get_js_config()->get("wakeup_req_latency");
   wakeup_req_latency = wakeup_req_latency_cfg ? wakeup_req_latency_cfg->get_int()
                                               : EU_WAKEUP_REQ_LATENCY;
@@ -451,7 +456,7 @@ vp::IoReqStatus Event_unit::sw_events_req(vp::IoReq *req, uint64_t offset, bool 
 
     int event = (offset - EU_CORE_TRIGG_SW_EVENT) >> 2;
     trace.msg("SW event trigger (event: %d, coreMask: 0x%x)\n", event, *data);
-    trigger_event(1<<event, *data);
+    trigger_event(1<<(sw_event_base + event), *data);
   }
   else if (offset >= EU_CORE_TRIGG_SW_EVENT_WAIT && offset <  EU_CORE_TRIGG_SW_EVENT_WAIT_SIZE)
   {
