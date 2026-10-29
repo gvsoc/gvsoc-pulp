@@ -63,12 +63,17 @@ class MagiaEventUnit(st.Component):
     wakeup_req_latency : int
         Cycles added to the reply of an event wait on top of the wake-up
         itself (6, the value of the v1 model, for the PULP cluster cores).
+    sw_event_base : int
+        Event raised by SW event 0, the next ones above it (0 as the v1
+        model; the event map of event_unit_flex has them from bit 6 for one
+        core and from bit 4 for a cluster).
     """
 
     def __init__(self, parent: st.Component, name: str, nb_core: int,
             nb_mutexes: int, nb_barriers: int, dispatch_size: int,
             nb_fifo_events: int, fifo_event: int, dispatch_event: int,
-            mutex_event: int, barrier_event: int, wakeup_req_latency: int=6):
+            mutex_event: int, barrier_event: int, wakeup_req_latency: int=6,
+            sw_event_base: int=0):
 
         super().__init__(parent, name)
 
@@ -77,6 +82,7 @@ class MagiaEventUnit(st.Component):
         self.add_properties({
             'nb_core': nb_core,
             'wakeup_req_latency': wakeup_req_latency,
+            'sw_event_base': sw_event_base,
             'properties': {
                 'dispatch': {'size': dispatch_size},
                 'mutex': {'nb_mutexes': nb_mutexes},
