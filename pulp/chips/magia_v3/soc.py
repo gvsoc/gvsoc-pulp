@@ -26,9 +26,9 @@ from pulp.chips.magia_v3.tile import MagiaV3Tile
 from pulp.chips.magia_v3.arch import *
 
 from pulp.floonoc_v2.floonoc_v2 import FlooNocV22dMeshNarrowWide, FlooNocV2Direction
-from pulp.chips.magia_v3.fractal_sync.fractal_sync import *
-from pulp.chips.magia_v3.kill_module.kill_module import *
-from pulp.chips.magia_v3.l2_port.l2_port import L2Port
+from pulp.chips.magia_common.fractal_sync.fractal_sync import *
+from pulp.chips.magia_common.kill_module.kill_module import *
+from pulp.chips.magia_common.l2_port.l2_port import L2Port
 from pulp.pcie_vfio_bridge.pcie_vfio_mem_bridge_v2 import PCIeVfioMemBridgeV2
 from typing import List, Dict
 import math

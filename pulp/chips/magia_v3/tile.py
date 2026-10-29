@@ -47,16 +47,16 @@ from ips.pulp.idma_v3.reg_dma import RegDmaV3
 from ips.pulp.idma_v3.reg_dma_config import RegDmaV3Config
 from ips.pulp.idma_v3.protocol_config import (IdmaPortConfig, IdmaObiConfig,
     PROTOCOL_AXI, PROTOCOL_OBI)
-from pulp.chips.magia_v3.event_unit.event_unit import MagiaEventUnit
+from pulp.chips.magia_common.event_unit.event_unit import MagiaEventUnit
 
 from pulp.chips.magia_v3.arch import *
-from pulp.chips.magia_v3.icache import MagiaIcache
-from pulp.chips.magia_v3.ctrl_core.core import CV32CtrlCore
-from pulp.chips.magia_v3.pulp_core.core import CV32PulpCore
-from pulp.chips.magia_v3.fractal_sync_mm_ctrl.fractal_sync_mm_ctrl import FSync_mm_ctrl
-from pulp.chips.magia_v3.idma_mm_ctrl.idma_mm_ctrl import iDMA_mm_ctrl
-from pulp.chips.magia_v3.obi_cut.obi_cut import ObiCut
-from pulp.chips.magia_v3.tcdm_interco.tcdm_interco import (MagiaTcdmInterco,
+from pulp.chips.magia_common.icache import MagiaIcache
+from pulp.chips.magia_common.ctrl_core.core import CV32CtrlCore
+from pulp.chips.magia_common.pulp_core.core import CV32PulpCore
+from pulp.chips.magia_common.fractal_sync_mm_ctrl.fractal_sync_mm_ctrl import FSync_mm_ctrl
+from pulp.chips.magia_common.idma_mm_ctrl.idma_mm_ctrl import iDMA_mm_ctrl
+from pulp.chips.magia_common.obi_cut.obi_cut import ObiCut
+from pulp.chips.magia_common.tcdm_interco.tcdm_interco import (MagiaTcdmInterco,
                                                           MagiaTcdmIntercoConfig)
 from pulp.chips.magia_v3.cluster_regs.cluster_regs import ClusterRegs
 

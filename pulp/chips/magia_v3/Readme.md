@@ -364,9 +364,9 @@ Each tile is a **self-contained compute cluster** composed of:
 
 ### Compute Cores
 
-- **CV32CtrlCore** (`ctrl_core/`) — tile controller, always present
+- **CV32CtrlCore** (`../magia_common/ctrl_core/`) — tile controller, always present
 - Optional **Snitch + Spatz** vector core
-- Optional **PULP cluster** — up to 8 **CV32PulpCore** workers (`pulp_core/`)
+- Optional **PULP cluster** — up to 8 **CV32PulpCore** workers (`../magia_common/pulp_core/`)
 
 The control core and the PULP cores are the **CV32E40P** model of the iss_v2
 (`pulp/cv32e40p`), configured as in `magia_tile.sv`: `COREV_PULP` and
@@ -375,7 +375,7 @@ The control core and the PULP cores are the **CV32E40P** model of the iss_v2
 subsets. With `COREV_CLUSTER`, `cv.elw` sleeps until the event unit answers,
 and an interrupt taken meanwhile replays it after the handler.
 
-- The control core reaches the Event Unit (`event_unit/`, the io_v2 port of
+- The control core reaches the Event Unit (`../magia_common/event_unit/`, the io_v2 port of
   the v3 event unit of `pulp/event_unit`, with one core) on a direct link (RTL
   `core_data_demux_eu_direct`); the Event Unit request drives its machine
   external interrupt (`mei`) as a level and the core acknowledges it
@@ -389,14 +389,14 @@ and an interrupt taken meanwhile replays it after the handler.
   the Event Unit); the line stays raised until the core acknowledges it
   (`irq_ack`), as `cluster_start_irq_pending` in the RTL.
 
-Each group of cores has a two-level instruction cache (`icache.py`, built on
+Each group of cores has a two-level instruction cache (`../magia_common/icache.py`, built on
 the `snitch_icache` L0 and L1): one private L0 per core in front of a shared
 L1, with the parameters of the RTL instances and the L0 prefetcher off, as
 MAGIA ties `enable_prefetching_i` to 0.
 
 ### Local Memory
 - **TCDM (L1 scratchpad)**
-  - 32 banks behind a single crossbar (`tcdm_interco/`, the
+  - 32 banks behind a single crossbar (`../magia_common/tcdm_interco/`, the
     `hci_interconnect` of the RTL) with bank conflicts modelled; wide
     masters (NoC wide channel, iDMA, RedMulE) span several banks, take
     priority over the narrow ones and, each having its own HCI branch,
@@ -619,23 +619,23 @@ pulp/pulp/chips/magia_v3/
 ├── board.py                       # GVSoC board entry point
 ├── soc.py                         # SoC composition (tiles, NoC, L2)
 ├── tile.py                        # Tile micro-architecture
-├── icache.py                      # Two-level instruction cache
 ├── cluster_regs/                  # Cluster control registers (Spatz + PULP)
 │   ├── cluster_regs.cpp           # C++ model implementation
 │   └── cluster_regs.py            # Python systree binding
-├── ctrl_core/                     # CV32E40P control core
-│   └── core.py                    # CV32CtrlCore class
-├── pulp_core/                     # CV32E40P PULP worker cores
-│   └── core.py                    # CV32PulpCore class
-├── idma_mm_ctrl/                  # Decoder of the two iDMA channel windows
+└── Readme.md
+
+pulp/pulp/chips/magia_common/      # Blocks shared with magia_v4
+├── icache.py                      # Two-level instruction cache
+├── ctrl_core/                     # CV32E40P control core (CV32CtrlCore)
+├── pulp_core/                     # CV32E40P PULP worker cores (CV32PulpCore)
 ├── event_unit/                    # Event Unit of the tile (io_v2)
-│   ├── event_unit.py
-│   └── event_unit.cpp
+├── idma_mm_ctrl/                  # Decoder of the two iDMA channel windows
 ├── fractal_sync/                  # Fractal synchronization module
-├── kill_module/                   # Simulation termination module
-│   ├── kill_module.py
-│   └── kill_module.cpp
-└── README.md
+├── fractal_sync_mm_ctrl/          # FractalSync memory-mapped controller
+├── tcdm_interco/                  # TCDM interconnect of the tile (HCI)
+├── obi_cut/                       # OBI register cut
+├── l2_port/                       # AXI port of the testbench L2
+└── kill_module/                   # Simulation termination module
 
 pulp/pulp/pcie_vfio_bridge/
 ├── CMakeLists.txt

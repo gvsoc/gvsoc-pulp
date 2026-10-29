@@ -72,7 +72,7 @@ class MagiaTcdmInterco(Component):
 
     def __init__(self, parent: Component, name: str, config: MagiaTcdmIntercoConfig):
         super().__init__(parent, name, config=config)
-        self.add_sources(['pulp/chips/magia_v3/tcdm_interco/tcdm_interco.cpp'])
+        self.add_sources(['pulp/chips/magia_common/tcdm_interco/tcdm_interco.cpp'])
         self.nb_slaves = config.nb_slaves
 
     def gen_gui(self, parent_signal):

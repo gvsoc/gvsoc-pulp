@@ -51,7 +51,7 @@ class KillModule(gvsoc.systree.Component):
             'nb_inputs' : nb_inputs,
         })
 
-        self.add_sources(['pulp/chips/magia_v3/kill_module/kill_module.cpp'])
+        self.add_sources(['pulp/chips/magia_common/kill_module/kill_module.cpp'])
 
     def i_INPUT(self, id: int = 0) -> gvsoc.systree.SlaveItf:
         """Input port ``id`` (one per tile)."""
