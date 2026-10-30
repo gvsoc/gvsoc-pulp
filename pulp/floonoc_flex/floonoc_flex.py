@@ -60,6 +60,7 @@ class FlooNocFlex(gvsoc.systree.Component):
             'pulp/floonoc_flex/floonoc_router_flex.cpp',
             'pulp/floonoc_flex/floonoc_network_interface_flex.cpp',
             'pulp/floonoc_flex/floonoc_collective_policy.cpp',
+            'cpu/iss/flexfloat/flexfloat.c',
         ])
 
         self.add_property('mappings', {})
@@ -715,10 +716,6 @@ class FlooNocFlex(gvsoc.systree.Component):
             return
         coord_to_id = {c: r for r, c in id_to_coord.items()}
 
-        if self.get_property('collective_enable'):
-            self.add_property('collective_coords',
-                [[node_id, x, y] for node_id, (x, y) in id_to_coord.items()])
-
         ni_to_router = {}
         for link in links:
             node_a, node_b = link[0], link[1]
@@ -726,6 +723,10 @@ class FlooNocFlex(gvsoc.systree.Component):
                 ni_to_router[node_a] = node_b
             elif node_b in nis and node_a in routers:
                 ni_to_router[node_b] = node_a
+
+        if self.get_property('collective_enable'):
+            self.add_property('collective_coords',
+                [[node_id, x, y] for node_id, (x, y) in id_to_coord.items()])
 
         routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
         for src in routers:

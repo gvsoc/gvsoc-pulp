@@ -129,7 +129,7 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address,
 
         // Collective primitives metadata
         *router_req->arg_get(FlooNoc::REQ_SRC_ID) =
-            (void *)(long)this->ni.node_id;
+            (void *)(long)this->router->node_id;
         // Initialize all collective metadata to default values
         *router_req->arg_get(FlooNoc::REQ_COLL_OP) =
             (void *)(long)FlooNoc::COLL_OP_UNICAST;
