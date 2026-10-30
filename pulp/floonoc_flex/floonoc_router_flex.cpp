@@ -222,8 +222,14 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 }
                 else if (fanout.size() > 1)
                 {
-                    // Fork the request and keep track of the children 
+                    // Fork the request and keep track of the children.
+                    // From this point on, req is purely an accumulator for
+                    // its children's merged results, so reset it to the
+                    // op's identity element first (it may still be holding
+                    // whatever garbage/stale data it had as a plain
+                    // request before becoming a fork point).
                     queue->queue.pop();
+                    _this->noc->init_reduction_identity(req);
                     for (auto &dest : fanout)
                     {
                         vp::IoReq *child = _this->fork_collective_child(

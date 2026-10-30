@@ -25,6 +25,7 @@
 #include "floonoc_flex.hpp"
 #include "floonoc_network_interface_flex.hpp"
 #include "floonoc_router_flex.hpp"
+#include <cstring>
 #include <vp/itf/io.hpp>
 #include <vp/vp.hpp>
 
@@ -411,19 +412,13 @@ Entry *FlooNoc::get_entry(uint64_t base, uint64_t size)
     return NULL;
 }
 
-// Resolves the completion of a collective request. See COLLECTIVES.md,
-// "Completion / fold", and the "Router changes" section for the two call
-// sites (a router finding a dead end, and the NI intercepting a forked
-// child's response).
+// Resolves the completion of a collective request.
 void FlooNoc::handle_collective_completion(vp::IoReq *req)
 {
     void *parent_ptr = *req->arg_get(FlooNoc::REQ_PARENT);
     if (parent_ptr == NULL)
     {
-        // Root (or a degenerate zero-member request): never had a real
-        // target of its own, so finalize it exactly as if its response
-        // had just arrived back at the originating NI, with no
-        // fictitious extra network hop.
+        // Root request, recover the original network interface and forward the response to it
         NetworkInterface *origin_ni =
             *(NetworkInterface **)req->arg_get(FlooNoc::REQ_SRC_NI);
 
@@ -432,6 +427,23 @@ void FlooNoc::handle_collective_completion(vp::IoReq *req)
         this->stat_collective_completed++;
         this->stat_collective_completion_latency +=
             this->time.get_engine()->get_time() - inject_time;
+
+        if (req->get_is_write())
+        {
+            // Notifies the burst once REQ_REM_SIZE reaches 0. 
+            // Each narrow_width/wide_width chunk of a write burst is 
+            // its own collective root, so replicate the check here for each chunk. 
+            // Otherwise, every chunk's root would complete the whole burst on its own.
+            vp::IoReq *burst = *(vp::IoReq **)req->arg_get(FlooNoc::REQ_BURST);
+            *(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE) -=
+                req->get_size();
+            if (*(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE) !=
+                0)
+            {
+                delete req;
+                return;
+            }
+        }
 
         *req->arg_get(FlooNoc::REQ_SRC_NI) = NULL;
         origin_ni->handle_response(req);
@@ -454,6 +466,60 @@ void FlooNoc::handle_collective_completion(vp::IoReq *req)
     if (pending <= 0)
     {
         this->handle_collective_completion(parent);
+    }
+}
+
+void FlooNoc::init_reduction_identity(vp::IoReq *req)
+{
+    int collective_op = req->get_int(FlooNoc::REQ_COLL_OP);
+    if (collective_op < FlooNoc::COLL_OP_FIRST_ARITH_OP)
+    {
+        return;
+    }
+
+    uint8_t *data = req->get_data();
+    uint64_t size = req->get_size();
+
+    switch (collective_op)
+    {
+        case FlooNoc::COLL_OP_REDADD_UINT16:
+        case FlooNoc::COLL_OP_REDADD_INT16:
+        case FlooNoc::COLL_OP_REDADD_FP16:
+            std::memset(data, 0, size);
+            break;
+
+        case FlooNoc::COLL_OP_REDMAX_UINT16:
+            std::memset(data, 0x00, size);
+            break;
+
+        case FlooNoc::COLL_OP_REDMAX_INT16:
+        {
+            int16_t *dst = (int16_t *)data;
+            for (uint64_t i = 0; i < size / sizeof(int16_t); i++)
+            {
+                dst[i] = INT16_MIN;
+            }
+            break;
+        }
+
+        case FlooNoc::COLL_OP_REDMAX_FP16:
+        {
+            uint16_t *dst = (uint16_t *)data;
+            flexfloat_t neg_inf;
+            ff_init(&neg_inf, FlooNoc::fp16_desc);
+            flexfloat_set_bits(&neg_inf, 0xFC00); // fp16 -inf
+            uint16_t bits = flexfloat_get_bits(&neg_inf);
+            for (uint64_t i = 0; i < size / sizeof(uint16_t); i++)
+            {
+                dst[i] = bits;
+            }
+            break;
+        }
+
+        default:
+            this->trace.fatal(
+                "init_reduction_identity with unsupported REQ_COLL_OP %d\n",
+                collective_op);
     }
 }
 
