@@ -19,10 +19,8 @@ routing:
   collective:
     en_narrow_multicast: true
     en_wide_multicast: true
-    en_narrow_reduction:
-      num_ops: 6
-    en_wide_reduction:
-      num_ops: 6
+    en_narrow_reduction: true
+    en_wide_reduction: true
 
 protocols:
   - name: "narrow_in"
