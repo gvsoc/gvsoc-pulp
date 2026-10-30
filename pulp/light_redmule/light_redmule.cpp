@@ -35,6 +35,8 @@
 #include <vector>
 #include <list>
 #include <queue>
+#include <deque>
+#include <functional>
 #include <stdint.h>
 #include <stdio.h>
 #include <math.h>
@@ -107,7 +109,9 @@ public:
     //static void offload_grant(vp::Block *__this, IssOffloadInsnGrant<iss_reg_t> *result);
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
 
-    uint32_t op_foramt_parser(uint32_t op_format);
+    uint32_t op_foramt_parser(uint32_t op_format, uint32_t *use_y);
+    // marith register (op << 10 | fmt << 7, hal_redmule.h) to op_foramt_parser format
+    static uint32_t marith_to_op_format(uint32_t marith);
 
     // HWPE control-register protocol (ACQUIRE / COMMIT_TRIGGER / SOFT_CLEAR)
     int32_t  acquire();
@@ -147,6 +151,11 @@ public:
     void apply_response_data(uint8_t *buf, uint32_t instr, uint32_t dst_offset, uint32_t cutoff);
     // Fired when the last W burst lands: run matmul and clear w_buffer.
     void run_compute_and_drain();
+    // Streaming ROUTINE (stream_loads)
+    void     stream_begin_group();
+    void     stream_tick();
+    void     send_routine_req();
+    void     stream_to_storing();
     void     matmul_fp16(fp16 * z, fp16 * y, fp16 * x, fp16 * w, uint16_t m_size, uint16_t n_size, uint16_t k_size);
 
     vp::Trace           trace;
@@ -169,6 +178,41 @@ public:
     uint32_t            tcdm_block_total;
     uint32_t            fsm_counter;
     uint32_t            fsm_timestamp;
+    // When set, the ROUTINE requests are streamed ahead of the array (see stream_tick()): they are
+    // sent one per cycle while the queue has a free entry, and the array starts an iteration as
+    // soon as the first data it needs is back. Otherwise every iteration waits for all its
+    // responses before the next one starts. It needs a synchronous TCDM interconnect (every
+    // request answered with IO_REQ_OK and a latency), as the MemPool L1 interconnect.
+    bool                stream_loads = false;
+
+    // Streaming state. Iteration g of the ROUTINE is computed on the X block (and, at the start of
+    // an output tile, the Y block) sent in the requests of iteration g-1 (or by the PRELOAD for
+    // g = 0) and on the W rows sent in its own requests. The array starts the iteration when its
+    // X (and Y) block is back, then takes the W rows in order, ce_pipe+1 cycles each, and stalls
+    // on a row that is not back yet. A queue entry is held by an X beat until its iteration
+    // starts, by a W beat until the array takes its row, and by a Y/Z beat until its response.
+    struct StreamIter {
+        bool            begun;          // its requests started (rows/tail known)
+        int64_t         x_ready;        // all the X (and Y) beats are back
+        uint32_t        x_left;         // X beats still to send
+        uint32_t        x_entries;      // queue entries held by its X beats
+        uint32_t        rows;           // W rows
+        uint32_t        tail;           // array cycles after the last row
+        std::vector<int64_t> w_ready;   // W rows sent so far, cycle at which each is back
+    };
+    std::deque<StreamIter> s_iters;     // iterations not completed, front = s_done_iters
+    int64_t             s_now;
+    uint64_t            s_group;        // iteration whose requests are being sent
+    uint64_t            s_done_iters;   // iterations completed by the array
+    uint64_t            s_total_iters;
+    bool                s_running;      // the array is computing the front iteration
+    uint32_t            s_row;          // next W row of the front iteration
+    bool                s_in_tail;
+    int64_t             s_busy_end;     // the current row (or tail) ends then
+    uint32_t            s_entries;      // queue entries held by X/W beats
+    bool                s_send_done;
+    uint64_t            s_stall_cycles;
+    std::priority_queue<int64_t, std::vector<int64_t>, std::greater<int64_t>> s_inflight; // Y/Z
     int64_t             timer_start;
     int64_t             cycle_start;
     int64_t             total_runtime;
@@ -189,6 +233,7 @@ public:
     uint32_t            cxt_w_addr[2];
     uint32_t            cxt_y_addr[2];
     uint32_t            cxt_compute_able[2];
+    uint32_t            cxt_use_y[2];
 
     //redmule configuration
     uint32_t            tcdm_bank_width;
@@ -202,6 +247,8 @@ public:
     uint32_t            fold_tiles_mapping;
     uint64_t            loc_base;
     uint32_t            compute_able;
+    // GEMM (1): Z = X * W + Y, Y is loaded. MATMUL (0): Z = X * W, no Y loads
+    uint32_t            use_y;
     uint32_t            LOCAL_BUFFER_H;
     uint32_t            LOCAL_BUFFER_N;
     uint32_t            LOCAL_BUFFER_W;
@@ -273,6 +320,9 @@ public:
     };
     std::vector<ReqSlot> req_slots;
     bool                request_denied;  // last issue was denied, await grant
+    // Status and latency of the last issued request
+    vp::IoReqStatus     last_req_status;
+    uint64_t            last_req_latency;
     // Compute fires when w_outstanding_count reaches 0 with compute_pending
     // set. X uses a double-buffer (x_buffer_next), swapped at iter_done.
     uint32_t            w_outstanding_count;
@@ -317,6 +367,11 @@ LightRedmule::LightRedmule(vp::ComponentConf &config)
     this->ce_width          = get_js_config()->get("ce_width")->get_int();
     this->ce_pipe           = get_js_config()->get("ce_pipe")->get_int();
     this->queue_depth       = get_js_config()->get("queue_depth")->get_int();
+    js::Config *stream_loads_config = get_js_config()->get("stream_loads");
+    this->stream_loads      = (stream_loads_config != NULL) && stream_loads_config->get_int();
+    // Smaller queues can deadlock the streaming ROUTINE (seen with 32)
+    if (this->stream_loads && (this->queue_depth < 64))
+        this->trace.fatal("[LightRedmule] queue_depth must be at least 64 when streaming (got %d)\n", this->queue_depth);
     this->fold_tiles_mapping= get_js_config()->get("fold_tiles_mapping")->get_int();
     this->loc_base          = get_js_config()->get("loc_base")->get_double();
     this->compute_able      = 0;
@@ -379,6 +434,7 @@ LightRedmule::LightRedmule(vp::ComponentConf &config)
     //Initialize FSM
     this->reg_fsm_state.set(IDLE);
     this->reg_busy.set(0);
+    this->use_y             = 1;
     this->redmule_query     = NULL;
     this->tcdm_req          = this->tcdm_itf.req_new(0, 0, 0, 0);
     this->fsm_event         = this->event_new(&LightRedmule::fsm_handler);
@@ -407,6 +463,7 @@ LightRedmule::LightRedmule(vp::ComponentConf &config)
         this->cxt_w_addr[i]       = 0;
         this->cxt_y_addr[i]       = 0;
         this->cxt_compute_able[i] = 0;
+        this->cxt_use_y[i]        = 1;
     }
 
     // Slot pool: queue_depth+1 entries; each owns an IoReq + bandwidth
@@ -481,6 +538,12 @@ void LightRedmule::init_redmule_meta_data(){
     this->compute_pending     = false;
     int64_t now = this->clock.get_cycles();
     for (auto &slot : this->req_slots) slot.available_at = now;
+
+    // MATMUL: the Y buffer stays zero (it is cleared after every forward to Z)
+    if (this->use_y == 0)
+    {
+        std::memset(this->y_buffer_preload, 0, this->LOCAL_BUFFER_H * this->LOCAL_BUFFER_W * this->elem_size);
+    }
 
     this->ideal_runtime = 1.0 * (this->m_size * this->n_size * this->k_size)/( 1.0 * this->ce_height * this->ce_width);
 }
@@ -828,8 +891,8 @@ uint32_t LightRedmule::get_routine_access_block_number(){
         total_blocks += this->x_acc_block;
     }
 
-    // Y block
-    if (this->iter_k == (this->x_row_tiles - 1) && (is_last_iteration == 0))
+    // Y block (not loaded by MATMUL)
+    if (this->use_y && (this->iter_k == (this->x_row_tiles - 1)) && (is_last_iteration == 0))
     {
         //update y tile base address
         uint32_t _i = this->iter_i;
@@ -880,7 +943,10 @@ uint32_t LightRedmule::get_preload_access_block_number(){
 
     // X & Y block
     this->x_acc_block = this->m_size < this->ce_height ?  this->m_size : this->ce_height;
-    this->y_acc_block = this->m_size < this->ce_height ?  this->m_size : this->ce_height;
+    if (this->use_y)
+    {
+        this->y_acc_block = this->m_size < this->ce_height ?  this->m_size : this->ce_height;
+    }
     total_blocks = this->x_acc_block + this->y_acc_block;
 
     return total_blocks;
@@ -926,7 +992,11 @@ uint32_t LightRedmule::get_redmule_array_runtime(){
     return runtime_pices * runtime_unit;
 }
 
-uint32_t LightRedmule::op_foramt_parser(uint32_t op_format) {
+uint32_t LightRedmule::marith_to_op_format(uint32_t marith) {
+    return (((marith >> 10) & 0x7) << 3) | ((marith >> 7) & 0x7);
+}
+
+uint32_t LightRedmule::op_foramt_parser(uint32_t op_format, uint32_t *use_y) {
     uint32_t data_format=op_format&0x7;
     uint32_t operation=(op_format>>3)&0x7;
     uint32_t compute_able=0;
@@ -937,12 +1007,14 @@ uint32_t LightRedmule::op_foramt_parser(uint32_t op_format) {
     //expected compute_able=5 --> matmul_uint8
     //expected compute_able=6 --> matmul_int8
     //expected compute_able=7 --> matmul_fp8e4m3
-    if ((operation==1) && (data_format==1))
+    //operation=1 --> GEMM (Z = X * W + Y), operation=0 --> MATMUL (Z = X * W)
+    if ((operation<=1) && (data_format==1))
         compute_able=3;
-    else if ((operation==1) && (data_format==0))
+    else if ((operation<=1) && (data_format==0))
         compute_able=7;
     else 
         this->trace.fatal("[LightRedmule] Selected wrong operation/format combination [op_format=0x%x-data_format=%d-operation=%d]\n",op_format,data_format,operation);
+    *use_y = operation;
     return compute_able;
 }
 
@@ -973,7 +1045,7 @@ void LightRedmule::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *ins
                 _this->w_addr = insn->arg_b;
                 _this->y_addr = insn->arg_c;
                 _this->z_addr = _this->y_addr;
-                _this->compute_able = _this->op_foramt_parser(insn->arg_d);
+                _this->compute_able = _this->op_foramt_parser(insn->arg_d, &_this->use_y);
                 _this->elem_size = (_this->compute_able < 4)? 2:1;
                 _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set XWY addr: 0x%08x, 0x%08x, 0x%08x\n", _this->x_addr, _this->w_addr, _this->y_addr);
 
@@ -1070,6 +1142,7 @@ void LightRedmule::start_next_job()
     this->y_addr         = this->cxt_y_addr[this->cxt_use_ptr];
     this->z_addr         = this->y_addr;
     this->compute_able   = this->cxt_compute_able[this->cxt_use_ptr];
+    this->use_y          = this->cxt_use_y[this->cxt_use_ptr];
     this->elem_size      = (this->compute_able < 4) ? 2 : 1;
     this->running_job_id = this->cxt_job_id[this->cxt_use_ptr];
 
@@ -1117,6 +1190,7 @@ void LightRedmule::soft_clear(uint32_t value)
             this->cxt_w_addr[i]       = 0;
             this->cxt_y_addr[i]       = 0;
             this->cxt_compute_able[i] = 0;
+            this->cxt_use_y[i]        = 1;
         }
     }
     if ((value == 0) || (value == 1)) {
@@ -1203,7 +1277,7 @@ vp::IoReqStatus LightRedmule::req(vp::Block *__this, vp::IoReq *req)
                 break;
             }
             case 0x54: {
-                _this->compute_able = _this->op_foramt_parser((value == 0x480)? 9:0); //the marith mapping between reg-if and offload-if is different... WHY?
+                _this->compute_able = _this->op_foramt_parser(marith_to_op_format(value), &_this->use_y);
                 _this->elem_size = (_this->compute_able < 4)? 2:1;
                 _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] marith 0x%x, compute_able 0x%x, elem_size %d)\n", value,_this->compute_able,_this->elem_size);
                 break;
@@ -1300,7 +1374,7 @@ vp::IoReqStatus LightRedmule::req_v2(vp::Block *__this, vp::IoReq *req)
                 break;
             }
             case 0x54: {
-                _this->cxt_compute_able[_this->cxt_cfg_ptr] = _this->op_foramt_parser((value == 0x480)? 9:0); //the marith mapping between reg-if and offload-if is different... WHY?
+                _this->cxt_compute_able[_this->cxt_cfg_ptr] = _this->op_foramt_parser(marith_to_op_format(value), &_this->cxt_use_y[_this->cxt_cfg_ptr]);
                 _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] marith 0x%x, compute_able 0x%x)\n", value,_this->cxt_compute_able[_this->cxt_cfg_ptr]);
                 break;
             }
@@ -1568,6 +1642,8 @@ bool LightRedmule::issue_request(uint32_t addr, uint32_t instr, bool is_write, u
     slot.req->set_data(slot.buf);
 
     vp::IoReqStatus err = this->tcdm_itf.req(slot.req);
+    this->last_req_status  = err;
+    this->last_req_latency = slot.req->get_latency();
 
     if (err == vp::IO_REQ_OK)
     {
@@ -1591,6 +1667,196 @@ bool LightRedmule::issue_request(uint32_t addr, uint32_t instr, bool is_write, u
     }
 
     return true;
+}
+
+// Streaming: called when the requests of iteration s_group start (iter_i/j/k and the
+// x/w/y/z_acc_block counters already refer to it)
+void LightRedmule::stream_begin_group()
+{
+    StreamIter &cur = this->s_iters[this->s_group - this->s_done_iters];
+    uint32_t runtime = this->get_redmule_array_runtime();
+    cur.begun = true;
+    cur.rows  = this->w_acc_block;
+    cur.tail  = runtime - cur.rows * (this->ce_pipe + 1);
+    // The X block sent now is the one of the next iteration
+    if (this->x_acc_block > 0)
+    {
+        this->s_iters.push_back({false, 0, this->x_acc_block, 0, 0, 0, {}});
+    }
+}
+
+// Streaming: one ROUTINE request, in the order of next_addr() (Y, W, X, Z)
+void LightRedmule::send_routine_req()
+{
+    bool is_y = this->y_acc_block > 0;
+    bool is_w = !is_y && (this->w_acc_block > 0);
+    bool is_x = !is_y && !is_w && (this->x_acc_block > 0);
+
+    uint32_t temp_addr = this->next_addr() - this->loc_base;
+    bool is_write = this->tcdm_req->get_is_write();
+    uint32_t size = (uint32_t)this->tcdm_req->get_size();
+    // The streaming timing assumes synchronous responses: the request queue is modelled here
+    if (!this->issue_request(temp_addr, this->iter_instruction, is_write, size) || (this->last_req_status != vp::IO_REQ_OK))
+    {
+        this->trace.fatal("[LightRedmule][ROUTINE-ijk: %0d-%0d-%0d] stream_loads needs every TCDM request to be answered synchronously\n", this->iter_i, this->iter_j, this->iter_k);
+        return;
+    }
+    this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][ROUTINE-ijk: %0d-%0d-%0d] --- Send TCDM req #%d [addr=0x%08x]\n", this->iter_i, this->iter_j, this->iter_k, this->fsm_counter, temp_addr);
+    int64_t ready = this->s_now + this->last_req_latency;
+
+    if (is_w)
+    {
+        // Its iteration cannot complete before all its rows are sent
+        this->s_iters[this->s_group - this->s_done_iters].w_ready.push_back(ready);
+        this->s_entries += 1;
+    } else if (is_x)
+    {
+        StreamIter &it = this->s_iters[this->s_group + 1 - this->s_done_iters];
+        it.x_ready       = std::max(it.x_ready, ready);
+        it.x_left       -= 1;
+        it.x_entries    += 1;
+        this->s_entries += 1;
+    } else {
+        // Y (GEMM) is the accumulator of the next output tile: the next iteration waits for it
+        if (is_y)
+        {
+            StreamIter &it = this->s_iters[this->s_group + 1 - this->s_done_iters];
+            it.x_ready = std::max(it.x_ready, ready);
+        }
+        this->s_inflight.push(ready);
+    }
+    this->fsm_counter += 1;
+}
+
+// Streaming ROUTINE, one cycle. The requests are sent in order, one per cycle, while the queue
+// (queue_depth entries) has a free entry; the Z rows of an output tile wait until the array has
+// computed it. The array computes the iterations in order, as described with StreamIter.
+void LightRedmule::stream_tick()
+{
+    // Y/Z responses free their queue entries
+    while (!this->s_inflight.empty() && (this->s_inflight.top() <= this->s_now))
+    {
+        this->s_inflight.pop();
+    }
+
+    // Array (a completed iteration lets the next one start in the same cycle)
+    bool busy = false;
+    for (int pass = 0; (pass < 2) && (this->s_done_iters < this->s_total_iters); pass++)
+    {
+        StreamIter &it = this->s_iters.front();
+        if (!this->s_running)
+        {
+            if (!it.begun || (it.x_left > 0) || (it.x_ready > this->s_now))
+            {
+                break;
+            }
+            this->s_running   = true;
+            this->s_row       = 0;
+            this->s_in_tail   = false;
+            this->s_busy_end  = this->s_now;
+            this->s_entries  -= it.x_entries;
+        }
+        if (this->s_now < this->s_busy_end)
+        {
+            busy = true;
+            break;
+        }
+        if (this->s_row < it.rows)
+        {
+            if ((this->s_row < it.w_ready.size()) && (it.w_ready[this->s_row] <= this->s_now))
+            {
+                this->s_busy_end  = this->s_now + this->ce_pipe + 1;
+                this->s_row      += 1;
+                this->s_entries  -= 1;
+                busy = true;
+            }
+            break;
+        }
+        if (!this->s_in_tail && (it.tail > 0))
+        {
+            this->s_in_tail   = true;
+            this->s_busy_end  = this->s_now + it.tail;
+            busy = true;
+            break;
+        }
+        // Iteration completed
+        this->s_iters.pop_front();
+        this->s_done_iters += 1;
+        this->s_running     = false;
+    }
+    if (!busy && (this->s_done_iters < this->s_total_iters))
+    {
+        this->s_stall_cycles += 1;
+    }
+
+    // Port
+    if (!this->s_send_done && (this->s_entries + this->s_inflight.size() < this->queue_depth))
+    {
+        bool is_z = (this->y_acc_block == 0) && (this->w_acc_block == 0) && (this->x_acc_block == 0);
+        if ((this->fsm_counter < this->tcdm_block_total) && (!is_z || (this->s_done_iters >= this->s_group)))
+        {
+            this->send_routine_req();
+        }
+
+        // All the requests of the iteration are sent (and, synchronous, their data is back)
+        if (this->fsm_counter >= this->tcdm_block_total)
+        {
+            // Promote the X of the next iteration into x_buffer
+            std::swap(this->x_buffer, this->x_buffer_next);
+            std::memset(this->x_buffer_next, 0, this->ce_height * this->bandwidth);
+
+            if ((this->compute_able != 0) && (this->iter_k + 1 == this->x_row_tiles))
+            {
+                this->iter_instruction = INSTR_FORWARD_YZ;
+                this->process_iter_instruction();
+            }
+            this->fsm_counter = 0;
+            if (this->next_iteration() == 0)
+            {
+                this->tcdm_block_total = this->get_routine_access_block_number();
+                this->s_group += 1;
+                this->stream_begin_group();
+            } else {
+                this->s_send_done = true;
+            }
+        }
+    }
+
+    this->s_now += 1;
+
+    // Last iteration computed: store the last output tile
+    if (this->s_send_done && (this->s_done_iters == this->s_total_iters))
+    {
+        this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule][ROUTINE] array stalled %ld cycles\n", this->s_stall_cycles);
+        this->stream_to_storing();
+    } else {
+        this->event_enqueue(this->fsm_event, 1);
+    }
+}
+
+// Streaming: go to STORING once the last iteration is computed. The Y/Z requests still in
+// flight keep their slots: their response is counted in FSM ticks, which do not advance during
+// the ROUTINE to STORING latency, so a request d cycles from its response at the end of the
+// ROUTINE frees its slot on the max(d, 1)-th STORING tick.
+void LightRedmule::stream_to_storing()
+{
+    int64_t now     = this->clock.get_cycles();
+    int64_t latency = this->get_routine_to_storing_latency();
+    while (!this->s_inflight.empty()) this->s_inflight.pop();
+    for (auto &slot : this->req_slots)
+    {
+        if (slot.available_at > now)
+        {
+            int64_t left = slot.available_at - (now + 1);
+            slot.available_at = now + latency + std::max<int64_t>(left - 1, 0);
+        }
+    }
+    this->tcdm_block_total  = this->get_storing_access_block_number();
+    this->fsm_counter       = 0;
+    this->fsm_timestamp     = 0;
+    this->reg_fsm_state.set(STORING);
+    this->reg_busy.set(1);
+    this->event_enqueue(this->fsm_event, latency);
 }
 
 void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
@@ -1647,6 +1913,26 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                     _this->iter_instruction = INSTR_FORWARD_YZ;
                     _this->process_iter_instruction();
                 }
+
+                if (_this->stream_loads)
+                {
+                    // Iteration 0 is computed on the X block of the PRELOAD, already back
+                    _this->s_iters.clear();
+                    _this->s_iters.push_back({false, 0, 0, 0, 0, 0, {}});
+                    while (!_this->s_inflight.empty()) _this->s_inflight.pop();
+                    _this->s_now            = 0;
+                    _this->s_group          = 0;
+                    _this->s_done_iters     = 0;
+                    _this->s_total_iters    = (uint64_t)_this->z_col_tiles * _this->z_row_tiles * _this->x_row_tiles;
+                    _this->s_running        = false;
+                    _this->s_row            = 0;
+                    _this->s_in_tail        = false;
+                    _this->s_busy_end       = 0;
+                    _this->s_entries        = 0;
+                    _this->s_send_done      = false;
+                    _this->s_stall_cycles   = 0;
+                    _this->stream_begin_group();
+                }
             } else {
                 _this->reg_fsm_state.set(PRELOAD);
                 _this->reg_busy.set(1);
@@ -1656,6 +1942,12 @@ void LightRedmule::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
             break;
         }
         case ROUTINE: {
+            if (_this->stream_loads)
+            {
+                _this->stream_tick();
+                break;
+            }
+
             bool can_issue = (_this->fsm_counter < _this->tcdm_block_total)
                 && !_this->request_denied
                 && _this->issue_slot_gate_ok();

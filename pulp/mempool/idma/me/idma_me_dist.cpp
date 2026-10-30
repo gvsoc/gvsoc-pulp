@@ -118,7 +118,14 @@ void IDmaMeDist::enqueue_transfer(IdmaTransfer *transfer)
         }
     }
     transfer->bursts_sent = true;
+    this->pending_transfers.push(transfer);
 
+    // A transfer without any burst (empty) is done already
+    if (transfer->nb_bursts == 0)
+    {
+        this->done_transfers.insert(transfer);
+        this->retire_transfers();
+    }
 }
 
 
@@ -147,25 +154,43 @@ void IDmaMeDist::ack_transfer(IdmaTransfer *transfer)
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Remaining bursts for transfer (transfer: %p, nb_bursts: %d)\n",
         transfer->parent, transfer->parent->nb_bursts);
 
-    // And terminate the transfer if all bursts have been sent and no more burst is pending
+    // The transfer is done if all bursts have been sent and no more burst is pending. It is
+    // terminated once all the older ones are
     if (transfer->parent->bursts_sent && transfer->parent->nb_bursts == 0)
     {
-        // Keep the parent in a local since the loop below frees all the bursts of this
-        // transfer, including the one we received, making transfer->parent a dangling read.
-        IdmaTransfer *parent = transfer->parent;
-        this->trace.msg(vp::Trace::LEVEL_TRACE, "Finished transfer (transfer: %p)\n", parent);
+        this->trace.msg(vp::Trace::LEVEL_TRACE, "Finished transfer (transfer: %p)\n", transfer->parent);
+        this->done_transfers.insert(transfer->parent);
+        this->retire_transfers();
+    }
+
+}
+
+void IDmaMeDist::retire_transfers()
+{
+    bool retired = false;
+    while (!this->pending_transfers.empty() &&
+        this->done_transfers.count(this->pending_transfers.front()))
+    {
+        IdmaTransfer *transfer = this->pending_transfers.front();
+        this->pending_transfers.pop();
+        this->done_transfers.erase(transfer);
+        this->trace.msg(vp::Trace::LEVEL_TRACE, "Terminating transfer (transfer: %p)\n", transfer);
+        // Free its bursts, which are at the head of the queues since the older transfers are gone
         for (auto &queue: this->transfer_queue) {
-            if (queue.empty() || queue.front()->parent != parent) {
+            if (queue.empty() || queue.front()->parent != transfer) {
                 this->trace.fatal("Transfer completion mismatch\n");
             }
             IdmaTransfer *burst = queue.front();
             queue.pop();
             delete burst;
         }
-        this->fe->ack_transfer(parent);
+        this->fe->ack_transfer(transfer);
+        retired = true;
+    }
+    if (retired)
+    {
         this->fe->update();
     }
-
 }
 
 void IDmaMeDist::set_be(std::vector<IdmaTransferConsumer *> be)
@@ -179,6 +204,12 @@ void IDmaMeDist::reset(bool active)
 {
     if (active)
     {
+        while (!this->pending_transfers.empty())
+        {
+            this->pending_transfers.pop();
+        }
+        this->done_transfers.clear();
+
         // Empty the fifo
         for (auto &queue: this->transfer_queue) {
             while (!queue.empty())

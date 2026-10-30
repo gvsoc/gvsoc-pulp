@@ -34,6 +34,7 @@ IDmaBeAxi::IDmaBeAxi(vp::Component *idma, std::string itf_name, IdmaBeProducer *
 {
     // Backend will be used later for interaction
     this->be = be;
+    this->stalled = false;
 
     // Declare master port to AXI interface
     this->ico_itf.set_grant_meth(&IDmaBeAxi::axi_grant);
@@ -97,6 +98,9 @@ void IDmaBeAxi::reset(bool active)
         {
             this->pending_bursts.pop();
         }
+
+        // No burst is waiting for a grant
+        this->stalled = false;
 
         // And put back them all as free
         for (vp::IoReq &req: this->bursts)

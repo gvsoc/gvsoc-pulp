@@ -4,6 +4,7 @@
 //
 // Authors: Germain Haugou
 
+#include <cinttypes>
 #include <cpu/iss_v2/include/iss.hpp>
 
 SnitchMempool::SnitchMempool(Iss &iss)
@@ -24,6 +25,45 @@ SnitchMempool::SnitchMempool(Iss &iss)
     this->iss.csr.declare_csr(&this->stack_conf,  "stack_conf",  0x7d0);
     this->iss.csr.declare_csr(&this->stack_start, "stack_start", 0x7d1);
     this->iss.csr.declare_csr(&this->stack_end,   "stack_end",   0x7d2);
+
+    // MemPool's runtime uses 0x7d0 as its trace CSR: mempool_start_benchmark()
+    // and mempool_stop_benchmark() write 1 and 0 to it around a region
+    this->stack_conf.register_callback(std::bind(&SnitchMempool::bench_access, this,
+        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+}
+
+// A write of 1 opens a benchmark region, a write of 0 closes it and reports
+// it as a [BENCH] line (same format as the MemPool tooling expects)
+bool SnitchMempool::bench_access(iss_insn_t *insn, bool is_write, iss_reg_t &value)
+{
+    if (!is_write)
+    {
+        return true;
+    }
+
+    if (value != 0)
+    {
+        this->bench_start_cycles = this->iss.clock.get_cycles();
+        this->bench_start_time = this->iss.time.get_time();
+        this->bench_active = true;
+    }
+    else if (this->bench_active)
+    {
+        int64_t end_cycles = this->iss.clock.get_cycles();
+        int64_t end_time = this->iss.time.get_time();
+
+        printf("[BENCH] cycles=%" PRId64 " ns=%" PRId64 " start=%" PRId64 " end=%" PRId64
+            " region=%u hart=%d path=%s\n",
+            end_cycles - this->bench_start_cycles,
+            (end_time - this->bench_start_time) / 1000,
+            this->bench_start_cycles, end_cycles,
+            this->bench_region++, (int)this->iss.csr.mhartid,
+            this->iss.get_path().c_str());
+
+        this->bench_active = false;
+    }
+
+    return true;
 }
 
 void SnitchMempool::reset(bool active)
