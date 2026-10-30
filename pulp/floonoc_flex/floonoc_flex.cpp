@@ -452,7 +452,7 @@ void FlooNoc::handle_collective_completion(vp::IoReq *req)
 
     vp::IoReq *parent = (vp::IoReq *)parent_ptr;
 
-    if (parent->get_int(FlooNoc::REQ_COLL_OP) >= FlooNoc::COLL_OP_FIRST_ARITH_OP)
+    if (parent->get_int(FlooNoc::REQ_COLL_OP) > FlooNoc::COLL_OP_MULTICAST)
     {
         this->stat_collective_reduction_merges++;
     }
@@ -472,7 +472,7 @@ void FlooNoc::handle_collective_completion(vp::IoReq *req)
 void FlooNoc::init_reduction_identity(vp::IoReq *req)
 {
     int collective_op = req->get_int(FlooNoc::REQ_COLL_OP);
-    if (collective_op < FlooNoc::COLL_OP_FIRST_ARITH_OP)
+    if (collective_op <= FlooNoc::COLL_OP_MULTICAST)
     {
         return;
     }
@@ -482,6 +482,10 @@ void FlooNoc::init_reduction_identity(vp::IoReq *req)
 
     switch (collective_op)
     {
+        case FlooNoc::COLL_OP_LSBAND:
+            std::memset(data, 0xFF, size);
+            break;
+
         case FlooNoc::COLL_OP_REDADD_UINT16:
         case FlooNoc::COLL_OP_REDADD_INT16:
         case FlooNoc::COLL_OP_REDADD_FP16:
@@ -536,6 +540,18 @@ void FlooNoc::process_collective_operations(vp::IoReq *parent, vp::IoReq *req)
         case FlooNoc::COLL_OP_MULTICAST:
             // Broadcast: nothing to combine
             break;
+
+        case FlooNoc::COLL_OP_LSBAND:
+        {
+            // Barrier/wakeup: AND bit 0 of every participant's data byte by byte
+            uint8_t *dst = parent->get_data();
+            const uint8_t *src = req->get_data();
+            for (uint64_t i = 0; i < size; i++)
+            {
+                dst[i] = (dst[i] & 1) & (src[i] & 1);
+            }
+            break;
+        }
 
         case FlooNoc::COLL_OP_REDADD_UINT16:
         {
