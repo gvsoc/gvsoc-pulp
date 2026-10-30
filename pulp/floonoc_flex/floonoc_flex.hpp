@@ -192,6 +192,11 @@ class FlooNoc : public vp::Component
     // [Collective Only] Handles the completion of a collective request
     void handle_collective_completion(vp::IoReq *req);
 
+    // [Collective Only] Resets `req`'s own data buffer to the identity
+    // element of its REQ_COLL_OP (0 for ADD, the type's minimum for MAX). 
+    // No-op for ops that don't combine data (e.g. multicast).
+    void init_reduction_identity(vp::IoReq *req);
+
     vp::StatScalar stat_collective_requests;         // Number of collective requests injected
     vp::StatScalar stat_collective_children_total;   // Total forked children allocated
     vp::StatScalar stat_collective_reduction_merges;  // Total arithmetic reduction merges performed
