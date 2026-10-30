@@ -118,6 +118,16 @@ static void combine_max_int16(uint8_t *acc, const uint8_t *in, size_t size)
     }
 }
 
+static void init_ones(uint8_t *acc, size_t size) { std::memset(acc, 0xFF, size); }
+
+static void combine_lsband(uint8_t *acc, const uint8_t *in, size_t size)
+{
+    for (size_t i = 0; i < size; i++)
+    {
+        acc[i] = (acc[i] & 1) & (in[i] & 1);
+    }
+}
+
 static void combine_max_fp16(uint8_t *acc, const uint8_t *in, size_t size)
 {
     uint16_t *dst = (uint16_t *)acc;
@@ -155,7 +165,8 @@ private:
     // one matrix row.
     void build_unicast_regression();
     void build_broadcast(bool full_mesh);
-    void build_reduction(int collective_op, CombineFn combine, InitFn init);
+    void build_reduction(int collective_op, CombineFn combine, InitFn init,
+        uint8_t (*pattern)[PACKET_SIZE]);
     void build_mixed_traffic();
 
     // Small helpers shared by the builders above.
@@ -216,6 +227,11 @@ private:
     uint8_t pattern_a[PACKET_SIZE];
     uint8_t member_pattern[MESH_DIM][PACKET_SIZE];
     uint8_t fp16_member_pattern[MESH_DIM][PACKET_SIZE];
+    // LsbAnd ("arrived" flags): every member all-1s except the last one,
+    // which reports "not arrived" (bit0=0) at one lane only - proves the
+    // barrier correctly stays 0 at that lane instead of trivially being
+    // all-1s regardless of input.
+    uint8_t barrier_pattern[MESH_DIM][PACKET_SIZE];
     uint8_t reduce_expected[PACKET_SIZE];
     uint8_t zero_sentinel[PACKET_SIZE] = {0};
 };
@@ -269,7 +285,10 @@ CollectiveTestbench::CollectiveTestbench(vp::ComponentConf &config)
         {
             pattern16_fp[i] = bits;
         }
+
+        std::memset(this->barrier_pattern[m], 0x01, PACKET_SIZE);
     }
+    this->barrier_pattern[MESH_DIM - 1][5] = 0x00;
 
     if (this->scenario == "unicast_on" || this->scenario == "unicast_off")
     {
@@ -285,27 +304,38 @@ CollectiveTestbench::CollectiveTestbench(vp::ComponentConf &config)
     }
     else if (this->scenario == "reduction_add_uint16")
     {
-        this->build_reduction(FlooNoc::COLL_OP_REDADD_UINT16, combine_add_uint16, init_zero);
+        this->build_reduction(FlooNoc::COLL_OP_REDADD_UINT16, combine_add_uint16, init_zero,
+            this->member_pattern);
     }
     else if (this->scenario == "reduction_add_int16")
     {
-        this->build_reduction(FlooNoc::COLL_OP_REDADD_INT16, combine_add_int16, init_zero);
+        this->build_reduction(FlooNoc::COLL_OP_REDADD_INT16, combine_add_int16, init_zero,
+            this->member_pattern);
     }
     else if (this->scenario == "reduction_add_fp16")
     {
-        this->build_reduction(FlooNoc::COLL_OP_REDADD_FP16, combine_add_fp16, init_zero);
+        this->build_reduction(FlooNoc::COLL_OP_REDADD_FP16, combine_add_fp16, init_zero,
+            this->fp16_member_pattern);
     }
     else if (this->scenario == "reduction_max_uint16")
     {
-        this->build_reduction(FlooNoc::COLL_OP_REDMAX_UINT16, combine_max_uint16, init_zero);
+        this->build_reduction(FlooNoc::COLL_OP_REDMAX_UINT16, combine_max_uint16, init_zero,
+            this->member_pattern);
     }
     else if (this->scenario == "reduction_max_int16")
     {
-        this->build_reduction(FlooNoc::COLL_OP_REDMAX_INT16, combine_max_int16, init_max_int16);
+        this->build_reduction(FlooNoc::COLL_OP_REDMAX_INT16, combine_max_int16, init_max_int16,
+            this->member_pattern);
     }
     else if (this->scenario == "reduction_max_fp16")
     {
-        this->build_reduction(FlooNoc::COLL_OP_REDMAX_FP16, combine_max_fp16, init_max_fp16);
+        this->build_reduction(FlooNoc::COLL_OP_REDMAX_FP16, combine_max_fp16, init_max_fp16,
+            this->fp16_member_pattern);
+    }
+    else if (this->scenario == "barrier")
+    {
+        this->build_reduction(FlooNoc::COLL_OP_LSBAND, combine_lsband, init_ones,
+            this->barrier_pattern);
     }
     else if (this->scenario == "mixed_traffic")
     {
@@ -398,12 +428,9 @@ void CollectiveTestbench::build_broadcast(bool full_mesh)
 // reduction_<op>: the 4 row-y=0 members each write their own distinct
 // pattern to their own tile, then root (0,0) gathers with `collective_op`
 // over the row mask.
-void CollectiveTestbench::build_reduction(int collective_op, CombineFn combine, InitFn init)
+void CollectiveTestbench::build_reduction(int collective_op, CombineFn combine, InitFn init,
+    uint8_t (*pattern)[PACKET_SIZE])
 {
-    bool is_fp16 = collective_op == FlooNoc::COLL_OP_REDADD_FP16 ||
-        collective_op == FlooNoc::COLL_OP_REDMAX_FP16;
-    uint8_t (*pattern)[PACKET_SIZE] = is_fp16 ? this->fp16_member_pattern : this->member_pattern;
-
     init(this->reduce_expected, PACKET_SIZE);
     for (int x = 0; x < MESH_DIM; x++)
     {
