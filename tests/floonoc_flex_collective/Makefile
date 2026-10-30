@@ -9,5 +9,8 @@
 #
 GVSOC_ROOT ?= ../../..
 TARGET = test
+CASE ?= unicast_on
+
+TARGET := $(TARGET):scenario=$(CASE)
 
 include $(GVSOC_ROOT)/core/tests/common.mk
