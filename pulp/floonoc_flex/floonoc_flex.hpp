@@ -138,7 +138,10 @@ class FlooNoc : public vp::Component
     // RTL's collect_reserved_op_e
     static constexpr int COLL_OP_UNICAST = 0;   // Not a collective (passthrough)
     static constexpr int COLL_OP_MULTICAST = 1; // Broadcast, no compute
-    // @TODO Values 2-5 reserved for future structural ops (LsbAnd/SelectAW/CollectB/SeqAW)
+    // Group-barrier/wakeup primitive AND together bit 0 of every
+    // participant's data, byte by byte.
+    static constexpr int COLL_OP_LSBAND = 2;
+    // @TODO Values 3-5 reserved for future structural ops (SelectAW/CollectB/SeqAW)
     static constexpr int COLL_OP_FIRST_ARITH_OP =
         6; // First arithmetic (reduction) op code
     static constexpr int COLL_OP_REDADD_UINT16 = 6;
@@ -193,8 +196,8 @@ class FlooNoc : public vp::Component
     void handle_collective_completion(vp::IoReq *req);
 
     // [Collective Only] Resets `req`'s own data buffer to the identity
-    // element of its REQ_COLL_OP (0 for ADD, the type's minimum for MAX). 
-    // No-op for ops that don't combine data (e.g. multicast).
+    // element of its REQ_COLL_OP (0 for ADD, the type's minimum for MAX,
+    // all-1s for LsbAnd).
     void init_reduction_identity(vp::IoReq *req);
 
     vp::StatScalar stat_collective_requests;         // Number of collective requests injected
