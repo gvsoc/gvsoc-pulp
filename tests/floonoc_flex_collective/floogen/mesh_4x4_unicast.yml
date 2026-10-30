@@ -1,0 +1,82 @@
+# Same 4x4 narrow-wide mesh as mesh_4x4_collective.yml, but with no
+# `routing.collective` block at all, so collective_enable comes out False
+# (see FlooNocFlex.load_from_floogen). Used only by the unicast_off
+# scenario, to prove the plain unicast path is unperturbed when the
+# collective feature is compiled in but switched off entirely.
+#
+# user_width must stay a plain int here (not the {name: width} dict form
+# mesh_4x4_collective.yml uses): floogen's own Network.validate_protocols
+# only runs its narrow/wide user_width-consistency check (which puts
+# user_width into a Python set()) when routing.collective.en_collective is
+# False, and a dict is unhashable - installed floogen crashes with
+# `TypeError: unhashable type: 'dict'` on this exact yaml shape whenever
+# collectives are off.
+#
+# Copyright 2023 ETH Zurich and University of Bologna (original example).
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+
+name: mesh_4x4_unicast
+description: "4x4 NW mesh, no collective primitives"
+network_type: "narrow-wide"
+
+routing:
+  route_algo: "XY"
+  use_id_table: true
+
+protocols:
+  - name: "narrow_in"
+    type: "narrow"
+    protocol: "AXI4"
+    data_width: 64
+    addr_width: 48
+    id_width: 5
+    user_width: 5
+  - name: "narrow_out"
+    type: "narrow"
+    protocol: "AXI4"
+    data_width: 64
+    addr_width: 48
+    id_width: 2
+    user_width: 5
+  - name: "wide_in"
+    type: "wide"
+    protocol: "AXI4"
+    data_width: 512
+    addr_width: 48
+    id_width: 3
+  - name: "wide_out"
+    type: "wide"
+    protocol: "AXI4"
+    data_width: 512
+    addr_width: 48
+    id_width: 1
+
+endpoints:
+  - name: "cluster"
+    array: [4, 4]
+    addr_range:
+      base: 0x2000_0000
+      size: 0x0004_0000
+    mgr_port_protocol:
+      - "narrow_in"
+      - "wide_in"
+    sbr_port_protocol:
+      - "narrow_out"
+      - "wide_out"
+
+routers:
+  - name: "router"
+    array: [4, 4]
+    degree: 5
+
+connections:
+  - src: "cluster"
+    dst: "router"
+    src_range:
+    - [0, 3]
+    - [0, 3]
+    dst_range:
+    - [0, 3]
+    - [0, 3]
+    dst_dir: "Eject"
