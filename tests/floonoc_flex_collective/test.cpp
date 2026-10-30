@@ -166,27 +166,33 @@ private:
         return FlooNoc::coll_mask_set_axis(
             FlooNoc::coll_mask_set_axis(0, 0, 0x3), 1, 0x3);
     }
+    // All four below go through this->wide/this->narrow_control_itf,
+    // picked by `this->wide` (set once from the scenario name)
+    std::vector<TrafficGeneratorConfigMaster> &itf()
+    {
+        return this->wide ? this->wide_control_itf : this->narrow_control_itf;
+    }
     void start_write(TrafficGeneratorSync *sync, int x, int y, const uint8_t *data,
         int op = 0, uint64_t mask = 0)
     {
-        this->narrow_control_itf[NODE(x, y)].start(this->addr(x, y), PACKET_SIZE,
+        this->itf()[NODE(x, y)].start(this->addr(x, y), PACKET_SIZE,
             PACKET_SIZE, sync, true, false, op, mask, nullptr, data);
     }
     void start_self_check_write(TrafficGeneratorSync *sync, int x, int y)
     {
-        this->narrow_control_itf[NODE(x, y)].start(this->addr(x, y), PACKET_SIZE,
+        this->itf()[NODE(x, y)].start(this->addr(x, y), PACKET_SIZE,
             PACKET_SIZE, sync, true, true);
     }
     void start_check(TrafficGeneratorSync *sync, int x, int y, const uint8_t *expected,
         int op = 0, uint64_t mask = 0)
     {
-        this->narrow_control_itf[NODE(x, y)].start(this->addr(x, y), PACKET_SIZE,
+        this->itf()[NODE(x, y)].start(this->addr(x, y), PACKET_SIZE,
             PACKET_SIZE, sync, false, true, op, mask, expected);
     }
     bool collect(int x, int y, const char *label)
     {
         bool check_status = false;
-        this->narrow_control_itf[NODE(x, y)].get_result(&check_status, nullptr);
+        this->itf()[NODE(x, y)].get_result(&check_status, nullptr);
         printf("[floonoc_flex_collective] %s: node (%d,%d) %s\n", label, x, y,
             check_status ? "FAILED" : "passed");
         this->status |= check_status;
@@ -199,6 +205,7 @@ private:
     std::vector<TrafficGeneratorConfigMaster> wide_control_itf;
 
     std::string scenario;
+    bool wide = false;
     uint64_t node_size;
     uint64_t node_base;
     std::vector<std::function<void()>> phases;
@@ -221,6 +228,15 @@ CollectiveTestbench::CollectiveTestbench(vp::ComponentConf &config)
     this->node_size = this->get_js_config()->get_uint("node_size");
     this->node_base = this->get_js_config()->get_uint("node_base");
     this->scenario = this->get_js_config()->get_child_str("scenario");
+    // "<row>_wide" runs that same test entirely over the wide link instead of the narrow one
+    static const std::string wide_suffix = "_wide";
+    if (this->scenario.size() > wide_suffix.size() &&
+        this->scenario.compare(this->scenario.size() - wide_suffix.size(),
+            wide_suffix.size(), wide_suffix) == 0)
+    {
+        this->wide = true;
+        this->scenario.resize(this->scenario.size() - wide_suffix.size());
+    }
 
     int nb_nodes = MESH_DIM * MESH_DIM;
     this->narrow_control_itf.resize(nb_nodes);
