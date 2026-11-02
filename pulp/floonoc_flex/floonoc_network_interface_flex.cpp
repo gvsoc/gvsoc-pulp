@@ -755,6 +755,37 @@ void NetworkInterface::handle_response(vp::IoReq *req)
         *(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE) -=
             req->get_size();
 
+        // If `req` is a write-reduction accumulator chunk, release its other 
+        // contributions by multicasting a reduction-ack as soon as it completes
+        if (this->noc->has_pending_reduction_others(req))
+        {
+            vp::IoReq *echo = new vp::IoReq();
+            echo->init();
+            echo->arg_alloc(FlooNoc::REQ_NB_ARGS);
+            *echo->arg_get(FlooNoc::REQ_SRC_NI) = NULL;
+            *echo->arg_get(FlooNoc::REQ_BURST) = NULL;
+            *echo->arg_get(FlooNoc::REQ_IS_ADDRESS) = (void *)true;
+            *echo->arg_get(FlooNoc::REQ_WIDE) = *req->arg_get(FlooNoc::REQ_WIDE);
+            *echo->arg_get(FlooNoc::REQ_SRC_ID) =
+                (void *)(long)this->router[NetworkInterface::NW_REQ]->node_id;
+            *echo->arg_get(FlooNoc::REQ_COLL_OP) =
+                (void *)(long)FlooNoc::COLL_OP_MULTICAST;
+            *echo->arg_get(FlooNoc::REQ_COLL_MASK) =
+                *req->arg_get(FlooNoc::REQ_COLL_MASK);
+            *echo->arg_get(FlooNoc::REQ_COLL_STATE) = (void *)(long)0;
+            *echo->arg_get(FlooNoc::REQ_PARENT) = NULL;
+            *echo->arg_get(FlooNoc::REQ_PEND_KIDS) = (void *)(long)0;
+            *echo->arg_get(FlooNoc::REQ_INJECT_TIME) =
+                *req->arg_get(FlooNoc::REQ_INJECT_TIME);
+            *echo->arg_get(FlooNoc::REQ_IS_REDUCTION_ACK) = (void *)true;
+            echo->set_addr(req->get_addr());
+            echo->set_size(1);
+            echo->set_data(new uint8_t[1]);
+            echo->set_is_write(true);
+
+            this->rsp_queue.push_collective_req(echo);
+        }
+
         if (*(int *)burst->arg_get_last(NetworkInterface::REQ_REM_SIZE) == 0)
         {
             this->trace.msg(vp::Trace::LEVEL_DEBUG,
@@ -764,37 +795,6 @@ void NetworkInterface::handle_response(vp::IoReq *req)
             *req->arg_get(FlooNoc::REQ_DEST_ID) =
                 (void *)(long)origin_ni->node_id;
             this->rsp_queue.handle_rsp(req, true);
-
-            // If `req` is a write-reduction accumulator, release its other
-            // contributions by multicasting a reduction-ack
-            if (this->noc->has_pending_reduction_others(req))
-            {
-                vp::IoReq *echo = new vp::IoReq();
-                echo->init();
-                echo->arg_alloc(FlooNoc::REQ_NB_ARGS);
-                *echo->arg_get(FlooNoc::REQ_SRC_NI) = NULL;
-                *echo->arg_get(FlooNoc::REQ_BURST) = NULL;
-                *echo->arg_get(FlooNoc::REQ_IS_ADDRESS) = (void *)true;
-                *echo->arg_get(FlooNoc::REQ_WIDE) = *req->arg_get(FlooNoc::REQ_WIDE);
-                *echo->arg_get(FlooNoc::REQ_SRC_ID) =
-                    (void *)(long)this->router[NetworkInterface::NW_REQ]->node_id;
-                *echo->arg_get(FlooNoc::REQ_COLL_OP) =
-                    (void *)(long)FlooNoc::COLL_OP_MULTICAST;
-                *echo->arg_get(FlooNoc::REQ_COLL_MASK) =
-                    *req->arg_get(FlooNoc::REQ_COLL_MASK);
-                *echo->arg_get(FlooNoc::REQ_COLL_STATE) = (void *)(long)0;
-                *echo->arg_get(FlooNoc::REQ_PARENT) = NULL;
-                *echo->arg_get(FlooNoc::REQ_PEND_KIDS) = (void *)(long)0;
-                *echo->arg_get(FlooNoc::REQ_INJECT_TIME) =
-                    *req->arg_get(FlooNoc::REQ_INJECT_TIME);
-                *echo->arg_get(FlooNoc::REQ_IS_REDUCTION_ACK) = (void *)true;
-                echo->set_addr(req->get_addr());
-                echo->set_size(1);
-                echo->set_data(new uint8_t[1]);
-                echo->set_is_write(true);
-
-                this->rsp_queue.push_collective_req(echo);
-            }
         }
     }
     delete req;
