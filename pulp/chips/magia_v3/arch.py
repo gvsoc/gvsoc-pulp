@@ -56,15 +56,16 @@ class MagiaArch:
     L1_ADDR_END             = L1_ADDR_START + L1_SIZE - 1
     L1_TILE_OFFSET          = 0x0010_0000
     L2_ADDR_START           = 0xC000_0000
-    # Default L2 size, overridden by the l2_size target parameter
-    L2_SIZE                 = 0x0CFF_0000
-    L2_MAX_SIZE             = 0xFFFF_0000 - L2_ADDR_START
+    # Default L2 size, overridden by the l2_size target parameter: the L2
+    # window of the RTL (magia_tile_pkg.sv), up to 0xFFFF_FFFF. It holds the
+    # stdout address, which the testbench L2 takes as any other write.
+    L2_SIZE                 = 0x4000_0000
+    L2_MAX_SIZE             = L2_SIZE
     L2_ADDR_END             = L2_ADDR_START + L2_SIZE - 1
     # Fixed, as in the RTL and SDK
     TEST_END_ADDR_START     = 0xCCFF_0000
     TEST_END_SIZE           = 0x400
-    STDOUT_ADDR_START       = 0xFFFF_0004
-    STDOUT_SIZE             = 0x100
+    STDOUT_ADDR             = 0xFFFF_0004
 
     # Boot address of the tile (magia.sv boot_addr_i, the start of the code in
     # L2 for the SDK), which is also the reset value of mtvec (mtvec_addr_i)
