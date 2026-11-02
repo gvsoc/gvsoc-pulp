@@ -48,6 +48,11 @@ public:
     // Transfer config
     uint64_t config;
 
+    // Transfer collective op 
+    uint8_t collective_op = 0;
+    // Transfer collective mask
+    uint64_t collective_mask = 0;
+
     // Free rom for additional information
     std::vector<uint64_t> data;
 
