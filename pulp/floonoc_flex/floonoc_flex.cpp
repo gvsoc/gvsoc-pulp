@@ -513,9 +513,10 @@ bool FlooNoc::handle_write_reduction_contribution(vp::IoReq *req, vp::IoReq **co
     }
 
     // Group complete. Park the other contributions here and let
-    // NetworkInterface::handle_response() release them once the
-    // accumulator's own ack actually fires
-    this->pending_reduction_acks.push_back({group->accumulator, std::move(group->others)});
+    // NetworkInterface::handle_response() release them (via a
+    // reduction-ack echo) once the accumulator's own ack actually fires
+    this->pending_reduction_acks.push_back(
+        {group->accumulator, addr, mask, std::move(group->others)});
 
     int64_t inject_time = (int64_t)(long)*req->arg_get(FlooNoc::REQ_INJECT_TIME);
     this->stat_collective_completed++;
@@ -528,21 +529,73 @@ bool FlooNoc::handle_write_reduction_contribution(vp::IoReq *req, vp::IoReq **co
     return true;
 }
 
-// Returns (and forgets) the other contributions parked by
-// handle_write_reduction_contribution() for `accumulator`
-std::vector<vp::IoReq *> FlooNoc::take_pending_reduction_others(vp::IoReq *accumulator)
+// True once `accumulator`'s group has other contributors parked waiting
+// to be released
+bool FlooNoc::has_pending_reduction_others(vp::IoReq *accumulator)
+{
+    for (PendingReductionAck &group : this->pending_reduction_acks)
+    {
+        if (group.accumulator == accumulator)
+        {
+            return !group.others.empty();
+        }
+    }
+    return false;
+}
+
+// Returns (and forgets) the one contribution parked for (addr, mask) that
+// was made by `node_id`, or nullptr if `node_id` has none (e.g. it is the
+// group's own accumulator/destination)
+vp::IoReq *FlooNoc::take_pending_reduction_other(uint64_t addr, uint64_t mask, int node_id)
 {
     for (size_t i = 0; i < this->pending_reduction_acks.size(); i++)
     {
-        if (this->pending_reduction_acks[i].first == accumulator)
+        PendingReductionAck &group = this->pending_reduction_acks[i];
+        if (group.addr != addr || group.mask != mask)
         {
-            std::vector<vp::IoReq *> others = std::move(this->pending_reduction_acks[i].second);
-            this->pending_reduction_acks[i] = std::move(this->pending_reduction_acks.back());
-            this->pending_reduction_acks.pop_back();
-            return others;
+            continue;
         }
+
+        for (size_t j = 0; j < group.others.size(); j++)
+        {
+            if (group.others[j]->get_int(FlooNoc::REQ_SRC_ID) == node_id)
+            {
+                vp::IoReq *other = group.others[j];
+                group.others[j] = group.others.back();
+                group.others.pop_back();
+                if (group.others.empty())
+                {
+                    this->pending_reduction_acks[i] = std::move(this->pending_reduction_acks.back());
+                    this->pending_reduction_acks.pop_back();
+                }
+                return other;
+            }
+        }
+        return NULL;
     }
-    return {};
+    return NULL;
+}
+
+// Walks up the fork tree freeing a reduction-ack echo packet (and its
+// ancestors) once all of its forked copies have been delivered
+void FlooNoc::handle_reduction_ack_echo_completion(vp::IoReq *req)
+{
+    void *parent_ptr = *req->arg_get(FlooNoc::REQ_PARENT);
+    delete[] req->get_data();
+    delete req;
+
+    if (parent_ptr == NULL)
+    {
+        return;
+    }
+
+    vp::IoReq *parent = (vp::IoReq *)parent_ptr;
+    int pending = parent->get_int(FlooNoc::REQ_PEND_KIDS) - 1;
+    parent->set_int(FlooNoc::REQ_PEND_KIDS, pending);
+    if (pending <= 0)
+    {
+        this->handle_reduction_ack_echo_completion(parent);
+    }
 }
 
 void FlooNoc::init_reduction_identity(vp::IoReq *req)

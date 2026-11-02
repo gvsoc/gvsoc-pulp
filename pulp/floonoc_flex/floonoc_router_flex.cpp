@@ -505,6 +505,8 @@ vp::IoReq *Router::fork_collective_child(vp::IoReq *parent, int dest_node,
     *child->arg_get(FlooNoc::REQ_COLL_OP) = *parent->arg_get(FlooNoc::REQ_COLL_OP);
     *child->arg_get(FlooNoc::REQ_COLL_MASK) =
         *parent->arg_get(FlooNoc::REQ_COLL_MASK);
+    *child->arg_get(FlooNoc::REQ_IS_REDUCTION_ACK) =
+        *parent->arg_get(FlooNoc::REQ_IS_REDUCTION_ACK);
     child->set_int(FlooNoc::REQ_COLL_STATE, next_state);
     *child->arg_get(FlooNoc::REQ_PARENT) = (void *)parent;
     *child->arg_get(FlooNoc::REQ_PEND_KIDS) = (void *)(long)0;
