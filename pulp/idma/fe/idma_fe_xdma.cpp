@@ -30,6 +30,7 @@ IDmaFeXdma::IDmaFeXdma(vp::Component *idma, IdmaTransferConsumer *me)
     src_stride(*this, "src_stride", 32),
     dst_stride(*this, "dst_stride", 32),
     reps(*this, "reps", 32),
+    collective_cfg(*this, "collective_cfg", 64),
     next_transfer_id(*this, "next_transfer_id", 32, true, 2),
     completed_id(*this, "completed_id", 32, true, 1),
     do_transfer_grant(*this, "do_transfer_grant", 1)
@@ -106,6 +107,14 @@ void IDmaFeXdma::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *insn)
             //     insn->arg_b);
             insn->result = _this->get_status(insn->arg_b);
             break;
+        case 0b0001000:
+        {
+            uint64_t cfg = (((uint64_t)insn->arg_b) << 32) | insn->arg_a;
+            _this->trace.msg(vp::Trace::LEVEL_TRACE, "Received dmmask operation (op: 0x%llx, mask: 0x%llx)\n",
+                cfg & 0xff, cfg >> 8);
+            _this->collective_cfg.set(cfg);
+            break;
+        }
     }
 }
 
@@ -143,6 +152,8 @@ uint32_t IDmaFeXdma::enqueue_copy(uint32_t config, uint32_t size, bool &granted)
     transfer->dst_stride = this->dst_stride.get();
     transfer->reps = this->reps.get();
     transfer->config = config;
+    transfer->collective_op = (uint8_t)(this->collective_cfg.get() & 0xff);
+    transfer->collective_mask = this->collective_cfg.get() >> 8;
 
     this->trace.msg(vp::Trace::LEVEL_INFO, "Enqueuing transfer (id: %d, src: %llx, dst: %llx, "
         "size: %llx, src_stride: %llx, dst_stride: %llx, reps: %llx, config: %llx)\n",

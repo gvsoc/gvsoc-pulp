@@ -73,6 +73,8 @@ private:
     vp::Register<uint64_t> dst_stride;
     // Register holding replication
     vp::Register<uint32_t> reps;
+    // Register holding the pending collective op ([7:0]) + mask ([63:8])
+    vp::Register<uint64_t> collective_cfg;
     // Transfer ID of the next transfer
     vp::Register<uint32_t> next_transfer_id;
     // Transfer ID of the last completed ID
