@@ -157,7 +157,8 @@ class MagiaV3Tile(gvsoc.systree.Component):
             # Snitch Spatz boot rom file
             snitch_spatz_rom = Memory(self, 'snitch-spatz-rom', config=MemoryV3Config(
                 size=MagiaArch.SPATZ_BOOTROM_SIZE, latency=0,
-                stim_file=self.get_file_path(tree.romfile)))
+                # No romfile: an empty ROM (get_file_path('') is a directory)
+                stim_file=self.get_file_path(tree.romfile) if tree.romfile else ''))
 
             # Snitch Spatz core (fetch_enable is set to false as we control the boot sequence.
             # The core automatically starts from the rom and the corresponding boot address

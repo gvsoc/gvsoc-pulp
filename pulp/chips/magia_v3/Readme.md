@@ -430,7 +430,7 @@ MAGIA ties `enable_prefetching_i` to 0.
 
 ### Event & Debug
 - Event Unit (interrupt routing for CV32CtrlCore; PULP done IRQ at `in_event_12_pe_0`)
-- UART (stdout)
+- Stdout monitor on the port towards the NoC (the characters are written to the L2)
 - GDB server support
 
 ## PULP Cluster
@@ -554,7 +554,7 @@ Exact addresses are defined in `arch.py`.
 - Stack — tile-relative, per-core stack area
 - L1 (TCDM) — tile-relative, tile private scratchpad
 - **`0xC000_0000`** L2 — shared memory via NoC
-- **`0xFFFF_0004`** STDOUT — simulation UART
+- **`0xFFFF_0004`** STDOUT, in the L2 window (written to the L2, printed by the stdout monitor of the tile)
 - TEST_END — simulation termination (L2 end + 1)
 
 ---

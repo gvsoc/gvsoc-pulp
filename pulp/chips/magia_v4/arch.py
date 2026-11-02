@@ -95,8 +95,9 @@ class MagiaArch:
     SPATZ_ENABLE               = True
     SPATZ_BOOTROM_ADDR         = 0x1000_0000
     SPATZ_BOOTROM_SIZE         = 0x100
-    # The boot ROM of the RTL (spatz_bootrom.sv): it jumps to SPATZ_TASKBIN
-    SPATZ_ROMFILE              = 'pulp/chips/magia_v4/spatz_bootrom.bin'
+    # Spatz boot ROM image, given at run time (--attr magia_v4/spatz_romfile):
+    # the SDK builds it (bin/bootrom/spatz_init.bin)
+    SPATZ_ROMFILE              = ''
     # Default VLEN in bits, as in the RTL (SPATZ_VLEN), overridden by spatz_vlen
     SPATZ_VLEN                 = 256
 
