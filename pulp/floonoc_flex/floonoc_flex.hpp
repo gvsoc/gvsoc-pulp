@@ -133,8 +133,10 @@ class FlooNoc : public vp::Component
              // nullptr for the root request.
     static constexpr int REQ_PEND_KIDS =
         11; // [Collective Only] How many kids to be waited for response.
+    static constexpr int REQ_IS_REDUCTION_ACK =
+        12; // [Collective Only] Marks a packet to multicast reduction ACK.
     static constexpr int REQ_NB_ARGS =
-        12; // Number of request data required by this model
+        13; // Number of request data required by this model
 
     // Collective operation codes for REQ_COLL_OP, aligned with FlooNoC
     // RTL's collect_reserved_op_e
@@ -215,8 +217,18 @@ class FlooNoc : public vp::Component
     // the caller should actually forward to the real target
     bool handle_write_reduction_contribution(vp::IoReq *req, vp::IoReq **committed_req);
 
-    // [Collective Only] Returns the other contributions for the `accumulator`
-    std::vector<vp::IoReq *> take_pending_reduction_others(vp::IoReq *accumulator);
+    // [Collective Only] True once `accumulator`'s group has other
+    // contributors parked waiting to be released
+    bool has_pending_reduction_others(vp::IoReq *accumulator);
+
+    // [Collective Only] Returns the one contribution parked for (addr, mask)
+    // that was made by `node_id`.
+    // Called at each member NI a reduction-ack echo is forked to.
+    vp::IoReq *take_pending_reduction_other(uint64_t addr, uint64_t mask, int node_id);
+
+    // [Collective Only] Walks up the fork tree freeing a reduction-ack
+    // packet once all of its forked copies have been delivered
+    void handle_reduction_ack_echo_completion(vp::IoReq *req);
 
     vp::StatScalar stat_collective_requests;         // Number of collective requests injected
     vp::StatScalar stat_collective_children_total;   // Total forked children allocated
@@ -248,8 +260,17 @@ class FlooNoc : public vp::Component
     };
     std::vector<PendingWriteReduction> pending_write_reductions;
 
-    // [Collective Only] Other contributions of a just-completed write-reduction group
-    std::vector<std::pair<vp::IoReq *, std::vector<vp::IoReq *>>> pending_reduction_acks;
+    // [Collective Only] Other contributions of a just-completed
+    // write-reduction group, kept until a reduction-ack echo fans out and
+    // each member NI claims its own via take_pending_reduction_other().
+    struct PendingReductionAck
+    {
+        vp::IoReq *accumulator;
+        uint64_t addr;
+        uint64_t mask;
+        std::vector<vp::IoReq *> others;
+    };
+    std::vector<PendingReductionAck> pending_reduction_acks;
 
     // This block trace
     vp::Trace trace;
