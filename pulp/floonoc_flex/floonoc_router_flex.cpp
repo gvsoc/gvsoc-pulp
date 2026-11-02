@@ -182,7 +182,9 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
             // Collective primitives fan-out
             int collective_op = req->get_int(FlooNoc::REQ_COLL_OP);
-            if (collective_op != FlooNoc::COLL_OP_UNICAST)
+            bool is_write_join = req->get_is_write() &&
+                                 FlooNoc::is_write_reduction_op(collective_op);
+            if (collective_op != FlooNoc::COLL_OP_UNICAST && !is_write_join)
             {
                 std::vector<std::pair<int, int>> fanout;
                 bool local_member = false;

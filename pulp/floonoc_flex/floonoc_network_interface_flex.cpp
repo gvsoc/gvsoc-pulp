@@ -165,6 +165,16 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address,
                     break;
             }
 
+            if (!req->get_is_write() && FlooNoc::is_write_reduction_op(effective_op))
+            {
+                // FlooNoC RTL always forces a read's collective op to unicast
+                this->trace.msg(vp::Trace::LEVEL_WARNING,
+                    "Ignoring reduction/barrier op %d on a read (addr: "
+                    "0x%llx) - these only apply to writes\n", effective_op,
+                    req->get_addr());
+                effective_op = FlooNoc::COLL_OP_UNICAST;
+            }
+
             *router_req->arg_get(FlooNoc::REQ_COLL_OP) =
                 (void *)(long)effective_op;
             *router_req->arg_get(FlooNoc::REQ_COLL_MASK) = (void *)(long)mask;
@@ -599,6 +609,19 @@ bool NetworkInterface::handle_request(FloonocNode *node, vp::IoReq *req,
         {
             bool is_stalled = false;
 
+            if (req->get_is_write() &&
+                FlooNoc::is_write_reduction_op(req->get_int(FlooNoc::REQ_COLL_OP)))
+            {
+                // This write converges with other independent contributions
+                vp::IoReq *committed_req = NULL;
+                if (!this->noc->handle_write_reduction_contribution(req, &committed_req))
+                {
+                    // Wait until the reduction group completes.
+                    return false;
+                }
+                req = committed_req;
+            }
+
             // Received a address request from a router.
             // Handle it by sending it to the target network interface and
             // then sending the response packets back respecting the
@@ -726,6 +749,13 @@ void NetworkInterface::handle_response(vp::IoReq *req)
             *req->arg_get(FlooNoc::REQ_DEST_ID) =
                 (void *)(long)origin_ni->node_id;
             this->rsp_queue.handle_rsp(req, true);
+
+            // If `req` is a write-reduction accumulator, release its other
+            // contributions now that its own ack has actually been dispatched
+            for (vp::IoReq *other : this->noc->take_pending_reduction_others(req))
+            {
+                this->handle_response(other);
+            }
         }
     }
     delete req;
