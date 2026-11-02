@@ -38,9 +38,17 @@ The RTL tests of the "tile" testbench run on one tile
 ids and the FractalSync widths then count 16 tiles (`InstanceCount`), which is
 what these tests are built for.
 
-The Spatz boot ROM is the one of the RTL (`spatz_bootrom.bin`, the 4
-instructions of `spatz_bootrom.sv`, which jump to `SPATZ_TASKBIN`).
-`--attr magia_v4/spatz_romfile=<path>` replaces it.
+The Spatz boot ROM image is given at run time, as on magia_v3: the SDK builds
+it (`bin/bootrom/spatz_init.bin`, the 4 instructions of the RTL
+`spatz_bootrom.sv`, which jump to `SPATZ_TASKBIN`).
+
+```bash
+gvrun --target=magia_v4:n_tiles_x=4,n_tiles_y=4,nb_pulp_cores=8 \
+      --param binary=<elf> --work-dir <dir> \
+      --attr magia_v4/spatz_romfile=<magia-sdk build>/bin/bootrom/spatz_init.bin run
+```
+
+Without it the ROM is empty: the tests that do not use Spatz still run.
 
 ---
 
@@ -75,8 +83,11 @@ Spatz VLSU, then the cluster cores, the control core last.
 | default | the AXI crossbar (L2, other tiles) |
 
 Each output has a cut, as the RTL. The peripherals answer one cycle after the
-request (registered `rvalid`). The kill module and stdout windows are served in
-the tile, as in v3.
+request (registered `rvalid`). The kill module window is served in the tile,
+as in v3. The stdout address `0xFFFF_0004` is in the L2 window (1 GiB, as the
+RTL): a character is a write to the L2 through the NoC, and a monitor on the
+port of the tile towards the NoC prints it (`magia_common/stdout_probe`), as
+the RTL testbench.
 
 ### AXI crossbar
 
@@ -180,8 +191,6 @@ pulp/pulp/chips/magia_v4/
 ├── tile_ctrl/           # Control registers of Spatz, the cluster and the collectives
 │   ├── tile_ctrl.cpp
 │   └── tile_ctrl.py
-├── spatz_bootrom.bin    # Spatz boot ROM of the RTL
-├── CMakeLists.txt       # Installs the boot ROM
 └── Readme.md
 
 pulp/pulp/chips/magia_common/   # Blocks shared with magia_v3

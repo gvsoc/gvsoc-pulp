@@ -177,7 +177,8 @@ class MagiaV4Tile(gvsoc.systree.Component):
         # SPATZ_TASKBIN), behind the AXI x-bar
         snitch_spatz_rom = Memory(self, 'snitch-spatz-rom', config=MemoryV3Config(
             size=MagiaArch.SPATZ_BOOTROM_SIZE, latency=0,
-            stim_file=self.get_file_path(tree.romfile)))
+            # No romfile: an empty ROM (get_file_path('') is a directory)
+            stim_file=self.get_file_path(tree.romfile) if tree.romfile else ''))
 
         # Snitch Spatz core. It waits for its fetch enable (SPATZ_CLK_EN) and
         # boots from the ROM; its hart id is the one of the control core.
