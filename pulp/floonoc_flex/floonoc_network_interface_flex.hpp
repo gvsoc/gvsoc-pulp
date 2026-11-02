@@ -55,6 +55,9 @@ class NetworkQueue : public FloonocNode
     void unstall_queue(int from_id) override;
     bool handle_request(FloonocNode *node, vp::IoReq *req,
                         int from_id) override;
+    // [Collective Only] Injects an already fully-tagged collective packet
+    // directly, bypassing enqueue_router_req()'s. Used to inject a reduction-ack.
+    void push_collective_req(vp::IoReq *router_req);
 
     NetworkInterface &ni;
     Router *router;
@@ -140,6 +143,8 @@ class NetworkInterface : public FloonocNode
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
     int get_req_nw(bool is_wide, bool is_write);
     int get_rsp_nw(bool is_wide, bool is_write);
+    // [Collective Only] Handles the local arrival of a forked copy of a reduction-ack
+    void complete_reduction_ack_echo(vp::IoReq *echo);
     // Pointer to top
     FlooNoc *noc;
     int ni_outstanding_reqs;
