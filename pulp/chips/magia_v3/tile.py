@@ -39,7 +39,6 @@ from interco.router_v2 import Router, RouterConfig, RouterMapping, KIND_BEAT, KI
 from gvsoc.signature import IoV2Beat, IoV2SingleReq
 from utils.io_v2_shared_clock_bridge import IoV2SharedClockBridge
 
-from pulp.stdout.stdout_v3_v2 import StdoutV2
 from pulp.cpu.iss.spatz import Spatz
 from pulp.cpu.iss.spatz_config import SpatzConfig
 from pulp.light_redmule.light_redmule_v2 import LightRedmule
@@ -47,6 +46,7 @@ from ips.pulp.idma_v3.reg_dma import RegDmaV3
 from ips.pulp.idma_v3.reg_dma_config import RegDmaV3Config
 from ips.pulp.idma_v3.protocol_config import (IdmaPortConfig, IdmaObiConfig,
     PROTOCOL_AXI, PROTOCOL_OBI)
+from pulp.chips.magia_common.stdout_probe.stdout_probe import StdoutProbe
 from pulp.chips.magia_common.event_unit.event_unit import MagiaEventUnit
 
 from pulp.chips.magia_v3.arch import *
@@ -289,9 +289,10 @@ class MagiaV3Tile(gvsoc.systree.Component):
             fifo_event=8, dispatch_event=8, mutex_event=0, barrier_event=0,
             wakeup_req_latency=1)
 
-        # UART
-        stdout = StdoutV2(self, f'tile-{tid}-stdout', max_cluster=tree.nb_clusters,
-            max_core_per_cluster=1, user_set_core_id=0, user_set_cluster_id=tid)
+        # Print monitor of the testbench on the port towards the NoC: the
+        # characters are written to the L2 (STDOUT_ADDR is in its window)
+        stdout = StdoutProbe(self, f'tile-{tid}-stdout', width=MagiaArch.BYTES_PER_WORD,
+            addr=MagiaArch.STDOUT_ADDR)
 
         #
         # Input ports of the x-bars
@@ -451,12 +452,6 @@ class MagiaV3Tile(gvsoc.systree.Component):
             size=MagiaArch.TEST_END_SIZE, remove_base=False),
             name="Kill-sim-mem")
 
-        # Obi xbar -> uart
-        obi_xbar.o_MAP(self.cut(f'obi-mgr-cut-stdout', stdout.i_INPUT(), narrow), RouterMapping(
-            base=MagiaArch.STDOUT_ADDR_START,
-            size=MagiaArch.STDOUT_SIZE, remove_base=False),
-            name="local-uart-mem")
-
         # Everything that is not local goes to the tile xbar: remote tiles' L1
         # and reserved memory, plus the off-tile L2
         obi_xbar.o_MAP_DEFAULT(self.cut('obi-mgr-cut-l2', self.cut('axi-slv-cut-core-data',
@@ -464,8 +459,8 @@ class MagiaV3Tile(gvsoc.systree.Component):
 
         # Same on the AXI side: everything but the local L1 leaves the tile on
         # the narrow NoC channel
-        tile_xbar.o_MAP_DEFAULT(self.cut('axi-mst-cut-noc', self.__i_NARROW_OUTPUT(), narrow),
-            name="axi-to-off-tile")
+        tile_xbar.o_MAP_DEFAULT(stdout.i_INPUT(), name="axi-to-off-tile")
+        stdout.o_OUTPUT(self.cut('axi-mst-cut-noc', self.__i_NARROW_OUTPUT(), narrow))
 
         # NoC narrow channel -> tile xbar
         self.__o_NARROW_INPUT(self.cut('axi-slv-cut-noc', tile_xbar.i_INPUT(AXI_IN_NOC), narrow))
