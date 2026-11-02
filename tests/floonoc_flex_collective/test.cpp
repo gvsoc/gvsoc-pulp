@@ -189,6 +189,16 @@ private:
         this->itf()[NODE(x, y)].start(this->addr(x, y), PACKET_SIZE,
             PACKET_SIZE, sync, true, false, op, mask, nullptr, data);
     }
+    // Like start_write(), but issues the write from a different node than
+    // the one it targetsN. eeded so several distinct members can each
+    // write their own contribution to one shared destination address for
+    // a write-triggered reduction/barrier.
+    void start_write_to(TrafficGeneratorSync *sync, int src_x, int src_y,
+        int dst_x, int dst_y, const uint8_t *data, int op = 0, uint64_t mask = 0)
+    {
+        this->itf()[NODE(src_x, src_y)].start(this->addr(dst_x, dst_y), PACKET_SIZE,
+            PACKET_SIZE, sync, true, false, op, mask, nullptr, data);
+    }
     void start_self_check_write(TrafficGeneratorSync *sync, int x, int y)
     {
         this->itf()[NODE(x, y)].start(this->addr(x, y), PACKET_SIZE,
@@ -426,8 +436,8 @@ void CollectiveTestbench::build_broadcast(bool full_mesh)
 }
 
 // reduction_<op>: the 4 row-y=0 members each write their own distinct
-// pattern to their own tile, then root (0,0) gathers with `collective_op`
-// over the row mask.
+// pattern, tagged with `collective_op`/the row mask, to the SAME
+// destination (0,0).
 void CollectiveTestbench::build_reduction(int collective_op, CombineFn combine, InitFn init,
     uint8_t (*pattern)[PACKET_SIZE])
 {
@@ -437,22 +447,23 @@ void CollectiveTestbench::build_reduction(int collective_op, CombineFn combine, 
         combine(this->reduce_expected, pattern[x], PACKET_SIZE);
     }
 
-    this->phases.push_back([this, pattern]() {
+    uint64_t mask = this->row_mask();
+
+    this->phases.push_back([this, pattern, collective_op, mask]() {
         TrafficGeneratorSync *sync = new TrafficGeneratorSync(&this->fsm_event);
         for (int x = 0; x < MESH_DIM; x++)
         {
-            this->start_write(sync, x, 0, pattern[x]);
+            this->start_write_to(sync, x, 0, 0, 0, pattern[x], collective_op, mask);
         }
         sync->start();
     });
 
-    this->phases.push_back([this, collective_op, pattern]() {
-        uint64_t mask = this->row_mask();
+    this->phases.push_back([this]() {
         TrafficGeneratorSync *sync = new TrafficGeneratorSync(&this->fsm_event);
-        this->start_check(sync, 0, 0, this->reduce_expected, collective_op, mask);
+        this->start_check(sync, 0, 0, this->reduce_expected);
         for (int x = 1; x < MESH_DIM; x++)
         {
-            this->start_check(sync, x, 0, pattern[x]);
+            this->start_check(sync, x, 0, this->zero_sentinel);
         }
         for (int y = 1; y < MESH_DIM; y++)
         {
@@ -499,7 +510,10 @@ void CollectiveTestbench::build_mixed_traffic()
             this->row_mask());
         for (int x = 0; x < MESH_DIM; x++)
         {
-            this->start_write(sync, x, 1, this->member_pattern[x]);
+            // Write-triggered reduction: every row-y=1 member writes its
+            // contribution to the same destination (0,1)
+            this->start_write_to(sync, x, 1, 0, 1, this->member_pattern[x],
+                FlooNoc::COLL_OP_REDADD_UINT16, this->row_mask());
         }
         this->start_self_check_write(sync, 1, 2);
         this->start_self_check_write(sync, 3, 3);
@@ -515,8 +529,7 @@ void CollectiveTestbench::build_mixed_traffic()
         {
             this->start_check(sync, x, 0, this->pattern_a);
         }
-        this->start_check(sync, 0, 1, (const uint8_t *)expected16,
-            FlooNoc::COLL_OP_REDADD_UINT16, this->row_mask());
+        this->start_check(sync, 0, 1, (const uint8_t *)expected16);
         this->start_self_check_write(sync, 2, 2);
         this->start_self_check_write(sync, 0, 3);
         sync->start();
