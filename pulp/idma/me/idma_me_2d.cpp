@@ -137,6 +137,8 @@ void IDmaMe2D::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
         burst->src = _this->current_src;
         burst->dst = _this->current_dst;
         burst->size = _this->current_transfer->size;
+        burst->collective_op = _this->current_transfer->collective_op;
+        burst->collective_mask = _this->current_transfer->collective_mask;
         _this->current_reps--;
 
         if (_this->current_reps == 0)
