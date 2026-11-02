@@ -91,6 +91,38 @@ inline void Cv32e40pEvents::event_retire_account(iss_insn_t *insn)
     }
 }
 
+inline void Cv32e40pEvents::event_insn_latency_account(iss_insn_t *insn, int latency)
+{
+    // The multiplier FSM keeps ex_ready low, so the next instruction waits
+    // whether or not it uses the result (cv32e40p_mult.sv).
+    this->iss.exec.stall_cycles_inc(latency);
+}
+
+inline void Cv32e40pEvents::event_div_account(iss_reg_t dividend, iss_reg_t divisor,
+                                              bool is_signed, bool is_rem)
+{
+    // Serial divider (cv32e40p_alu_div.sv), as RI5CY: the count depends on
+    // the leading zeros of the divisor d, 35 cycles for d = 0, clz(~d) + 2
+    // for a negative signed d, else clz(d) + 3. The pipeline waits for it.
+    int32_t d = (int32_t)divisor;
+    int cycles;
+    if (d == 0)
+    {
+        cycles = 35;
+    }
+    else if (is_signed && d < 0)
+    {
+        uint32_t inv = ~(uint32_t)d;
+        cycles = (inv == 0 ? 32 : __builtin_clz(inv)) + 2;
+    }
+    else
+    {
+        cycles = __builtin_clz((uint32_t)d) + 3;
+    }
+    // The instruction itself already takes one cycle
+    this->iss.exec.stall_cycles_inc(cycles - 1);
+}
+
 inline void Cv32e40pEvents::insn_stall_account()
 {
     Events::insn_stall_account();

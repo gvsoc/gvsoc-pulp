@@ -14,6 +14,9 @@ class Cv32e40pCore : public Core
 public:
     Cv32e40pCore(Iss &iss);
 
+    // Tags the multi-cycle instructions with their extra cycles.
+    void start();
+
     // Called from Iss::reset, after the generic register-file reset.
     void reset(bool active);
 

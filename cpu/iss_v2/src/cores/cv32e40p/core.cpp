@@ -15,6 +15,20 @@ Cv32e40pCore::Cv32e40pCore(Iss &iss)
     this->iss.csr.mstatus.reset_val = 0x00001800;
 }
 
+void Cv32e40pCore::start()
+{
+    // mulh, mulhsu and mulhu run the 4 extra steps of the multiplier FSM
+    // (cv32e40p_mult.sv), counted by Cv32e40pEvents::event_insn_latency_account.
+    if (!__iss_isa_set.initialized)
+    {
+        __iss_isa_set.initialized = true;
+        for (iss_decoder_item_t *item : *this->iss.decode.get_insns_from_tag("mulh"))
+        {
+            item->u.insn.latency = 4;
+        }
+    }
+}
+
 void Cv32e40pCore::reset(bool active)
 {
     this->Core::reset(active);
