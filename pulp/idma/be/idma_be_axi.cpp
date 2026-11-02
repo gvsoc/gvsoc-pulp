@@ -28,6 +28,23 @@
 
 
 
+// Stamp the collective sideband descriptor (1 byte op + 8 byte mask)
+// that floonoc_flex reads from req->get_payload().
+// Only the write side of a transfer can carry a collective tag.
+static inline void stamp_collective_payload(vp::IoReq *req, IdmaTransfer *transfer, bool is_write)
+{
+    uint8_t *payload = req->get_payload();
+    uint8_t op = is_write ? transfer->collective_op : 0; // 0 == floonoc_flex's COLL_OP_UNICAST
+    uint64_t mask = is_write ? transfer->collective_mask : 0;
+    payload[0] = op;
+    for (int i = 0; i < 8; i++)
+    {
+        payload[1 + i] = (uint8_t)(mask >> (8 * i));
+    }
+}
+
+
+
 IDmaBeAxi::IDmaBeAxi(vp::Component *idma, std::string itf_name, IdmaBeProducer *be)
 :   Block(idma, itf_name),
     fsm_event(this, &IDmaBeAxi::fsm_handler)
@@ -152,6 +169,7 @@ void IDmaBeAxi::enqueue_burst(uint64_t base, uint64_t size, bool is_write, IdmaT
     req->set_addr(base);
     req->set_size(size);
     *req->arg_get(0) = (void *)transfer;
+    stamp_collective_payload(req, transfer, is_write);
 
     this->pending_bursts.push(req);
     this->pending_bursts_ack.push(req);
@@ -303,6 +321,7 @@ void IDmaBeAxi::write_data(IdmaTransfer *transfer, uint8_t *data, uint64_t size)
     req->set_data(data);
     req->arg_alloc();
     *req->arg_get(0) = (void *)transfer;
+    stamp_collective_payload(req, transfer, true);
 
     vp::IoReqStatus status = this->ico_itf.req(req);
     if (status == vp::IoReqStatus::IO_REQ_OK)
