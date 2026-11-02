@@ -733,6 +733,10 @@ void Event_unit::in_event_sync(vp::Block *__this, bool active, int id)
   int core_id = id >> 16;
   int event_id = id & 0xffff;
   _this->trace.msg("Received input event (core: %d, event: %d, active: %d)\n", core_id, event_id, active);
+  // The sources raise a one-cycle pulse (sync true, then false). The RTL
+  // buffers the event while the line is high, so only the rising edge counts.
+  if (!active)
+    return;
   Core_event_unit *eu = &_this->core_eu[core_id];
   eu->set_status(eu->status | (1<<event_id));
   eu->check_state();
