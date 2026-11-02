@@ -48,6 +48,33 @@ bool MeshXYCollectivePolicy::lookup_neighbor(int x, int y,
     return true;
 }
 
+bool MeshXYCollectivePolicy::is_member(int node_id, int ref_id, uint64_t mask) const
+{
+    auto cur_it = this->node_coords.find(node_id);
+    auto ref_it = this->node_coords.find(ref_id);
+    if (cur_it == this->node_coords.end() || ref_it == this->node_coords.end())
+    {
+        return false;
+    }
+
+    int mask_x = (int)FlooNoc::coll_mask_axis(mask, 0);
+    int mask_y = (int)FlooNoc::coll_mask_axis(mask, 1);
+
+    bool x_matched = (cur_it->second.first & ~mask_x) == (ref_it->second.first & ~mask_x);
+    bool y_matched = (cur_it->second.second & ~mask_y) == (ref_it->second.second & ~mask_y);
+    return x_matched && y_matched;
+}
+
+int MeshXYCollectivePolicy::member_count(int ref_id, uint64_t mask) const
+{
+    // Each masked bit is an independent don't-care on its axis so the box holds
+    // 2^popcount(mask_x) * 2^popcount(mask_y) coordinates
+    int mask_x = (int)FlooNoc::coll_mask_axis(mask, 0);
+    int mask_y = (int)FlooNoc::coll_mask_axis(mask, 1);
+    int bits = __builtin_popcount((unsigned)mask_x) + __builtin_popcount((unsigned)mask_y);
+    return 1 << bits;
+}
+
 void MeshXYCollectivePolicy::analyze(
     int node_id, int src_id, uint64_t mask, int state,
     std::vector<std::pair<int, int>> &fanout, bool &local_member) const

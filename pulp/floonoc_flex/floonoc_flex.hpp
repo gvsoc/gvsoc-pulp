@@ -26,6 +26,8 @@
 
 #include "floonoc_collective_policy.hpp"
 #include <cpu/iss/flexfloat/flexfloat.h>
+#include <unordered_map>
+#include <vector>
 #include <vp/itf/io.hpp>
 #include <vp/signal.hpp>
 #include <vp/stats/stats.hpp>
@@ -151,6 +153,11 @@ class FlooNoc : public vp::Component
     static constexpr int COLL_OP_REDMAX_INT16 = 10;
     static constexpr int COLL_OP_REDMAX_FP16 = 11;
 
+    static inline bool is_write_reduction_op(int op)
+    {
+        return op == FlooNoc::COLL_OP_LSBAND || op >= FlooNoc::COLL_OP_FIRST_ARITH_OP;
+    }
+
     // [Collective Only] REQ_COLL_MASK Format: we divide the mask into sub-masks,
     // one per axis (XY in 2D, XYZ in 3D, or leaf-index ranges in a tree).
     // We assume 16 bits are enough to index within an axis. 
@@ -200,6 +207,17 @@ class FlooNoc : public vp::Component
     // all-1s for LsbAnd).
     void init_reduction_identity(vp::IoReq *req);
 
+    // [Collective Only] Handles one independent write contribution to a
+    // write-triggered reduction/barrier converging on `req`'s address.
+    // `req` is the data-phase write that just arrived at its destination
+    // network interface. Returns false if the group is not yet complete.
+    // Returns true once complete and sets `*committed_req` to the request
+    // the caller should actually forward to the real target
+    bool handle_write_reduction_contribution(vp::IoReq *req, vp::IoReq **committed_req);
+
+    // [Collective Only] Returns the other contributions for the `accumulator`
+    std::vector<vp::IoReq *> take_pending_reduction_others(vp::IoReq *accumulator);
+
     vp::StatScalar stat_collective_requests;         // Number of collective requests injected
     vp::StatScalar stat_collective_children_total;   // Total forked children allocated
     vp::StatScalar stat_collective_reduction_merges;  // Total arithmetic reduction merges performed
@@ -215,6 +233,23 @@ class FlooNoc : public vp::Component
     // [Collective Only] Merges a forked collective child's response data
     // into its parent's buffer according to the parent's REQ_COLL_OP..
     void process_collective_operations(vp::IoReq *parent, vp::IoReq *req);
+
+    // [Collective Only] One in-flight write-triggered reduction/barrier
+    // group, identified by (addr, op, mask)
+    struct PendingWriteReduction
+    {
+        uint64_t addr;
+        int op;
+        uint64_t mask;
+        vp::IoReq *accumulator;
+        int expected;
+        int received;
+        std::vector<vp::IoReq *> others;
+    };
+    std::vector<PendingWriteReduction> pending_write_reductions;
+
+    // [Collective Only] Other contributions of a just-completed write-reduction group
+    std::vector<std::pair<vp::IoReq *, std::vector<vp::IoReq *>>> pending_reduction_acks;
 
     // This block trace
     vp::Trace trace;

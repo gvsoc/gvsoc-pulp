@@ -469,6 +469,82 @@ void FlooNoc::handle_collective_completion(vp::IoReq *req)
     }
 }
 
+// Handles one independent write contribution to a write-triggered
+// reduction/barrier converging on `req`'s address
+bool FlooNoc::handle_write_reduction_contribution(vp::IoReq *req, vp::IoReq **committed_req)
+{
+    int op = req->get_int(FlooNoc::REQ_COLL_OP);
+    uint64_t addr = req->get_addr();
+    uint64_t mask = (uint64_t)(long)*req->arg_get(FlooNoc::REQ_COLL_MASK);
+
+    PendingWriteReduction *group = NULL;
+    for (PendingWriteReduction &candidate : this->pending_write_reductions)
+    {
+        if (candidate.addr == addr && candidate.op == op && candidate.mask == mask)
+        {
+            group = &candidate;
+            break;
+        }
+    }
+
+    if (group == NULL)
+    {
+        this->pending_write_reductions.push_back({});
+        group = &this->pending_write_reductions.back();
+        group->addr = addr;
+        group->op = op;
+        group->mask = mask;
+        group->accumulator = req;
+        group->expected = this->collective_policy->member_count(
+            req->get_int(FlooNoc::REQ_SRC_ID), mask);
+        group->received = 1;
+    }
+    else
+    {
+        this->process_collective_operations(group->accumulator, req);
+        group->others.push_back(req);
+        group->received++;
+        this->stat_collective_reduction_merges++;
+    }
+
+    if (group->received < group->expected)
+    {
+        return false;
+    }
+
+    // Group complete. Park the other contributions here and let
+    // NetworkInterface::handle_response() release them once the
+    // accumulator's own ack actually fires
+    this->pending_reduction_acks.push_back({group->accumulator, std::move(group->others)});
+
+    int64_t inject_time = (int64_t)(long)*req->arg_get(FlooNoc::REQ_INJECT_TIME);
+    this->stat_collective_completed++;
+    this->stat_collective_completion_latency +=
+        this->time.get_engine()->get_time() - inject_time;
+
+    *committed_req = group->accumulator;
+    *group = this->pending_write_reductions.back();
+    this->pending_write_reductions.pop_back();
+    return true;
+}
+
+// Returns (and forgets) the other contributions parked by
+// handle_write_reduction_contribution() for `accumulator`
+std::vector<vp::IoReq *> FlooNoc::take_pending_reduction_others(vp::IoReq *accumulator)
+{
+    for (size_t i = 0; i < this->pending_reduction_acks.size(); i++)
+    {
+        if (this->pending_reduction_acks[i].first == accumulator)
+        {
+            std::vector<vp::IoReq *> others = std::move(this->pending_reduction_acks[i].second);
+            this->pending_reduction_acks[i] = std::move(this->pending_reduction_acks.back());
+            this->pending_reduction_acks.pop_back();
+            return others;
+        }
+    }
+    return {};
+}
+
 void FlooNoc::init_reduction_identity(vp::IoReq *req)
 {
     int collective_op = req->get_int(FlooNoc::REQ_COLL_OP);

@@ -47,6 +47,14 @@ class CollectiveRoutingPolicy
     virtual void analyze(int node_id, int src_id, uint64_t mask, int state,
                          std::vector<std::pair<int, int>> &fanout,
                          bool &local_member) const = 0;
+
+    // True if `node_id` belongs to the same collective group as `ref_id` for this mask
+    virtual bool is_member(int node_id, int ref_id, uint64_t mask) const = 0;
+
+    // Total number of nodes `is_member()` accepts for this mask. 
+    //Used by write-triggered reductions/barriers to know
+    // how many independent contributions to wait for before they converge.
+    virtual int member_count(int ref_id, uint64_t mask) const = 0;
 };
 
 // 2D mesh multicast/reduction fan-out, XY or YX dimension-order.
@@ -65,6 +73,9 @@ class MeshXYCollectivePolicy : public CollectiveRoutingPolicy
     void analyze(int node_id, int src_id, uint64_t mask, int state,
                 std::vector<std::pair<int, int>> &fanout,
                 bool &local_member) const override;
+
+    bool is_member(int node_id, int ref_id, uint64_t mask) const override;
+    int member_count(int ref_id, uint64_t mask) const override;
 
   private:
     bool x_first;
