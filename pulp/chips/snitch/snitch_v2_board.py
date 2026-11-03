@@ -86,8 +86,9 @@ class SnitchArch(Tree):
                 self.clusters = []
                 current_hartid = 0
                 for id in range(0, self.nb_cluster):
+                    # The cluster alias of the current RTL configuration
                     cluster_arch = ClusterArch(self, 'cluster', self.get_cluster_base(id),
-                        current_hartid)
+                        current_hartid, alias_base=0x1800_0000)
                     self.clusters.append(cluster_arch)
                     current_hartid += self.clusters[id].nb_core
 

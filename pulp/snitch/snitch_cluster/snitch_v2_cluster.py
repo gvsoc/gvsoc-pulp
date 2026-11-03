@@ -70,7 +70,7 @@ class ClusterArch(Tree):
 
     def __init__(self, parent, name, base, first_hartid, auto_fetch=False,
             boot_addr=0x0000_1000, nb_core_per_cluster=9, isa='rv32imfdca',
-            peripheral_offset=0x0002_1000, old_periph_regmap=False):
+            peripheral_offset=0x0002_1000, old_periph_regmap=False, alias_base=None):
         super().__init__(parent, name)
 
         self.nb_core = nb_core_per_cluster
@@ -85,8 +85,20 @@ class ClusterArch(Tree):
         self.dma_core = self.nb_core - 1
         self.nb_ssrs = 3
 
+        # The TCDM gets an input more, narrow and wide, for the cluster alias
         nb_masters = (self.nb_core - 1) * self.nb_ssrs + 1 + 1
-        self.tcdm          = ClusterArch.Tcdm(self, 'tcdm', base, nb_masters)
+        self.tcdm          = ClusterArch.Tcdm(self, 'tcdm', base,
+            nb_masters + (1 if alias_base is not None else 0),
+            2 if alias_base is not None else 1)
+        self.tcdm.narrow_port = nb_masters - 1
+        # Cluster alias of the current RTL (AliasRegionBase): the TCDM is also
+        # at this address, on the narrow and the wide crossbars. The RTL
+        # crossbars decode it to the same TCDM port; the model has a TCDM
+        # input for it on each. The aliases of the peripherals and zero memory
+        # are not modeled.
+        self.alias = None
+        if alias_base is not None:
+            self.alias = Area(self, 'alias', alias_base, 0x0002_0000, 'TCDM alias range')
         # RTL map: a 4 KiB cluster bootrom window at 0x2_0000 (not modeled,
         # the boot ROM is on the SoC), then the peripherals up to the zero
         # memory. Older clusters (Occamy) have no bootrom window and their
@@ -104,7 +116,7 @@ class ClusterArch(Tree):
             description='L1 icache serial lookup (SERIAL_LOOKUP), 0 or 1')
 
     class Tcdm(Tree):
-        def __init__(self, parent, name, base, nb_masters):
+        def __init__(self, parent, name, base, nb_masters, nb_wide_masters=1):
             super().__init__(parent, name)
             self.area = Area(self, 'tcdm', base + 0x0000_0000, 0x0002_0000, 'TCDM range')
             # RTL: 32 banks of 64 bits
@@ -113,6 +125,7 @@ class ClusterArch(Tree):
             self.bank_size = self.area.size // self.nb_banks
             self.latency = 1
             self.nb_masters = nb_masters
+            self.nb_wide_masters = nb_wide_masters
 
 
 class SnitchClusterTcdm(gvsoc.systree.Component):
@@ -127,7 +140,7 @@ class SnitchClusterTcdm(gvsoc.systree.Component):
             nb_masters=arch.nb_masters,
             nb_slaves=arch.nb_banks,
             interleaving_width=int(math.log2(arch.bank_width)),
-            nb_wide_masters=1, rr_tree=True))
+            nb_wide_masters=arch.nb_wide_masters, rr_tree=True))
 
         for i in range(0, arch.nb_banks):
             bank = memory_v3.Memory(self, f'bank_{i}', config=MemoryV3Config(
@@ -136,13 +149,14 @@ class SnitchClusterTcdm(gvsoc.systree.Component):
 
         for i in range(0, arch.nb_masters):
             self.bind(self, f'input_{i}', ico, f'input_{i}')
-        self.bind(self, 'wide_input_0', ico, 'wide_input_0')
+        for i in range(0, arch.nb_wide_masters):
+            self.bind(self, f'wide_input_{i}', ico, f'wide_input_{i}')
 
     def i_INPUT(self, port: int) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'input_{port}', signature=IoV2SingleReq())
 
-    def i_WIDE_INPUT(self) -> gvsoc.systree.SlaveItf:
-        return gvsoc.systree.SlaveItf(self, 'wide_input_0', signature=IoV2SingleReq())
+    def i_WIDE_INPUT(self, port: int=0) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, f'wide_input_{port}', signature=IoV2SingleReq())
 
 
 class SnitchCluster(gvsoc.systree.Component):
@@ -154,8 +168,12 @@ class SnitchCluster(gvsoc.systree.Component):
         # Components
         #
 
+        # The iDMA uses a single AXI ID: as in the RTL crossbar, its bursts to
+        # another slave wait for the ones in flight, so its reads come back in
+        # order
         wide_axi = router_v2.Router(self, 'wide_axi', config=RouterConfig(
-            kind=KIND_BEAT, width=64, max_pending_bursts_per_input=4))
+            kind=KIND_BEAT, width=64, max_pending_bursts_per_input=4,
+            axi_id_ordering=True))
         narrow_axi = router_v2.Router(self, 'narrow_axi', config=RouterConfig(
             kind=KIND_BEAT, width=8, max_pending_bursts_per_input=4))
 
@@ -222,9 +240,14 @@ class SnitchCluster(gvsoc.systree.Component):
             max_pending_bursts=2, full_registered=True, max_pending_per_dir=3,
             rw_exclusive=True), name='axi')
         self.o_NARROW_INPUT(narrow_axi.i_INPUT(1))
-        narrow_axi.o_MAP(tcdm.i_INPUT(arch.tcdm.nb_masters - 1),
+        narrow_axi.o_MAP(tcdm.i_INPUT(arch.tcdm.narrow_port),
             RouterMapping(base=arch.tcdm.area.base, size=arch.tcdm.area.size,
                 remove_base=False), name='tcdm')
+        if arch.alias is not None:
+            narrow_axi.o_MAP(tcdm.i_INPUT(arch.tcdm.narrow_port + 1),
+                RouterMapping(base=arch.alias.base, size=arch.alias.size,
+                    remove_offset=arch.alias.base, add_offset=arch.tcdm.area.base),
+                name='tcdm_alias')
         narrow_axi.o_MAP(cluster_registers.i_INPUT(),
             RouterMapping(base=arch.peripheral.base, size=arch.peripheral.size),
             name='periph')
@@ -252,6 +275,15 @@ class SnitchCluster(gvsoc.systree.Component):
             RouterMapping(base=arch.zero_mem.base, size=arch.zero_mem.size),
             name='zero_mem')
         wide_zero_mem_reg.o_OUTPUT(zero_mem.i_INPUT())
+        if arch.alias is not None:
+            wide_tcdm_alias_reg = Fifo(self, 'wide_tcdm_alias_reg', config=FifoConfig(
+                depth=8, latency=1, resp_latency=1, max_outstanding=8,
+                done_annotated_latency=True))
+            wide_axi.o_MAP(wide_tcdm_alias_reg.i_INPUT(),
+                RouterMapping(base=arch.alias.base, size=arch.alias.size,
+                    remove_offset=arch.alias.base, add_offset=arch.tcdm.area.base),
+                name='tcdm_alias')
+            wide_tcdm_alias_reg.o_OUTPUT(tcdm.i_WIDE_INPUT(1))
         wide_axi.o_MAP_DEFAULT(self.i_WIDE_SOC(), name='soc')
         # Wide accesses from the SoC (other clusters' DMAs), left unbound on a
         # single-cluster SoC
