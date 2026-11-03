@@ -169,7 +169,10 @@ void IDmaBeAxi::enqueue_burst(uint64_t base, uint64_t size, bool is_write, IdmaT
     req->set_addr(base);
     req->set_size(size);
     *req->arg_get(0) = (void *)transfer;
-    stamp_collective_payload(req, transfer, is_write);
+    if (!is_write)
+    {
+        stamp_collective_payload(req, transfer, false);
+    }
 
     this->pending_bursts.push(req);
     this->pending_bursts_ack.push(req);
