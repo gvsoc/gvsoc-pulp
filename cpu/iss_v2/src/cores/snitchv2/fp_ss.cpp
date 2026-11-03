@@ -145,7 +145,10 @@ void SnitchFpSs::reset(bool active)
         for (int i = 0; i < 32; i++)
         {
             this->fp_ready[i] = 0;
+            this->sc_fifo[i].clear();
         }
+        this->sc_mask = 0;
+        this->sc_slot_id = 0;
 
         this->lsu_free = NULL;
         for (int i = 0; i < CONFIG_GVSOC_ISS_SNITCH_FP_LSU_NB_OUTSTANDING; i++)
@@ -568,10 +571,20 @@ bool SnitchFpSs::check_operands(iss_insn_t *insn, SnitchFpSsEntry &entry)
         // The FP LSU writes back to the register file, never to an SSR
         bool is_load_dest = entry.kind == SNITCH_FPSS_LOAD &&
             darg->type == ISS_DECODER_ARG_TYPE_OUT_REG;
-        if (ssr_enabled && lid < CONFIG_GVSOC_ISS_SNITCH_NB_SSRS && !is_load_dest)
+        if (ssr_enabled && this->is_ssr_mapped(lid, is_load_dest))
         {
             if (darg->type == ISS_DECODER_ARG_TYPE_IN_REG) ssr_reads |= 1 << lid;
             else ssr_writes |= 1 << lid;
+        }
+        else if (this->is_chained(lid))
+        {
+            // A source waits for its oldest value, a destination does not
+            // wait for the previous writes
+            if (darg->type == ISS_DECODER_ARG_TYPE_IN_REG &&
+                (this->sc_fifo[lid].empty() || this->sc_fifo[lid].front().ready > cycle))
+            {
+                return false;
+            }
         }
         else if (this->fp_ready[lid] > cycle)
         {
@@ -629,6 +642,11 @@ bool SnitchFpSs::issue_entry(int index, int offset, bool last)
         insn->addr, offset, last);
     this->pc_signal.set_and_release(insn->addr);
 
+    if (unlikely(this->sc_mask != 0))
+    {
+        this->sc_pop_sources(insn, entry);
+    }
+
 #ifdef VP_TRACE_ACTIVE
     // The instruction trace shows the operands at issue. The last execution
     // of an instruction is dumped by the core when it is terminated, the
@@ -679,7 +697,17 @@ bool SnitchFpSs::issue_entry(int index, int offset, bool last)
             if (darg->type == ISS_DECODER_ARG_TYPE_OUT_REG && (darg->flags & ISS_DECODER_ARG_FLAG_FREG))
             {
                 int lid = insn->args[i].u.reg.index - ISS_NB_REGS;
-                if (!ssr_enabled || lid >= CONFIG_GVSOC_ISS_SNITCH_NB_SSRS)
+                if (ssr_enabled && this->is_ssr_mapped(lid, false))
+                {
+                    continue;
+                }
+                if (this->is_chained(lid))
+                {
+                    this->sc_fifo[lid].push_back({
+                        this->iss.regfile.Regfile::get_freg(insn->args[i].u.reg.index),
+                        done + CONFIG_GVSOC_ISS_SNITCH_RESULT_LATENCY, this->sc_slot_id++});
+                }
+                else
                 {
                     this->fp_ready[lid] = done + CONFIG_GVSOC_ISS_SNITCH_RESULT_LATENCY;
                 }
@@ -726,8 +754,16 @@ void SnitchFpSs::lsu_send(SnitchFpLsuReq *req)
         this->fsm_event.enable();
         if (req->req.get_opcode() == vp::IoReqOpcode::READ)
         {
-            this->fp_ready[req->reg - ISS_NB_REGS] = req->timestamp +
-                CONFIG_GVSOC_ISS_SNITCH_RESULT_LATENCY;
+            SnitchFpSsChainSlot *slot = this->sc_find_slot(req);
+            if (slot != NULL)
+            {
+                slot->ready = req->timestamp + CONFIG_GVSOC_ISS_SNITCH_RESULT_LATENCY;
+            }
+            else
+            {
+                this->fp_ready[req->reg - ISS_NB_REGS] = req->timestamp +
+                    CONFIG_GVSOC_ISS_SNITCH_RESULT_LATENCY;
+            }
         }
     }
     else if (status == vp::IO_REQ_DENIED)
@@ -758,8 +794,19 @@ void SnitchFpSs::load(iss_insn_t *insn, iss_addr_t addr, int size, int reg)
     io_req->set_data((uint8_t *)&req->data);
     io_req->set_resp_status(vp::IO_RESP_OK);
 
-    // Pending until the data is back
-    this->fp_ready[reg - ISS_NB_REGS] = INT64_MAX;
+    // Pending until the data is back. A chained register gets its slot now,
+    // in program order, filled when the data is back.
+    int lid = reg - ISS_NB_REGS;
+    req->sc_slot = -1;
+    if (this->is_chained(lid))
+    {
+        req->sc_slot = this->sc_slot_id++;
+        this->sc_fifo[lid].push_back({0, INT64_MAX, req->sc_slot});
+    }
+    else
+    {
+        this->fp_ready[lid] = INT64_MAX;
+    }
 
     this->lsu_send(req);
 }
@@ -773,6 +820,7 @@ void SnitchFpSs::store(iss_insn_t *insn, iss_addr_t addr, int size, int reg)
     req->entry = this->current_entry;
     req->caq_addr = this->current_addr & ~(iss_addr_t)7;
     req->caq_release = this->current_caq_release;
+    req->sc_slot = -1;
     req->data = this->iss.regfile.get_freg(reg);
 
     this->trace.msg(vp::Trace::LEVEL_TRACE, "FP store (addr: 0x%lx, size: %d, value: 0x%lx)\n",
@@ -801,14 +849,27 @@ void SnitchFpSs::lsu_end(SnitchFpLsuReq *req)
 
     if (io_req->get_opcode() == vp::IoReqOpcode::READ)
     {
-        // Straight to the register file, an SSR mapping does not apply to
-        // the FP LSU
-        this->iss.regfile.Regfile::set_freg(req->reg, req->data);
         int lid = req->reg - ISS_NB_REGS;
         int64_t ready = this->iss.clock.get_cycles() + CONFIG_GVSOC_ISS_SNITCH_RESULT_LATENCY;
-        if (this->fp_ready[lid] == INT64_MAX || this->fp_ready[lid] < ready)
+        SnitchFpSsChainSlot *slot = this->sc_find_slot(req);
+        if (slot != NULL)
         {
-            this->fp_ready[lid] = ready;
+            // Into the slot of the chained register, read in order
+            slot->value = req->data;
+            if (slot->ready == INT64_MAX || slot->ready < ready)
+            {
+                slot->ready = ready;
+            }
+        }
+        else
+        {
+            // Straight to the register file, an SSR mapping does not apply to
+            // the FP LSU
+            this->iss.regfile.Regfile::set_freg(req->reg, req->data);
+            if (this->fp_ready[lid] == INT64_MAX || this->fp_ready[lid] < ready)
+            {
+                this->fp_ready[lid] = ready;
+            }
         }
     }
 
@@ -845,4 +906,66 @@ vp::IoRespAck SnitchFpSs::lsu_response(vp::Block *__this, vp::IoReq *req)
     SnitchFpSs *_this = (SnitchFpSs *)__this;
     _this->lsu_end((SnitchFpLsuReq *)req);
     return vp::IO_RESP_ACCEPTED;
+}
+
+bool SnitchFpSs::is_ssr_mapped(int lid, bool is_load_dest)
+{
+    return lid < CONFIG_GVSOC_ISS_SNITCH_NB_SSRS && !is_load_dest &&
+        this->iss.arch.ssr.is_enabled();
+}
+
+void SnitchFpSs::sc_pop_sources(iss_insn_t *insn, SnitchFpSsEntry &entry)
+{
+    // Each chained source gives its oldest value to the register file, where
+    // the instruction reads it, once even if it is read by several operands
+    uint32_t popped = 0;
+    for (int i = 0; i < insn->decoder_item->u.insn.nb_args; i++)
+    {
+        iss_decoder_arg_t *darg = &insn->decoder_item->u.insn.args[i];
+        if (!(darg->flags & ISS_DECODER_ARG_FLAG_FREG)) continue;
+        if (darg->type != ISS_DECODER_ARG_TYPE_IN_REG) continue;
+
+        int reg = insn->args[i].u.reg.index;
+        int lid = reg - ISS_NB_REGS;
+        if (!this->is_chained(lid) || this->is_ssr_mapped(lid, false)) continue;
+        if ((popped >> lid) & 1) continue;
+        popped |= 1 << lid;
+
+        SnitchFpSsChainSlot &slot = this->sc_fifo[lid].front();
+        this->iss.regfile.Regfile::set_freg(reg, slot.value);
+        this->sc_fifo[lid].pop_front();
+    }
+}
+
+SnitchFpSsChainSlot *SnitchFpSs::sc_find_slot(SnitchFpLsuReq *req)
+{
+    if (req->sc_slot < 0) return NULL;
+    for (SnitchFpSsChainSlot &slot: this->sc_fifo[req->reg - ISS_NB_REGS])
+    {
+        if (slot.id == req->sc_slot) return &slot;
+    }
+    return NULL;
+}
+
+void SnitchFpSs::sc_set_mask(uint32_t mask)
+{
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Scalar chaining mask (mask: 0x%x)\n", mask);
+
+    for (int lid = 0; lid < 32; lid++)
+    {
+        bool was = this->is_chained(lid), now = (mask >> lid) & 1;
+        if (was && !now && !this->sc_fifo[lid].empty())
+        {
+            // The values not read yet are written back in order, the
+            // register keeps the last one
+            SnitchFpSsChainSlot &last = this->sc_fifo[lid].back();
+            this->iss.regfile.Regfile::set_freg(ISS_NB_REGS + lid, last.value);
+            this->fp_ready[lid] = last.ready;
+        }
+        if (was != now)
+        {
+            this->sc_fifo[lid].clear();
+        }
+    }
+    this->sc_mask = mask;
 }

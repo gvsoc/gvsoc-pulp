@@ -27,6 +27,11 @@ class Iss;
  * the barrier CSR (0x7C2): reading it notifies the cluster barrier unit
  * through the barrier_req port and stalls the core until the unit answers on
  * barrier_ack, once every core of the cluster has arrived.
+ *
+ * The sc CSR (0x7C3) holds the FP registers with scalar chaining, executed by
+ * the FP subsystem; the copift CSR (0x7C6) is the enable of the COPIFT queues,
+ * which are not modeled; the dump CSR (0x7C7) prints the values written to it,
+ * like the RTL core does in simulation.
  */
 class SnitchV2 : public IssArch
 {
@@ -53,6 +58,9 @@ public:
     SnitchSsr ssr;
 
 private:
+    bool sc_update(iss_insn_t *insn, bool is_write, iss_reg_t &value);
+    bool copift_update(iss_insn_t *insn, bool is_write, iss_reg_t &value);
+    bool dump_update(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool barrier_update(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     static void barrier_sync(vp::Block *__this, bool value);
     static void barrier_release_handler(vp::Block *__this, vp::ClockEvent *event);
@@ -63,6 +71,10 @@ private:
 
     // Size-0 request showing the next PC on the fetch port while idle
     vp::IoReq fetch_hint_req;
+
+    CsrReg sc;
+    CsrReg copift;
+    CsrReg dump;
 
     CsrReg barrier;
     vp::WireMaster<bool> barrier_req_itf;

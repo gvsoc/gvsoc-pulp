@@ -4,6 +4,7 @@
 //
 // Authors: Germain Haugou (germain.haugou@gmail.com)
 
+#include <string.h>
 #include "cpu/iss_v2/include/iss.hpp"
 
 SnitchV2::SnitchV2(Iss &iss)
@@ -17,6 +18,19 @@ SnitchV2::SnitchV2(Iss &iss)
 
     this->iss.csr.declare_csr(&this->barrier, "barrier", 0x7C2);
     this->barrier.register_callback(std::bind(&SnitchV2::barrier_update,
+        this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+
+    // Scalar chaining mask, applied by the FP subsystem
+    this->iss.csr.declare_csr(&this->sc, "sc", 0x7C3, 0, 0xFFFFFFFF);
+    this->sc.register_callback(std::bind(&SnitchV2::sc_update,
+        this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+
+    this->iss.csr.declare_csr(&this->copift, "copift", 0x7C6, 0, 1);
+    this->copift.register_callback(std::bind(&SnitchV2::copift_update,
+        this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+
+    this->iss.csr.declare_csr(&this->dump, "dump", 0x7C7);
+    this->dump.register_callback(std::bind(&SnitchV2::dump_update,
         this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
     this->barrier_ack_itf.set_sync_meth(&SnitchV2::barrier_sync);
@@ -107,10 +121,10 @@ iss_reg_t SnitchV2::csr_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
 {
     iss_reg_t csr = UIM_GET(0);
 
-    // The SSR enable is executed in order by the FP subsystem, once its
-    // sequencer is empty. The FP status reads wait for the FP instructions
-    // in flight, whose flags they report.
-    if ((csr == 0x7C0 && !iss->arch.fp_ss.is_drained()) ||
+    // The SSR enable and the scalar chaining mask are executed in order by the
+    // FP subsystem, once its sequencer is empty. The FP status reads wait for
+    // the FP instructions in flight, whose flags they report.
+    if (((csr == 0x7C0 || csr == 0x7C3) && !iss->arch.fp_ss.is_drained()) ||
         ((csr == 0x001 || csr == 0x003) && !iss->arch.fp_ss.is_idle()))
     {
         iss->exec.insn_stall();
@@ -130,6 +144,46 @@ void SnitchV2::idle_hook(iss_insn_t *insn)
     req->set_is_write(false);
     req->set_data(NULL);
     this->iss.prefetch.fetch_itf.req(req);
+}
+
+bool SnitchV2::sc_update(iss_insn_t *insn, bool is_write, iss_reg_t &value)
+{
+    if (is_write)
+    {
+        this->fp_ss.sc_set_mask((uint32_t)value);
+    }
+    return true;
+}
+
+bool SnitchV2::copift_update(iss_insn_t *insn, bool is_write, iss_reg_t &value)
+{
+    if (is_write && (value & 1))
+    {
+        // The I2F / F2I queues the bit switches on (x31 popped from and FP
+        // results to integer registers pushed to them) are not modeled
+        this->iss.csr.trace.force_warning("COPIFT queues enabled, not supported\n");
+    }
+    return true;
+}
+
+bool SnitchV2::dump_update(iss_insn_t *insn, bool is_write, iss_reg_t &value)
+{
+    if (is_write)
+    {
+        // Same print as the RTL core (simulation only), with the cycle
+        // instead of the time
+        uint32_t v = (uint32_t)value;
+        float f;
+        memcpy(&f, &v, sizeof(f));
+        printf("[Dump Core %d] %ld 0x7c7 = 0x%08x, %d, %f\n", (int)this->iss.csr.mhartid,
+            (long)this->iss.clock.get_cycles(), v, (int32_t)v, f);
+        fflush(stdout);
+    }
+    else
+    {
+        value = 0;
+    }
+    return false;
 }
 
 bool SnitchV2::barrier_update(iss_insn_t *insn, bool is_write, iss_reg_t &value)

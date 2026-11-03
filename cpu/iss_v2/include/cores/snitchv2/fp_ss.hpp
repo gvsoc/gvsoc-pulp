@@ -85,7 +85,19 @@ struct SnitchFpLsuReq
     bool caq_release;
     // Cycle at which a synchronously answered access completes
     int64_t timestamp;
+    // Id of the scalar chaining slot of a load to a chained register, -1
+    // otherwise
+    int64_t sc_slot;
     SnitchFpLsuReq *next;
+};
+
+// Value written to a register with scalar chaining, not read yet
+struct SnitchFpSsChainSlot
+{
+    uint64_t value;
+    // Cycle at which it can be read, INT64_MAX for a load not back yet
+    int64_t ready;
+    int64_t id;
 };
 
 /**
@@ -105,6 +117,13 @@ struct SnitchFpLsuReq
  * re-issue their body from the buffer, outer (frep.o) or inner (frep.i), with
  * the staggered register offsets. The instruction executes functionally at
  * issue; the result timing is carried by the scoreboard.
+ *
+ * The registers of the scalar chaining mask (sc CSR) are FIFOs: each write
+ * appends its value, each instruction reading the register takes the oldest
+ * one, once it is ready, and an instruction writing it does not wait for the
+ * previous writes. In the RTL, the register holds one value and the others
+ * wait in the FPU pipeline, whose writeback stalls until the register is read;
+ * that stall is not modeled.
  */
 class SnitchFpSs
 {
@@ -132,6 +151,9 @@ public:
     // Called by the FP load and store handlers
     void load(iss_insn_t *insn, iss_addr_t addr, int size, int reg);
     void store(iss_insn_t *insn, iss_addr_t addr, int size, int reg);
+
+    // Write of the sc CSR: the FP registers with scalar chaining
+    void sc_set_mask(uint32_t mask);
 
     // Cycle at which the result of the instruction being executed is
     // available, used for the SSR writes
@@ -173,6 +195,20 @@ private:
 
     // Cycle at which each FP register can be read or written again
     int64_t fp_ready[32];
+
+    // Scalar chaining: the mask, and the values written to each chained
+    // register and not read yet, oldest first
+    uint32_t sc_mask;
+    std::deque<SnitchFpSsChainSlot> sc_fifo[32];
+    int64_t sc_slot_id;
+    // The register is mapped to an SSR, for the accesses of the instruction
+    // being checked or issued (the FP LSU destination never is)
+    bool is_ssr_mapped(int lid, bool is_load_dest);
+    inline bool is_chained(int lid) { return (this->sc_mask >> lid) & 1; }
+    // Take the oldest values of the chained registers the instruction reads
+    void sc_pop_sources(iss_insn_t *insn, SnitchFpSsEntry &entry);
+    // Slot of a load to a chained register, NULL if there is none (anymore)
+    SnitchFpSsChainSlot *sc_find_slot(SnitchFpLsuReq *req);
     // Cycle at which the FPU division / square root is free again
     int64_t divsqrt_ready;
 
