@@ -161,9 +161,13 @@ void ClusterRegisters::reset(bool active)
 }
 
 
+// The CLINT set and clear registers are write pulses in the RTL: only the bits
+// of the write act, and nothing is kept. A 64-bit write split into two 32-bit
+// ones thus does nothing with its upper half.
 void ClusterRegisters::cl_clint_set_req(uint64_t reg_offset, int size, uint8_t *value, bool is_write)
 {
     this->regmap.cl_clint_set.update(reg_offset, size, value, is_write);
+    if (!is_write) return;
     for (int i=0; i<this->nb_cores; i++)
     {
         int irq_status = (this->regmap.cl_clint_set.get() >> i) & 1;
@@ -172,11 +176,13 @@ void ClusterRegisters::cl_clint_set_req(uint64_t reg_offset, int size, uint8_t *
             this->external_irq_itf[i].sync(true);
         }
     }
+    this->regmap.cl_clint_set.set(0);
 }
 
 void ClusterRegisters::cl_clint_clear_req(uint64_t reg_offset, int size, uint8_t *value, bool is_write)
 {
     this->regmap.cl_clint_clear.update(reg_offset, size, value, is_write);
+    if (!is_write) return;
     for (int i=0; i<this->nb_cores; i++)
     {
         int irq_status = (this->regmap.cl_clint_clear.get() >> i) & 1;
@@ -185,6 +191,7 @@ void ClusterRegisters::cl_clint_clear_req(uint64_t reg_offset, int size, uint8_t
             this->external_irq_itf[i].sync(false);
         }
     }
+    this->regmap.cl_clint_clear.set(0);
 }
 
 void ClusterRegisters::icache_prefetch_enable_req(uint64_t reg_offset, int size, uint8_t *value, bool is_write)

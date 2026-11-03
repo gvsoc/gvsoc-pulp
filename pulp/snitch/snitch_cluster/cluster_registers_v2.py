@@ -60,7 +60,11 @@ class ClusterRegisters(gvsoc.systree.Component):
         else:
             hjson, name = 'snitch_cluster_peripheral_v2_reg.hjson', 'cluster_periph_v2'
         regmap_instance = regmap.regmap.Regmap(name)
-        regmap.regmap_hjson.import_hjson(regmap_instance, self.get_file_path(f'{comp_path}/{hjson}'))
+        # The registers of the current RTL are 64-bit (its runtime accesses
+        # them through 64-bit structs, which are split into 32-bit or smaller
+        # accesses anywhere in them, and the counters have 48 bits)
+        regmap.regmap_hjson.import_hjson(regmap_instance, self.get_file_path(f'{comp_path}/{hjson}'),
+            use_regwidth=not self.old_regmap)
         regmap.regmap_c_header.dump_to_header(regmap=regmap_instance, name=name,
             header_path=f'{builddir}/{comp_path}/{name}', headers=['regfields', 'gvsoc'])
 
