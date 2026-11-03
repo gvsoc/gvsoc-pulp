@@ -53,11 +53,13 @@ class SnitchV2Config(RiscvConfig):
     lsu_width: int = cfg_field(default=8, dump=True, desc=(
         "Width in bytes of the core data port."
     ))
-    seq_buffer_size: int = cfg_field(default=16, dump=True, desc=(
-        "Entries of the FP sequencer buffer (RTL snitch_sequencer Depth)."
+    seq_buffer_size: int = cfg_field(default=32, dump=True, desc=(
+        "Entries of the FP sequencer buffer, a power of 2 (RTL snitch_sequencer "
+        "BufferDepth, NumSequencerInstr)."
     ))
-    frep_config_size: int = cfg_field(default=8, dump=True, desc=(
-        "Pending FREP loop configurations (RTL snitch_sequencer RptDepth)."
+    frep_nest_depth: int = cfg_field(default=2, dump=True, desc=(
+        "FREP loops which can be nested (RTL snitch_sequencer NestDepth, "
+        "NumSequencerLoops)."
     ))
     offload_latency: int = cfg_field(default=2, dump=True, desc=(
         "Cycles from the offload by the integer core to the earliest FPU issue "
@@ -120,7 +122,7 @@ class ArchSnitchV2(Arch):
         ])
         defines = {
             'SEQ_BUFFER_SIZE': config.seq_buffer_size,
-            'FREP_CONFIG_SIZE': config.frep_config_size,
+            'FREP_NEST_DEPTH': config.frep_nest_depth,
             'OFFLOAD_LATENCY': config.offload_latency,
             'RESULT_LATENCY': config.result_latency,
             'RESP_LATENCY': config.resp_latency,
@@ -185,7 +187,7 @@ class SnitchV2(RiscvCommon):
 
         # The parameters are compiled into the ISS through the ISA header
         isa_key = config.isa + '_' + '_'.join(str(v) for v in [config.seq_buffer_size,
-            config.frep_config_size, config.offload_latency, config.result_latency,
+            config.frep_nest_depth, config.offload_latency, config.result_latency,
             config.resp_latency, config.fma_latency, config.noncomp_latency,
             config.conv_latency, config.divsqrt_latency, config.fp_lsu_nb_outstanding,
             config.caq_depth, config.nb_ssrs, config.ssr_fifo_depth,

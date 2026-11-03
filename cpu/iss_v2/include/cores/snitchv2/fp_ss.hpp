@@ -36,7 +36,8 @@ enum SnitchFpSsKind
     // FP instruction reading an integer register (conversion, move):
     // bypasses the sequencer, integer operand captured at offload
     SNITCH_FPSS_FROM_INT = 4,
-    // FREP loop configuration, repetition count captured at offload
+    // FREP loop configuration, applied at offload. frep.i (repeating each
+    // instruction) is no longer in the RTL, it is taken as frep.o.
     SNITCH_FPSS_FREP_O = 5,
     SNITCH_FPSS_FREP_I = 6,
 };
@@ -56,6 +57,8 @@ struct SnitchFpSsEntry
     int int_reg;
     // Earliest cycle the instruction can be issued (offload latency)
     int64_t ready_cycle;
+    // Position in the instruction stream of the sequencer, for the loops
+    int64_t seq;
     // Copies of the instruction with staggered registers, built when an FREP
     // loop issues it with an offset (index offset - 1)
     std::vector<iss_insn_t *> stagger_insns;
@@ -100,6 +103,21 @@ struct SnitchFpSsChainSlot
     int64_t id;
 };
 
+// FREP loop of the nest (RTL snitch_sequencer loop_cfg_t and its counters)
+struct SnitchFpSsLoop
+{
+    // Sequence number of the first instruction of the body
+    int64_t base_seq;
+    // Index of the last instruction of the body, last iteration
+    int max_inst;
+    uint64_t max_iter;
+    int stagger_max;
+    int stagger_mask;
+    // Current instruction and iteration
+    int inst_cnt;
+    uint64_t iter_cnt;
+};
+
 /**
  * @brief Snitch FP subsystem (RTL snitch_fp_ss + snitch_sequencer).
  *
@@ -107,15 +125,20 @@ struct SnitchFpSsChainSlot
  * holds them in the core and pushes them here with their integer operands.
  * Up to SEQ_BUFFER_SIZE of them wait in the sequencer buffer, plus one in the
  * offload cut; the core stalls on an offload beyond that, or behind an
- * instruction which bypasses the sequencer and is still waiting. FREP
- * configurations take one of FREP_CONFIG_SIZE slots instead.
+ * instruction which bypasses the sequencer and is still waiting.
+ *
+ * An FREP configures a loop of the nest when it is offloaded, on the next
+ * instructions: up to FREP_NEST_DEPTH loops, the inner ones offloaded while
+ * the body of the outermost one is not complete. The core stalls on another
+ * FREP until the nest is done.
  *
  * Every cycle, the subsystem issues at most one instruction to the FPU, in
  * order, once its FP operands and destination are free in its scoreboard
  * (no forwarding: a result is readable RESULT_LATENCY cycles after the FPU
- * latency), its SSR data is there, or its FP LSU slot is free. FREP loops
- * re-issue their body from the buffer, outer (frep.o) or inner (frep.i), with
- * the staggered register offsets. The instruction executes functionally at
+ * latency), its SSR data is there, or its FP LSU slot is free. The loops
+ * re-issue their body from the buffer, the inner bodies being one instruction
+ * each of the outer ones, with the staggered register offsets of the innermost
+ * loop. The instruction executes functionally at
  * issue; the result timing is carried by the scoreboard.
  *
  * The registers of the scalar chaining mask (sc CSR) are FIFOs: each write
@@ -170,14 +193,19 @@ private:
     // Try to issue the next instruction, returns true if one was issued
     bool issue();
     // Issue the instruction of the entry at queue index, with stagger offset
-    bool issue_entry(int index, int offset, bool last);
-    iss_insn_t *get_stagger_insn(SnitchFpSsEntry &entry, iss_insn_t *insn, int offset);
+    bool issue_entry(int index, int offset, int stagger_mask, bool last);
+    iss_insn_t *get_stagger_insn(SnitchFpSsEntry &entry, iss_insn_t *insn, int offset,
+        int stagger_mask);
     bool check_operands(iss_insn_t *insn, SnitchFpSsEntry &entry);
     void complete_at(InsnEntry *entry, int64_t cycle);
     void pop_entry();
     void lsu_send(SnitchFpLsuReq *req);
     void lsu_end(SnitchFpLsuReq *req);
-    void loop_start(SnitchFpSsEntry &entry);
+    // An FREP can be offloaded: no nest, or nested in the current one
+    bool frep_accepted();
+    void frep_configure(iss_insn_t *insn, iss_reg_t nb_iter);
+    // Loop counters update after the issue of an instruction of the nest
+    void nest_advance();
     void check_idle();
 
     Iss &iss;
@@ -185,9 +213,11 @@ private:
     vp::ClockEvent fsm_event;
 
     std::deque<SnitchFpSsEntry> queue;
-    // Instructions (FREP excluded) and FREP configurations in the queue
+    // Instructions in the queue
     int nb_insns;
-    int nb_freps;
+    // Sequence numbers of the next instruction offloaded and issued
+    int64_t next_seq;
+    int64_t rd_seq;
     // A bypass instruction is in the queue (it holds the offload cut)
     bool pending_bypass;
     // Held instructions not terminated yet, queued or in flight
@@ -212,15 +242,16 @@ private:
     // Cycle at which the FPU division / square root is free again
     int64_t divsqrt_ready;
 
-    // FREP loop being executed. Its body is at the head of the queue.
+    // FREP loop nest: the configured loops, outermost first, whether it is
+    // being executed (its body is then at the head of the queue), the loop of
+    // the instruction being issued, whether the body of the outermost loop is
+    // all offloaded, and the stagger offset of the innermost loop.
+    SnitchFpSsLoop nest[CONFIG_GVSOC_ISS_SNITCH_FREP_NEST_DEPTH];
+    int nest_cnt;
     bool loop_active;
-    bool loop_inner;
-    int loop_nb_insns;
-    uint64_t loop_nb_rpt;
-    int loop_stagger_max;
-    int loop_stagger_mask;
-    int loop_insn;
-    uint64_t loop_rpt;
+    int loop_idx;
+    bool nest_received_all;
+    int stagger_cnt;
 
     // Instruction completions, (cycle, held instruction)
     std::vector<std::pair<int64_t, InsnEntry *>> completions;

@@ -133,10 +133,15 @@ void SnitchFpSs::reset(bool active)
         this->queue.clear();
         this->completions.clear();
         this->nb_insns = 0;
-        this->nb_freps = 0;
+        this->next_seq = 0;
+        this->rd_seq = 0;
         this->nb_inflight = 0;
         this->pending_bypass = false;
+        this->nest_cnt = 0;
         this->loop_active = false;
+        this->loop_idx = 0;
+        this->nest_received_all = false;
+        this->stagger_cnt = 0;
         this->divsqrt_ready = 0;
         this->issue_id = 0;
         this->result_cycle = 0;
@@ -174,7 +179,7 @@ bool SnitchFpSs::can_offload(SnitchFpSsKind kind)
 
     if (kind == SNITCH_FPSS_FREP_O || kind == SNITCH_FPSS_FREP_I)
     {
-        return this->nb_freps < CONFIG_GVSOC_ISS_SNITCH_FREP_CONFIG_SIZE;
+        return this->frep_accepted();
     }
 
     if ((kind == SNITCH_FPSS_LOAD || kind == SNITCH_FPSS_STORE) &&
@@ -253,6 +258,14 @@ iss_reg_t SnitchFpSs::offload_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
         return pc;
     }
 
+    if (kind == SNITCH_FPSS_FREP_O || kind == SNITCH_FPSS_FREP_I)
+    {
+        // The loop is configured now, on the next instructions, the FREP itself
+        // does not go to the buffer
+        _this->frep_configure(insn, REG_GET(0));
+        return iss_stub_handler<fast>(insn)(iss, insn, pc);
+    }
+
     _this->queue.emplace_back();
     SnitchFpSsEntry &entry = _this->queue.back();
     entry.kind = kind;
@@ -262,6 +275,13 @@ iss_reg_t SnitchFpSs::offload_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
     entry.caq_pending = false;
     entry.handler = iss_stub_handler<fast>(insn);
     entry.ready_cycle = iss->clock.get_cycles() + CONFIG_GVSOC_ISS_SNITCH_OFFLOAD_LATENCY;
+    entry.seq = _this->next_seq++;
+
+    // The last instruction of the body of the nest has arrived
+    if (_this->nest_cnt > 0 && entry.seq == _this->nest[0].base_seq + _this->nest[0].max_inst)
+    {
+        _this->nest_received_all = true;
+    }
 
     // The integer operands are captured now, the core may overwrite them
     // before the FP subsystem executes the instruction
@@ -272,11 +292,6 @@ iss_reg_t SnitchFpSs::offload_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
             entry.int_value = REG_GET(0) + SIM_GET(0);
             _this->caq.push_back(entry.int_value & ~(iss_addr_t)7);
             entry.caq_pending = true;
-            break;
-
-        case SNITCH_FPSS_FREP_O:
-        case SNITCH_FPSS_FREP_I:
-            entry.int_value = REG_GET(0);
             break;
 
         case SNITCH_FPSS_FROM_INT:
@@ -308,21 +323,14 @@ iss_reg_t SnitchFpSs::offload_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
 #endif
 
     _this->nb_inflight++;
-    if (kind == SNITCH_FPSS_FREP_O || kind == SNITCH_FPSS_FREP_I)
+    _this->nb_insns++;
+    if (kind == SNITCH_FPSS_TO_INT || kind == SNITCH_FPSS_FROM_INT)
     {
-        _this->nb_freps++;
-    }
-    else
-    {
-        _this->nb_insns++;
-        if (kind == SNITCH_FPSS_TO_INT || kind == SNITCH_FPSS_FROM_INT)
-        {
-            _this->pending_bypass = true;
-        }
+        _this->pending_bypass = true;
     }
 
     _this->trace.msg(vp::Trace::LEVEL_TRACE, "Offloaded instruction (pc: 0x%lx, kind: %d, "
-        "nb_insns: %d, nb_freps: %d)\n", pc, kind, _this->nb_insns, _this->nb_freps);
+        "nb_insns: %d)\n", pc, kind, _this->nb_insns);
 
     _this->fsm_event.enable();
 
@@ -388,24 +396,133 @@ void SnitchFpSs::complete_at(InsnEntry *entry, int64_t cycle)
     this->completions.emplace_back(cycle, entry);
 }
 
-void SnitchFpSs::loop_start(SnitchFpSsEntry &entry)
+bool SnitchFpSs::frep_accepted()
 {
-    iss_insn_t *insn = this->iss.exec.get_insn(entry.entry);
+    // As the RTL handshake: no nest, or nested in the current one, i.e. while
+    // the body of the outermost loop is still being received
+    if (this->nest_cnt == 0) return true;
+    if (this->nest_received_all) return false;
+    if (this->nest_cnt == CONFIG_GVSOC_ISS_SNITCH_FREP_NEST_DEPTH) return false;
+    return this->next_seq <= this->nest[0].base_seq + this->nest[0].max_inst;
+}
 
-    this->loop_active = true;
-    this->loop_inner = entry.kind == SNITCH_FPSS_FREP_I;
-    this->loop_nb_insns = insn->uim[2] + 1;
-    this->loop_nb_rpt = (uint64_t)entry.int_value + 1;
-    this->loop_stagger_max = insn->uim[1];
-    this->loop_stagger_mask = insn->uim[0];
-    this->loop_insn = 0;
-    this->loop_rpt = 0;
+void SnitchFpSs::frep_configure(iss_insn_t *insn, iss_reg_t nb_iter)
+{
+    SnitchFpSsLoop &loop = this->nest[this->nest_cnt++];
 
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, "FREP start (inner: %d, nb_insns: %d, nb_rpt: %ld, "
-        "stagger_max: %d, stagger_mask: 0x%x)\n", this->loop_inner, this->loop_nb_insns,
-        this->loop_nb_rpt, this->loop_stagger_max, this->loop_stagger_mask);
+    // The body size field is the number of instructions, on the bits of the
+    // buffer index (0 for a full buffer)
+    loop.base_seq = this->next_seq;
+    loop.max_inst = (insn->uim[2] - 1) & (CONFIG_GVSOC_ISS_SNITCH_SEQ_BUFFER_SIZE - 1);
+    loop.max_iter = nb_iter & 0xFFFF;
+    loop.stagger_max = insn->uim[1];
+    loop.stagger_mask = insn->uim[0];
+    loop.inst_cnt = 0;
+    loop.iter_cnt = 0;
 
-    this->loop_signal = true;
+    if (insn->uim[2] >> 11)
+    {
+        this->trace.force_warning("Stream-controlled FREP loop not supported (pc: 0x%lx)\n",
+            insn->addr);
+    }
+
+    this->trace.msg(vp::Trace::LEVEL_DEBUG, "FREP configured (level: %d, nb_insns: %d, "
+        "nb_iter: %ld, stagger_max: %d, stagger_mask: 0x%x)\n", this->nest_cnt - 1,
+        loop.max_inst + 1, loop.max_iter + 1, loop.stagger_max, loop.stagger_mask);
+}
+
+void SnitchFpSs::nest_advance()
+{
+    // Counters and read pointer update of the RTL nest controller, from the
+    // state before the issue
+    int idx = this->loop_idx;
+    bool last_inst[CONFIG_GVSOC_ISS_SNITCH_FREP_NEST_DEPTH];
+    bool last_iter[CONFIG_GVSOC_ISS_SNITCH_FREP_NEST_DEPTH];
+    // All the loops inside loop i, up to the current one, are in their last
+    // iteration
+    bool last_iter_inner[CONFIG_GVSOC_ISS_SNITCH_FREP_NEST_DEPTH];
+
+    for (int i = 0; i < this->nest_cnt; i++)
+    {
+        last_inst[i] = this->nest[i].inst_cnt == this->nest[i].max_inst;
+        last_iter[i] = this->nest[i].iter_cnt == this->nest[i].max_iter;
+    }
+    for (int i = 0; i <= idx; i++)
+    {
+        last_iter_inner[i] = true;
+        for (int j = i + 1; j <= idx; j++) last_iter_inner[i] &= last_iter[j];
+    }
+
+    int outermost_ending = -1;
+    for (int i = 0; i <= idx; i++)
+    {
+        if (last_inst[i] && last_iter[i] && last_iter_inner[i])
+        {
+            outermost_ending = i;
+            break;
+        }
+    }
+    int innermost_non_ending = outermost_ending == -1 ? idx : outermost_ending - 1;
+    bool nest_ends = outermost_ending == 0;
+
+    // Stagger offset, only in the innermost loop
+    if (idx == this->nest_cnt - 1)
+    {
+        if (nest_ends)
+        {
+            this->stagger_cnt = 0;
+        }
+        else if (last_inst[idx])
+        {
+            this->stagger_cnt = last_iter[idx] || this->stagger_cnt == this->nest[idx].stagger_max ?
+                0 : this->stagger_cnt + 1;
+        }
+    }
+
+    // Next instruction, back to the start of the innermost loop going on if it
+    // is at its end
+    this->rd_seq++;
+    if (!nest_ends && last_inst[innermost_non_ending])
+    {
+        this->rd_seq = this->nest[innermost_non_ending].base_seq;
+    }
+
+    // The instructions of the inner bodies count for the outer loops on
+    // their last execution
+    for (int i = 0; i <= idx; i++)
+    {
+        if (i == idx || last_iter_inner[i])
+        {
+            SnitchFpSsLoop &loop = this->nest[i];
+            if (last_inst[i])
+            {
+                loop.inst_cnt = 0;
+                loop.iter_cnt = last_iter[i] ? 0 : loop.iter_cnt + 1;
+            }
+            else
+            {
+                loop.inst_cnt++;
+            }
+        }
+    }
+
+    if (outermost_ending > 0)
+    {
+        this->loop_idx = innermost_non_ending;
+    }
+    else if (nest_ends)
+    {
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "FREP nest end\n");
+        for (int i = 0; i <= this->nest[0].max_inst; i++)
+        {
+            this->pop_entry();
+        }
+        this->nest_cnt = 0;
+        this->loop_active = false;
+        this->loop_idx = 0;
+        this->nest_received_all = false;
+        this->loop_signal = false;
+    }
 }
 
 void SnitchFpSs::pop_entry()
@@ -422,84 +539,58 @@ void SnitchFpSs::pop_entry()
 
 bool SnitchFpSs::issue()
 {
-    int64_t cycle = this->iss.clock.get_cycles();
+    if (this->queue.empty()) return false;
 
-    while (1)
+    // The nest starts with the first instruction of the outermost body, and
+    // an inner loop with the first of its body
+    if (this->nest_cnt > 0 && !this->loop_active && this->rd_seq == this->nest[0].base_seq)
     {
-        if (this->loop_active)
-        {
-            // The loop body is at the head of the queue, it may not be all
-            // offloaded yet
-            if (this->loop_insn >= (int)this->queue.size()) return false;
+        this->loop_active = true;
+        this->loop_idx = 0;
+        this->loop_signal = true;
+    }
 
-            int offset = 0;
-            if (this->loop_stagger_max)
-            {
-                offset = this->loop_rpt % (this->loop_stagger_max + 1);
-            }
-            bool last = this->loop_rpt == this->loop_nb_rpt - 1;
-
-            if (!this->issue_entry(this->loop_insn, offset, last)) return false;
-
-            bool done;
-            if (this->loop_inner)
-            {
-                this->loop_rpt++;
-                if (this->loop_rpt == this->loop_nb_rpt)
-                {
-                    this->loop_rpt = 0;
-                    this->loop_insn++;
-                }
-                done = this->loop_insn == this->loop_nb_insns;
-            }
-            else
-            {
-                this->loop_insn++;
-                if (this->loop_insn == this->loop_nb_insns)
-                {
-                    this->loop_insn = 0;
-                    this->loop_rpt++;
-                }
-                done = this->loop_rpt == this->loop_nb_rpt;
-            }
-
-            if (done)
-            {
-                this->trace.msg(vp::Trace::LEVEL_DEBUG, "FREP end\n");
-                for (int i = 0; i < this->loop_nb_insns; i++)
-                {
-                    this->pop_entry();
-                }
-                this->loop_active = false;
-                this->loop_signal = false;
-            }
-            return true;
-        }
-
-        if (this->queue.empty()) return false;
-
-        SnitchFpSsEntry &head = this->queue.front();
-        if (head.ready_cycle > cycle) return false;
-
-        if (head.kind == SNITCH_FPSS_FREP_O || head.kind == SNITCH_FPSS_FREP_I)
-        {
-            // The loop configuration does not take an issue slot, the first
-            // instruction of the body can go in the same cycle
-            this->loop_start(head);
-            this->complete_at(head.entry, cycle);
-            this->queue.pop_front();
-            this->nb_freps--;
-            continue;
-        }
-
-        if (!this->issue_entry(0, 0, true)) return false;
-
+    if (!this->loop_active)
+    {
+        if (!this->issue_entry(0, 0, 0, true)) return false;
         this->pop_entry();
+        this->rd_seq++;
         return true;
     }
+
+    for (int i = this->nest_cnt - 1; i > this->loop_idx; i--)
+    {
+        if (this->nest[i].base_seq == this->rd_seq)
+        {
+            this->loop_idx = i;
+            break;
+        }
+    }
+
+    // The body is at the head of the queue, it may not be all offloaded yet
+    int index = this->rd_seq - this->queue.front().seq;
+    if (index >= (int)this->queue.size()) return false;
+
+    // Last execution of the instruction when all the loops containing it are
+    // in their last iteration
+    bool last = true;
+    for (int i = 0; i <= this->loop_idx; i++)
+    {
+        last &= this->nest[i].iter_cnt == this->nest[i].max_iter;
+    }
+
+    int stagger_mask = this->nest[this->loop_idx].stagger_mask;
+    if (!this->issue_entry(index, stagger_mask ? this->stagger_cnt : 0, stagger_mask, last))
+    {
+        return false;
+    }
+
+    this->nest_advance();
+    return true;
 }
 
-iss_insn_t *SnitchFpSs::get_stagger_insn(SnitchFpSsEntry &entry, iss_insn_t *insn, int offset)
+iss_insn_t *SnitchFpSs::get_stagger_insn(SnitchFpSsEntry &entry, iss_insn_t *insn, int offset,
+    int stagger_mask)
 {
     if ((int)entry.stagger_insns.size() < offset)
     {
@@ -531,7 +622,7 @@ iss_insn_t *SnitchFpSs::get_stagger_insn(SnitchFpSsEntry &entry, iss_insn_t *ins
                 continue;
             }
 
-            if (!((this->loop_stagger_mask >> bit) & 1)) continue;
+            if (!((stagger_mask >> bit) & 1)) continue;
 
             int lid = copy->args[i].u.reg.index - ISS_NB_REGS;
             int reg = ISS_NB_REGS + ((lid + offset) & 0x1f);
@@ -614,7 +705,7 @@ bool SnitchFpSs::check_operands(iss_insn_t *insn, SnitchFpSsEntry &entry)
     return true;
 }
 
-bool SnitchFpSs::issue_entry(int index, int offset, bool last)
+bool SnitchFpSs::issue_entry(int index, int offset, int stagger_mask, bool last)
 {
     int64_t cycle = this->iss.clock.get_cycles();
     SnitchFpSsEntry &entry = this->queue[index];
@@ -624,7 +715,7 @@ bool SnitchFpSs::issue_entry(int index, int offset, bool last)
     iss_insn_t *insn = this->iss.exec.get_insn(entry.entry);
     if (offset != 0)
     {
-        insn = this->get_stagger_insn(entry, insn, offset);
+        insn = this->get_stagger_insn(entry, insn, offset, stagger_mask);
     }
 
     if (!this->check_operands(insn, entry)) return false;
