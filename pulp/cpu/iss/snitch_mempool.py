@@ -72,7 +72,27 @@ class IrqMempool(IssModule):
         ])
 
 
+class SnitchMempoolEvent(IssModule):
+    """Pipelined FPU results: an instruction with a decoder latency holds its
+    destination in the scoreboard until writeback (see
+    cpu/iss_v2/include/cores/snitchmempool/events.hpp)."""
+
+    @override
+    def gen(self, iss: RiscvCommon):
+        iss.isa.add_define('CONFIG_GVSOC_ISS_EVENT', 'SnitchMempoolEvents')
+        iss.isa.add_include('<cpu/iss_v2/include/cores/snitchmempool/events.hpp>')
+        iss.add_sources(['cpu/iss_v2/src/event/event.cpp'])
+        iss.isa.add_implem_include(
+            '<cpu/iss_v2/include/cores/snitchmempool/events_implem.hpp>')
+        iss.add_sources(['cpu/iss_v2/src/cores/snitchmempool/events.cpp'])
+
+
 _isa_instances: dict[str, Isa] = {}
+
+# Cycles from the issue of vfexp.h to the issue of an instruction using its
+# result, as in the RTL (pipelined: independent instructions issue every
+# cycle). Every other FP operation takes 1 cycle.
+VFEXP_LATENCY = 3
 
 
 class SnitchMempool(RiscvCommon):
@@ -87,14 +107,19 @@ class SnitchMempool(RiscvCommon):
 
         if isa_instance is None:
             if config.vector:
-                extensions = [Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux()]
+                extensions = [Xdma(), Xf16(), Xf16alt(), Xf8(), XfvecSnitch(inc_vfexp=True), Xfaux()]
             else:
-                extensions = [Xf16(), Xf16alt(), Xf8(), XfvecSnitch(), Xfaux(),
+                extensions = [Xf16(), Xf16alt(), Xf8(), XfvecSnitch(inc_vfexp=True), Xfaux(),
                               PulpV2(hwloop=False, elw=False)]
             isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa(
                 'snitch_mempool_' + cache_key, config.isa, extensions=extensions)
             if config.vector:
                 pulp.ara.ara_v2.extend_isa(isa_instance)
+            for insn in isa_instance.get_insns():
+                # The scoreboard releases a result one cycle after its
+                # writeback
+                if 'fexp' in insn.tags:
+                    insn.set_latency(VFEXP_LATENCY - 1)
             _isa_instances[cache_key] = isa_instance
 
         modules: dict[str, IssModule] = {
@@ -104,6 +129,7 @@ class SnitchMempool(RiscvCommon):
             'prefetch': PrefetchSingleLine(),
             'irq': IrqMempool(),
             'lsu': (LsuV2 if config.lsu_v2 else Lsu)(nb_outstanding=config.nb_outstanding),
+            'event': SnitchMempoolEvent(),
         }
         if config.vector:
             modules['offload'] = Offload()
