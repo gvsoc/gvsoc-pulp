@@ -29,6 +29,7 @@ import gvsoc.runner
 import vp.clock_domain
 from pulp.floonoc_flex.floonoc_flex import FlooNocFlex
 from interco.traffic.generator import Generator
+from pulp.idma.snitch_dma import SnitchDma
 from memory.memory import Memory
 from gvrun.parameter import TargetParameter
 
@@ -37,6 +38,22 @@ WIDE_WIDTH = 64
 MESH_DIM = 4
 NODE_SIZE = 0x10000
 MEM_BASE = 0x2000_0000
+
+# Scenarios that drive node (0,0) via a real SnitchDma instead of a
+# Generator, mapped to which plane the DMA's AXI
+# master binds to (True=wide, False=narrow). All other nodes get a normal Generator.
+DMA_SCENARIOS = {
+    'dma_broadcast': True,
+    'dma_reduction_add_uint16': True,
+    'dma_reduction_add_int16': True,
+    'dma_reduction_add_fp16': True,
+    'dma_reduction_max_uint16': True,
+    'dma_reduction_max_int16': True,
+    'dma_reduction_max_fp16': True,
+    'dma_reduction_subgrid': True,
+    'dma_reduction_large': True,
+    'dma_reduction_narrow': False,
+}
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -64,6 +81,14 @@ class CollectiveTestbench(gvsoc.systree.Component):
         self.itf_bind(f'generator_control_{node}_{suffix}', itf,
             signature='wire<TrafficGeneratorConfig>')
 
+    # Enable the use of DMAs for test
+    def o_DMA_OFFLOAD(self, itf: gvsoc.systree.SlaveItf):
+        self.itf_bind('dma_offload', itf, signature='wire<IssOffloadInsn<uint32_t>*>')
+
+    def i_DMA_OFFLOAD_GRANT(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'dma_offload_grant',
+            signature='wire<IssOffloadInsnGrant<uint32_t>*>')
+
 
 class Soc(gvsoc.systree.Component):
     def __init__(self, parent: gvsoc.systree.Component, name: str, scenario: str):
@@ -90,15 +115,31 @@ class Soc(gvsoc.systree.Component):
                 noc.o_NARROW_MAP(mem.i_INPUT(), base, NODE_SIZE, node_id, rm_base=True)
                 noc.o_WIDE_BIND(mem.i_INPUT(), node_id)
 
-                narrow_gen = Generator(self, f'narrow_generator_{x}_{y}', nb_pending_reqs=32,
-                    collective_enable=collective_enable)
-                narrow_gen.o_OUTPUT(noc.i_NARROW_INPUT(node_id))
-                testbench.o_GENERATOR_CONTROL(node, False, narrow_gen.i_CONTROL())
+                # For a dma_* scenario, node (0,0)'s is driven by a real SnitchDma
+                dma_wide = DMA_SCENARIOS.get(scenario)
+                is_dma_node = dma_wide is not None and x == 0 and y == 0
 
-                wide_gen = Generator(self, f'wide_generator_{x}_{y}', nb_pending_reqs=32,
-                    collective_enable=collective_enable)
-                wide_gen.o_OUTPUT(noc.i_WIDE_INPUT(node_id))
-                testbench.o_GENERATOR_CONTROL(node, True, wide_gen.i_CONTROL())
+                if is_dma_node and not dma_wide:
+                    dma = SnitchDma(self, 'dma', transfer_queue_size=4, burst_queue_size=4)
+                    dma.o_AXI(noc.i_NARROW_INPUT(node_id))
+                    testbench.o_DMA_OFFLOAD(dma.i_OFFLOAD())
+                    dma.o_OFFLOAD_GRANT(testbench.i_DMA_OFFLOAD_GRANT())
+                else:
+                    narrow_gen = Generator(self, f'narrow_generator_{x}_{y}', nb_pending_reqs=32,
+                        collective_enable=collective_enable)
+                    narrow_gen.o_OUTPUT(noc.i_NARROW_INPUT(node_id))
+                    testbench.o_GENERATOR_CONTROL(node, False, narrow_gen.i_CONTROL())
+
+                if is_dma_node and dma_wide:
+                    dma = SnitchDma(self, 'dma', transfer_queue_size=4, burst_queue_size=4)
+                    dma.o_AXI(noc.i_WIDE_INPUT(node_id))
+                    testbench.o_DMA_OFFLOAD(dma.i_OFFLOAD())
+                    dma.o_OFFLOAD_GRANT(testbench.i_DMA_OFFLOAD_GRANT())
+                else:
+                    wide_gen = Generator(self, f'wide_generator_{x}_{y}', nb_pending_reqs=32,
+                        collective_enable=collective_enable)
+                    wide_gen.o_OUTPUT(noc.i_WIDE_INPUT(node_id))
+                    testbench.o_GENERATOR_CONTROL(node, True, wide_gen.i_CONTROL())
 
 
 # Wraps the SoC with its clock generator, like a normal gvsoc chip.
