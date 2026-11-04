@@ -30,6 +30,8 @@
 # router and are cut into 32-bit lanes; each FC port and each lane has a demux
 # which sends the shared L2 to its own port of the L2 log interconnect and
 # everything else to the bridge router (private L2, APB, cluster).
+# The cluster is an AXI slave of the AXI beat router, which the bridge router
+# reaches for the cluster window.
 
 from __future__ import annotations
 
@@ -38,7 +40,7 @@ from gvsoc.systree import Component, SlaveItf
 from gvsoc.signature import IoV2SingleReq, IoV2Beat
 from gvrun.parameter import TargetParameter
 from gvrun.systree import ExecutableContainer
-from interco.router_v2 import Router, RouterConfig, RouterMapping, KIND_BEAT
+from interco.router_v2 import Router, RouterConfig, RouterMapping, KIND_BEAT, KIND_UNTIMED, KIND_AUTO
 from interco.limiter_v2 import Limiter, LimiterConfig
 from interco.rw_splitter_v2 import RwSplitter, RwSplitterConfig
 from interco.splitter_v2 import Splitter, SplitterConfig
@@ -183,9 +185,9 @@ class PulpOpenV2Soc(Component):
             signature=IoV2Beat(config.axi_width))
         rw_splitter = RwSplitter(self, 'rw_splitter', config=RwSplitterConfig())
         axi_read_split = Splitter(self, 'axi_read_splitter', config=SplitterConfig(
-            input_width=config.axi_width, output_width=4))
+            input_width=config.axi_width, output_width=4, lane_by_address=True))
         axi_write_split = Splitter(self, 'axi_write_splitter', config=SplitterConfig(
-            input_width=config.axi_width, output_width=4))
+            input_width=config.axi_width, output_width=4, lane_by_address=True))
         fc_fetch_limiter = Limiter(self, 'fc_fetch_limiter', LimiterConfig(bandwidth=4))
 
         # The uDMA ports come last, the other ones keep the port they had
@@ -195,7 +197,11 @@ class PulpOpenV2Soc(Component):
             nb_masters=len(masters), nb_slaves=config.l2_shared_banks, interleaving_width=2))
         bridge = Router(self, 'bridge', config=RouterConfig())
         apb = Router(self, 'apb', config=RouterConfig(latency=config.apb_latency))
-        demuxes = {name: Router(self, f'{name}_demux', config=RouterConfig()) for name in masters}
+        # The AXI lanes of lint64_to_32 go straight into the L2 crossbar: no
+        # buffering, a lost bank stalls the lane (and the bridge) until granted
+        axi_lanes = [f'axi_{rw}_{i}' for rw in ('read', 'write') for i in range(nb_axi_lanes)]
+        demuxes = {name: Router(self, f'{name}_demux', config=RouterConfig(
+            kind=KIND_UNTIMED if name in axi_lanes else KIND_AUTO)) for name in masters}
         # The FC data port sees the L2 at address 0 too
         fc_alias = Remapper(self, 'fc_alias', config=RemapperConfig(
             base=0, size=config.l2_alias_size, target_base=config.l2_base),
@@ -232,6 +238,11 @@ class PulpOpenV2Soc(Component):
 
         # AXI
         axi_limiter.o_OUTPUT(axi.i_INPUT(0))
+        # SoC to cluster through the RTL axi_cdc, as the cluster to SoC way
+        axi.o_MAP(cluster.i_INPUT(), mapping=RouterMapping(
+            base=cluster_cfg.base, size=cluster_cfg.size, remove_base=False), name='cluster',
+            clock_bridge=('cdc_fifo_gray_beh', {'k_src_per_dir': 1, 'k_dst_per_dir': 3,
+                                                'depth': 8, 'axi_channels': True}))
         axi.o_MAP_DEFAULT(axi_slice.i_INPUT(), name='soc')
         axi_slice.o_OUTPUT(rw_splitter.i_INPUT())
         rw_splitter.o_READ_OUTPUT(axi_read_split.i_INPUT())
@@ -255,7 +266,9 @@ class PulpOpenV2Soc(Component):
             base=config.l2_base + config.l2_priv_size, size=config.l2_priv_size), name='l2_priv1')
         bridge.o_MAP(apb.i_INPUT(), mapping=RouterMapping(
             base=config.apb_base, size=config.apb_size, remove_base=False), name='apb')
-        bridge.o_MAP(cluster.i_INPUT(), mapping=RouterMapping(
+        # The cluster is behind the AXI crossbar: the bridge reaches it through
+        # the lint to AXI converter, the last input of the AXI router
+        bridge.o_MAP(axi.i_INPUT(2), mapping=RouterMapping(
             base=cluster_cfg.base, size=cluster_cfg.size, remove_base=False,
             latency=config.axi_latency), name='cluster')
 

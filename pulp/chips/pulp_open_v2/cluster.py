@@ -186,7 +186,13 @@ class PulpOpenV2Cluster(Component):
             kind=KIND_BEAT, width=config.ext_axi_width,
             max_pending_bursts_per_input=8,
             max_input_pending_size=0, combinational=True))
-        ext_ico    = Router(self, 'ext_ico', config=rtr_cfg())
+        # SoC to cluster AXI slave, behind the SoC to cluster axi_cdc: the
+        # cluster AXI crossbar, a beat router as soc_ico, whose outputs get
+        # the axi2mem / axi2per adapters inserted by the framework
+        ext_ico    = Router(self, 'ext_ico', config=RouterConfig(
+            kind=KIND_BEAT, width=config.ext_axi_width,
+            max_pending_bursts_per_input=8,
+            max_input_pending_size=0, combinational=True))
 
         cluster_ctrl = ClusterCtrl(self, 'cluster_ctrl', config=ClusterCtrlConfig(nb_core=nb_pe))
         event_unit = EventUnit(self, 'event_unit', nb_core=nb_pe)
@@ -302,10 +308,12 @@ class PulpOpenV2Cluster(Component):
     # -------- external ports --------
 
     def i_INPUT(self) -> SlaveItf:
-        return SlaveItf(self, 'input', signature=IoV2SingleReq())
+        # AXI slave of the SoC: the SoC binds a beat master here, which gets
+        # the clock bridge of its choice (the RTL axi_cdc)
+        return SlaveItf(self, 'input', signature=IoV2Beat(self._soc_beat_width))
 
     def __o_INPUT(self, itf: SlaveItf):
-        self.itf_bind('input', itf, signature=IoV2SingleReq(), composite_bind=True)
+        self.itf_bind('input', itf, signature=IoV2Beat(self._soc_beat_width), composite_bind=True)
 
     def i_REF_CLOCK(self) -> SlaveItf:
         return SlaveItf(self, 'ref_clock', signature='clock_gen')
