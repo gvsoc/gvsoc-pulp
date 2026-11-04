@@ -95,10 +95,31 @@ class Rv32frep(IsaSubset):
 # RV32 Extension SSR
 class Rv32ssr(IsaSubset):
 
-    def __init__(self):
+    # With Xcopift, the SSR register index of scfgri / scfgwi (bits 31:25) is
+    # decoded below 32, its upper bits being 0, which leaves room for the
+    # COPIFT instructions on the same opcode
+    def __init__(self, copift=False):
+        top = '00-----' if copift else '-------'
         super().__init__(name='Xssr', instrs=[
-            Instr('scfgri', Format_SCFGRI, '------------ 00000 001 ---- -0101011', tags=["ssr", 'nseq', 'fp_op']),
-            Instr('scfgwi', Format_SCFGWI, '------------ ----- 010 0000 00101011', tags=["ssr", 'nseq', 'fp_op']),
+            Instr('scfgri', Format_SCFGRI, top + '----- 00000 001 ---- -0101011', tags=["ssr", 'nseq', 'fp_op']),
+            Instr('scfgwi', Format_SCFGWI, top + '----- ----- 010 0000 00101011', tags=["ssr", 'nseq', 'fp_op']),
             Instr('scfgr', Format_SCFGR, '0000000----- 00001 001 ---- -0101011', tags=["ssr", 'nseq', 'fp_op']),
             Instr('scfgw', Format_SCFGW, '0000000----- ----- 010 0000 00101011', tags=["ssr", 'nseq', 'fp_op']),
+        ])
+
+
+# COPIFT conversions and comparison working on FP registers only, the 32-bit
+# integers being in FP registers, so that they can be sequenced (FREP).
+# They overlap scfgri / scfgwi on large SSR register indexes: use with
+# Rv32ssr(copift=True).
+class Xcopift(IsaSubset):
+
+    def __init__(self):
+        super().__init__(name='Xcopift', instrs=[
+            Instr('fcvt.d.w.copift',  F_F('d', ui12_3), '1101001 00000 ----- --- ----- 0101011',
+                  tags=['fconv', 'fp_op']),
+            Instr('fcvt.d.wu.copift', F_F('d', ui12_3), '1101001 00001 ----- --- ----- 0101011',
+                  tags=['fconv', 'fp_op']),
+            Instr('flt.d.copift',     F_FF('d'),        '1010001 ----- ----- 001 ----- 0101011',
+                  tags=['fother', 'fp_op']),
         ])

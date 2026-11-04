@@ -29,18 +29,25 @@ enum SnitchFpSsKind
     SNITCH_FPSS_LOAD = 1,
     SNITCH_FPSS_STORE = 2,
     // FP instruction writing an integer register (compare, classify,
-    // conversion, move): bypasses the sequencer, only issued once it is
-    // empty. The integer register stays pending in the core until the result
-    // comes back.
+    // conversion, move). The integer register stays pending in the core until
+    // the result comes back, unless it goes to the F2I COPIFT queue.
     SNITCH_FPSS_TO_INT = 3,
-    // FP instruction reading an integer register (conversion, move):
-    // bypasses the sequencer, integer operand captured at offload
+    // FP instruction reading an integer register (conversion, move), integer
+    // operand captured at offload, or popped from the I2F COPIFT queue at
+    // issue.
+    // Most of these two kinds bypass the sequencer buffer: nothing else is
+    // offloaded until they are issued, they cannot be in an FREP loop. The RTL
+    // buffers flt.d, fcvt.w(u).d, fcvt.d.w(u), fmv.x.w and fmv.w.x.
     SNITCH_FPSS_FROM_INT = 4,
     // FREP loop configuration, applied at offload. frep.i (repeating each
     // instruction) is no longer in the RTL, it is taken as frep.o.
     SNITCH_FPSS_FREP_O = 5,
     SNITCH_FPSS_FREP_I = 6,
 };
+
+// Added to the kind in the decoder item block_id for the instructions going
+// around the sequencer buffer
+#define SNITCH_FPSS_BYPASS 0x10
 
 // One instruction in the FP subsystem, from its offload to its last issue
 struct SnitchFpSsEntry
@@ -69,6 +76,19 @@ struct SnitchFpSsEntry
     // Handler executing the instruction, the full or fast one depending on
     // the variant of the stub which offloaded it
     iss_reg_t (*handler)(Iss *, iss_insn_t *, iss_reg_t);
+    // Goes around the sequencer buffer
+    bool bypass;
+    // TO_INT whose result goes to the F2I queue (COPIFT on at offload)
+    bool to_f2i;
+};
+
+// Termination of a held instruction
+struct SnitchFpSsCompletion
+{
+    int64_t cycle;
+    InsnEntry *entry;
+    // Its integer register is not pending in the core (result to F2I)
+    bool keep_scoreboard;
 };
 
 // FP load or store of the FP LSU
@@ -178,6 +198,11 @@ public:
     // Write of the sc CSR: the FP registers with scalar chaining
     void sc_set_mask(uint32_t mask);
 
+    // Something to do (COPIFT queue access by the core)
+    inline void activate() { this->fsm_event.enable(); }
+
+    vp::Trace trace;
+
     // Cycle at which the result of the instruction being executed is
     // available, used for the SSR writes
     int64_t result_cycle;
@@ -197,7 +222,7 @@ private:
     iss_insn_t *get_stagger_insn(SnitchFpSsEntry &entry, iss_insn_t *insn, int offset,
         int stagger_mask);
     bool check_operands(iss_insn_t *insn, SnitchFpSsEntry &entry);
-    void complete_at(InsnEntry *entry, int64_t cycle);
+    void complete_at(InsnEntry *entry, int64_t cycle, bool keep_scoreboard=false);
     void pop_entry();
     void lsu_send(SnitchFpLsuReq *req);
     void lsu_end(SnitchFpLsuReq *req);
@@ -209,7 +234,6 @@ private:
     void check_idle();
 
     Iss &iss;
-    vp::Trace trace;
     vp::ClockEvent fsm_event;
 
     std::deque<SnitchFpSsEntry> queue;
@@ -253,8 +277,7 @@ private:
     bool nest_received_all;
     int stagger_cnt;
 
-    // Instruction completions, (cycle, held instruction)
-    std::vector<std::pair<int64_t, InsnEntry *>> completions;
+    std::vector<SnitchFpSsCompletion> completions;
 
     // FP LSU
     vp::IoMaster lsu_itf{&SnitchFpSs::lsu_retry, &SnitchFpSs::lsu_response};

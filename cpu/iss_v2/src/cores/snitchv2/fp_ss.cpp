@@ -102,7 +102,20 @@ void SnitchFpSs::start()
             kind = SNITCH_FPSS_COMPUTE;
         }
 
-        desc->block_id = kind;
+        // The RTL sequencer buffers some of the instructions exchanging values
+        // with the integer core (for COPIFT), the others go around it
+        bool bypass = false;
+        if (kind == SNITCH_FPSS_TO_INT || kind == SNITCH_FPSS_FROM_INT)
+        {
+            bypass = true;
+            for (const char *name: {"flt.d", "fcvt.w.d", "fcvt.wu.d", "fcvt.d.w", "fcvt.d.wu",
+                "fmv.x.w", "fmv.w.x"})
+            {
+                if (strcmp(desc->label, name) == 0) bypass = false;
+            }
+        }
+
+        desc->block_id = kind | (bypass ? SNITCH_FPSS_BYPASS : 0);
         desc->stub_handler = &SnitchFpSs::offload_stub<false>;
         desc->stub_fast_handler = &SnitchFpSs::offload_stub<true>;
         desc->resource_latency = CONFIG_GVSOC_ISS_SNITCH_FMA_LATENCY;
@@ -249,7 +262,9 @@ template<bool fast>
 iss_reg_t SnitchFpSs::offload_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
 {
     SnitchFpSs *_this = &iss->arch.fp_ss;
-    SnitchFpSsKind kind = (SnitchFpSsKind)insn->decoder_item->u.insn.block_id;
+    int block_id = insn->decoder_item->u.insn.block_id;
+    SnitchFpSsKind kind = (SnitchFpSsKind)(block_id & ~SNITCH_FPSS_BYPASS);
+    bool bypass = (block_id & SNITCH_FPSS_BYPASS) != 0;
 
     if (!_this->can_offload(kind))
     {
@@ -274,6 +289,8 @@ iss_reg_t SnitchFpSs::offload_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
     entry.int_value = 0;
     entry.caq_pending = false;
     entry.handler = iss_stub_handler<fast>(insn);
+    entry.bypass = bypass;
+    entry.to_f2i = kind == SNITCH_FPSS_TO_INT && iss->arch.copift_enabled;
     entry.ready_cycle = iss->clock.get_cycles() + CONFIG_GVSOC_ISS_SNITCH_OFFLOAD_LATENCY;
     entry.seq = _this->next_seq++;
 
@@ -313,6 +330,11 @@ iss_reg_t SnitchFpSs::offload_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
     }
 
     entry.entry = iss->exec.insn_hold(insn);
+    if (entry.to_f2i)
+    {
+        // The result goes to F2I, the integer register is not pending
+        iss->regfile.scoreboard_insn_clear(insn);
+    }
 #ifdef VP_TRACE_ACTIVE
     if (!iss->trace.insn_trace.get_active())
     {
@@ -324,7 +346,7 @@ iss_reg_t SnitchFpSs::offload_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
 
     _this->nb_inflight++;
     _this->nb_insns++;
-    if (kind == SNITCH_FPSS_TO_INT || kind == SNITCH_FPSS_FROM_INT)
+    if (bypass)
     {
         _this->pending_bypass = true;
     }
@@ -346,13 +368,13 @@ void SnitchFpSs::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     // Instructions done
     for (size_t i = 0; i < _this->completions.size();)
     {
-        if (_this->completions[i].first <= cycle)
+        if (_this->completions[i].cycle <= cycle)
         {
-            InsnEntry *entry = _this->completions[i].second;
+            SnitchFpSsCompletion completion = _this->completions[i];
             _this->completions[i] = _this->completions.back();
             _this->completions.pop_back();
             _this->nb_inflight--;
-            iss->exec.insn_terminate(entry);
+            iss->exec.insn_terminate(completion.entry, completion.keep_scoreboard);
         }
         else
         {
@@ -391,9 +413,9 @@ void SnitchFpSs::check_idle()
     }
 }
 
-void SnitchFpSs::complete_at(InsnEntry *entry, int64_t cycle)
+void SnitchFpSs::complete_at(InsnEntry *entry, int64_t cycle, bool keep_scoreboard)
 {
-    this->completions.emplace_back(cycle, entry);
+    this->completions.push_back({cycle, entry, keep_scoreboard});
 }
 
 bool SnitchFpSs::frep_accepted()
@@ -528,7 +550,7 @@ void SnitchFpSs::nest_advance()
 void SnitchFpSs::pop_entry()
 {
     SnitchFpSsEntry &entry = this->queue.front();
-    if (entry.kind == SNITCH_FPSS_TO_INT || entry.kind == SNITCH_FPSS_FROM_INT)
+    if (entry.bypass)
     {
         this->pending_bypass = false;
     }
@@ -702,6 +724,14 @@ bool SnitchFpSs::check_operands(iss_insn_t *insn, SnitchFpSsEntry &entry)
 
     if (insn->resource_bandwidth && this->divsqrt_ready > cycle) return false;
 
+    // COPIFT queues: the integer operand is there, room for the result
+    if (entry.kind == SNITCH_FPSS_FROM_INT && this->iss.arch.copift_enabled)
+    {
+        std::deque<SnitchCopiftValue> &i2f = this->iss.arch.i2f;
+        if (i2f.empty() || i2f.front().ready > cycle) return false;
+    }
+    if (entry.to_f2i && this->iss.arch.f2i.size() >= SNITCH_COPIFT_QUEUE_DEPTH) return false;
+
     return true;
 }
 
@@ -757,19 +787,42 @@ bool SnitchFpSs::issue_entry(int index, int offset, int stagger_mask, bool last)
     }
 #endif
 
+    // The integer registers the handler accesses are the real ones
+    this->iss.arch.in_fp_ss = true;
     if (entry.kind == SNITCH_FPSS_FROM_INT)
     {
-        // Execute with the integer operand captured at offload
+        // Execute with the integer operand captured at offload, or the one of
+        // the I2F queue
+        iss_reg_t value = entry.int_value;
+        if (this->iss.arch.copift_enabled)
+        {
+            value = this->iss.arch.i2f.front().value;
+            this->iss.arch.i2f.pop_front();
+        }
         uint64_t *regs = this->iss.regfile.dbt_regs();
         uint64_t saved = regs[entry.int_reg];
-        regs[entry.int_reg] = entry.int_value;
+        regs[entry.int_reg] = value;
         entry.handler(&this->iss, insn, insn->addr);
         regs[entry.int_reg] = saved;
+    }
+    else if (entry.to_f2i)
+    {
+        // The integer result goes to F2I, after the offload response cut
+        int rd = insn->out_regs[0];
+        uint64_t *regs = this->iss.regfile.dbt_regs();
+        uint64_t saved = regs[rd];
+        entry.handler(&this->iss, insn, insn->addr);
+        int64_t ready = done + CONFIG_GVSOC_ISS_SNITCH_RESP_LATENCY;
+        std::deque<SnitchCopiftValue> &f2i = this->iss.arch.f2i;
+        if (!f2i.empty() && f2i.back().ready > ready) ready = f2i.back().ready;
+        f2i.push_back({(iss_reg_t)regs[rd], ready});
+        regs[rd] = saved;
     }
     else
     {
         entry.handler(&this->iss, insn, insn->addr);
     }
+    this->iss.arch.in_fp_ss = false;
 
 #ifdef VP_TRACE_ACTIVE
     if (trace_active && !trace_in_entry)
@@ -820,9 +873,11 @@ bool SnitchFpSs::issue_entry(int index, int offset, int stagger_mask, bool last)
             case SNITCH_FPSS_STORE:
                 break;
 
-            // The integer result goes back through the offload response
+            // The integer result goes back through the offload response, or
+            // to F2I
             case SNITCH_FPSS_TO_INT:
-                this->complete_at(entry.entry, done + CONFIG_GVSOC_ISS_SNITCH_RESP_LATENCY);
+                this->complete_at(entry.entry, done + CONFIG_GVSOC_ISS_SNITCH_RESP_LATENCY,
+                    entry.to_f2i);
                 break;
 
             default:

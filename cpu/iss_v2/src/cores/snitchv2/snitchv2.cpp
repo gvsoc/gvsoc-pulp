@@ -62,6 +62,13 @@ void SnitchV2::reset(bool active)
     {
         this->barrier_waiting = false;
         this->barrier_stalled = false;
+        this->copift_enabled = false;
+        this->copift_redirect = false;
+        this->in_fp_ss = false;
+        this->f2i_value = 0;
+        this->i2f_reserved = 0;
+        this->i2f.clear();
+        this->f2i.clear();
         this->barrier_release_event.cancel();
     }
 }
@@ -114,6 +121,61 @@ void SnitchV2::decode_hook(iss_insn_t *insn)
     insn->sb_reg_mask = in_mask | out_mask;
     insn->sb_in_reg_mask = in_mask;
     insn->sb_out_reg_mask = out_mask;
+
+    // The integer instructions accessing x31 go through the COPIFT queues
+    // when they are on
+    if (insn->decoder_item->u.insn.block_id == -1 && ((in_mask | out_mask) >> 31) & 1)
+    {
+        insn->saved_handler = insn->handler;
+        insn->handler = &SnitchV2::copift_stub;
+        insn->fast_handler = &SnitchV2::copift_stub;
+    }
+}
+
+iss_reg_t SnitchV2::copift_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
+{
+    SnitchV2 *_this = &iss->arch;
+
+    if (likely(!_this->copift_enabled))
+    {
+        return insn->saved_handler(iss, insn, pc);
+    }
+
+    bool reads = (insn->sb_in_reg_mask >> 31) & 1;
+    bool writes = (insn->sb_out_reg_mask >> 31) & 1;
+    int64_t cycle = iss->clock.get_cycles();
+
+    if (reads && (_this->f2i.empty() || _this->f2i.front().ready > cycle))
+    {
+        _this->fp_ss.trace.msg(vp::Trace::LEVEL_TRACE, "Waiting for F2I (pc: 0x%lx)\n", pc);
+        iss->exec.insn_stall();
+        return pc;
+    }
+    if (writes && (int)_this->i2f.size() + _this->i2f_reserved >= SNITCH_COPIFT_QUEUE_DEPTH)
+    {
+        _this->fp_ss.trace.msg(vp::Trace::LEVEL_TRACE, "Waiting for I2F (pc: 0x%lx)\n", pc);
+        iss->exec.insn_stall();
+        return pc;
+    }
+
+    if (reads) _this->f2i_value = _this->f2i.front().value;
+    if (writes) _this->i2f_reserved++;
+
+    _this->copift_redirect = true;
+    iss_reg_t next_pc = insn->saved_handler(iss, insn, pc);
+    _this->copift_redirect = false;
+
+    if (iss->exec.insn_is_stalled())
+    {
+        if (writes) _this->i2f_reserved--;
+    }
+    else if (reads)
+    {
+        _this->f2i.pop_front();
+        _this->fp_ss.activate();
+    }
+
+    return next_pc;
 }
 
 template<bool fast>
@@ -157,11 +219,11 @@ bool SnitchV2::sc_update(iss_insn_t *insn, bool is_write, iss_reg_t &value)
 
 bool SnitchV2::copift_update(iss_insn_t *insn, bool is_write, iss_reg_t &value)
 {
-    if (is_write && (value & 1))
+    if (is_write)
     {
-        // The I2F / F2I queues the bit switches on (x31 popped from and FP
-        // results to integer registers pushed to them) are not modeled
-        this->iss.csr.trace.force_warning("COPIFT queues enabled, not supported\n");
+        this->copift_enabled = value & 1;
+        this->fp_ss.trace.msg(vp::Trace::LEVEL_DEBUG, "COPIFT queues %s\n",
+            this->copift_enabled ? "enabled" : "disabled");
     }
     return true;
 }

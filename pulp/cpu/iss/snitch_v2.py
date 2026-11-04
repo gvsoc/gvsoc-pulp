@@ -37,7 +37,7 @@ from cpu.iss_v2.riscv import (Arch, ExecInOrder, IssModule, LsuV2, Offload, Pref
 from cpu.iss_v2.riscv_config import RiscvConfig
 from gvsoc.signature import IoV2SingleReq
 from gvsoc.systree import Component
-from pulp.snitch.snitch_isa import Xdma, Rv32frep, Rv32ssr
+from pulp.snitch.snitch_isa import Xcopift, Xdma, Rv32frep, Rv32ssr
 
 
 class SnitchV2Config(RiscvConfig):
@@ -196,7 +196,7 @@ class SnitchV2(RiscvCommon):
 
         if isa_instance is None:
             extensions = [Xdma(), Xf16(), Xf16alt(), Xf8(), Xf8Snitch(), XfvecSnitch(), Xfaux(),
-                Rv32frep(), Rv32ssr()]
+                Rv32frep(), Rv32ssr(copift=True), Xcopift()]
             isa_instance = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa(
                 f'snitch_v2_{len(_isa_instances)}_' + config.isa, config.isa,
                 extensions=extensions)

@@ -15,6 +15,16 @@
 
 class Iss;
 
+// Entries of each COPIFT queue (RTL snitch I2F / F2I cc_stream_fifo Depth)
+#define SNITCH_COPIFT_QUEUE_DEPTH 16
+
+// Value in a COPIFT queue and the cycle from which it can be read
+struct SnitchCopiftValue
+{
+    iss_reg_t value;
+    int64_t ready;
+};
+
 /**
  * @brief Snitch core (RTL snitch_cc) on iss_v2.
  *
@@ -29,9 +39,16 @@ class Iss;
  * barrier_ack, once every core of the cluster has arrived.
  *
  * The sc CSR (0x7C3) holds the FP registers with scalar chaining, executed by
- * the FP subsystem; the copift CSR (0x7C6) is the enable of the COPIFT queues,
- * which are not modeled; the dump CSR (0x7C7) prints the values written to it,
+ * the FP subsystem; the dump CSR (0x7C7) prints the values written to it,
  * like the RTL core does in simulation.
+ *
+ * The copift CSR (0x7C6) enables the COPIFT queues. x31 is then the end of
+ * the I2F (integer to FP) and F2I (FP to integer) queues for the integer
+ * instructions: a write pushes to I2F (for a load, when its data comes back),
+ * a read pops from F2I, waiting while it is full or empty, and the register
+ * keeps its value. In the FP subsystem, the integer operand of an instruction
+ * is popped from I2F when it is issued, and its integer result is pushed to
+ * F2I, whatever the register, the core not waiting for it.
  */
 class SnitchV2 : public IssArch
 {
@@ -54,6 +71,24 @@ public:
 
     CsrReg fmode;
 
+    // COPIFT queues, see the class description
+    bool copift_enabled;
+    std::deque<SnitchCopiftValue> i2f;
+    std::deque<SnitchCopiftValue> f2i;
+    // Executing an integer instruction using x31 with the queues on: its x31
+    // reads return f2i_value (popped once it is done)
+    bool copift_redirect;
+    iss_reg_t f2i_value;
+    // I2F entries taken by integer instructions writing x31 not done yet
+    // (loads)
+    int i2f_reserved;
+    // The FP subsystem executes an instruction, its integer register accesses
+    // are the real ones
+    bool in_fp_ss;
+    // Called by the register file on an integer access of x31 with the
+    // queues on, see the class description
+    inline void copift_push(iss_reg_t value);
+
     SnitchFpSs fp_ss;
     SnitchSsr ssr;
 
@@ -66,6 +101,9 @@ private:
     static void barrier_release_handler(vp::Block *__this, vp::ClockEvent *event);
     template<bool fast>
     static iss_reg_t csr_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc);
+    // Stub of the integer instructions accessing x31, for the COPIFT queues.
+    // The handler of the instruction is in saved_handler.
+    static iss_reg_t copift_stub(Iss *iss, iss_insn_t *insn, iss_reg_t pc);
 
     Iss &iss;
 

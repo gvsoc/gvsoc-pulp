@@ -38,6 +38,33 @@ inline uint64_t SnitchV2Regfile::get_freg(int reg)
     return Regfile::get_freg(reg);
 }
 
+inline uint64_t SnitchV2Regfile::get_reg(int reg)
+{
+    if (unlikely(reg == 31) && this->iss.arch.copift_redirect)
+    {
+        return this->iss.arch.f2i_value;
+    }
+    return Regfile::get_reg(reg);
+}
+
+inline void SnitchV2Regfile::set_reg(int reg, uint64_t value)
+{
+    if (unlikely(reg == 31) && this->iss.arch.copift_enabled && !this->iss.arch.in_fp_ss)
+    {
+        this->iss.arch.copift_push((iss_reg_t)value);
+        return;
+    }
+    Regfile::set_reg(reg, value);
+}
+
+inline void SnitchV2::copift_push(iss_reg_t value)
+{
+    // Readable by the FP subsystem the next cycle (registered FIFO)
+    this->i2f.push_back({value, this->iss.clock.get_cycles() + 1});
+    if (this->i2f_reserved > 0) this->i2f_reserved--;
+    this->fp_ss.activate();
+}
+
 inline void SnitchV2Regfile::set_freg(int reg, uint64_t value)
 {
     int lid = reg - ISS_NB_REGS;
@@ -133,3 +160,25 @@ static inline iss_reg_t scfgw_exec(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
     return iss_insn_next(iss, insn, pc);
 }
 
+// COPIFT conversions and comparison, on FP registers only: the 32-bit
+// integers are in the low bits of the FP registers
+
+static inline iss_reg_t fcvt_d_w_copift_exec(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
+{
+    FREG_SET(0, LIB_FF_CALL2(lib_flexfloat_cvt_ff_w_round, (iss_reg_t)(uint32_t)FREG_GET(0), 11, 52,
+        UIM_GET(0)));
+    return iss_insn_next(iss, insn, pc);
+}
+
+static inline iss_reg_t fcvt_d_wu_copift_exec(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
+{
+    FREG_SET(0, LIB_FF_CALL2(lib_flexfloat_cvt_ff_wu_round, (iss_reg_t)(uint32_t)FREG_GET(0), 11, 52,
+        UIM_GET(0)));
+    return iss_insn_next(iss, insn, pc);
+}
+
+static inline iss_reg_t flt_d_copift_exec(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
+{
+    FREG_SET(0, LIB_FF_CALL2(lib_flexfloat_lt, FREG_GET(0), FREG_GET(1), 11, 52));
+    return iss_insn_next(iss, insn, pc);
+}
