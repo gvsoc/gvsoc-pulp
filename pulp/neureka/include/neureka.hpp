@@ -24,7 +24,7 @@
 #define __NEUREKA_HPP__
 
 #include <vp/vp.hpp>
-#include <vp/itf/io.hpp>
+#include <vp/itf/io_v2.hpp>
 #include <iostream>
 #include <fstream>
 #include <iomanip>
@@ -176,8 +176,15 @@ class NeurekaVectorLoad : public NeurekaStreamAccess {
       bool debug
     );
     NeurekaVectorLoad();
+    // Sends the wide read consumed by the next ex(): the data lands in
+    // `buffer` when the access is granted.
+    void issue(int width, bool w_demux);
+    // Returns the data of the read sent by issue().
     xt::xarray<T> ex(int width, bool w_demux, int64_t& cycles);
-    void foo();
+
+  private:
+    int pending_addr = 0;
+    uint8_t buffer[STREAM_MAX_WIDTH_BYTES];
 };
 
 template <class T>
@@ -196,6 +203,9 @@ class NeurekaVectorStore : public NeurekaStreamAccess {
     );
     NeurekaVectorStore();
     xt::xarray<T> ex(xt::xarray<T> data, int width, int64_t& cycles, int32_t enable);
+
+  private:
+    uint8_t buffer[STREAM_MAX_WIDTH_BYTES];
 };
 
 class Neureka : public vp::Component
@@ -208,10 +218,33 @@ public:
     void reset(bool active);
 
     // were private before, but did not work with stream.hpp
-    vp::IoReq io_req;
     vp::Trace trace;
-    vp::IoMaster out;
-    vp::IoMaster wmem_out;
+
+    // Streamer: one access at a time, either a wide access to the L1 through
+    // the HCI HWPE port (out), or a weight read from the weight memory
+    // (wmem_out). The HCI denies the fresh request and grants it, all or
+    // nothing, on its synchronous retry, moving the data between the banks
+    // and the streamer buffer inline. The FSM waits for the end of the access
+    // (stream_pending) before going on.
+    void stream_issue(uint64_t addr, uint8_t *data, int size, bool is_write, bool wmem);
+    static void stream_retry(vp::Block *__this, vp::IoRetryChannel channel);
+    static vp::IoRespAck stream_resp(vp::Block *__this, vp::IoReq *req);
+    static void wmem_retry(vp::Block *__this, vp::IoRetryChannel channel);
+    static vp::IoRespAck wmem_resp(vp::Block *__this, vp::IoReq *req);
+    void stream_retry_port(vp::IoMaster *port);
+    void stream_done();
+    vp::IoMaster out{&Neureka::stream_retry, &Neureka::stream_resp};
+    vp::IoMaster wmem_out{&Neureka::wmem_retry, &Neureka::wmem_resp};
+    vp::IoReq stream_req;
+    vp::IoMaster *stream_port = nullptr;
+    // True while an access is in flight (waiting for its grant or response)
+    bool stream_pending = false;
+    // True while the FSM loop runs, so that an access completed inline does
+    // not re-arm the FSM
+    bool in_fsm = false;
+    // Latency of the FSM step which sent the pending access, applied when it
+    // completes
+    int stream_post_latency = 0;
     vp::reg_32 state;
     vp::reg_8 activity;
     NeurekaTraceLevel trace_level;
@@ -266,6 +299,14 @@ private:
     // MAIN FSM and LOOP
     int  fsm();
     void fsm_loop();
+    // Send the read consumed by the next FSM step (they mirror the matching
+    // *_cycle() functions)
+    void issue_streamin();
+    void issue_load();
+    void issue_matrixvec();
+    void issue_normquant_shift();
+    void issue_normquant_mult();
+    void issue_normquant_bias();
     //NeurekaState state;
 
     // REGISTER FILE member functions
@@ -274,6 +315,9 @@ private:
     void regfile_cxt();
     void commit();
     int  acquire();
+    // Soft clear (control register 0x14) and reset: empty job queue, no
+    // context configured
+    void clear_jobs();
     bool status();
     void printout();
 
@@ -519,7 +563,7 @@ private:
     NeurekaVectorStore<uint8_t> vst_y;
     xt::xarray<int32_t> col_enable;
 
-    vp::IoSlave in;
+    vp::IoSlave in{&Neureka::hwpe_slave};
     vp::WireMaster<bool> irq;
 
     vp::ClockEvent *fsm_start_event;

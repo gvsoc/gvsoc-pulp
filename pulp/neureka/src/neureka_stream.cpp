@@ -157,62 +157,40 @@ template <class T>
 NeurekaVectorLoad<T>::NeurekaVectorLoad() : NeurekaStreamAccess((Neureka *) NULL, 0, 0, 0, 0, 0, 0, 0, false) {
 }
 
+// Send the wide read for the NEXT ex(): one access covering the realignment
+// padded window (width+4 elements from the word-aligned address), like the
+// 9-word port of the streamer. The data lands in `buffer` when the access is
+// granted.
 template <class T>
-xt::xarray<T> NeurekaVectorLoad<T>::ex(int width, bool w_demux, int64_t& cycles) {
+void NeurekaVectorLoad<T>::issue(int width, bool w_demux) {
   auto addr = this->iterate();
-  uint8_t load_data[STREAM_MAX_WIDTH_BYTES];
+  this->pending_addr = addr;
   auto width_padded = width + 4;
   auto addr_padded = addr & ~0x3;
-  auto width_words = width_padded * sizeof(T) / 4;
-  auto width_rem   = width_padded * sizeof(T) % 4;
-  int64_t max_latency = 0;
-  
-  for(auto i=0; i<width_words; i++) {
-    this->neureka->io_req.init();
-    if(w_demux==true)
-      this->neureka->io_req.set_addr(addr_padded+i*4);
-    else 
-      this->neureka->io_req.set_addr(addr_padded+i*4 & NEUREKA_STREAM_L1_MASK);
-    
-    this->neureka->io_req.set_size(4);
-    this->neureka->io_req.set_data(load_data+i*4);
-    this->neureka->io_req.set_is_write(false);
-    int err = (w_demux==true) ? this->neureka->wmem_out.req(&this->neureka->io_req) : this->neureka->out.req(&this->neureka->io_req);
-    
-    if (err == vp::IO_REQ_OK) {
-      int64_t latency = this->neureka->io_req.get_latency();
-      if (latency > max_latency) {
-        max_latency = latency;
-      }
-    }
-    else {
-      this->neureka->trace.fatal("Unsupported asynchronous reply\n");
-    }
-  }
-  if(width_rem) {
-    this->neureka->io_req.init();
-    this->neureka->io_req.set_addr(addr_padded+width_words*4 & NEUREKA_STREAM_L1_MASK);
-    this->neureka->io_req.set_size(width_rem);
-    this->neureka->io_req.set_data(load_data+width_words*4);
-    this->neureka->io_req.set_is_write(false);
-    int err = (w_demux==true) ? this->neureka->wmem_out.req(&this->neureka->io_req) : this->neureka->out.req(&this->neureka->io_req);
-    if (err != vp::IO_REQ_OK) {
-      this->neureka->trace.fatal("Unsupported asynchronous reply\n");
-    }
-  }
+  int size = width_padded * sizeof(T);
+  assert(size <= STREAM_MAX_WIDTH_BYTES);
+
+  // The weight memory sees the address as it is, the L1 only its offset
+  uint64_t req_addr = w_demux ? addr_padded : (addr_padded & NEUREKA_STREAM_L1_MASK);
+  this->neureka->stream_issue(req_addr, this->buffer, size, false, w_demux);
+}
+
+template <class T>
+xt::xarray<T> NeurekaVectorLoad<T>::ex(int width, bool w_demux, int64_t& cycles) {
+  auto addr = this->pending_addr;
+
   if (trace_at_least(this->neureka->trace_level, NEUREKA_L2_STREAM_INOUT)) {
     this->neureka->trace.msg(
       vp::Trace::LEVEL_DEBUG,
-      "STREAM ACTIVATION_LOAD: addr=0x%08x size=%dB latency=%lld\n",
+      "STREAM ACTIVATION_LOAD: addr=0x%08x size=%dB\n",
       addr & NEUREKA_STREAM_L1_MASK,
-      width * static_cast<int>(sizeof(T)),
-      static_cast<long long>(max_latency + 1)
+      width * static_cast<int>(sizeof(T))
     );
   }
 
   xt::xarray<T> x = xt::zeros<T>({width});
   for(auto i=0; i<width; i++) {
-    xt::view(x, i) = *(T *)(load_data + (addr & 0x3) + i*sizeof(T));
+    xt::view(x, i) = *(T *)(this->buffer + (addr & 0x3) + i*sizeof(T));
   }
 
   if (trace_at_least(this->neureka->trace_level, NEUREKA_L2_STREAM_INOUT)) {
@@ -223,7 +201,8 @@ xt::xarray<T> NeurekaVectorLoad<T>::ex(int width, bool w_demux, int64_t& cycles)
     this->neureka->trace.msg(vp::Trace::LEVEL_DEBUG, msg.c_str());
   }
 
-  cycles += max_latency + 1;
+  // The cycle of the access, its latency is added when it completes
+  cycles += 1;
   return x;
 }
 
@@ -248,71 +227,24 @@ NeurekaVectorStore<T>::NeurekaVectorStore() : NeurekaStreamAccess((Neureka *) NU
 template <class T>
 xt::xarray<T> NeurekaVectorStore<T>::ex(xt::xarray<T> data, int width, int64_t& cycles, int32_t enable) {
   auto addr = this->iterate();
-  uint8_t store_data[STREAM_MAX_WIDTH_BYTES];
-  for(auto i=0; i<STREAM_MAX_WIDTH_BYTES; i++) store_data[i] = 0;
-  for(auto i=0; i<width; i++) {
-    *(T *)(store_data + i*sizeof(T)) = data(i);
-  }
+  int width_bytes = width*sizeof(T);
+  assert(width_bytes <= STREAM_MAX_WIDTH_BYTES);
 
-  auto width_bytes = width*sizeof(T);
-  /* To handle misaligned address*/
-  auto addr_start = addr;
-  auto addr_end   = addr + width_bytes;
-
-  auto addr_start_aligned = 4*((addr_start+(addr_start%4 ? 4:0))/4);
-  auto addr_end_aligned   = 4*(addr_end/4);
-
-  auto misaligned_start_byte =  (width_bytes < 4 ) ? width_bytes : addr_start_aligned - addr_start;
-  auto misaligned_end_byte = (width_bytes < 4 ) ?  0 : addr_end - addr_end_aligned;
-
-  auto width_words = (addr_end_aligned> addr_start_aligned) ? (addr_end_aligned - addr_start_aligned)/4 : 0;
-
-
-  int64_t max_latency = 0;
-  if(enable) {
-    for(auto i=0; i<width_words+misaligned_start_byte+misaligned_end_byte; i++) {
-      this->neureka->io_req.init();
-
-      if((i<misaligned_start_byte))
-      {
-        this->neureka->io_req.set_addr((addr_start+i) & NEUREKA_STREAM_L1_MASK);
-        this->neureka->io_req.set_size(1);
-        this->neureka->io_req.set_data(store_data+i);
-      }
-      else if(i>=misaligned_start_byte+width_words){
-        this->neureka->io_req.set_addr((addr_start+misaligned_start_byte + 4*width_words+(i- misaligned_start_byte - width_words)) & NEUREKA_STREAM_L1_MASK);
-        this->neureka->io_req.set_size(1);
-        this->neureka->io_req.set_data(store_data+misaligned_start_byte + 4*width_words+(i- misaligned_start_byte - width_words));
-      }
-      else
-      {
-        this->neureka->io_req.set_addr((addr_start_aligned+4*( i- misaligned_start_byte)) & NEUREKA_STREAM_L1_MASK);
-        this->neureka->io_req.set_size(4);
-        this->neureka->io_req.set_data(store_data+misaligned_start_byte+4*(i-misaligned_start_byte));
-      } 
-      this->neureka->io_req.set_is_write(true);
-      int err = this->neureka->out.req(&this->neureka->io_req);
-      if (err == vp::IO_REQ_OK) {
-        if((i>=misaligned_start_byte) && (i<width_words+misaligned_start_byte)) {  // apparently, for non-aligned bytes we get garbage latency
-          int64_t latency = this->neureka->io_req.get_latency();
-          if (latency > max_latency) {
-            max_latency = latency;
-          }
-        }
-      }
-      else {
-        this->neureka->trace.fatal("Unsupported asynchronous reply\n");
-      }
+  if(enable && width_bytes > 0) {
+    for(auto i=0; i<width; i++) {
+      *(T *)(this->buffer + i*sizeof(T)) = data(i);
     }
+    // One wide write of the whole vector, the HCI cuts it into the bank
+    // accesses, misaligned bytes included
+    this->neureka->stream_issue(addr & NEUREKA_STREAM_L1_MASK, this->buffer, width_bytes, true, false);
   }
   if (trace_at_least(this->neureka->trace_level, NEUREKA_L2_STREAM_INOUT)) {
     this->neureka->trace.msg(
       vp::Trace::LEVEL_DEBUG,
-      "STREAM STORE: addr=0x%08x size=%dB en=%d latency=%lld\n",
+      "STREAM STORE: addr=0x%08x size=%dB en=%d\n",
       addr & NEUREKA_STREAM_L1_MASK,
       width * static_cast<int>(sizeof(T)),
-      enable ? 1 : 0,
-      static_cast<long long>(max_latency + 1)
+      enable ? 1 : 0
     );
   }
 
@@ -328,8 +260,9 @@ xt::xarray<T> NeurekaVectorStore<T>::ex(xt::xarray<T> data, int width, int64_t& 
     this->neureka->trace.msg(vp::Trace::LEVEL_DEBUG, msg.c_str());
   }
 
-  cycles += max_latency + 1;
-  
+  // The cycle of the access, its latency is added when it completes
+  cycles += 1;
+
   return data;
 }
 

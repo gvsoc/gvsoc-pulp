@@ -174,9 +174,22 @@ void Neureka::fsm_end_handler(vp::Block *__this, vp::ClockEvent *event) {
 
 void Neureka::fsm_loop() {
   auto latency = 0;
+  this->in_fsm = true;
   do {
     latency = this->fsm();
-  } while(latency == 0 && state.get() != JOB_END);
+  } while(latency == 0 && state.get() != JOB_END && !this->stream_pending);
+  this->in_fsm = false;
+
+  if (this->stream_pending) {
+    // An access is in flight: its end (stream_done) resumes the FSM, after
+    // the latency of this step
+    this->stream_post_latency = latency;
+    if (trace_at_least(this->trace_level, NEUREKA_L3_ALL)) {
+      this->trace.msg(vp::Trace::LEVEL_DEBUG, "FSM waiting for a streamer access (state=%d latency=%d)\n",
+        this->state.get(), latency);
+    }
+    return;
+  }
 
   if (trace_at_least(this->trace_level, NEUREKA_L3_ALL)) {
     this->trace.msg(
@@ -270,6 +283,7 @@ int Neureka::fsm() {
       if(this->streamin) {
         this->streamin_setup();
         state_next = ACCUM_STREAMIN;
+        this->issue_streamin();
       }
       else {
         state_next = LOAD_PREPARE;
@@ -300,6 +314,7 @@ int Neureka::fsm() {
       }
       else {
         this->streamin_update_idx();
+        this->issue_streamin();
       }
       break;
 
@@ -316,6 +331,7 @@ int Neureka::fsm() {
       }
       state_next = ACTIVATION_LOAD;
       this->load_latency = 0;
+      this->issue_load();
 
       // emulate 6 cycles of latency due to FIFOs + ctrl
       latency += 6;
@@ -349,6 +365,7 @@ int Neureka::fsm() {
       }
       else {
         this->load_update_idx();
+        this->issue_load();
       }
       if(this->activation_prefetch)
         this->load_latency += latency;
@@ -370,6 +387,7 @@ int Neureka::fsm() {
         this->trace.msg(vp::Trace::LEVEL_DEBUG, "  mv_qw_lim=%d\n", mv_qw_lim); // was simply qw
       }
       state_next = MATRIX_VECTOR_COMPUTE;
+      this->issue_matrixvec();
       if((this->matrixvec_latency > this->load_latency) && this->activation_prefetch)
         latency += this->matrixvec_latency - this->load_latency;
       this->matrixvec_latency = 0;
@@ -449,11 +467,13 @@ int Neureka::fsm() {
         else if(this->output_quant && this->norm_option_shift) {
           this->normquant_shift_setup();
           state_next = NORM_SHIFT;
+          this->issue_normquant_shift();
         }
         else if(this->output_quant) {
 
           this->normquant_mult_setup();
           state_next = NORM_MULTIPLY;
+          this->issue_normquant_mult();
         }
         else {
           this->streamout_setup();
@@ -462,6 +482,7 @@ int Neureka::fsm() {
       }
       else {
         this->matrixvec_update_idx();// for depthwise only updates w.r.t. qw
+        this->issue_matrixvec();
       }
       break;
       
@@ -473,6 +494,7 @@ int Neureka::fsm() {
       latency = latency + 7;
       this->normquant_mult_setup();
       state_next = NORM_MULTIPLY;
+      this->issue_normquant_mult();
       break;
     
     case NORM_MULTIPLY:
@@ -488,9 +510,11 @@ int Neureka::fsm() {
          latency += 9;
         this->normquant_bias_setup();
         state_next = NORM_BIAS_SHIFT;
+        this->issue_normquant_bias();
       }
       else {
         this->normquant_mult_update_idx();
+        this->issue_normquant_mult();
       }
       break;
     
@@ -510,6 +534,7 @@ int Neureka::fsm() {
       }
       else {
         this->normquant_bias_update_idx();
+        this->issue_normquant_bias();
       }
       break;
     
@@ -589,4 +614,50 @@ int Neureka::fsm() {
 
   this->state.set(state_next);
   return latency;
+}
+
+// Pre-issue helpers: send the read consumed by the NEXT FSM step, so that the
+// data is moved by the banks when the access is granted, before the step
+// runs. Width and conditions mirror the matching *_cycle() functions.
+
+void Neureka::issue_streamin() {
+  // mirrors streamin_cycle()
+  if(this->col_enable(this->streamin_i_out_iter, this->streamin_j_out_iter)) {
+    auto k_out_last = (this->streamin_k_out_iter+1)*8;
+    if(this->k_out_major == this->subtile_nb_ko-1 && this->subtile_rem_ko != this->TP_OUT && this->subtile_rem_ko != 0) {
+      k_out_last = k_out_last < this->subtile_rem_ko ? k_out_last : this->subtile_rem_ko;
+    }
+    this->vld_streamin.issue((k_out_last-this->streamin_k_out_iter*8)*4, false);
+  }
+}
+
+void Neureka::issue_load() {
+  // mirrors load_cycle()
+  this->vld_x.issue(this->load_k_in_lim, false);
+}
+
+void Neureka::issue_matrixvec() {
+  // mirrors matrixvec_cycle()
+  if((this->depthwise && (this->dw_iter==0)) || (!this->depthwise)) {
+    auto& vld_W = this->depthwise ? this->vld_W_dw : (this->fs == 3) ? this->vld_W_3x3 : this->vld_W_1x1;
+    const int read_size = 8;
+    vld_W.issue(read_size*(this->TP_IN/8), this->weight_demux);
+  }
+}
+
+void Neureka::issue_normquant_shift() {
+  // mirrors normquant_shift_cycle()
+  this->vld_nqs.issue(this->TP_OUT, false);
+}
+
+void Neureka::issue_normquant_mult() {
+  // mirrors normquant_mult_cycle()
+  this->vld_nq.issue(4, false);
+}
+
+void Neureka::issue_normquant_bias() {
+  // mirrors normquant_bias_cycle()
+  if(this->norm_option_bias) {
+    this->vld_nqb.issue(32, false);
+  }
 }

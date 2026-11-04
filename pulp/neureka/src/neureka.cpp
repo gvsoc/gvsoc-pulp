@@ -53,7 +53,6 @@ Neureka::Neureka(vp::ComponentConf &config)
     this->new_master_port("out", &this->out);//public in hpp
     this->new_master_port("wmem_out", &this->wmem_out);//public in hpp
     this->new_master_port("irq", &this->irq);//private in hpp connected to the cluster event unit
-    this->in.set_req_meth(&Neureka::hwpe_slave);//private in hpp
     this->new_slave_port("input", &this->in); // how to change this name? //private in hpp linked to preipheral ico at the cluster
     this->fsm_start_event = this->event_new(&Neureka::fsm_start_handler);//private in hpp
     this->fsm_event = this->event_new(&Neureka::fsm_handler);//private in hpp
@@ -75,9 +74,7 @@ void Neureka::reset(bool active)
     this->weight          = xt::zeros<uint8_t>({this->FILTER_SIZE*this->FILTER_SIZE, (this->TP_IN/8)});
     this->dw_weight_buffer= xt::zeros<uint8_t>({8, 32});//<8 bits of weight so 8 cycles, 32*8 is the bw offered>
     this->nqs             = xt::zeros<uint8_t>({this->TP_OUT});
-    this->job_id          = 0;
-    this->cxt_job_id[0] = this->cxt_job_id[1] = -1;
-    this->running_job_id  = 0;
+    this->clear_jobs();
     this->job_running     = 0;
     this->start_cycles    = 0;
     this->end_cycles      = 0x7FFFFFFF;
@@ -85,6 +82,93 @@ void Neureka::reset(bool active)
     this->state_phase_track_cycles = 0;
     this->state_phase_track_valid = false;
     this->state_phase_track_start_cycle = 0;
+    this->stream_pending = false;
+    this->stream_post_latency = 0;
+    this->in_fsm = false;
+}
+
+void Neureka::stream_issue(uint64_t addr, uint8_t *data, int size, bool is_write, bool wmem)
+{
+    assert(!this->stream_pending);
+    this->stream_pending = true;
+    this->stream_port = wmem ? &this->wmem_out : &this->out;
+
+    this->stream_req.set_addr(addr);
+    this->stream_req.set_data(data);
+    this->stream_req.set_size(size);
+    this->stream_req.set_is_write(is_write);
+    this->stream_req.prepare();
+
+    vp::IoReqStatus status = this->stream_port->req(&this->stream_req);
+    if (status == vp::IO_REQ_DONE)
+    {
+        this->stream_done();
+    }
+    // GRANTED: wait for the response, DENIED: wait for the retry
+}
+
+void Neureka::stream_retry_port(vp::IoMaster *port)
+{
+    if (!this->stream_pending || this->stream_port != port) return;
+
+    // Synchronous re-issue inside the retry callback, the HCI only forwards
+    // it during its election
+    vp::IoReqStatus status = port->req(&this->stream_req);
+    if (status == vp::IO_REQ_DONE)
+    {
+        this->stream_done();
+    }
+}
+
+void Neureka::stream_retry(vp::Block *__this, vp::IoRetryChannel channel)
+{
+    Neureka *_this = (Neureka *)__this;
+    _this->stream_retry_port(&_this->out);
+}
+
+void Neureka::wmem_retry(vp::Block *__this, vp::IoRetryChannel channel)
+{
+    Neureka *_this = (Neureka *)__this;
+    _this->stream_retry_port(&_this->wmem_out);
+}
+
+vp::IoRespAck Neureka::stream_resp(vp::Block *__this, vp::IoReq *req)
+{
+    Neureka *_this = (Neureka *)__this;
+    _this->stream_done();
+    return vp::IO_RESP_ACCEPTED;
+}
+
+vp::IoRespAck Neureka::wmem_resp(vp::Block *__this, vp::IoReq *req)
+{
+    Neureka *_this = (Neureka *)__this;
+    _this->stream_done();
+    return vp::IO_RESP_ACCEPTED;
+}
+
+// End of a streamer access. If it completed inline while the FSM step was
+// sending it, the step goes on as with the io v1 model. Otherwise the FSM
+// resumes after the latency of the step which sent it, at least one cycle
+// later since the HCI port takes one access per cycle. The streamer is
+// pipelined against the memory, whose response comes one cycle after the
+// request: only the latency above that one slows it down.
+void Neureka::stream_done()
+{
+    this->stream_pending = false;
+
+    if (this->in_fsm) return;
+
+    int64_t latency = this->stream_req.get_latency();
+    int64_t delay = this->stream_post_latency + (latency > 1 ? latency - 1 : 0);
+    if (delay < 1)
+    {
+        delay = 1;
+    }
+    this->stream_post_latency = 0;
+    if (!this->fsm_event->is_enqueued())
+    {
+        this->event_enqueue(this->fsm_event, delay);
+    }
 }
 
 // The `hwpe_slave` member function models an access to the NEUREKA SLAVE interface
@@ -120,17 +204,23 @@ vp::IoReqStatus Neureka::hwpe_slave(vp::Block *__this, vp::IoReq *req)
                 _this->trace_level = NEUREKA_L4_STATE_PHASE_SUMMARY;
                 _this->trace.msg("Setting tracing level to NEUREKA_L4_STATE_PHASE_SUMMARY\n");
             }
-            return vp::IO_REQ_OK;
+            return vp::IO_REQ_DONE;
         }
         else if(((req->get_addr() & 0xfff) - 0x20) >> 2 == NEUREKA_SPECIAL_FORMAT_TRACE_REG) {
             _this->trace_format = *data;
             _this->trace.msg("Setting tracing format to %s\n", *data?"Hex":"Dec");
-            return vp::IO_REQ_OK;
+            return vp::IO_REQ_DONE;
         }
         else if((req->get_addr() & 0x17f) == 0x0) {
             _this->commit();
             if (!_this->job_running && !_this->fsm_start_event->is_enqueued() && *(uint32_t *) data == 0) {
                 _this->event_enqueue(_this->fsm_start_event, 1);
+            }
+        }
+        else if((req->get_addr() & 0x17f) < 0x20) {
+            // Other control registers: only the soft clear has an effect
+            if((req->get_addr() & 0x17f) == 0x14) {
+                _this->clear_jobs();
             }
         }
         else {
@@ -160,6 +250,9 @@ vp::IoReqStatus Neureka::hwpe_slave(vp::Block *__this, vp::IoReq *req)
                 _this->trace.msg("Returning %x\n", *(uint32_t *) data);
             }
         }
+        else if((req->get_addr() & 0x17f) < 0x20) {
+            *(uint32_t *) data = 0;
+        }
         else {
             *(uint32_t *) data = _this->regfile_rd(((req->get_addr() & 0x17f) - 0x20) >> 2);
             if (trace_at_least(_this->trace_level, NEUREKA_L3_ALL)) {
@@ -168,7 +261,7 @@ vp::IoReqStatus Neureka::hwpe_slave(vp::Block *__this, vp::IoReq *req)
         }
     }
 
-    return vp::IO_REQ_OK;
+    return vp::IO_REQ_DONE;
 }
 
 extern "C" vp::Component *gv_new(vp::ComponentConf &config)

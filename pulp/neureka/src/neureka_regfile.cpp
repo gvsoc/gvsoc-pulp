@@ -334,6 +334,19 @@ void Neureka::commit() {
   this->cxt_cfg_ptr = 1-this->cxt_cfg_ptr;
 }
 
+void Neureka::clear_jobs() {
+  this->cxt_cfg_ptr = 0;
+  this->cxt_use_ptr = 0;
+  this->job_pending = 0;
+  this->job_state = 0;
+  this->job_id = 0;
+  this->cxt_job_id[0] = this->cxt_job_id[1] = -1;
+  this->running_job_id = 0;
+  for(auto i=0; i<NEUREKA_NB_REG; i++) {
+    this->cxt0[i] = this->cxt1[i] = 0;
+  }
+}
+
 int Neureka::acquire() {
   this->trace.msg(vp::Trace::LEVEL_DEBUG, "JOB ACQUIRED: job_state=%d job_pending=%d job_running=%d\n", this->job_state, this->job_pending, this->job_running);
   if(this->job_state == 0 & this->job_pending < 2) {
