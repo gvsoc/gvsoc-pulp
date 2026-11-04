@@ -131,6 +131,8 @@ class Router : public FloonocNode
     vp::ClockEvent fsm_event;
     // Current queue where next request will be taken from, used for round-robin
     int current_queue;
+    // Buffer to track which output queues already got a request this cycle
+    std::vector<uint8_t> output_full;
     // State of the output queues, true if it is stalled and nothing can be sent
     // to it anymore until it is unstalled.
     std::vector<vp::Signal<bool> *> stalled_queues;
