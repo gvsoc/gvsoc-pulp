@@ -15,7 +15,7 @@
 // The ABI is made of plain structs and pure virtual methods. A minor version may append
 // fields to a struct and methods to the class. Every struct starts with struct_size, the size
 // the caller was compiled with, and the core never accesses beyond it. Any other change needs
-// a new major version, with a new acquire symbol.
+// a new major version, with a new acquire service.
 //
 // The protocol assumes one hart, reset only at time 0. The checker calls configure() once,
 // before anything else. Then, in RTL time order, it calls input() for each pin change,
@@ -280,7 +280,8 @@ protected:
     ~Cv32e40pCosim() {}
 };
 
-// Exported by the model library. component is gv::Gvsoc::get_component() of the core.
+// The core registers it as the service CV32E40P_COSIM_ACQUIRE.
+// component is gv::Gvsoc::get_component() of the core.
 // Returns NULL when the component is not a CV32E40P core or the major version differs.
 extern "C" typedef Cv32e40pCosim *(*Cv32e40pCosimAcquire)(void *component, uint32_t major,
                                                          uint32_t *minor);
