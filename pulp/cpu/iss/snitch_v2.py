@@ -141,6 +141,18 @@ class ArchSnitchV2(Arch):
             iss.isa.add_define(f'CONFIG_GVSOC_ISS_SNITCH_{name}', value)
 
 
+class EventSnitchV2(IssModule):
+    """Core events counting the retired instructions, for the cluster
+    performance counters."""
+
+    @override
+    def gen(self, iss: RiscvCommon):
+        iss.isa.add_define('CONFIG_GVSOC_ISS_EVENT', 'SnitchV2Events')
+        iss.isa.add_include('<cpu/iss_v2/include/cores/snitchv2/events.hpp>')
+        iss.add_sources(['cpu/iss_v2/src/event/event.cpp'])
+        iss.isa.add_implem_include('<cpu/iss_v2/include/event/event_implem.hpp>')
+
+
 class RegfileSnitchV2(Regfile):
     """Register file whose ft0..ft2 reads and writes go to the stream
     semantic registers while they are enabled."""
@@ -209,6 +221,7 @@ class SnitchV2(RiscvCommon):
             'arch': ArchSnitchV2(config),
             'exec': ExecInOrder(scoreboard=True),
             'regfile': RegfileSnitchV2(scoreboard=True),
+            'event': EventSnitchV2(),
             # The RTL core fetches one 32-bit word at its PC each cycle
             # (snitch_icache FETCH_DW), which is also what the L0 prefetcher
             # decides from
@@ -229,6 +242,10 @@ class SnitchV2(RiscvCommon):
     def i_BARRIER_ACK(self) -> gvsoc.systree.SlaveItf:
         """Release from the cluster barrier unit, once all the cores arrived."""
         return gvsoc.systree.SlaveItf(self, 'barrier_ack', signature='wire<bool>')
+
+    def i_PERF_EVENTS(self) -> gvsoc.systree.SlaveItf:
+        """Totals of the core events, read by the cluster performance counters."""
+        return gvsoc.systree.SlaveItf(self, 'perf_events', signature='wire<SnitchPerfEvents *>')
 
     def o_FP_DATA(self, itf: gvsoc.systree.SlaveItf):
         """FP load / store port of the FP subsystem (io_v2 single-request

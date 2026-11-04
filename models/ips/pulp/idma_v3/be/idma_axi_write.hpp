@@ -81,6 +81,14 @@ public:
     /// The bus master, for a component binding it to one of its own blocks.
     vp::IoMaster &master() { return this->bus; }
 
+    /// Handshakes since reset, for performance counters: AW (the first beat
+    /// of a burst), bytes of the accepted bursts, W beats and their bytes, B.
+    uint64_t perf_aw_done = 0;
+    uint64_t perf_aw_bytes = 0;
+    uint64_t perf_w_done = 0;
+    uint64_t perf_w_bytes = 0;
+    uint64_t perf_b_done = 0;
+
 private:
     /// One write burst, alive from its AW to its response.
     struct WriteCtx

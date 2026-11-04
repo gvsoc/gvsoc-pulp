@@ -36,6 +36,15 @@ SnitchV2::SnitchV2(Iss &iss)
     this->barrier_ack_itf.set_sync_meth(&SnitchV2::barrier_sync);
     this->iss.new_slave_port("barrier_ack", &this->barrier_ack_itf, (vp::Block *)this);
     this->iss.new_master_port("barrier_req", &this->barrier_req_itf);
+
+    this->perf_events_itf.set_sync_meth(&SnitchV2::perf_events_sync);
+    this->iss.new_slave_port("perf_events", &this->perf_events_itf, (vp::Block *)this);
+}
+
+void SnitchV2::perf_events_sync(vp::Block *__this, SnitchPerfEvents *events)
+{
+    SnitchV2 *_this = (SnitchV2 *)__this;
+    events->count[SNITCH_PERF_RETIRED_INSTR] = _this->iss.timing.retired_instr;
 }
 
 void SnitchV2::start()

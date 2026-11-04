@@ -68,6 +68,11 @@ class SnitchDmaV3(gvsoc.systree.Component):
         """Binds the AXI write master."""
         self.itf_bind('axi_write', itf, signature=IoV2Beat(self.cfg.data_width))
 
+    def i_PERF_EVENTS(self) -> gvsoc.systree.SlaveItf:
+        """Totals of the AXI handshakes, read by the cluster performance
+        counters."""
+        return gvsoc.systree.SlaveItf(self, 'perf_events', signature='wire<SnitchPerfEvents *>')
+
     def o_IRQ(self, itf: gvsoc.systree.SlaveItf):
         """Binds the completion pulse (one per completed transfer)."""
         self.itf_bind('irq', itf, signature='wire<bool>')

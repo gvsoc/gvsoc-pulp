@@ -77,6 +77,12 @@ public:
     /// The bus master, for a component binding it to one of its own blocks.
     vp::IoMaster &master() { return this->bus; }
 
+    /// Handshakes since reset, for performance counters: AR, bytes of the
+    /// accepted bursts, R beats.
+    uint64_t perf_ar_done = 0;
+    uint64_t perf_ar_bytes = 0;
+    uint64_t perf_r_done = 0;
+
 private:
     /// One outstanding read burst.
     struct ReadCtx

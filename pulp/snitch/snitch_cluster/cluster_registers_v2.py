@@ -22,7 +22,9 @@ The regmap of the current Snitch cluster RTL
 behaviour of the v1 model: the CLINT set /
 clear registers drive the core
 interrupts, and the barrier unit releases all the cores once each of them
-has read its barrier CSR. The ``input`` port speaks io_v2.
+has read its barrier CSR. The ``input`` port speaks io_v2. With the current
+map, the performance counters count the cycles and the events the cores and
+the DMA report on their perf_events ports.
 """
 
 from config_tree import Config, cfg_field
@@ -37,6 +39,9 @@ import regmap.regmap_c_header
 class ClusterRegistersConfig(Config):
     nb_cores: int = cfg_field(default=1, dump=True, desc=(
         "Number of cores of the cluster (interrupt lines and barrier inputs)"
+    ))
+    dma_data_width: int = cfg_field(default=64, dump=True, desc=(
+        "Data width of the DMA in bytes (dma_r_bw metric)"
     ))
 
 
@@ -86,6 +91,14 @@ class ClusterRegisters(gvsoc.systree.Component):
     def o_BARRIER_ACK(self, itf: gvsoc.systree.SlaveItf):
         """Barrier release, sent to all the cores once they all arrived."""
         self.itf_bind('barrier_ack', itf, signature='wire<bool>')
+
+    def o_CORE_PERF_EVENTS(self, core: int, itf: gvsoc.systree.SlaveItf):
+        """Event totals of core ``core``, for the performance counters."""
+        self.itf_bind(f'core_perf_events_{core}', itf, signature='wire<SnitchPerfEvents *>')
+
+    def o_DMA_PERF_EVENTS(self, itf: gvsoc.systree.SlaveItf):
+        """Event totals of the DMA, for the performance counters."""
+        self.itf_bind('dma_perf_events', itf, signature='wire<SnitchPerfEvents *>')
 
     def gen_gui(self, parent_signal):
         return gvsoc.gui.Signal(self, parent_signal, name=self.name, is_group=True, groups=["regmap"])

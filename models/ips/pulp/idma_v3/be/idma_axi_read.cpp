@@ -104,6 +104,9 @@ void IdmaAxiRead::reset(bool active)
             this->held_ar = nullptr;
         }
         this->held_resp = nullptr;
+        this->perf_ar_done = 0;
+        this->perf_ar_bytes = 0;
+        this->perf_r_done = 0;
     }
 }
 
@@ -188,6 +191,8 @@ void IdmaAxiRead::trace_ar(vp::IoReq *req, int beats)
 {
     this->sig_ar_addr.set_and_release(req->get_addr());
     this->sig_ar_beats.set_and_release(beats);
+    this->perf_ar_done++;
+    this->perf_ar_bytes += (uint64_t)beats * this->width;
 }
 
 
@@ -285,6 +290,7 @@ vp::IoRespAck IdmaAxiRead::resp_meth(vp::Block *__this, vp::IoReq *beat)
     }
 
     ctx->beats_received++;
+    _this->perf_r_done++;
     _this->sig_r_addr.set_and_release(beat->get_addr());
     if (ctx->beats_received == ctx->beats_expected)
     {

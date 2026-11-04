@@ -12,6 +12,7 @@
 #include <cpu/iss_v2/include/csr.hpp>
 #include <cpu/iss_v2/include/cores/snitchv2/fp_ss.hpp>
 #include <cpu/iss_v2/include/cores/snitchv2/ssr.hpp>
+#include <pulp/snitch/snitch_cluster/snitch_perf_events.hpp>
 
 class Iss;
 
@@ -97,6 +98,8 @@ private:
     bool copift_update(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool dump_update(iss_insn_t *insn, bool is_write, iss_reg_t &value);
     bool barrier_update(iss_insn_t *insn, bool is_write, iss_reg_t &value);
+    // Totals of the core events, for the cluster performance counters
+    static void perf_events_sync(vp::Block *__this, SnitchPerfEvents *events);
     static void barrier_sync(vp::Block *__this, bool value);
     static void barrier_release_handler(vp::Block *__this, vp::ClockEvent *event);
     template<bool fast>
@@ -125,4 +128,6 @@ private:
     // RTL barrier being registered
     vp::ClockEvent barrier_release_event;
     vp::Trace barrier_trace;
+
+    vp::WireSlave<SnitchPerfEvents *> perf_events_itf;
 };

@@ -92,6 +92,11 @@ void IdmaAxiWrite::reset(bool active)
         }
         this->held_ctx = nullptr;
         this->w_waiting = false;
+        this->perf_aw_done = 0;
+        this->perf_aw_bytes = 0;
+        this->perf_w_done = 0;
+        this->perf_w_bytes = 0;
+        this->perf_b_done = 0;
     }
 }
 
@@ -196,6 +201,7 @@ bool IdmaAxiWrite::send_beat(vp::IoReq *beat)
 {
     WriteCtx *ctx = (WriteCtx *)beat->initiator;
     bool is_last = beat->is_last;
+    bool is_first = beat->is_first;
     // A granted beat belongs to the target: read what is traced before
     uint64_t addr = beat->get_addr();
     uint64_t size = beat->get_size();
@@ -218,6 +224,13 @@ bool IdmaAxiWrite::send_beat(vp::IoReq *beat)
     }
     this->sig_w_addr.set_and_release(addr);
     this->sig_w_size.set_and_release(size);
+    if (is_first)
+    {
+        this->perf_aw_done++;
+        this->perf_aw_bytes += (uint64_t)ctx->num_beats * this->width;
+    }
+    this->perf_w_done++;
+    this->perf_w_bytes += size;
     if (is_last)
     {
         this->sig_w_last.set_and_release(true);
@@ -379,6 +392,7 @@ void IdmaAxiWrite::complete(WriteCtx *ctx, vp::IoRespStatus status)
     ctx->in_use = false;
     this->sig_burst[ctx->slot].release();
     this->sig_b.set_and_release(ctx->slot);
+    this->perf_b_done++;
     this->free_ctxs.push_back(ctx);
 
     this->be->write_burst_done(this, status == vp::IO_RESP_INVALID);

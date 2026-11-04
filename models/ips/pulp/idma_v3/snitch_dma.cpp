@@ -26,6 +26,7 @@
 #include "be/idma_be.hpp"
 #include "be/idma_axi_read.hpp"
 #include "be/idma_axi_write.hpp"
+#include <pulp/snitch/snitch_cluster/snitch_perf_events.hpp>
 
 /**
  * @brief Snitch xdma-driven iDMA: the offload front-end, one stream, AXI
@@ -56,6 +57,10 @@ private:
     IdmaBackend be;
     IdmaAxiRead axi_read;
     IdmaAxiWrite axi_write;
+
+    /// Totals of the AXI handshakes, for the cluster performance counters
+    static void perf_events_sync(vp::Block *__this, SnitchPerfEvents *events);
+    vp::WireSlave<SnitchPerfEvents *> perf_events_itf;
 };
 
 
@@ -72,6 +77,24 @@ SnitchDma::SnitchDma(vp::ComponentConf &config)
     this->be.add_write_manager(&this->axi_write);
     this->me.set_backend(&this->be);
     this->fe.set_backend(&this->be);
+
+    this->perf_events_itf.set_sync_meth(&SnitchDma::perf_events_sync);
+    this->new_slave_port("perf_events", &this->perf_events_itf);
+}
+
+
+
+void SnitchDma::perf_events_sync(vp::Block *__this, SnitchPerfEvents *events)
+{
+    SnitchDma *_this = (SnitchDma *)__this;
+    events->count[SNITCH_PERF_DMA_AR_DONE] = _this->axi_read.perf_ar_done;
+    events->count[SNITCH_PERF_DMA_AR_BW] = _this->axi_read.perf_ar_bytes;
+    events->count[SNITCH_PERF_DMA_R_DONE] = _this->axi_read.perf_r_done;
+    events->count[SNITCH_PERF_DMA_AW_DONE] = _this->axi_write.perf_aw_done;
+    events->count[SNITCH_PERF_DMA_AW_BW] = _this->axi_write.perf_aw_bytes;
+    events->count[SNITCH_PERF_DMA_W_DONE] = _this->axi_write.perf_w_done;
+    events->count[SNITCH_PERF_DMA_W_BW] = _this->axi_write.perf_w_bytes;
+    events->count[SNITCH_PERF_DMA_B_DONE] = _this->axi_write.perf_b_done;
 }
 
 
