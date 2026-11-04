@@ -61,6 +61,7 @@ if so, its rules take precedence over the default guidelines below.
 | Maintainer | Rules |
 |---|---|
 | @haugoug | [.github/maintainers/haugoug.md](.github/maintainers/haugoug.md) |
+| @rfamedina | [.github/maintainers/rfamedina.md](.github/maintainers/rfamedina.md) |
 
 Maintainers who are not listed in this table follow the default guidelines.
 
