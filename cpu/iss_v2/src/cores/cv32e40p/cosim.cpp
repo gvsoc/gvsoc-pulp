@@ -842,4 +842,6 @@ void Cv32e40pExec::start()
     // Created here, once every slot is built, because the model reads their
     // configuration.
     this->cosim = new Cv32e40pCosimModel(this->iss);
+    // The engine keeps model symbols private, so clients find the entry point as a service.
+    this->iss.new_service(CV32E40P_COSIM_ACQUIRE, (void *)cv32e40p_cosim_acquire_v1);
 }
