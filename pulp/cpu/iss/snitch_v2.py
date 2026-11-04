@@ -47,8 +47,10 @@ class SnitchV2Config(RiscvConfig):
     lsu_nb_outstanding: int = cfg_field(default=4, dump=True, desc=(
         "Outstanding integer loads and stores (RTL NumIntOutstandingMem)."
     ))
-    lsu_nb_outstanding_loads: int = cfg_field(default=1, dump=True, desc=(
-        "Outstanding integer loads among them (RTL NumIntOutstandingLoads)."
+    lsu_nb_outstanding_loads: int = cfg_field(default=4, dump=True, desc=(
+        "Outstanding integer loads among them (RTL NumIntOutstandingLoads, 4 "
+        "in the latest Snitch cluster). A load to a register still waiting "
+        "for an earlier one waits for it (scoreboard)."
     ))
     lsu_width: int = cfg_field(default=8, dump=True, desc=(
         "Width in bytes of the core data port."
