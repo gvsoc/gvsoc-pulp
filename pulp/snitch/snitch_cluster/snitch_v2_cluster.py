@@ -142,9 +142,12 @@ class SnitchClusterTcdm(gvsoc.systree.Component):
             interleaving_width=int(math.log2(arch.bank_width)),
             nb_wide_masters=arch.nb_wide_masters, rr_tree=True))
 
+        # The banks start at zero like the RTL SRAMs (no simulation init, X
+        # read as 0 by Verilator), some kernels leave parts of their output
+        # unwritten
         for i in range(0, arch.nb_banks):
             bank = memory_v3.Memory(self, f'bank_{i}', config=MemoryV3Config(
-                size=arch.bank_size, atomics=True, latency=arch.latency))
+                size=arch.bank_size, atomics=True, latency=arch.latency, init=False))
             ico.o_OUTPUT(i, bank.i_INPUT())
 
         for i in range(0, arch.nb_masters):

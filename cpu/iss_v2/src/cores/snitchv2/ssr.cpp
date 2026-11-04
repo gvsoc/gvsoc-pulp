@@ -12,6 +12,9 @@
 // Start-up cycle of a stream (the data movers are built with indirection
 // support, which adds a stage in front of the address generator)
 #define SNITCH_SSR_START_LATENCY 1
+// Cycles from an index word coming back to the first address generated from
+// it (index FIFO, then the output spill register of the address generator)
+#define SNITCH_SSR_INDIR_LATENCY 2
 
 SnitchSsrStreamer::SnitchSsrStreamer(Iss &iss, SnitchSsr &top, int id)
 : iss(iss), top(top), id(id),
@@ -37,6 +40,19 @@ void SnitchSsrStreamer::reset(bool active)
         {
             this->ptrs[i] = 0;
         }
+        this->idx_cfg = 0;
+        this->idx_base = 0;
+        this->idx_ptr = 0;
+        this->idx_head = 0;
+        this->idx_tail = 0;
+        this->idx_count = 0;
+        this->last_was_idx = false;
+        for (int i = 0; i < SNITCH_SSR_INDEX_CREDITS; i++)
+        {
+            SnitchSsrReq *req = &this->idx_reqs[i];
+            req->idx_slot = i;
+            req->slot = -1;
+        }
         this->jobs.clear();
         this->fifo_head = 0;
         this->fifo_tail = 0;
@@ -49,6 +65,7 @@ void SnitchSsrStreamer::reset(bool active)
         {
             SnitchSsrReq *req = &this->reqs[i];
             req->req.set_data((uint8_t *)&req->data);
+            req->idx_slot = -1;
             req->next = this->free_reqs;
             this->free_reqs = req;
         }
@@ -75,19 +92,41 @@ bool SnitchSsrStreamer::cfg_write(int reg, iss_reg_t value)
     {
         this->strides[reg - SNITCH_SSR_REG_STRIDES] = value;
     }
-    else if (reg >= SNITCH_SSR_REG_RPTR && reg < SNITCH_SSR_REG_WPTR + 4)
+    else if (reg == SNITCH_SSR_REG_IDX_CFG)
+    {
+        this->idx_cfg = value & 0x1FFFF;
+    }
+    else if (reg == SNITCH_SSR_REG_IDX_BASE)
+    {
+        this->idx_base = value & ~(iss_reg_t)7;
+    }
+    else if (reg >= SNITCH_SSR_REG_RPTR_INDIR && reg < SNITCH_SSR_REG_WPTR + 4)
     {
         // A stream is already waiting behind the current one, retry later
         if (this->jobs.size() >= 2) return false;
 
-        bool is_write = reg >= SNITCH_SSR_REG_WPTR;
-        int dims = reg - (is_write ? SNITCH_SSR_REG_WPTR : SNITCH_SSR_REG_RPTR) + 1;
+        // Pointer aliases: bit 3 no indirection, bit 2 write, bits 1:0
+        // dimensions - 1
+        bool indirect = ((reg >> 3) & 1) == 0;
+        bool is_write = (reg >> 2) & 1;
+        int dims = (reg & 3) + 1;
 
-        this->ptrs[reg - SNITCH_SSR_REG_RPTR] = value;
+        if (indirect)
+        {
+            this->idx_ptr = value;
+            if (dims != 1)
+            {
+                this->trace.force_warning("SSR index intersection is not supported\n");
+            }
+        }
+        else
+        {
+            this->ptrs[reg - SNITCH_SSR_REG_RPTR] = value;
+        }
 
         SnitchSsrJob job;
         job.is_write = is_write;
-        job.dims = dims;
+        job.dims = indirect ? 1 : dims;
         job.repeat = this->repeat;
         job.ptr = value;
         job.addr_done = false;
@@ -98,13 +137,27 @@ bool SnitchSsrStreamer::cfg_write(int reg, iss_reg_t value)
             job.bounds[i] = this->bounds[i];
             job.strides[i] = this->strides[i];
             job.cnt[i] = 0;
-            if (i < dims) nb_elems *= (int64_t)this->bounds[i] + 1;
+            if (i < job.dims) nb_elems *= (int64_t)this->bounds[i] + 1;
         }
         job.fp_remaining = is_write ? nb_elems : nb_elems * ((int64_t)this->repeat + 1);
 
+        job.indirect = indirect;
+        if (indirect)
+        {
+            job.idx_base = this->idx_base;
+            job.idx_size = this->idx_cfg & 0x3;
+            job.idx_shift = (this->idx_cfg >> 8) & 0xFF;
+            job.idx_byteoff = value & 7;
+            job.idx_fetch_ptr = value & ~(iss_reg_t)7;
+            // Index words spanned by the indices
+            int64_t nb_bytes = job.idx_byteoff + (nb_elems << job.idx_size);
+            job.idx_words_left = (nb_bytes + 7) / 8;
+            job.addr_remaining = nb_elems;
+        }
+
         this->trace.msg(vp::Trace::LEVEL_DEBUG, "Launching stream (is_write: %d, dims: %d, "
-            "ptr: 0x%lx, nb_elems: %ld, repeat: %ld)\n", is_write, dims, value, nb_elems,
-            this->repeat);
+            "ptr: 0x%lx, nb_elems: %ld, repeat: %ld, indirect: %d)\n", is_write, job.dims, value,
+            nb_elems, this->repeat, indirect);
 
         this->jobs.push_back(job);
         this->top.activate();
@@ -131,6 +184,18 @@ iss_reg_t SnitchSsrStreamer::cfg_read(int reg)
     else if (reg >= SNITCH_SSR_REG_STRIDES && reg < SNITCH_SSR_REG_STRIDES + 4)
     {
         return this->strides[reg - SNITCH_SSR_REG_STRIDES];
+    }
+    else if (reg == SNITCH_SSR_REG_IDX_CFG)
+    {
+        return this->idx_cfg;
+    }
+    else if (reg == SNITCH_SSR_REG_IDX_BASE)
+    {
+        return this->idx_base;
+    }
+    else if (reg >= SNITCH_SSR_REG_RPTR_INDIR && reg < SNITCH_SSR_REG_RPTR)
+    {
+        return this->idx_ptr;
     }
     else if (reg >= SNITCH_SSR_REG_RPTR && reg < SNITCH_SSR_REG_WPTR + 4)
     {
@@ -218,8 +283,70 @@ void SnitchSsrStreamer::job_check_end()
     }
 }
 
+bool SnitchSsrStreamer::addr_peek(SnitchSsrJob &job, int64_t cycle, iss_reg_t &addr)
+{
+    if (!job.indirect)
+    {
+        addr = job.ptr;
+        return true;
+    }
+
+    if (this->idx_count == 0) return false;
+    SnitchSsrIdxWord &word = this->idx_fifo[this->idx_head];
+    if (!word.valid || word.ready_cycle > cycle) return false;
+
+    int size = 1 << job.idx_size;
+    uint64_t index = word.data >> (job.idx_byteoff * 8);
+    if (size < 8) index &= (1ULL << (size * 8)) - 1;
+    addr = job.idx_base + ((index << 3) << job.idx_shift);
+    return true;
+}
+
+bool SnitchSsrStreamer::idx_fetch_ready(SnitchSsrJob &job)
+{
+    return job.indirect && job.idx_words_left > 0 && this->idx_count < SNITCH_SSR_INDEX_CREDITS;
+}
+
+void SnitchSsrStreamer::idx_fetch(SnitchSsrJob &job)
+{
+    int slot = this->idx_tail;
+    SnitchSsrReq *req = &this->idx_reqs[slot];
+    this->idx_fifo[slot].valid = false;
+    this->idx_tail = (this->idx_tail + 1) % SNITCH_SSR_INDEX_CREDITS;
+    this->idx_count++;
+
+    req->req.prepare();
+    req->req.set_addr(job.idx_fetch_ptr);
+    req->req.set_size(8);
+    req->req.set_opcode(vp::IoReqOpcode::READ);
+    req->req.set_data((uint8_t *)&req->data);
+    req->req.set_resp_status(vp::IO_RESP_OK);
+
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Index fetch (addr: 0x%lx)\n", job.idx_fetch_ptr);
+
+    job.idx_fetch_ptr += 8;
+    job.idx_words_left--;
+
+    this->nb_pending_reqs++;
+    this->send(req);
+}
+
 bool SnitchSsrStreamer::addr_next(SnitchSsrJob &job)
 {
+    if (job.indirect)
+    {
+        // Next index, the word is consumed once its last index is used
+        job.idx_byteoff += 1 << job.idx_size;
+        job.addr_remaining--;
+        if (job.idx_byteoff >= 8 || job.addr_remaining == 0)
+        {
+            job.idx_byteoff = 0;
+            this->idx_head = (this->idx_head + 1) % SNITCH_SSR_INDEX_CREDITS;
+            this->idx_count--;
+        }
+        return job.addr_remaining > 0;
+    }
+
     // Affine loop nest: the innermost dimension which has not reached its
     // bound increments, the ones below wrap. The pointer moves by the stride
     // of the dimension which increments (the strides are relative to the
@@ -275,19 +402,41 @@ bool SnitchSsrStreamer::handle(int64_t cycle)
     }
     if (cycle < job->start_cycle) return true;
 
-    if (this->free_reqs == NULL) return true;
+    // The data access can go if its address is known and the data FIFO has
+    // the data to write or room for the read
+    iss_reg_t addr;
+    bool data_ready = this->free_reqs != NULL && this->addr_peek(*job, cycle, addr);
+    if (data_ready)
+    {
+        if (job->is_write)
+        {
+            data_ready = this->fifo_count > 0 && this->fifo[this->fifo_head].ready_cycle <= cycle;
+        }
+        else
+        {
+            data_ready = this->fifo_count < CONFIG_GVSOC_ISS_SNITCH_SSR_FIFO_DEPTH;
+        }
+    }
+    bool idx_ready = this->idx_fetch_ready(*job);
+
+    // One request per cycle, round-robin between index and data
+    if (idx_ready && (!data_ready || !this->last_was_idx))
+    {
+        this->last_was_idx = true;
+        this->idx_fetch(*job);
+        return true;
+    }
+    if (!data_ready) return true;
+    this->last_was_idx = false;
 
     SnitchSsrReq *req;
-    iss_reg_t addr = job->ptr;
     // The data movers access 64-bit words. A 32-bit aligned element is read
     // from its word and shifted, written with only its bytes.
     int offset = addr & 7;
 
     if (job->is_write)
     {
-        if (this->fifo_count == 0) return true;
         SnitchSsrSlot &slot = this->fifo[this->fifo_head];
-        if (slot.ready_cycle > cycle) return true;
 
         req = this->free_reqs;
         this->free_reqs = req->next;
@@ -303,8 +452,6 @@ bool SnitchSsrStreamer::handle(int64_t cycle)
     }
     else
     {
-        if (this->fifo_count == CONFIG_GVSOC_ISS_SNITCH_SSR_FIFO_DEPTH) return true;
-
         req = this->free_reqs;
         this->free_reqs = req->next;
         req->slot = this->fifo_tail;
@@ -359,6 +506,16 @@ void SnitchSsrStreamer::req_end(SnitchSsrReq *req, int64_t cycle)
     if (req->req.get_resp_status() == vp::IO_RESP_INVALID)
     {
         this->trace.force_warning("Invalid SSR access (addr: 0x%lx)\n", req->req.get_addr());
+    }
+
+    if (req->idx_slot != -1)
+    {
+        SnitchSsrIdxWord &word = this->idx_fifo[req->idx_slot];
+        word.data = req->data;
+        word.valid = true;
+        word.ready_cycle = cycle + SNITCH_SSR_INDIR_LATENCY;
+        this->nb_pending_reqs--;
+        return;
     }
 
     if (req->slot != -1)
@@ -447,7 +604,7 @@ bool SnitchSsr::cfg_write(int reg, int ssr, iss_reg_t value)
         // accept it
         for (SnitchSsrStreamer *streamer: this->streamers)
         {
-            if (reg >= SNITCH_SSR_REG_RPTR && !streamer->can_launch()) return false;
+            if (reg >= SNITCH_SSR_REG_RPTR_INDIR && !streamer->can_launch()) return false;
         }
         for (SnitchSsrStreamer *streamer: this->streamers)
         {

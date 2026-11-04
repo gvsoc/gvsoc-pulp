@@ -20,8 +20,18 @@ class SnitchSsr;
 #define SNITCH_SSR_REG_REPEAT  1
 #define SNITCH_SSR_REG_BOUNDS  2
 #define SNITCH_SSR_REG_STRIDES 6
+#define SNITCH_SSR_REG_IDX_CFG  10
+#define SNITCH_SSR_REG_IDX_BASE 11
+#define SNITCH_SSR_REG_IDX_ISECT 12
+// Pointer aliases of indirect streams (no intersection: 1D only)
+#define SNITCH_SSR_REG_RPTR_INDIR 16
+#define SNITCH_SSR_REG_WPTR_INDIR 20
 #define SNITCH_SSR_REG_RPTR    24
 #define SNITCH_SSR_REG_WPTR    28
+
+// Index words fetched and not consumed yet of an indirect stream (RTL
+// IndexCredits)
+#define SNITCH_SSR_INDEX_CREDITS 3
 
 // One stream, from the write of its pointer to its last element
 struct SnitchSsrJob
@@ -35,6 +45,18 @@ struct SnitchSsrJob
     iss_reg_t ptr;
     iss_reg_t cnt[4];
     bool addr_done;
+    // Indirect stream: the elements are at idx_base + (index << 3 << shift),
+    // the indices of idx_size bytes are read from ptr. The index words left to
+    // fetch, the next one, the byte offset of the next index in the oldest
+    // fetched word, and the addresses left to generate.
+    bool indirect;
+    iss_reg_t idx_base;
+    int idx_size;
+    int idx_shift;
+    iss_reg_t idx_fetch_ptr;
+    int64_t idx_words_left;
+    int idx_byteoff;
+    int64_t addr_remaining;
     // Cycle from which the address generator can start the stream, -1 until
     // the stream is the current one of the address generator
     int64_t start_cycle;
@@ -50,10 +72,21 @@ struct SnitchSsrReq
     uint64_t data;
     // Data FIFO slot of a read
     int slot;
+    // Index FIFO slot of an index word read, -1 for a data access
+    int idx_slot;
     // Offset of the element in the 64-bit word read
     int offset;
     int64_t timestamp;
     SnitchSsrReq *next;
+};
+
+// Index word of an indirect stream
+struct SnitchSsrIdxWord
+{
+    uint64_t data;
+    bool valid;
+    // Cycle from which its indices can be turned into addresses
+    int64_t ready_cycle;
 };
 
 struct SnitchSsrSlot
@@ -80,6 +113,12 @@ struct SnitchSsrSlot
  * once the FP subsystem consumed the data (repeat + 1 times). A write
  * leaves the FIFO once its data is produced by the FPU. One memory request
  * per cycle on the streamer io_v2 port, with deny / retry.
+ *
+ * An indirect stream (ISSR) reads its 64-bit index words on the same port,
+ * the RTL muxing the index and data requests round-robin, with up to
+ * SNITCH_SSR_INDEX_CREDITS words fetched and not consumed. Each index gives
+ * the address of an element. The intersection of index streams is not
+ * modeled.
  */
 class SnitchSsrStreamer
 {
@@ -115,6 +154,11 @@ private:
     void send(SnitchSsrReq *req);
     void req_end(SnitchSsrReq *req, int64_t cycle);
     bool addr_next(SnitchSsrJob &job);
+    // Address of the next element of the stream, false if it is not known
+    // yet (index word of an indirect stream not there)
+    bool addr_peek(SnitchSsrJob &job, int64_t cycle, iss_reg_t &addr);
+    bool idx_fetch_ready(SnitchSsrJob &job);
+    void idx_fetch(SnitchSsrJob &job);
     void job_check_end();
     inline SnitchSsrJob *fp_job();
     inline SnitchSsrJob *addr_job();
@@ -129,6 +173,9 @@ private:
     iss_reg_t bounds[4];
     iss_reg_t strides[4];
     iss_reg_t ptrs[8];
+    iss_reg_t idx_cfg;
+    iss_reg_t idx_base;
+    iss_reg_t idx_ptr;
 
     // Current stream and the one waiting behind it
     std::vector<SnitchSsrJob> jobs;
@@ -143,6 +190,16 @@ private:
     // Last FP read, an instruction reading the same SSR twice pops once
     int64_t last_pop_id;
     uint64_t last_pop_data;
+
+    // Index FIFO of the indirect streams, a slot is taken at request
+    SnitchSsrIdxWord idx_fifo[SNITCH_SSR_INDEX_CREDITS];
+    int idx_head;
+    int idx_tail;
+    int idx_count;
+    SnitchSsrReq idx_reqs[SNITCH_SSR_INDEX_CREDITS];
+    // The last request of the round-robin between index and data requests
+    // was an index one
+    bool last_was_idx;
 
     SnitchSsrReq reqs[CONFIG_GVSOC_ISS_SNITCH_SSR_FIFO_DEPTH];
     SnitchSsrReq *free_reqs;
