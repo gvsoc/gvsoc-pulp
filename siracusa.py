@@ -14,16 +14,18 @@
 # limitations under the License.
 #
 
-from pulp.chips.siracusa.pulp_open_board import Pulp_open_board
-import gvsoc.runner as gvsoc
+import gvsoc.runner
+from pulp.chips.siracusa.board import SiracusaBoard
 
 
-class Target(gvsoc.Target):
+class Target(gvsoc.runner.Target):
 
-    gapy_description="Siracusa virtual board"
-    model = Pulp_open_board
+    gapy_description = "Siracusa virtual board (io_v2 and iss_v2)"
+    model = SiracusaBoard
     name = "pulp-open"
+    # The legacy gvsoc launcher (the Siracusa SDK and Deeploy) hands it to gvrun
+    gvrun_only = True
 
     def __init__(self, parser, options=None, name=None):
         super(Target, self).__init__(parser, options,
-            model=Pulp_open_board, name=name)
+            model=SiracusaBoard, name=name)
