@@ -36,7 +36,7 @@ IdmaBackend::IdmaBackend(vp::Component *top, std::string name, const IdmaBackend
     wlast(params.meta_fifo_depth > 0 ? params.meta_fifo_depth
         : params.buffer_depth + params.num_ax_in_flight),
     buffer(params.width, params.buffer_depth),
-    compute(params.width),
+    compute(params.width, params.transpose_full_duplex),
     compute_beat(params.width),
     buffer_fill(*this, "buffer_fill", 32, vp::SignalCommon::ResetKind::HighZ),
     busy(*this, "busy", 1, vp::SignalCommon::ResetKind::HighZ),

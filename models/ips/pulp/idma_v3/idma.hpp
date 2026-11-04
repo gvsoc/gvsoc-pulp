@@ -213,6 +213,9 @@ struct IdmaBackendParams
     /// On-the-fly compute engine elaborated (DMAEnableCompute); without it
     /// a DMOPC operation is a plain copy.
     bool enable_compute = false;
+    /// Two transpose tile banks (ComputeTuning.transpose_full_duplex): a tile
+    /// fills while the previous one drains; with one, at half rate.
+    bool transpose_full_duplex = true;
 };
 
 /**

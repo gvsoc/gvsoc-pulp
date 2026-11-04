@@ -46,6 +46,7 @@ private:
         params.meta_fifo_depth = cfg.meta_fifo_depth;
         params.raw_coupling = cfg.raw_coupling;
         params.enable_compute = cfg.enable_compute;
+        params.transpose_full_duplex = cfg.transpose_full_duplex;
         return params;
     }
 

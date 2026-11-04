@@ -160,16 +160,17 @@ static uint16_t fp32_to_fp16(uint32_t f)
 
 
 
-IdmaComputeEngine::IdmaComputeEngine(int width)
+IdmaComputeEngine::IdmaComputeEngine(int width, bool full_duplex)
 {
-    this->configure(width);
+    this->configure(width, full_duplex);
 }
 
 
 
-void IdmaComputeEngine::configure(int width)
+void IdmaComputeEngine::configure(int width, bool full_duplex)
 {
     this->width = width;
+    this->full_duplex = full_duplex;
     this->log2_width = 0;
     while ((1 << this->log2_width) < width)
     {
@@ -355,7 +356,7 @@ void IdmaComputeEngine::tp_push(const uint8_t *beat, int64_t now)
     }
 
     this->wr_cnt = 0;
-    this->wr_bank ^= 1;
+    if (this->full_duplex) this->wr_bank ^= 1;
 }
 
 
@@ -398,7 +399,7 @@ bool IdmaComputeEngine::tp_step(int64_t now)
         bank.full = false;
         bank.fill_cycle = now + 1;
         this->rd_cnt = 0;
-        this->rd_bank ^= 1;
+        if (this->full_duplex) this->rd_bank ^= 1;
     }
 
     return true;

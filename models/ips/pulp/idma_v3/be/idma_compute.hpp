@@ -29,9 +29,10 @@
  * configuration is only taken once the engine is empty (the RTL backend
  * interlock).
  *
- * - Transpose (idma_otf_transpose, two tile banks): NE = width / E input
- *   beats fill a bank, which then drains one transposed beat per cycle
- *   through an output register, while the other bank fills. The tiles are
+ * - Transpose (idma_otf_transpose): NE = width / E input beats fill a tile
+ *   bank, which then drains one transposed beat per cycle through an output
+ *   register. With two banks (FullDuplex) the next tile fills the other bank
+ *   meanwhile; with one, it waits for the drain (half rate). The tiles are
  *   walked column tile first, then row tile; the edge tiles of the tensor
  *   come with a byte strobe masking the rows and columns outside it.
  * - MX quant (idma_otf_mxquant): 32 FP32 or FP16 elements make a block,
@@ -46,11 +47,12 @@
 class IdmaComputeEngine
 {
 public:
-    /// @param width Data path width in bytes.
-    IdmaComputeEngine(int width=8);
+    /// @param width       Data path width in bytes.
+    /// @param full_duplex Two transpose tile banks (FullDuplex), else one.
+    IdmaComputeEngine(int width=8, bool full_duplex=true);
 
     /// Resize the engine (drops its state).
-    void configure(int width);
+    void configure(int width, bool full_duplex=true);
     /// Drop all state.
     void reset();
 
@@ -119,6 +121,7 @@ private:
 
     int width;
     int log2_width;
+    bool full_duplex;
     IdmaComputeCfg current;
 
     // Transpose

@@ -38,7 +38,7 @@ Model of the RTL ``snitch_cluster`` (default configuration):
   4 outstanding transactions per input.
 - iDMA: ``SnitchDmaV3`` (xdma front-end, ND mid-end, AXI read/write
   managers, DMOPC compute engine) offloaded from the DMA core.
-- Instruction caches: per-core L0 (8 lines of 32 B) and a shared L1 (8 KiB,
+- Instruction caches: per-core L0 (8 lines of 64 B) and a shared L1 (16 KiB,
   2 ways) refilling on the wide AXI.
 - Peripherals: Snitch cluster registers (CLINT, barrier), zero memory.
 """
@@ -52,6 +52,7 @@ import memory.memory_v3 as memory_v3
 from memory.memory_v3 import MemoryV3Config
 import interco.router_v2 as router_v2
 from interco.fifo_v2 import Fifo, FifoConfig
+from interco.rw_splitter_v2 import RwSplitter, RwSplitterConfig
 from interco.router_v2 import RouterConfig, RouterMapping, KIND_UNTIMED, KIND_BEAT
 from pulp.snitch.snitch_cluster.spatz.spatz_tcdm_interco import (
     SpatzTcdmInterco, SpatzTcdmIntercoConfig)
@@ -85,11 +86,13 @@ class ClusterArch(Tree):
         self.dma_core = self.nb_core - 1
         self.nb_ssrs = 3
 
-        # The TCDM gets an input more, narrow and wide, for the cluster alias
+        # The TCDM gets an input more, narrow and wide, for the cluster alias.
+        # Its wide inputs: the DMA reads, the DMA writes (the axi_to_mem_split
+        # of the RTL gives them a TCDM port each), then the alias.
         nb_masters = (self.nb_core - 1) * self.nb_ssrs + 1 + 1
         self.tcdm          = ClusterArch.Tcdm(self, 'tcdm', base,
             nb_masters + (1 if alias_base is not None else 0),
-            2 if alias_base is not None else 1)
+            3 if alias_base is not None else 2)
         self.tcdm.narrow_port = nb_masters - 1
         # Cluster alias of the current RTL (AliasRegionBase): the TCDM is also
         # at this address, on the narrow and the wide crossbars. The RTL
@@ -140,7 +143,9 @@ class SnitchClusterTcdm(gvsoc.systree.Component):
             nb_masters=arch.nb_masters,
             nb_slaves=arch.nb_banks,
             interleaving_width=int(math.log2(arch.bank_width)),
-            nb_wide_masters=arch.nb_wide_masters, rr_tree=True))
+            nb_wide_masters=arch.nb_wide_masters, rr_tree=True,
+            # axi_to_mem_split: the DMA reads and writes have a port each
+            wide_split_read_write=True))
 
         # The banks start at zero like the RTL SRAMs (no simulation init, X
         # read as 0 by Verilator), some kernels leave parts of their output
@@ -184,8 +189,9 @@ class SnitchCluster(gvsoc.systree.Component):
 
         zero_mem = ZeroMem(self, 'zero_mem', size=arch.zero_mem.size)
 
-        # Instruction caches: per-core L0 (8 lines of 32 B) in front of the
-        # shared L1 (8 KiB, 2 ways, 256-bit lines). As in the RTL, the
+        # Instruction caches: per-core L0 (8 lines of 64 B) in front of the
+        # shared L1 (16 KiB, 2 ways, 512-bit lines: the icache of the hive in
+        # cfg/default.json). As in the RTL, the
         # prefetcher is in the L0s (next line or the target of the first
         # taken branch / JAL of the line, one refill pending at a time, demand
         # miss or prefetch), and the L1 serves the L0s through one
@@ -194,10 +200,10 @@ class SnitchCluster(gvsoc.systree.Component):
         l0_caches = []
         for core_id in range(0, arch.nb_core):
             l0_caches.append(SnitchIcacheL0(self, f'l0_icache_{core_id}',
-                line_count=8, line_width=256, cacheable_base=arch.cacheable.base,
+                line_count=8, line_width=512, cacheable_base=arch.cacheable.base,
                 cacheable_size=arch.cacheable.size))
         l1_icache = SnitchIcacheL1(self, 'l1_icache', line_count=128, way_count=2,
-            line_width=256, nr_fetch_ports=arch.nb_core, num_axi_outstanding=2,
+            line_width=512, nr_fetch_ports=arch.nb_core, num_axi_outstanding=2,
             serial_lookup=bool(arch.icache_serial_lookup), cacheable_base=arch.cacheable.base, cacheable_size=arch.cacheable.size)
 
         cores = []
@@ -227,10 +233,11 @@ class SnitchCluster(gvsoc.systree.Component):
         # (dma_axi_req_fifo_depth) and an 8-entry request FIFO
         # (dma_req_fifo_depth). The write meta FIFO derives from them. The
         # offload request goes through a register (RegisterOffloadReq). The
-        # on-the-fly compute engine is there (dma_enable_compute).
+        # on-the-fly compute engine is there (dma_enable_compute), with one
+        # transpose tile bank (dma_compute_transpose_full_duplex: false).
         idma = SnitchDmaV3(self, 'idma', config=SnitchDmaV3Config(data_width=64,
             num_ax_in_flight=24, req_fifo_depth=8, meta_fifo_depth=0,
-            offload_req_latency=1, enable_compute=True))
+            offload_req_latency=1, enable_compute=True, transpose_full_duplex=False))
 
         #
         # Bindings
@@ -265,16 +272,26 @@ class SnitchCluster(gvsoc.systree.Component):
         # and its single-request adapter take 1. The cluster slaves get the
         # difference from a register stage (the testbench memory latency
         # already includes it for the SoC port).
-        wide_tcdm_reg = Fifo(self, 'wide_tcdm_reg', config=FifoConfig(
+        # As in the RTL (axi_to_mem_split), the reads and the writes into the
+        # TCDM have a port each: a copy within the TCDM reads and writes a
+        # beat in the same cycle.
+        wide_tcdm_split = RwSplitter(self, 'wide_tcdm_split', config=RwSplitterConfig())
+        wide_tcdm_rd_reg = Fifo(self, 'wide_tcdm_rd_reg', config=FifoConfig(
+            depth=8, latency=1, resp_latency=1, max_outstanding=8,
+            done_annotated_latency=True))
+        wide_tcdm_wr_reg = Fifo(self, 'wide_tcdm_wr_reg', config=FifoConfig(
             depth=8, latency=1, resp_latency=1, max_outstanding=8,
             done_annotated_latency=True))
         wide_zero_mem_reg = Fifo(self, 'wide_zero_mem_reg', config=FifoConfig(
             depth=8, latency=1, resp_latency=1, max_outstanding=8,
             done_annotated_latency=True))
-        wide_axi.o_MAP(wide_tcdm_reg.i_INPUT(),
+        wide_axi.o_MAP(wide_tcdm_split.i_INPUT(),
             RouterMapping(base=arch.tcdm.area.base, size=arch.tcdm.area.size,
                 remove_base=False), name='tcdm')
-        wide_tcdm_reg.o_OUTPUT(tcdm.i_WIDE_INPUT())
+        wide_tcdm_split.o_READ_OUTPUT(wide_tcdm_rd_reg.i_INPUT())
+        wide_tcdm_split.o_WRITE_OUTPUT(wide_tcdm_wr_reg.i_INPUT())
+        wide_tcdm_rd_reg.o_OUTPUT(tcdm.i_WIDE_INPUT(0))
+        wide_tcdm_wr_reg.o_OUTPUT(tcdm.i_WIDE_INPUT(1))
         wide_axi.o_MAP(wide_zero_mem_reg.i_INPUT(),
             RouterMapping(base=arch.zero_mem.base, size=arch.zero_mem.size),
             name='zero_mem')
@@ -287,7 +304,7 @@ class SnitchCluster(gvsoc.systree.Component):
                 RouterMapping(base=arch.alias.base, size=arch.alias.size,
                     remove_offset=arch.alias.base, add_offset=arch.tcdm.area.base),
                 name='tcdm_alias')
-            wide_tcdm_alias_reg.o_OUTPUT(tcdm.i_WIDE_INPUT(1))
+            wide_tcdm_alias_reg.o_OUTPUT(tcdm.i_WIDE_INPUT(2))
         wide_axi.o_MAP_DEFAULT(self.i_WIDE_SOC(), name='soc')
         # Wide accesses from the SoC (other clusters' DMAs), left unbound on a
         # single-cluster SoC

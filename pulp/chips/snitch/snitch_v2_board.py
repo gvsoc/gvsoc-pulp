@@ -47,10 +47,11 @@ from pulp.snitch.snitch_cluster.snitch_v2_cluster import ClusterArch, SnitchClus
 
 # Latency of the testbench memory, its two ports alike: from the request at
 # the cluster output to its response back there, less the routing the model
-# adds on the way.
-TB_MEM_LATENCY = 7
+# adds on the way. The latest cluster's testbench (axi_to_mem_intf and a read
+# data register) answers a cycle sooner than the axi_to_reg_intf of older ones.
+TB_MEM_LATENCY = 6
 # A write takes a cycle more, its data following its address
-TB_MEM_WRITE_LATENCY = 8
+TB_MEM_WRITE_LATENCY = 7
 
 
 class SnitchArch(Tree):

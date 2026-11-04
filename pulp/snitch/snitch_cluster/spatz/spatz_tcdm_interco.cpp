@@ -174,6 +174,7 @@ struct WideInputState
     // claim set at election time.
     uint64_t pending_addr = 0;
     uint64_t pending_size = 0;
+    bool pending_write = false;
 };
 
 struct BankState
@@ -260,8 +261,15 @@ private:
     // direction it goes -- a DMA read and a DMA write cannot both progress
     // in the same cycle even when they land on different banks. That is
     // what makes an L1->L1 copy run at half the bandwidth of a one-sided
-    // transfer, on the RTL (31 vs 55-56 B/cycle) as in this model.
-    int64_t  wide_used_cycle = -1;
+    // transfer, on the RTL (31 vs 55-56 B/cycle) as in this model. With
+    // wide_split_read_write the reads and the writes have a port each
+    // (Snitch: axi_to_mem_split), one read and one write per cycle whatever
+    // the input they come from.
+    int64_t wide_used_cycles[2] = {-1, -1};
+    int64_t &wide_used_cycle(bool is_write)
+    {
+        return this->wide_used_cycles[this->cfg.wide_split_read_write ? is_write : 0];
+    }
     // Scratch request used to slice a wide access into per-bank accesses.
     vp::IoReq wide_chunk_req;
 
@@ -379,7 +387,7 @@ void SpatzTcdmInterco::reset(bool active)
         this->wide_retrying = -1;
         this->banks_busy.clear();
         this->banks_busy_cycle = -1;
-        this->wide_used_cycle = -1;
+        this->wide_used_cycles[0] = this->wide_used_cycles[1] = -1;
         for (auto &b : this->banks)
         {
             b->pending_mask.clear();
@@ -588,9 +596,9 @@ vp::IoReqStatus SpatzTcdmInterco::wide_input_req(vp::Block *__this, vp::IoReq *r
     {
         _this->wide_claim_mask(req->get_addr(), req->get_size(), _this->wide_claim);
         if (!_this->wide_claim.intersects(_this->banks_busy_now()) &&
-            _this->wide_used_cycle != _this->clock.get_cycles())
+            _this->wide_used_cycle(req->get_is_write()) != _this->clock.get_cycles())
         {
-            _this->wide_used_cycle = _this->clock.get_cycles();
+            _this->wide_used_cycle(req->get_is_write()) = _this->clock.get_cycles();
             _this->banks_busy.merge(_this->wide_claim);
             return _this->forward_wide(req, id);
         }
@@ -616,6 +624,7 @@ vp::IoReqStatus SpatzTcdmInterco::wide_input_req(vp::Block *__this, vp::IoReq *r
     in->pending = true;
     in->pending_addr = req->get_addr();
     in->pending_size = req->get_size();
+    in->pending_write = req->get_is_write();
     _this->fsm_event.enqueue(0);
     return vp::IO_REQ_DENIED;
 }
@@ -667,7 +676,7 @@ void SpatzTcdmInterco::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
         _this->wide_claim_mask(w->pending_addr, w->pending_size, claim);
         if (claim.intersects(banks_taken) ||
-            _this->wide_used_cycle == _this->clock.get_cycles())
+            _this->wide_used_cycle(w->pending_write) == _this->clock.get_cycles())
         {
             // Overlaps a wide master already served this tick; try again
             // next cycle.
@@ -677,7 +686,7 @@ void SpatzTcdmInterco::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 
         banks_taken.merge(claim);
         _this->banks_busy.merge(claim);
-        _this->wide_used_cycle = _this->clock.get_cycles();
+        _this->wide_used_cycle(w->pending_write) = _this->clock.get_cycles();
         w->pending = false;
 
         _this->trace.msg(vp::Trace::LEVEL_DEBUG,

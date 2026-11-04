@@ -60,6 +60,14 @@ class SpatzTcdmIntercoConfig(Config):
         "consecutive banks served within the same arbiter tick, with "
         "priority over the narrow masters (RTL superbank mux behaviour)"
     ))
+    wide_split_read_write: bool = cfg_field(default=False, dump=True, desc=(
+        "Give the wide reads and the wide writes a port each into the banks, "
+        "so that they do not share their bandwidth: one read and one write "
+        "per cycle, whatever the wide input they come from (Snitch: "
+        "axi_to_mem_split). False (default): reads and writes share one "
+        "port, one wide access per cycle (Spatz: axi_to_mem_interleaved), so "
+        "an L1->L1 copy runs at half rate"
+    ))
 
 
 

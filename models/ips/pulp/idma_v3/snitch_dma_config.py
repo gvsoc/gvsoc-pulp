@@ -71,6 +71,12 @@ class SnitchDmaV3Config(Config):
         "Without it they are plain copies."
     ))
 
+    transpose_full_duplex: bool = cfg_field(default=True, desc=(
+        "Two tile banks in the transpose engine (the RTL ComputeTuning "
+        "transpose_full_duplex): a tile fills while the previous one drains. "
+        "With one bank, transposes run at half rate."
+    ))
+
     offload_req_latency: int = cfg_field(default=0, desc=(
         "Cycles between the offload of a dmcpy by the core and the entry of "
         "its transfer into the mid-end (1 for the Snitch RegisterOffloadReq "
