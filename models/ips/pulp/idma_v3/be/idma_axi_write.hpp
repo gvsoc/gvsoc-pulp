@@ -88,6 +88,9 @@ private:
         /// Staged data of the burst, one bus word per beat; the data beats
         /// point into it, so it lives until the burst is acknowledged.
         std::vector<uint8_t> stage;
+        /// Byte strobe of the staged data, for the beats a compute operation
+        /// masks (transpose edge tiles).
+        std::vector<uint8_t> strb;
         /// Index in the pool, reported as burst_id.
         int slot = 0;
         bool in_use = false;

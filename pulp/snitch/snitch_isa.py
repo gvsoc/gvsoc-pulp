@@ -35,6 +35,15 @@ class Xdma(IsaSubset):
             '<cpu/iss/include/isa/xdma.hpp>',
         ])
 
+class Xdmopc(IsaSubset):
+    """DMOPC of the latest Snitch cluster: sets the on-the-fly compute
+    operation (rs1: opcode word, rs2: parameters) of the next DMA transfers."""
+
+    def __init__(self):
+        super().__init__(name='Xdmopc', instrs=[
+            Instr('dmopc',     Format_R  ,   '0001010 ----- ----- 000 00000 0101011'),
+        ])
+
 # Encodings for extended Snitch instruction set
       #   3 3 2 2 2 2 2       2 2 2 2 2       1 1 1 1 1       1 1 1       1 1
       #   1 0 9 8 7 6 5       4 3 2 1 0       9 8 7 6 5       4 3 2       1 0 9 8 7       6 5 4 3 2 1 0

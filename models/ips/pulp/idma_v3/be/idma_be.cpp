@@ -18,6 +18,8 @@
  * Authors: Germain Haugou (germain.haugou@gmail.com)
  */
 
+#include <algorithm>
+#include <cstring>
 #include "idma_be.hpp"
 
 
@@ -34,6 +36,8 @@ IdmaBackend::IdmaBackend(vp::Component *top, std::string name, const IdmaBackend
     wlast(params.meta_fifo_depth > 0 ? params.meta_fifo_depth
         : params.buffer_depth + params.num_ax_in_flight),
     buffer(params.width, params.buffer_depth),
+    compute(params.width),
+    compute_beat(params.width),
     buffer_fill(*this, "buffer_fill", 32, vp::SignalCommon::ResetKind::HighZ),
     busy(*this, "busy", 1, vp::SignalCommon::ResetKind::HighZ),
     sig_r_addr(*this, "r_addr", 32, vp::SignalCommon::ResetKind::HighZ),
@@ -63,6 +67,8 @@ void IdmaBackend::reset(bool active)
         this->w_fifo.reset();
         this->wlast.reset();
         this->buffer.reset();
+        this->compute.reset();
+        this->in_order.clear();
         this->r_beat_idx = 0;
         this->w_beat_idx = 0;
         this->shown_full = false;
@@ -197,7 +203,14 @@ bool IdmaBackend::write_beat_ready(IdmaWriteManager *manager, IdmaSplit **split,
     }
 
     IdmaBeatBytes bytes = this->beat_bytes(slot.split, this->w_beat_idx);
-    if (!this->buffer.can_pop(bytes, slot.split.shift, now))
+    if (is_compute(slot.split))
+    {
+        if (!this->compute.can_pop(bytes.count, now))
+        {
+            return false;
+        }
+    }
+    else if (!this->buffer.can_pop(bytes, slot.split.shift, now))
     {
         return false;
     }
@@ -210,17 +223,43 @@ bool IdmaBackend::write_beat_ready(IdmaWriteManager *manager, IdmaSplit **split,
 
 
 
-void IdmaBackend::write_beat_take(IdmaWriteManager *manager, uint8_t *bus, int64_t now)
+bool IdmaBackend::write_beat_take(IdmaWriteManager *manager, uint8_t *bus, int64_t now,
+    uint8_t *strb)
 {
     WriteSlot &slot = this->w_fifo.head();
     IdmaBeatBytes bytes = this->beat_bytes(slot.split, this->w_beat_idx);
+    bool masked = false;
 
     this->trace.msg(vp::Trace::LEVEL_TRACE,
-        "Write beat taken (addr: 0x%lx, beat: %d/%d, strb: %d+%d)\n",
-        slot.split.addr, this->w_beat_idx, slot.split.num_beats, bytes.first, bytes.count);
+        "Write beat taken (addr: 0x%lx, beat: %d/%d, strb: %d+%d, compute: %d)\n",
+        slot.split.addr, this->w_beat_idx, slot.split.num_beats, bytes.first, bytes.count,
+        slot.split.req->compute.op);
 
-    this->buffer.pop(bytes, slot.split.shift, bus, now);
-    this->buffer_fill.set(this->buffer.fill());
+    if (is_compute(slot.split))
+    {
+        // Compute transfers are beat-aligned: the output starts at lane 0
+        masked = this->compute.pop(bus + bytes.first, strb ? strb + bytes.first : nullptr,
+            bytes.count, now);
+        if (masked && strb == nullptr)
+        {
+            this->trace.fatal("Masked compute output on a write manager without strobe\n");
+        }
+    }
+    else
+    {
+        this->buffer.pop(bytes, slot.split.shift, bus, now);
+        this->buffer_fill.set(this->buffer.fill());
+        if (this->params.enable_compute)
+        {
+            // These bytes head the buffer: they belong to the oldest request
+            InOrder &head = this->in_order.front();
+            head.left -= bytes.count;
+            if (head.left == 0)
+            {
+                this->in_order.pop_front();
+            }
+        }
+    }
 
     this->w_beat_idx++;
     if (this->w_beat_idx == slot.split.num_beats)
@@ -232,6 +271,75 @@ void IdmaBackend::write_beat_take(IdmaWriteManager *manager, uint8_t *bus, int64
     // Freed lanes may let a held response beat in (same cycle, see the tick)
     // and the freed FIFO slot lets the legalizer go on next cycle
     this->wake();
+
+    return masked;
+}
+
+
+
+void IdmaBackend::compute_track(Idma1dReq *req)
+{
+    if (this->params.enable_compute)
+    {
+        this->in_order.push_back({req, req->length});
+    }
+}
+
+
+
+// The engine works after the write side popped this cycle (its output
+// register and pack buffers accept in the cycle they are popped), then takes
+// one input beat from the buffer when the bytes heading it are a compute
+// request's. A new operation is only taken by an empty engine.
+bool IdmaBackend::compute_tick(int64_t now)
+{
+    if (!this->params.enable_compute)
+    {
+        return false;
+    }
+
+    bool active = this->compute.step(now);
+
+    if (this->in_order.empty())
+    {
+        return active;
+    }
+    InOrder &head = this->in_order.front();
+    const IdmaComputeCfg &cfg = head.req->compute;
+    if (cfg.op == IDMA_COMPUTE_NONE)
+    {
+        return active;
+    }
+    if (cfg != this->compute.cfg())
+    {
+        if (!this->compute.idle())
+        {
+            return active;
+        }
+        this->compute.start(cfg);
+        active |= this->compute.step(now);
+    }
+
+    int count = std::min<uint64_t>(this->params.width, head.left);
+    IdmaBeatBytes bytes{0, count};
+    if (!this->compute.can_accept(now) || !this->buffer.can_pop(bytes, 0, now))
+    {
+        return active;
+    }
+
+    uint8_t *beat = this->compute_beat.data();
+    memset(beat, 0, this->params.width);
+    this->buffer.pop(bytes, 0, beat, now);
+    this->buffer_fill.set(this->buffer.fill());
+    this->compute.push(beat, count, now);
+
+    head.left -= count;
+    if (head.left == 0)
+    {
+        this->in_order.pop_front();
+    }
+
+    return true;
 }
 
 
@@ -296,6 +404,9 @@ void IdmaBackend::tick_handler(vp::Block *__this, vp::ClockEvent *event)
     {
         active |= wm->tick(now);
     }
+
+    // 2b. Compute engine: its work, then one beat from the buffer
+    active |= _this->compute_tick(now);
 
     // 3. Read managers: response beats held for lack of buffer room may enter
     // now that this cycle's pops were applied (push-when-full of the
@@ -367,8 +478,9 @@ void IdmaBackend::update_signals(int64_t now)
     if (this->w_fifo.head_visible(now))
     {
         WriteSlot &slot = this->w_fifo.head();
-        empty = !this->buffer.can_pop(this->beat_bytes(slot.split, this->w_beat_idx),
-            slot.split.shift, now);
+        IdmaBeatBytes bytes = this->beat_bytes(slot.split, this->w_beat_idx);
+        empty = is_compute(slot.split) ? !this->compute.can_pop(bytes.count, now)
+            : !this->buffer.can_pop(bytes, slot.split.shift, now);
     }
     if (empty != this->shown_empty)
     {
@@ -393,7 +505,7 @@ uint32_t IdmaBackend::busy_bits()
         w_dp |= wm->busy();
     }
     // {raw_coupler, eh_cnt, eh_fsm, w_leg, r_leg, w_dp, r_dp, buffer}
-    bits |= !this->buffer.empty() ? 1 << 0 : 0;
+    bits |= !this->buffer.empty() || !this->compute.idle() ? 1 << 0 : 0;
     bits |= r_dp ? 1 << 1 : 0;
     bits |= w_dp ? 1 << 2 : 0;
     bits |= this->legalizer.r_busy() ? 1 << 3 : 0;

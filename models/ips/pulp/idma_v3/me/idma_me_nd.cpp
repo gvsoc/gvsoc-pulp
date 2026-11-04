@@ -148,6 +148,7 @@ Idma1dReq *IdmaMeNd::build_1d()
     burst->dst_reduce_len = req->dst_reduce_len;
     burst->src_max_llen = req->src_max_llen;
     burst->dst_max_llen = req->dst_max_llen;
+    burst->compute = req->compute;
     burst->parent = req;
     req->nb_1d_alive++;
 

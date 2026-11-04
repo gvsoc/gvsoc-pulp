@@ -46,7 +46,9 @@ class IdmaBackend;
  * - the next 1D request is taken in the cycle of the last split, so
  *   consecutive 1D transfers leave no bubble; the first split of a request
  *   comes one cycle after it was taken;
- * - a zero-length request is answered at once without touching the sides.
+ * - a zero-length request is answered at once without touching the sides;
+ * - a request with a compute operation decouples both sides, and the MX
+ *   operations size its write side by their byte ratio.
  */
 class IdmaLegalizer
 {
@@ -95,6 +97,8 @@ private:
 
     /// Try to take the next 1D request from the mid-end.
     bool take_request(int64_t now);
+    /// Adapt the sides of a request with a compute operation.
+    void setup_compute(Idma1dReq *req);
     /// Build the split of one side.
     IdmaSplit make_split(const Side &side, uint32_t num_bytes);
 

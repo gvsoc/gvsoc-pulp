@@ -66,6 +66,7 @@ IdmaAxiWrite::IdmaAxiWrite(vp::Component *top, std::string itf_name, IdmaBackend
             vp::SignalCommon::ResetKind::HighZ);
         this->ctxs[i].slot = i;
         this->ctxs[i].stage.resize(this->page_size + this->width);
+        this->ctxs[i].strb.resize(this->page_size + this->width);
     }
 }
 
@@ -282,7 +283,8 @@ bool IdmaAxiWrite::tick(int64_t now)
     bool is_last = beat_idx == split->num_beats - 1;
 
     uint8_t *bus_word = ctx->stage.data() + beat_idx * this->width;
-    this->be->write_beat_take(this, bus_word, now);
+    uint8_t *strb = ctx->strb.data() + beat_idx * this->width;
+    bool masked = this->be->write_beat_take(this, bus_word, now, strb);
 
     int first = bytes.first;
     int count = bytes.count;
@@ -293,6 +295,10 @@ bool IdmaAxiWrite::tick(int64_t now)
     beat->set_addr((split_addr & ~(uint64_t)(this->width - 1)) + beat_idx * this->width + first);
     beat->set_size(count);
     beat->set_data(bus_word + first);
+    if (masked)
+    {
+        beat->set_strb(strb + first);
+    }
     beat->is_first = beat_idx == 0;
     beat->is_last = is_last;
     beat->burst_id = ctx->slot;

@@ -36,6 +36,7 @@ IDMA_V3_SOURCES = [
     'ips/pulp/idma_v3/be/idma_buffer.cpp',
     'ips/pulp/idma_v3/be/idma_legalizer.cpp',
     'ips/pulp/idma_v3/be/idma_be.cpp',
+    'ips/pulp/idma_v3/be/idma_compute.cpp',
     'ips/pulp/idma_v3/be/idma_axi_read.cpp',
     'ips/pulp/idma_v3/be/idma_axi_write.cpp',
 ]

@@ -160,6 +160,19 @@ static inline iss_reg_t scfgw_exec(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
     return iss_insn_next(iss, insn, pc);
 }
 
+// DMOPC: offloaded to the DMA like dmsrc, which latches it for the next
+// transfers
+static inline iss_reg_t dmopc_exec(Iss *iss, iss_insn_t *insn, iss_reg_t pc)
+{
+    IssOffloadInsn<iss_reg_t> offload_insn = {
+        .opcode=insn->opcode,
+        .arg_a=(iss_reg_t)REG_GET(0),
+        .arg_b=(iss_reg_t)REG_GET(1),
+    };
+    iss->offload.offload_insn(&offload_insn);
+    return iss_insn_next(iss, insn, pc);
+}
+
 // COPIFT conversions and comparison, on FP registers only: the 32-bit
 // integers are in the low bits of the FP registers
 

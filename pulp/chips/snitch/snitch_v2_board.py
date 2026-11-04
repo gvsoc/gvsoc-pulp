@@ -150,15 +150,28 @@ class Soc(gvsoc.systree.Component):
         # a time (its atomics filter). Their latency, the same on both, is the
         # one of the memory.
         tb_mem = router_v2.Router(self, 'tb_mem', config=RouterConfig(kind=KIND_UNTIMED))
-        tb_mem.o_MAP_DEFAULT(self.i_HBM(), name='hbm')
+        tb_mem.o_MAP(self.i_HBM(),
+            RouterMapping(base=arch.hbm.base, size=arch.hbm.size), name='hbm')
         wide_axi.o_MAP(tb_mem.i_INPUT(0),
             RouterMapping(base=arch.hbm.base, size=arch.hbm.size,
-                max_pending_bursts=2),
+                max_pending_bursts=2, remove_base=False),
             name='hbm')
         narrow_axi.o_MAP(tb_mem.i_INPUT(1),
             RouterMapping(base=arch.hbm.base, size=arch.hbm.size,
-                max_pending_bursts=2),
+                max_pending_bursts=2, remove_base=False),
             name='hbm')
+
+        # The testbench memory is sparse and answers any address: what no
+        # other slave decodes below the HBM, like the window of a cluster
+        # which is not there, goes to a memory of its own. It has inputs of
+        # its own too, unlike on the RTL where these accesses share the HBM
+        # ports.
+        tb_low_mem = memory_v3.Memory(self, 'tb_low_mem', config=MemoryV3Config(
+            size=arch.hbm.base, atomics=True, latency=TB_MEM_LATENCY,
+            write_latency=TB_MEM_WRITE_LATENCY, init=False))
+        tb_mem.o_MAP_DEFAULT(tb_low_mem.i_INPUT(), name='low')
+        wide_axi.o_MAP_DEFAULT(tb_mem.i_INPUT(2), name='tb_mem')
+        narrow_axi.o_MAP_DEFAULT(tb_mem.i_INPUT(3), name='tb_mem')
 
         # ROM sits on the wide crossbar (RTL BootROM slave).
         wide_axi.o_MAP(rom.i_INPUT(),

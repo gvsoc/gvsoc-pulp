@@ -165,12 +165,61 @@ bool IdmaLegalizer::take_request(int64_t now)
     // lets each side advance on its own.
     this->coupled = !req->decouple_rw && !rm->not_bursting() && !wm->not_bursting();
 
+    if (!this->be->params.enable_compute)
+    {
+        // No compute engine: DMOPC operations are plain copies
+        req->compute = IdmaComputeCfg();
+    }
+    if (req->compute.op != IDMA_COMPUTE_NONE)
+    {
+        this->setup_compute(req);
+    }
+    this->be->compute_track(req);
+
     this->be->trace.msg(vp::Trace::LEVEL_DEBUG,
         "Taking request (src: 0x%lx, dst: 0x%lx, length: 0x%lx, src_prot: %d, dst_prot: %d, "
         "coupled: %d, super_last: %d)\n", req->src, req->dst, req->length, req->src_prot,
         req->dst_prot, this->coupled, req->super_last);
 
     return true;
+}
+
+
+
+// A compute transfer decouples both sides, the write side's length follows
+// the operation's byte ratio (MX: 128 or 64 bytes per 33-byte block), and
+// both addresses must be beat-aligned (the engine takes and gives whole
+// beats)
+void IdmaLegalizer::setup_compute(Idma1dReq *req)
+{
+    uint64_t in_bytes = 0, out_bytes = 0;
+    switch (req->compute.op)
+    {
+        case IDMA_COMPUTE_MXQUANT: in_bytes = 128; out_bytes = 33; break;
+        case IDMA_COMPUTE_MXQUANT_FP16: in_bytes = 64; out_bytes = 33; break;
+        case IDMA_COMPUTE_MXDEQUANT: in_bytes = 33; out_bytes = 128; break;
+        case IDMA_COMPUTE_MXDEQUANT_FP16: in_bytes = 33; out_bytes = 64; break;
+        default: break;
+    }
+    if (in_bytes != 0)
+    {
+        if (req->length % in_bytes != 0)
+        {
+            this->be->trace.fatal("Compute transfer length 0x%lx not a multiple of %lu bytes\n",
+                req->length, in_bytes);
+        }
+        this->w.length = req->length / in_bytes * out_bytes;
+    }
+
+    if ((req->src | req->dst) & (this->width - 1))
+    {
+        this->be->trace.fatal("Compute transfer not beat-aligned (src: 0x%lx, dst: 0x%lx)\n",
+            req->src, req->dst);
+    }
+
+    this->coupled = false;
+    req->decouple_rw = true;
+    req->decouple_aw = true;
 }
 
 

@@ -63,6 +63,7 @@ void IdmaFeXdma::reset(bool active)
         }
         this->pending_done = 0;
         this->busy = false;
+        this->compute = IdmaComputeCfg();
     }
 }
 
@@ -111,7 +112,42 @@ void IdmaFeXdma::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *insn)
         case 0b0000100:
             insn->result = _this->get_status(insn->arg_b);
             break;
+        case 0b0001010:
+            _this->set_compute(insn->arg_a, insn->arg_b);
+            break;
     }
+}
+
+
+
+// DMOPC: decode the operation (idma_inst64_compute_pkg::opc_decode, from
+// idma_dmopc.yml) and keep it for the next transfers. An unknown opcode
+// byte decodes to a plain copy.
+void IdmaFeXdma::set_compute(uint32_t opcode, uint32_t params)
+{
+    IdmaComputeCfg cfg;
+    switch (opcode & 0xff)
+    {
+        case 0x08: break;
+        case 0x20: cfg.op = IDMA_COMPUTE_MXQUANT; break;
+        case 0x21: cfg.op = IDMA_COMPUTE_MXDEQUANT; break;
+        case 0x22: cfg.op = IDMA_COMPUTE_MXQUANT_FP16; break;
+        case 0x23: cfg.op = IDMA_COMPUTE_MXDEQUANT_FP16; break;
+        case 0x50:
+            cfg.op = IDMA_COMPUTE_TRANSPOSE;
+            cfg.mode = (opcode >> 16) & 0x3;
+            cfg.tensor_m = params & 0xfff;
+            cfg.tensor_n = (params >> 12) & 0xfff;
+            break;
+        default:
+            this->trace.warning("Unknown DMOPC opcode byte 0x%x, using a plain copy\n",
+                opcode & 0xff);
+            break;
+    }
+
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Received dmopc (opcode: 0x%x, params: 0x%x, op: %d)\n",
+        opcode, params, cfg.op);
+    this->compute = cfg;
 }
 
 
@@ -151,6 +187,7 @@ uint32_t IdmaFeXdma::enqueue_copy(uint32_t config, uint32_t size, bool &granted)
     req->decouple_rw = config & 1;
     req->src_prot = IDMA_PROT_AXI;
     req->dst_prot = IDMA_PROT_AXI;
+    req->compute = this->compute;
     req->id = transfer_id;
     req->stream = 0;
 

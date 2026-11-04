@@ -65,6 +65,12 @@ class SnitchDmaV3Config(Config):
         "Dimensions the mid-end iterates (1 to 3)."
     ))
 
+    enable_compute: bool = cfg_field(default=False, desc=(
+        "On-the-fly compute engine (the RTL DMAEnableCompute): DMOPC selects "
+        "a transpose or an MX quant / dequant for the next transfers. "
+        "Without it they are plain copies."
+    ))
+
     offload_req_latency: int = cfg_field(default=0, desc=(
         "Cycles between the offload of a dmcpy by the core and the entry of "
         "its transfer into the mid-end (1 for the Snitch RegisterOffloadReq "

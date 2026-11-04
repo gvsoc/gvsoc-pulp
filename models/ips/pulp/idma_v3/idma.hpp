@@ -84,6 +84,33 @@ enum IdmaProtocol
     IDMA_PROT_INIT = 4,
 };
 
+/// On-the-fly compute operations (idma_pkg::compute_op_e), selected by DMOPC.
+enum IdmaComputeOp
+{
+    IDMA_COMPUTE_NONE = 0,
+    IDMA_COMPUTE_TRANSPOSE,
+    IDMA_COMPUTE_MXQUANT,
+    IDMA_COMPUTE_MXQUANT_FP16,
+    IDMA_COMPUTE_MXDEQUANT,
+    IDMA_COMPUTE_MXDEQUANT_FP16,
+};
+
+/// The compute configuration of a transfer (idma_pkg::compute_options_t).
+struct IdmaComputeCfg
+{
+    IdmaComputeOp op = IDMA_COMPUTE_NONE;
+    /// Transpose: element size 1 << mode bytes and tensor shape in elements.
+    int mode = 0;
+    int tensor_m = 0;
+    int tensor_n = 0;
+
+    bool operator==(const IdmaComputeCfg &o) const
+    {
+        return op == o.op && mode == o.mode && tensor_m == o.tensor_m && tensor_n == o.tensor_n;
+    }
+    bool operator!=(const IdmaComputeCfg &o) const { return !(*this == o); }
+};
+
 /// One launched ND transfer as produced by a front-end (the nd_req_t of the
 /// RTL midend, plus the bookkeeping the model needs to free it).
 struct IdmaNdReq
@@ -108,6 +135,8 @@ struct IdmaNdReq
     bool dst_reduce_len = false;
     int src_max_llen = 0;
     int dst_max_llen = 0;
+    /// On-the-fly compute applied to the data (DMOPC).
+    IdmaComputeCfg compute;
     /// Transfer id returned to software and stream the request was launched on.
     uint32_t id = 0;
     int stream = 0;
@@ -130,6 +159,8 @@ struct Idma1dReq
     bool dst_reduce_len = false;
     int src_max_llen = 0;
     int dst_max_llen = 0;
+    /// On-the-fly compute applied to the data (DMOPC).
+    IdmaComputeCfg compute;
     /// opt.last: this is the last 1D of its ND transfer.
     bool super_last = true;
     IdmaNdReq *parent = nullptr;
@@ -179,6 +210,9 @@ struct IdmaBackendParams
     int meta_fifo_depth = 11;
     /// Read/write channel coupler (RAWCouplingAvail, AXI writes only).
     bool raw_coupling = false;
+    /// On-the-fly compute engine elaborated (DMAEnableCompute); without it
+    /// a DMOPC operation is a plain copy.
+    bool enable_compute = false;
 };
 
 /**

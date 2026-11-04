@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include <deque>
 #include <map>
 #include <set>
 #include <string>
@@ -31,6 +32,7 @@
 #include "idma_fifo.hpp"
 #include "idma_buffer.hpp"
 #include "idma_legalizer.hpp"
+#include "idma_compute.hpp"
 
 /**
  * @brief One back-end (idma_backend): legalizer, ordering FIFOs, byte-lane
@@ -64,6 +66,12 @@
  * held beat in the same cycle. A beat arriving after the tick simply sees
  * the room. Either way the beat enters in the same cycle as it would in the
  * RTL.
+ *
+ * On-the-fly compute (params.enable_compute): a transfer with a DMOPC
+ * operation has its bytes go from the buffer through the compute engine,
+ * one beat per cycle, and its write beats take the engine's output. The
+ * buffer bytes belong to the 1D requests in the order the legalizer took
+ * them (in_order), which tells whose bytes head the buffer.
  *
  * Matching beats to bursts: response beats are matched to the split heading
  * r_fifo (the RTL has a single r_dp_req FIFO, so beats come back in split
@@ -107,7 +115,11 @@ public:
     bool write_beat_ready(IdmaWriteManager *manager, IdmaSplit **split, int *beat_idx,
         IdmaBeatBytes *bytes_out, int64_t now);
     /// Write managers: pop the bytes of that beat into a full-width bus word.
-    void write_beat_take(IdmaWriteManager *manager, uint8_t *bus, int64_t now);
+    /// With @p strb, a compute operation masking some of the bytes fills
+    /// their strobe and returns true; a manager passing NULL cannot write
+    /// such beats.
+    bool write_beat_take(IdmaWriteManager *manager, uint8_t *bus, int64_t now,
+        uint8_t *strb=nullptr);
     /// Write managers: the response of the oldest outstanding write burst
     /// arrived (B / rvalid); completes the 1D request when that burst was
     /// its last one. @p error reports a failed burst (traced only).
@@ -157,6 +169,17 @@ private:
 
     /// The per-cycle evaluation (see the class description).
     static void tick_handler(vp::Block *__this, vp::ClockEvent *event);
+    /// Compute: the engine's work of the cycle, then one input beat from
+    /// the buffer. Returns true when something remains to do.
+    bool compute_tick(int64_t now);
+    /// Compute: the legalizer took this request, its bytes enter the buffer
+    /// after those of the previous ones.
+    void compute_track(Idma1dReq *req);
+    /// True when the split's write beats come from the compute engine.
+    static bool is_compute(const IdmaSplit &split)
+    {
+        return split.req->compute.op != IDMA_COMPUTE_NONE;
+    }
 
     /// Manager registered for a protocol, NULL when none.
     IdmaReadManager *read_manager(int protocol);
@@ -181,6 +204,17 @@ private:
     IdmaTimedFifo<LastSlot> wlast;
     /// The data path between the read and the write managers.
     IdmaByteLaneBuffer buffer;
+    /// The compute engine, and the requests whose bytes are in or still to
+    /// come into the buffer with the bytes not out of it yet.
+    IdmaComputeEngine compute;
+    struct InOrder
+    {
+        Idma1dReq *req;
+        uint64_t left;
+    };
+    std::deque<InOrder> in_order;
+    /// The input beat handed to the engine.
+    std::vector<uint8_t> compute_beat;
     /// Beats already consumed of the bursts heading r_fifo / w_fifo.
     int r_beat_idx = 0;
     int w_beat_idx = 0;

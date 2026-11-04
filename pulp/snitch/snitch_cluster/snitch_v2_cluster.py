@@ -37,7 +37,7 @@ Model of the RTL ``snitch_cluster`` (default configuration):
 - Fabric: ``router_v2`` beat routers, wide 512-bit and narrow 64-bit, with
   4 outstanding transactions per input.
 - iDMA: ``SnitchDmaV3`` (xdma front-end, ND mid-end, AXI read/write
-  managers) offloaded from the DMA core.
+  managers, DMOPC compute engine) offloaded from the DMA core.
 - Instruction caches: per-core L0 (8 lines of 32 B) and a shared L1 (8 KiB,
   2 ways) refilling on the wide AXI.
 - Peripherals: Snitch cluster registers (CLINT, barrier), zero memory.
@@ -226,10 +226,11 @@ class SnitchCluster(gvsoc.systree.Component):
         # The Snitch cluster default config: 24 bursts in flight
         # (dma_axi_req_fifo_depth) and an 8-entry request FIFO
         # (dma_req_fifo_depth). The write meta FIFO derives from them. The
-        # offload request goes through a register (RegisterOffloadReq).
+        # offload request goes through a register (RegisterOffloadReq). The
+        # on-the-fly compute engine is there (dma_enable_compute).
         idma = SnitchDmaV3(self, 'idma', config=SnitchDmaV3Config(data_width=64,
             num_ax_in_flight=24, req_fifo_depth=8, meta_fifo_depth=0,
-            offload_req_latency=1))
+            offload_req_latency=1, enable_compute=True))
 
         #
         # Bindings
