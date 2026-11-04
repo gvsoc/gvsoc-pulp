@@ -53,6 +53,12 @@ public:
   int actual_size;
   // Cycle at which a read word reaches its channel
   int64_t ready_cycle;
+  // An access crossing a word boundary goes to the L2 as two parts, up to the
+  // boundary then the rest: whole access, bytes done so far, error seen
+  uint32_t base_addr;
+  int total_size;
+  int done_size;
+  bool error;
 
   void set_next(Udma_l2_req *next) { this->next = next; }
   Udma_l2_req *get_next() { return next; }
@@ -541,6 +547,15 @@ private:
   // from now
   void l2_read_end(Udma_l2_req *req, int64_t latency);
   void free_write_req(Udma_l2_req *req);
+  // Start an L2 access, split in two if it crosses a word boundary
+  void l2_split_start(Udma_l2_req *req, Udma_l2_req **split);
+  // A part of an L2 access is done; prepares the next part and returns false
+  // if there is one, else restores the whole access and returns true
+  bool l2_split_part_done(Udma_l2_req *req, Udma_l2_req **split, bool *next_ready);
+  void issue_l2_read(Udma_l2_req *req);
+  void l2_read_part_done(Udma_l2_req *req, int64_t latency);
+  void issue_l2_write(Udma_l2_req *req);
+  void l2_write_part_done(Udma_l2_req *req);
 
   vp::IoRespStatus conf_req(vp::IoReq *req, uint64_t offset);
   vp::IoRespStatus periph_req(vp::IoReq *req, uint64_t offset);
@@ -573,12 +588,20 @@ private:
   Udma_queue<Udma_l2_req> *l2_read_waiting_reqs;
   // Read denied by the L2, sent again on its retry
   Udma_l2_req *l2_read_denied;
+  // Read split in two parts (crossing a word boundary) in progress, and
+  // whether its second part waits to be sent. As the RTL udma_tx_l2_if
+  // (NON_ALIGNED state), no other read goes until it is done.
+  Udma_l2_req *l2_read_split;
+  bool l2_read_split_ready;
 
   // Writes waiting to be sent, and the free ones
   Udma_queue<Udma_l2_req> *l2_write_reqs;
   Udma_queue<Udma_l2_req> *l2_write_free;
   // Write denied by the L2, sent again on its retry
   Udma_l2_req *l2_write_denied;
+  // Same as l2_read_split for writes (RTL udma_rx_l2_if)
+  Udma_l2_req *l2_write_split;
+  bool l2_write_split_ready;
 
   vp::WireMaster<int>    event_itf;
 };

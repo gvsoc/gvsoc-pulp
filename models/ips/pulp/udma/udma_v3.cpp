@@ -498,9 +498,102 @@ void udma::enqueue_ready(Udma_channel *channel)
 }
 
 
+// The uDMA core only drives word-aligned L2 accesses: one crossing a word
+// boundary is done in two, the second one the cycle after the first one
+// (udma_{rx,tx}_l2_if NON_ALIGNED state). An interleaved L2 would otherwise
+// see an access spanning two banks.
+void udma::l2_split_start(Udma_l2_req *req, Udma_l2_req **split)
+{
+  uint32_t addr = req->req.get_addr();
+  int size = req->req.get_size();
+  req->base_addr = addr;
+  req->total_size = size;
+  req->done_size = 0;
+  req->error = false;
+  int first_size = 4 - (addr & 3);
+  if (first_size < size)
+  {
+    req->req.set_size(first_size);
+    *split = req;
+  }
+}
+
+
+bool udma::l2_split_part_done(Udma_l2_req *req, Udma_l2_req **split, bool *next_ready)
+{
+  if (req->req.get_resp_status() != vp::IO_RESP_OK)
+  {
+    req->error = true;
+  }
+  req->done_size += req->req.get_size();
+  if (req->done_size < req->total_size)
+  {
+    req->req.prepare();
+    req->req.set_addr(req->base_addr + req->done_size);
+    req->req.set_size(req->total_size - req->done_size);
+    req->req.set_data(req->data + req->done_size);
+    *next_ready = true;
+    return false;
+  }
+
+  if (*split == req)
+  {
+    *split = NULL;
+  }
+  req->req.set_addr(req->base_addr);
+  req->req.set_size(req->total_size);
+  req->req.set_data(req->data);
+  req->req.set_resp_status(req->error ? vp::IO_RESP_INVALID : vp::IO_RESP_OK);
+  return true;
+}
+
+
+void udma::issue_l2_write(Udma_l2_req *req)
+{
+  vp::IoReqStatus status = this->l2_wo.req(&req->req);
+  if (status == vp::IO_REQ_DONE)
+  {
+    this->l2_write_part_done(req);
+  }
+  else if (status == vp::IO_REQ_DENIED)
+  {
+    this->l2_write_denied = req;
+  }
+  // Granted: goes on when its response comes back
+}
+
+
+void udma::l2_write_part_done(Udma_l2_req *req)
+{
+  if (this->l2_split_part_done(req, &this->l2_write_split, &this->l2_write_split_ready))
+  {
+    if (req->req.get_resp_status() != vp::IO_RESP_OK)
+    {
+      this->trace.force_warning("Invalid L2 write (addr: 0x%x)\n", req->req.get_addr());
+    }
+    this->free_write_req(req);
+  }
+}
+
+
 void udma::send_l2_write()
 {
-  if (this->l2_write_denied != NULL || this->l2_write_reqs->is_empty())
+  if (this->l2_write_denied != NULL)
+  {
+    return;
+  }
+
+  if (this->l2_write_split != NULL)
+  {
+    if (this->l2_write_split_ready)
+    {
+      this->l2_write_split_ready = false;
+      this->issue_l2_write(this->l2_write_split);
+    }
+    return;
+  }
+
+  if (this->l2_write_reqs->is_empty())
   {
     return;
   }
@@ -509,27 +602,29 @@ void udma::send_l2_write()
   this->trace.msg("Sending write request to L2 (value: 0x%x, addr: 0x%x, size: 0x%x)\n",
     *(uint32_t *)req->data, req->req.get_addr(), req->req.get_size());
 
-  vp::IoReqStatus status = this->l2_wo.req(&req->req);
-  if (status == vp::IO_REQ_DONE)
-  {
-    if (req->req.get_resp_status() != vp::IO_RESP_OK)
-    {
-      this->trace.force_warning("Invalid L2 write (addr: 0x%x)\n", req->req.get_addr());
-    }
-    this->free_write_req(req);
-  }
-  else if (status == vp::IO_REQ_DENIED)
-  {
-    this->l2_write_denied = req;
-  }
-  // Granted: freed when its response comes back
+  this->l2_split_start(req, &this->l2_write_split);
+  this->issue_l2_write(req);
 }
 
 
 void udma::send_l2_read()
 {
-  if (this->l2_read_denied != NULL || this->ready_tx_channels->is_empty() ||
-    this->l2_read_reqs->is_empty())
+  if (this->l2_read_denied != NULL)
+  {
+    return;
+  }
+
+  if (this->l2_read_split != NULL)
+  {
+    if (this->l2_read_split_ready)
+    {
+      this->l2_read_split_ready = false;
+      this->issue_l2_read(this->l2_read_split);
+    }
+    return;
+  }
+
+  if (this->ready_tx_channels->is_empty() || this->l2_read_reqs->is_empty())
   {
     return;
   }
@@ -544,16 +639,32 @@ void udma::send_l2_read()
   this->trace.msg("Sending read request to L2 (addr: 0x%x, size: 0x%x)\n",
     req->req.get_addr(), req->req.get_size());
 
+  this->l2_split_start(req, &this->l2_read_split);
+  this->issue_l2_read(req);
+}
+
+
+void udma::issue_l2_read(Udma_l2_req *req)
+{
   vp::IoReqStatus status = this->l2_ro.req(&req->req);
   if (status == vp::IO_REQ_DONE)
   {
-    this->l2_read_end(req, req->req.get_full_latency() + 1);
+    this->l2_read_part_done(req, req->req.get_full_latency() + 1);
   }
   else if (status == vp::IO_REQ_DENIED)
   {
     this->l2_read_denied = req;
   }
   // Granted: goes on when its response comes back
+}
+
+
+void udma::l2_read_part_done(Udma_l2_req *req, int64_t latency)
+{
+  if (this->l2_split_part_done(req, &this->l2_read_split, &this->l2_read_split_ready))
+  {
+    this->l2_read_end(req, latency);
+  }
 }
 
 
@@ -602,15 +713,7 @@ void udma::l2_ro_retry(vp::Block *__this, vp::IoRetryChannel channel)
 
   // Sent again right away, inside the retry
   _this->l2_read_denied = NULL;
-  vp::IoReqStatus status = _this->l2_ro.req(&req->req);
-  if (status == vp::IO_REQ_DONE)
-  {
-    _this->l2_read_end(req, req->req.get_full_latency() + 1);
-  }
-  else if (status == vp::IO_REQ_DENIED)
-  {
-    _this->l2_read_denied = req;
-  }
+  _this->issue_l2_read(req);
   _this->check_state();
 }
 
@@ -618,7 +721,7 @@ void udma::l2_ro_retry(vp::Block *__this, vp::IoRetryChannel channel)
 vp::IoRespAck udma::l2_ro_resp(vp::Block *__this, vp::IoReq *req)
 {
   udma *_this = (udma *)__this;
-  _this->l2_read_end((Udma_l2_req *)req, req->get_full_latency() + 1);
+  _this->l2_read_part_done((Udma_l2_req *)req, req->get_full_latency() + 1);
   _this->check_state();
   return vp::IO_RESP_ACCEPTED;
 }
@@ -635,15 +738,7 @@ void udma::l2_wo_retry(vp::Block *__this, vp::IoRetryChannel channel)
 
   // Sent again right away, inside the retry
   _this->l2_write_denied = NULL;
-  vp::IoReqStatus status = _this->l2_wo.req(&req->req);
-  if (status == vp::IO_REQ_DONE)
-  {
-    _this->free_write_req(req);
-  }
-  else if (status == vp::IO_REQ_DENIED)
-  {
-    _this->l2_write_denied = req;
-  }
+  _this->issue_l2_write(req);
   _this->check_state();
 }
 
@@ -651,11 +746,7 @@ void udma::l2_wo_retry(vp::Block *__this, vp::IoRetryChannel channel)
 vp::IoRespAck udma::l2_wo_resp(vp::Block *__this, vp::IoReq *req)
 {
   udma *_this = (udma *)__this;
-  if (req->get_resp_status() != vp::IO_RESP_OK)
-  {
-    _this->trace.force_warning("Invalid L2 write (addr: 0x%x)\n", req->get_addr());
-  }
-  _this->free_write_req((Udma_l2_req *)req);
+  _this->l2_write_part_done((Udma_l2_req *)req);
   _this->check_state();
   return vp::IO_RESP_ACCEPTED;
 }
@@ -670,8 +761,12 @@ void udma::free_read_req(Udma_l2_req *req)
 
 void udma::check_state()
 {
-  if ((this->l2_read_denied == NULL && !ready_tx_channels->is_empty() && !l2_read_reqs->is_empty()) ||
-    (this->l2_write_denied == NULL && !l2_write_reqs->is_empty()))
+  bool read_pending = this->l2_read_split != NULL ? this->l2_read_split_ready :
+    !ready_tx_channels->is_empty() && !l2_read_reqs->is_empty();
+  bool write_pending = this->l2_write_split != NULL ? this->l2_write_split_ready :
+    !l2_write_reqs->is_empty();
+  if ((this->l2_read_denied == NULL && read_pending) ||
+    (this->l2_write_denied == NULL && write_pending))
   {
     event_reenqueue_ext(event, 1);
   }
@@ -775,6 +870,10 @@ void udma::reset(bool active)
     clock_gating = 0;
     this->l2_read_denied = NULL;
     this->l2_write_denied = NULL;
+    this->l2_read_split = NULL;
+    this->l2_read_split_ready = false;
+    this->l2_write_split = NULL;
+    this->l2_write_split_ready = false;
   }
 
   for (int i=0; i<this->cfg.nb_periphs; i++)
