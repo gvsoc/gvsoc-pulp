@@ -25,6 +25,7 @@
 #include "floonoc_router_flex.hpp"
 #include "floonoc_flex.hpp"
 #include "floonoc_network_interface_flex.hpp"
+#include <algorithm>
 #include <cstring>
 #include <vp/itf/io.hpp>
 #include <vp/vp.hpp>
@@ -50,6 +51,7 @@ Router::Router(FlooNoc *noc, std::string name, int node_id, int num_queues,
     this->stalled_queues.resize(this->num_queues, nullptr);
     this->input_latencies.resize(this->num_queues, 1);
     this->collective_pending_queues.resize(this->num_queues);
+    this->output_full.resize(this->num_queues, 0);
 
     // Create a queue for each direction
     for (int i = 0; i < this->num_queues; i++)
@@ -158,10 +160,9 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     // Get the currently active queue and update it to implement the round-robin
     int in_queue_index = _this->current_queue;
 
-    std::vector<bool> output_full(_this->num_queues,
-                                  false); // Used to make sure we only send a
-                                          // single request per cycle to each
-                                          // direction
+    // Used to make sure we only send a single request per cycle to each direction
+    std::vector<uint8_t> &output_full = _this->output_full;
+    std::fill(output_full.begin(), output_full.end(), 0);
     // Then go through the num_queues input queues until we find a request which
     // can be propagated
     for (int i = 0; i < _this->num_queues; i++)
@@ -300,7 +301,7 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
                 continue; // Skip this request and instead check another input
                           // queue
             }
-            output_full[out_queue_id] = true;
+            output_full[out_queue_id] = 1;
 
             // In case the request goes to a queue which is stalled, skip it
             // we'll retry later
