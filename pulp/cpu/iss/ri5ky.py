@@ -115,6 +115,12 @@ class Ri5ky(RiscvCommon):
             isa_instance = RiscvIsa(f"{type(self).isa_name}_{config.isa}",
                 config.isa, extensions=extensions)
 
+            # RI5CY behaviours of the ISA and core code shared with other
+            # cores: vfmre is rd = rs1*rs2 - rd and a vector compare puts each
+            # lane result at the bottom of its lane, as fpnew does; an mstatus
+            # write only keeps MIE and MPIE, MPP stays M (PULP_SECURE=0).
+            isa_instance.add_define('CONFIG_GVSOC_ISS_RI5KY', 1)
+
             isa_instances[cache_key] = isa_instance
 
         modules: dict[str, IssModule] = {
