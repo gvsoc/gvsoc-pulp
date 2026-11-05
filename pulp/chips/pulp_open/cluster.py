@@ -116,14 +116,14 @@ class Cluster(st.Component):
         # The Deeploy flow the iDMA is used for needs a larger L1 and a cluster window wide
         # enough to hold it. The chip description keeps the sizes PULP Open ships with, and they
         # are enlarged here only when iDMA is selected, so the default platform is untouched.
+        # Only the sizes change, so they are set inside the existing entries. add_properties() is
+        # not used: the gvrun systree merges it shallowly, so a partial 'mapping' or 'l1' would
+        # replace the whole entry and drop the cluster base address and the rest of the L1
+        # description.
         if dma_model == 'idma':
-            cluster_conf.add_properties({
-                'mapping': {'size': '0x00C00000'},
-                'l1': {
-                    'mapping': {'size': '0x00040000'},
-                    'ts_mapping': {'size': '0x00040000'},
-                },
-            })
+            cluster_conf.get_property('mapping')['size'] = '0x00C00000'
+            cluster_conf.get_property('l1/mapping')['size'] = '0x00040000'
+            cluster_conf.get_property('l1/ts_mapping')['size'] = '0x00040000'
 
         nb_pe               = cluster_conf.get_property('nb_pe', int)
         cluster_size        = cluster_conf.get_property('mapping/size', int)
