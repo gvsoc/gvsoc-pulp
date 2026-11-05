@@ -47,7 +47,9 @@ class PulpOpenDma(gvsoc.systree.Component):
         done_id multiregs. Two for the iDMA the chips-it fork generates, sixteen for v0.6.4; it
         fixes where next_id and done_id sit, and must match the header the software uses.
     global_queue_depth: int
-        Number of transfers which can be accepted before the middle-end takes them over.
+        Number of transfers of one stream which can be accepted before the middle-end takes them
+        over, as the per-stream request FIFO of dmac_wrap. When it is full, the NEXT_ID read
+        stalls the core until a slot frees up.
     transfer_queue_size: int
         Number of transfer requests which can be queued to the middle-end.
     burst_queue_size: int

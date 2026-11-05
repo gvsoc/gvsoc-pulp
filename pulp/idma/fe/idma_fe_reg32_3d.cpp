@@ -28,6 +28,7 @@ IDmaFeReg32_3d::Stream::Stream(vp::Block &parent, int id)
     done_id(parent, "stream_" + std::to_string(id) + "_done_id", 32, true, 0)
 {
     this->pending = 0;
+    this->queued = 0;
 }
 
 
@@ -77,7 +78,21 @@ vp::IoReqStatus IDmaFeReg32_3dPort::req(vp::Block *__this, vp::IoReq *req)
     {
         if (offset == fe->next_id_base + 4 * stream)
         {
+            // The hardware only grants the read once the request FIFO of the stream takes the
+            // transfer, so a full FIFO stalls the requester. Keep the read pending and answer it
+            // with the identifier when a slot frees up. The requester is stalled, so it cannot
+            // touch the registers of this port in the meantime.
+            if (!fe->stream_has_room(stream))
+            {
+                fe->trace.msg(vp::Trace::LEVEL_TRACE,
+                    "Stalling transfer, queue is full (port: %d, stream: %d)\n", _this->id,
+                    stream);
+                fe->stalled_reads.push_back({_this, stream, req});
+                return vp::IO_REQ_PENDING;
+            }
+
             *(uint32_t *)req->get_data() = fe->enqueue_copy(_this, stream);
+            fe->check_pending_queue();
             return vp::IO_REQ_OK;
         }
 
@@ -201,17 +216,15 @@ IDmaFeReg32_3d::IDmaFeReg32_3d(vp::Component *idma, IdmaTransferConsumer *me)
 
 
 
+bool IDmaFeReg32_3d::stream_has_room(int stream)
+{
+    return this->streams[stream]->queued < this->global_queue_depth;
+}
+
+
+
 uint32_t IDmaFeReg32_3d::enqueue_copy(IDmaFeReg32_3dPort *port, int stream)
 {
-    // The hardware returns 0 when it cannot take the transfer. Refuse here rather than dropping
-    // it silently, so that software polling on the returned identifier behaves as on hardware.
-    if (this->pending_queue.size() >= (size_t)this->global_queue_depth)
-    {
-        this->trace.msg(vp::Trace::LEVEL_TRACE,
-            "Rejecting transfer, queue is full (port: %d, stream: %d)\n", port->id, stream);
-        return 0;
-    }
-
     uint32_t conf = port->conf.get();
     uint32_t enable_nd =
         (conf >> IDMA_REG32_3D_CONF_ENABLE_ND_BIT) & IDMA_REG32_3D_CONF_ENABLE_ND_MASK;
@@ -263,7 +276,7 @@ uint32_t IDmaFeReg32_3d::enqueue_copy(IDmaFeReg32_3dPort *port, int stream)
     }
 
     this->pending_queue.push(transfer);
-    this->check_pending_queue();
+    this->streams[stream]->queued++;
 
     return transfer_id;
 }
@@ -272,11 +285,44 @@ uint32_t IDmaFeReg32_3d::enqueue_copy(IDmaFeReg32_3dPort *port, int stream)
 
 void IDmaFeReg32_3d::check_pending_queue()
 {
-    while (this->pending_queue.size() > 0 && this->me->can_accept_transfer())
+    // Accepting a stalled read queues a new transfer, which the middle-end may take right away,
+    // so loop until nothing moves anymore.
+    bool progress = true;
+    while (progress)
     {
-        IdmaTransfer *transfer = this->pending_queue.front();
-        this->pending_queue.pop();
-        this->me->enqueue_transfer(transfer);
+        progress = false;
+
+        while (this->pending_queue.size() > 0 && this->me->can_accept_transfer())
+        {
+            IdmaTransfer *transfer = this->pending_queue.front();
+            this->pending_queue.pop();
+            this->streams[transfer->data[IDMA_ND_STREAM]]->queued--;
+            this->me->enqueue_transfer(transfer);
+            progress = true;
+        }
+
+        // Accept the oldest stalled read whose stream has room. Only one per iteration, since
+        // answering the read may let the requester push a new stalled read, which would
+        // invalidate an iterator kept across the response.
+        for (auto it = this->stalled_reads.begin(); it != this->stalled_reads.end(); it++)
+        {
+            if (!this->stream_has_room(it->stream))
+            {
+                continue;
+            }
+
+            StalledRead stalled = *it;
+            this->stalled_reads.erase(it);
+
+            this->trace.msg(vp::Trace::LEVEL_TRACE,
+                "Granting stalled transfer (port: %d, stream: %d)\n", stalled.port->id,
+                stalled.stream);
+
+            *(uint32_t *)stalled.req->get_data() = this->enqueue_copy(stalled.port, stalled.stream);
+            stalled.req->get_resp_port()->resp(stalled.req);
+            progress = true;
+            break;
+        }
     }
 }
 
@@ -349,6 +395,9 @@ void IDmaFeReg32_3d::reset(bool active)
         for (Stream *stream : this->streams)
         {
             stream->pending = 0;
+            stream->queued = 0;
         }
+
+        this->stalled_reads.clear();
     }
 }
