@@ -106,7 +106,7 @@ class TeranocSystem(st.Component):
         teranoc_cluster = TeranocCluster(self, 'teranoc_cluster', parser=parser, arch=arch)
 
         # Boot Rom
-        rom = memory.Memory(self, 'rom', size=0x1000, width_log2=(axi_data_width - 1).bit_length(), stim_file=self.get_file_path('pulp/chips/spatz/rom.bin'))
+        rom = memory.Memory(self, 'rom', size=0x1000, width_log2=(axi_data_width - 1).bit_length(), stim_file=self.get_file_path('pulp/mempool/bootrom.bin'))
 
         # L2 NoC
         l2_noc = L2_noc(self, 'l2_noc', width=axi_data_width, nb_x_groups=arch.nb_x_groups, nb_y_groups=arch.nb_y_groups, ni_outstanding_reqs=32, router_input_queue_size=2)

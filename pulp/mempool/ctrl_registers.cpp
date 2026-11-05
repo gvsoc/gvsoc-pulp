@@ -24,6 +24,8 @@
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
 #include <cpu/iss/include/offload.hpp>
+#include <deque>
+#include <vector>
 
 
 class CtrlRegisters : public vp::Component
@@ -38,11 +40,15 @@ private:
 
     vp::Trace trace;
     vp::IoSlave input_itf;
-    vp::WireMaster<bool> barrier_ack_itf;
+    // One wake-up wire per core
+    std::vector<vp::WireMaster<bool>> barrier_ack_itf;
     vp::WireMaster<IssOffloadInsn<uint32_t>*> rocache_cfg_itf;
     vp::ClockEvent * wakeup_event;
     int wakeup_latency;
     bool eoc_reached;
+    int nb_cores;
+    // Wake-ups in flight, as the cycle they reach the cores and the core they wake up, -1 for all
+    std::deque<std::pair<int64_t, int>> wake_ups;
 };
 
 
@@ -53,8 +59,14 @@ CtrlRegisters::CtrlRegisters(vp::ComponentConf &config)
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
     this->input_itf.set_req_meth(&CtrlRegisters::req);
 
+    this->nb_cores = get_js_config()->get_child_int("nb_cores");
+
     this->new_slave_port("input", &this->input_itf);
-    this->new_master_port("barrier_ack", &this->barrier_ack_itf);
+    this->barrier_ack_itf.resize(this->nb_cores);
+    for (int i = 0; i < this->nb_cores; i++)
+    {
+        this->new_master_port("barrier_ack_" + std::to_string(i), &this->barrier_ack_itf[i]);
+    }
     this->new_master_port("rocache_cfg", &this->rocache_cfg_itf);
     this->wakeup_event = this->event_new(&CtrlRegisters::wakeup_event_handler);
     wakeup_latency = get_js_config()->get_child_int("wakeup_latency");
@@ -63,8 +75,31 @@ CtrlRegisters::CtrlRegisters(vp::ComponentConf &config)
 
 void CtrlRegisters::wakeup_event_handler(vp::Block *__this, vp::ClockEvent *event) {
     CtrlRegisters *_this = (CtrlRegisters *)__this;
-    _this->barrier_ack_itf.sync(1);
+    int64_t cycle = _this->clock.get_cycles();
+    while (!_this->wake_ups.empty() && _this->wake_ups.front().first <= cycle)
+    {
+        int core = _this->wake_ups.front().second;
+        if (core == -1)
+        {
+            // Wake up core 0 last, as when all the cores shared a single wire, so that the cores
+            // woken up in the same cycle keep their order
+            for (int i = 1; i < _this->nb_cores; i++)
+            {
+                _this->barrier_ack_itf[i].sync(1);
+            }
+            _this->barrier_ack_itf[0].sync(1);
+        }
+        else
+        {
+            _this->barrier_ack_itf[core].sync(1);
+        }
+        _this->wake_ups.pop_front();
+    }
     _this->trace.msg("Control registers wake up signal work and write %d to barrier ack output\n", 1);
+    if (!_this->wake_ups.empty())
+    {
+        _this->event_enqueue(_this->wakeup_event, _this->wake_ups.front().first - cycle);
+    }
 }
 
 
@@ -89,9 +124,15 @@ vp::IoReqStatus CtrlRegisters::req(vp::Block *__this, vp::IoReq *req)
             std::cout << "EOC register return value: 0x" << std::hex << ((value - 1) >> 1) << std::endl;
             _this->time.get_engine()->quit(value >> 1);
         }
-        if (offset == 4 && value == 0xFFFFFFFF)
+        // Wake up one core, or all of them for an invalid core ID such as -1
+        if (offset == 4)
         {
-            _this->event_enqueue(_this->wakeup_event, _this->wakeup_latency);
+            if (_this->wake_ups.empty())
+            {
+                _this->event_enqueue(_this->wakeup_event, _this->wakeup_latency);
+            }
+            _this->wake_ups.emplace_back(_this->clock.get_cycles() + _this->wakeup_latency,
+                value < (uint32_t)_this->nb_cores ? (int)value : -1);
         }
         if (offset == 0x48 || offset == 0x4C || offset == 0x50 || offset == 0x54)
         {
