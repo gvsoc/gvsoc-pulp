@@ -328,7 +328,10 @@ class SnitchCluster(gvsoc.systree.Component):
         idma.o_OFFLOAD_GRANT(cores[arch.dma_core].i_OFFLOAD_GRANT())
         idma.o_AXI_READ(wide_axi.i_INPUT(1))
         idma.o_AXI_WRITE(wide_axi.i_INPUT(2))
-        cluster_registers.o_DMA_PERF_EVENTS(idma.i_PERF_EVENTS())
+        # The performance counters, only in the current register map (not in
+        # the one of Occamy)
+        if not arch.old_periph_regmap:
+            cluster_registers.o_DMA_PERF_EVENTS(idma.i_PERF_EVENTS())
 
         # Per-core memory ports
         tcdm_port = 0
@@ -364,7 +367,8 @@ class SnitchCluster(gvsoc.systree.Component):
             cores[core_id].o_BARRIER_REQ(cluster_registers.i_BARRIER_REQ(core_id))
             cluster_registers.o_BARRIER_ACK(cores[core_id].i_BARRIER_ACK())
             cluster_registers.o_EXTERNAL_IRQ(core_id, cores[core_id].i_IRQ(arch.barrier_irq))
-            cluster_registers.o_CORE_PERF_EVENTS(core_id, cores[core_id].i_PERF_EVENTS())
+            if not arch.old_periph_regmap:
+                cluster_registers.o_CORE_PERF_EVENTS(core_id, cores[core_id].i_PERF_EVENTS())
             self.__o_MSIP(core_id, cores[core_id].i_IRQ(3))
             self.__o_MTIP(core_id, cores[core_id].i_IRQ(7))
             self.__o_MEIP(core_id, cores[core_id].i_IRQ(11))
