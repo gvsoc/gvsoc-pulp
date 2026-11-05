@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include <deque>
 #include <queue>
 #include <vector>
 #include <vp/vp.hpp>
@@ -131,9 +132,11 @@ private:
  * requester and a set of transfer identifier counters per stream.
  *
  * A transfer is launched by reading NEXT_ID of a stream: the descriptor currently programmed on
- * that port is pushed to the middle-end and the read returns the identifier allocated for it, or
- * zero if the transfer could not be accepted. Software waits for a transfer by polling DONE_ID of
- * the same stream, which returns the identifier of the last completed transfer.
+ * that port is pushed to the request queue of that stream and the read returns the identifier
+ * allocated for it. When the queue of the stream is full, the read is not answered until a slot
+ * frees up, which stalls the requester as the hardware does. Zero is never returned. Software
+ * waits for a transfer by polling DONE_ID of the same stream, which returns the identifier of the
+ * last completed transfer.
  *
  * Completion is also signalled through the event ports. Following the hardware, the event is
  * broadcast to every core rather than routed to the one that programmed the transfer, and no
@@ -167,8 +170,21 @@ private:
         vp::Register<uint32_t> done_id;
         // Number of transfers launched on this stream and not completed yet
         int pending;
+        // Number of transfers of this stream waiting in the request queue
+        int queued;
 
         Stream(vp::Block &parent, int id);
+    };
+
+    // A NEXT_ID read stalled because the request queue of its stream was full
+    struct StalledRead
+    {
+        // Port the read came from, whose registers describe the transfer
+        IDmaFeReg32_3dPort *port;
+        // Stream the transfer is launched on
+        int stream;
+        // Read request, answered with the transfer identifier once the transfer is accepted
+        vp::IoReq *req;
     };
 
     // Offsets of the first entry of each multireg, derived from the entry count
@@ -176,10 +192,13 @@ private:
     uint64_t next_id_base;
     uint64_t done_id_base;
 
-    // Build a transfer from the registers of a port and push it to the middle-end. Returns the
-    // allocated identifier, or 0 if the transfer was rejected.
+    // Tell if the request queue of a stream has room for one more transfer
+    bool stream_has_room(int stream);
+    // Build a transfer from the registers of a port and push it to the request queue of the
+    // stream. The queue must have room. Returns the allocated identifier.
     uint32_t enqueue_copy(IDmaFeReg32_3dPort *port, int stream);
-    // Push as many pending transfers as the middle-end accepts
+    // Push as many queued transfers as the middle-end accepts, then accept the stalled NEXT_ID
+    // reads whose stream got room
     void check_pending_queue();
     // Broadcast a completion event to every core and PE port
     void raise_event();
@@ -196,7 +215,8 @@ private:
     int multireg_count;
     // Number of cores receiving the completion event
     int nb_cores;
-    // Maximum number of transfers waiting to be handed over to the middle-end
+    // Maximum number of transfers of one stream waiting to be handed over to the middle-end,
+    // as the per-stream request FIFO of the hardware
     int global_queue_depth;
     // Register-file ports
     std::vector<IDmaFeReg32_3dPort *> ports;
@@ -206,8 +226,10 @@ private:
     std::vector<vp::WireMaster<bool> *> event_itf;
     // Completion event, broadcast to every PE port
     std::vector<vp::WireMaster<bool> *> event_pe_itf;
-    // Transfers accepted but not handed over to the middle-end yet
+    // Transfers accepted but not handed over to the middle-end yet, all streams together
     std::queue<IdmaTransfer *> pending_queue;
+    // NEXT_ID reads stalled on a full stream queue, in arrival order
+    std::deque<StalledRead> stalled_reads;
     // Signals for VCD tracing
     vp::Signal<bool> trace_busy;
     vp::Signal<uint32_t> trace_src;
