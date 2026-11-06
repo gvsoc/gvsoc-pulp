@@ -29,12 +29,12 @@
 
 
 // Stamp the collective sideband descriptor (1 byte op + 8 byte mask)
-// that floonoc_flex reads from req->get_payload().
+// that floonoc reads from req->get_payload().
 // Only the write side of a transfer can carry a collective tag.
 static inline void stamp_collective_payload(vp::IoReq *req, IdmaTransfer *transfer, bool is_write)
 {
     uint8_t *payload = req->get_payload();
-    uint8_t op = is_write ? transfer->collective_op : 0; // 0 == floonoc_flex's COLL_OP_UNICAST
+    uint8_t op = is_write ? transfer->collective_op : 0; // 0 == floonoc's COLL_OP_UNICAST
     uint64_t mask = is_write ? transfer->collective_mask : 0;
     payload[0] = op;
     for (int i = 0; i < 8; i++)
