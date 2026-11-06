@@ -24,7 +24,7 @@ named router_global_{g}.
 
 Router/endpoint declaration order in the emitted YAML is load-bearing:
 floogen preserves YAML list order through to its graph traversal order.
-floonoc_flex.py's load_from_floogen() assigns runtime node ids by that
+floonoc.py's load_from_floogen() assigns runtime node ids by that
 same traversal order (all routers first, then all NIs). The routing-table
 precomputation below replicates that exact id assignment so the routing
 tables it computes match what the real loader will independently arrive
