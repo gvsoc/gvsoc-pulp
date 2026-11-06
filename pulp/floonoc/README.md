@@ -1,21 +1,22 @@
-# floonoc_flex
+# FlooNoC
 
-A generic-topology network-on-chip model. Not tied to a mesh: topology is just a list of router/NI nodes plus links, with routing tables computed by one of several generators or loaded verbatim from a `routing.yml`.
+A generic-topology network-on-chip model. The topology is specified by a list of router/NI nodes plus links, with routing tables computed by one of several generators or loaded from a `routing.yml`. It also provides a default 2D-mesh/cluster-grid builder (`FlooNoc2dMeshNarrowWide`/`FlooNocClusterGridNarrowWide`) for callers that want the classic fixed mesh without touching the generic topology interface.
 
 ## What's modeled
 
 - Independent **narrow** and **wide** links, each with its own width (bytes/cycle) and its own set of per-node routers/queues; a burst is split into internal requests sized to whichever link it travels.
 - **Collectives primitives** (multicast/broadcast and in-network reduction) dependent on the `collective_enable` setting, and currently mesh-only:
   - Multicast/broadcast to an arbitrary sub-grid (row, column, rectangle,
-    or the whole mesh), via a mask carried in the request (see `COLL_MASK_AXIS_BITS`/`coll_mask_set_axis` in `floonoc_flex.hpp`).
+    or the whole mesh), via a mask carried in the request (see `COLL_MASK_AXIS_BITS`/`coll_mask_set_axis` in `floonoc.hpp`).
   - Six arithmetic reductions (ADD/MAX × uint16/int16/fp16).
   - `LsbAnd`: a group-barrier/wakeup primitive (AND bit 0 of every participant's byte, byte-by-byte).
-  - A test matrix in `pulp/tests/floonoc_flex_collective/`.
+  - A test matrix in `pulp/tests/floonoc_collective/`.
 
 ## Integrating this NoC into a system model
 
 - **Node IDs are a single flat space shared by routers and NIs** (e.g. a
-  floogen-generated 4x4 mesh gets routers 0-15 and NIs 16-31). This is set at `id_map` (returned by `load_from_floogen`, or built yourself via `add_router`/`add_network_interface`).
+  floogen-generated 4x4 mesh gets routers 0-15 and NIs 16-31). This is set at `id_map` (returned by `load_from_floogen`, or built yourself via `add_router`/`add_network_interface`). 
+  - Note: the default-mesh builder (`FlooNoc2dMeshNarrowWide`) does *not* share ids between a router and its co-located NI: it allocates each its own id and links them explicitly.
 - **Every NI needs exactly one router link.**
 - **Collectives need router names FlooGen can parse as coordinates in Mesh** (`..._x_y` suffix) and `route_algo: "XY"`/`"YX"`.
 

@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-# System for floonoc_flex's collective (multicast/reduction) correctness
+# System for floonoc's collective (multicast/reduction) correctness
 # and benchmarking tests.
 # CollectiveTestbench's expected interface (see test.cpp):
 #   CollectiveTestbench(parent, name, dim, node_size, node_base, scenario)
@@ -27,7 +27,7 @@ import gvsoc.systree
 import gvsoc.runner
 
 import vp.clock_domain
-from pulp.floonoc_flex.floonoc_flex import FlooNocFlex
+from pulp.floonoc.floonoc import FlooNoc as FlooNocFlex
 from interco.traffic.generator import Generator
 from pulp.idma.snitch_dma import SnitchDma
 from memory.memory import Memory
@@ -160,6 +160,6 @@ class Chip(gvsoc.systree.Component):
 
 # This is the top target that gapy will instantiate.
 class Target(gvsoc.runner.Target):
-    gapy_description = "floonoc_flex collective (multicast/reduction) correctness and benchmark tests"
+    gapy_description = "floonoc collective (multicast/reduction) correctness and benchmark tests"
     model = Chip
     name = "test"
