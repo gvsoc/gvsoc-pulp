@@ -930,15 +930,19 @@ class FlooNoc2dMeshNarrowWide(FlooNoc):
     router_input_queue_size: int
         Size of the routers input queues. This gives the number of requests which can be buffered
         before the source output queue is stalled.
+    collective_enable: bool
+        Enable DMA communication collectives (broadcast/reduction) over this mesh.
     """
     def __init__(self, parent: gvsoc.systree.Component, name, narrow_width: int, wide_width: int,
-            dim_x: int, dim_y: int, ni_outstanding_reqs: int=8, router_input_queue_size: int=2):
-        # Upper bound: every position could end up with both a router and an NI, each needing its own id. 
+            dim_x: int, dim_y: int, ni_outstanding_reqs: int=8, router_input_queue_size: int=2,
+            collective_enable: bool=False):
+        # Upper bound: every position could end up with both a router and an NI, each needing its own id.
         super().__init__(parent, name, narrow_width=narrow_width, wide_width=wide_width,
             nb_nodes=2 * dim_x * dim_y, ni_outstanding_reqs=ni_outstanding_reqs,
             router_input_queue_size=router_input_queue_size)
         self.dim_x = dim_x
         self.dim_y = dim_y
+        self._collective_enable = collective_enable
         self._router_id = {}  # (x, y) -> node id, routers only
         self._ni_id = {}      # (x, y) -> node id, network interfaces only
         self._next_id = 0
@@ -1153,6 +1157,14 @@ class FlooNoc2dMeshNarrowWide(FlooNoc):
             routing_tables[str(src_id)] = table
         self.add_property('routing_tables', routing_tables)
 
+        if self._collective_enable:
+            if not self._router_id:
+                raise ValueError(
+                    "collective_enable is set but no router was added to the mesh")
+            self.add_property('collective_route_algo', 'xy_mesh')
+            self.add_property('collective_coords',
+                [[node_id, x, y] for (x, y), node_id in self._router_id.items()])
+
 
 class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
     """FlooNoc instance for a grid of clusters
@@ -1178,15 +1190,20 @@ class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
         Number of clusters on the X direction. This should not include the targets on the borders.
     nb_y_clusters: int
         Number of clusters on the Y direction. This should not include the targets on the borders.
+    collective_enable: bool
+        Enable DMA communication collectives (broadcast/reduction) over the mesh's interior
+        routers. Border targets (the +2 ring of NIs) never take part in collectives, since
+        collective membership is defined over routers only.
     """
     def __init__(self, parent: gvsoc.systree.Component, name, wide_width: int, narrow_width: int,
             nb_x_clusters: int, nb_y_clusters, router_input_queue_size=2,
-            ni_outstanding_reqs: int=2):
+            ni_outstanding_reqs: int=2, collective_enable: bool=False):
         # The total grid contains 1 more node on each direction for the targets
         super().__init__(parent, name, wide_width=wide_width, narrow_width=narrow_width,
             dim_x=nb_x_clusters+2, dim_y=nb_y_clusters+2,
             router_input_queue_size=router_input_queue_size,
-            ni_outstanding_reqs=ni_outstanding_reqs)
+            ni_outstanding_reqs=ni_outstanding_reqs,
+            collective_enable=collective_enable)
 
         for tile_x in range(0, nb_x_clusters):
             for tile_y in range(0, nb_y_clusters):
