@@ -140,10 +140,6 @@ class RegDmaV2(gvsoc.systree.Component):
     __gvsoc_doc__ = {
         'title': 'iDMA (v2)',
         'static_page': '../ips/pulp/idma_v2',
-        'tests_dirs': [
-            {'dir':       'gvsoc/pulp/tests/idma_v2',
-             'component': 'ips.pulp.idma_v2.reg_dma'},
-        ],
     }
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, config: RegDmaConfig,
