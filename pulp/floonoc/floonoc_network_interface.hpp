@@ -17,14 +17,18 @@
 
 /*
  * Authors: Germain Haugou, ETH (germain.haugou@iis.ee.ethz.ch)
-            Jonas Martin, ETH (martinjo@student.ethz.ch)
+ *          Jonas Martin, ETH (martinjo@student.ethz.ch)
+ *          Siim Rausi, ETH (srausi@student.ethz.ch)
+ *          Rafael Medina, ETH (medinar@iis.ee.ethz.ch)
  */
 
 #pragma once
 
-#include <vp/vp.hpp>
-#include <list>
 #include "floonoc.hpp"
+#include <list>
+#include <vp/signal.hpp>
+#include <vp/stats/stats.hpp>
+#include <vp/vp.hpp>
 
 class FlooNoc;
 class NetworkInterface;
@@ -32,20 +36,28 @@ class NetworkInterface;
 class NetworkQueue : public FloonocNode
 {
     friend class NetworkInterface;
-public:
-    NetworkQueue(NetworkInterface &ni, std::string name, uint64_t width, bool is_wide);
+
+  public:
+    NetworkQueue(NetworkInterface &ni, std::string name, uint64_t width,
+                 bool is_wide);
     void reset(bool active) override;
 
     void check();
     void handle_req(vp::IoReq *req);
-    // This gets called to handle a response from the target. The request must be send to the router
+    // This gets called to handle a response from the target. The request must
+    // be send to the router
     void handle_rsp(vp::IoReq *req, bool is_address);
 
-private:
-    void enqueue_router_req(vp::IoReq *req, bool is_address, bool wide, bool is_req);
+  private:
+    void enqueue_router_req(vp::IoReq *req, bool is_address, bool wide,
+                            bool is_req);
     void send_router_req();
-    void unstall_queue(int from_x, int from_y) override;
-    bool handle_request(FloonocNode *node, vp::IoReq *req, int from_x, int from_y) override;
+    void unstall_queue(int from_id) override;
+    bool handle_request(FloonocNode *node, vp::IoReq *req,
+                        int from_id) override;
+    // [Collective Only] Injects an already fully-tagged collective packet
+    // directly, bypassing enqueue_router_req()'s. Used to inject a reduction-ack.
+    void push_collective_req(vp::IoReq *router_req);
 
     NetworkInterface &ni;
     Router *router;
@@ -53,8 +65,8 @@ private:
     bool is_wide;
     vp::Trace trace;
     std::queue<vp::IoReq *> queue;
-    // True when the output queue is stalled because a router denied a request. The network
-    // interface can not send any request until it gets unstalled
+    // True when the output queue is stalled because a router denied a request.
+    // The network interface can not send any request until it gets unstalled
     bool stalled;
 };
 
@@ -63,91 +75,110 @@ private:
  *
  * Network interfaces are entry point to the noc.
  * Initiators can injects IO bursts there.
- * The network interface is then in charge of splitting the bursts into request which fit
- * the noc width and pass them to the closest router, so that they routed to the destination
+ * The network interface is then in charge of splitting the bursts into request
+ * which fit the noc width and pass them to the closest router, so that they
+ * routed to the destination
  */
 class NetworkInterface : public FloonocNode
 {
     friend class NetworkQueue;
 
-public:
-    static constexpr int NW_REQ   = 0;
-    static constexpr int NW_RSP   = 1;
-    static constexpr int NW_WIDE  = 2;
-    static constexpr int NW_NB    = 3;
+  public:
+    static constexpr int NW_REQ = 0;
+    static constexpr int NW_RSP = 1;
+    static constexpr int NW_WIDE = 2;
+    static constexpr int NW_NB = 3;
 
     static constexpr int REQ_REM_SIZE = 0;
     static constexpr int REQ_WIDE = 1;
+    static constexpr int REQ_ARRIVAL_TIME = 2;
 
-    NetworkInterface(FlooNoc *noc, int x, int y, std::string itf_name);
+    NetworkInterface(FlooNoc *noc, int node_id, std::string itf_name);
 
     void reset(bool active);
 
-    // This gets called by the top when an asynchronous response is received from a target.
+    // This gets called by the top when an asynchronous response is received
+    // from a target.
     void handle_response(vp::IoReq *req);
-    // This gets called by a router to unstall the output queue of the network interface after
-    // a request was denied because the input queue of the router was full
-    void unstall_queue(int from_x, int from_y) override;
+    // This gets called by a router to unstall the output queue of the network
+    // interface after a request was denied because the input queue of the
+    // router was full
+    void unstall_queue(int from_id) override;
 
-    // This gets called by a router when the destination is reached and the request is sent from the router to the network interface
-    bool handle_request(FloonocNode *node, vp::IoReq *req, int from_x, int from_y) override;
-    // Can be used to retrieve the x coordinate of the network interface
-    int get_x();
-    // Can be used to retrieve the y coordinate of the network interface
-    int get_y();
+    // This gets called by a router when the destination is reached and the
+    // request is sent from the router to the network interface
+    bool handle_request(FloonocNode *node, vp::IoReq *req,
+                        int from_id) override;
+    // Returns the id of the network interface
+    int get_id();
     // This gets called by the top noc to grant a a request denied by a target
     void grant(vp::IoReq *req);
-    void set_router(int nw, Router *router);
-private:
-    // Callback called when a target request is asynchronously granted after a denied error was
-    // reported
+    void set_router(int nw, Router *router, int latency = 1);
+
+    // Performance statistics, dumped by the stats engine when --stats is passed
+    vp::StatScalar stat_injected_packets;
+    vp::StatScalar stat_received_responses;
+
+    vp::StatScalar stat_total_packet_latency;
+    vp::StatScalar stat_arrived_packets;
+
+  private:
+    // Callback called when a target request is asynchronously granted after a
+    // denied error was reported
     static void wide_grant(vp::Block *__this, vp::IoReq *req);
-    // Callback called when a target request is asynchronously replied after a pending error was
-    // reported
+    // Callback called when a target request is asynchronously replied after a
+    // pending error was reported
     static void wide_response(vp::Block *__this, vp::IoReq *req);
     static void narrow_grant(vp::Block *__this, vp::IoReq *req);
     static void narrow_response(vp::Block *__this, vp::IoReq *req);
-    // Input method called when a narrow burst is received from the local initiator
+    // Input method called when a narrow burst is received from the local
+    // initiator
     static vp::IoReqStatus narrow_req(vp::Block *__this, vp::IoReq *req);
-    // Input method called when a wide burst is received from the local initiator
+    // Input method called when a wide burst is received from the local
+    // initiator
     static vp::IoReqStatus wide_req(vp::Block *__this, vp::IoReq *req);
     vp::IoReqStatus handle_req(vp::IoReq *req);
-    // FSM event handler called when something happened and queues need to be checked to see
-    // if a request should be handled.
+    // FSM event handler called when something happened and queues need to be
+    // checked to see if a request should be handled.
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
     int get_req_nw(bool is_wide, bool is_write);
     int get_rsp_nw(bool is_wide, bool is_write);
+    // [Collective Only] Handles the local arrival of a forked copy of a reduction-ack
+    void complete_reduction_ack_echo(vp::IoReq *echo);
     // Pointer to top
     FlooNoc *noc;
     int ni_outstanding_reqs;
-    // X position of this network interface in the grid
-    int x;
-    // Y position of this network interface in the grid
-    int y;
+
+    // Support for flexible topologies
+    int node_id;
+    int router_in_latency = 1;
+
     vp::IoMaster wide_output_itf;
     vp::IoMaster narrow_output_itf;
-    // Input IO interface where wide incoming bursts are injected into the network
+    // Input IO interface where wide incoming bursts are injected into the
+    // network
     vp::IoSlave wide_input_itf;
-    // Input IO interface where narrow incoming bursts are injected into the network
+    // Input IO interface where narrow incoming bursts are injected into the
+    // network
     vp::IoSlave narrow_input_itf;
     // This block trace
     vp::Trace trace;
     NetworkQueue req_queue;
     NetworkQueue wide_queue;
     NetworkQueue rsp_queue;
-    // Clock event used to schedule FSM handler. This is scheduled eveytime something may need to
-    // be done
+    // Clock event used to schedule FSM handler. This is scheduled eveytime
+    // something may need to be done
     vp::ClockEvent fsm_event;
 
     // Signal used for tracing narrow reqs
     vp::Signal<uint64_t> signal_narrow_req;
     // Signal used for tracing wide reqs
     vp::Signal<uint64_t> signal_wide_req;
-    // True when the associated target has reported a stall. No request must be sent until
-    // the stalled one is granted
+    // True when the associated target has reported a stall. No request must be
+    // sent until the stalled one is granted
     bool target_stalled;
-    // True when the routers has been stalled because either the target reported a stall
-    // or there is not enough requests anymore
+    // True when the routers has been stalled because either the target reported
+    // a stall or there is not enough requests anymore
     FloonocNode *routers_stalled;
     Router *router[NW_NB];
 
@@ -160,17 +191,17 @@ private:
     int narrow_read_pending_burst_nb_req;
     int narrow_write_pending_burst_nb_req;
 
+    // When initiator is stalled because max number of input pending req has
+    // been reached, this give the input request which has been stalled and must
+    // be granted.
+    std::queue<vp::IoReq *> wide_denied_read_req;
+    std::queue<vp::IoReq *> wide_denied_write_req;
+    std::queue<vp::IoReq *> narrow_denied_read_req;
+    std::queue<vp::IoReq *> narrow_denied_write_req;
 
-    // When initiator is stalled because max number of input pending req has been reached,
-    // this give the input request which has been stalled and must be granted.
-    std::queue<vp::IoReq *>wide_denied_read_req;
-    std::queue<vp::IoReq *>wide_denied_write_req;
-    std::queue<vp::IoReq *>narrow_denied_read_req;
-    std::queue<vp::IoReq *>narrow_denied_write_req;
-
-    // Response received synchronously are put here to inject them into rsp only after latency
-    // has passed
+    // Response received synchronously are put here to inject them into rsp only
+    // after latency has passed
     vp::Queue response_queue;
 
-int nb_pending_bursts[2];
+    int nb_pending_bursts[2];
 };

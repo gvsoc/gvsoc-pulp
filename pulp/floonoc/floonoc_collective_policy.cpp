@@ -20,7 +20,7 @@
  */
 
 #include "floonoc_collective_policy.hpp"
-#include "floonoc_flex.hpp"
+#include "floonoc.hpp"
 
 MeshXYCollectivePolicy::MeshXYCollectivePolicy(
     bool x_first,

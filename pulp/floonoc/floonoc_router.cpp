@@ -18,79 +18,133 @@
 /*
  * Authors: Germain Haugou, ETH (germain.haugou@iis.ee.ethz.ch)
  *          Jonas Martin, ETH (martinjo@student.ethz.ch)
+ *          Siim Rausi, ETH (srausi@student.ethz.ch)
+ *          Rafael Medina, ETH (medinar@iis.ee.ethz.ch)
  */
 
-#include <vp/vp.hpp>
-#include <vp/itf/io.hpp>
-#include "floonoc.hpp"
 #include "floonoc_router.hpp"
+#include "floonoc.hpp"
 #include "floonoc_network_interface.hpp"
+#include <algorithm>
+#include <cstring>
+#include <vp/itf/io.hpp>
+#include <vp/vp.hpp>
 
-Router::Router(FlooNoc *noc, std::string name, int x, int y, int queue_size)
-    : FloonocNode(noc, name + std::to_string(x) + "_" + std::to_string(y)),
+Router::Router(FlooNoc *noc, std::string name, int node_id, int num_queues,
+               int queue_size)
+    : FloonocNode(noc, name + std::to_string(node_id)),
       fsm_event(this, &Router::fsm_handler),
       signal_req(*this, "req", 64, vp::SignalCommon::ResetKind::HighZ),
-      signal_req_size(*this, "req_size", 64, vp::SignalCommon::ResetKind::HighZ),
-      signal_req_is_write(*this, "req_is_write", 1, vp::SignalCommon::ResetKind::HighZ),
-      stalled_queues{{
-        vp::Signal<bool>(*this, "stalled_queue_right", 1),
-        vp::Signal<bool>(*this, "stalled_queue_left", 1),
-        vp::Signal<bool>(*this, "stalled_queue_up", 1),
-        vp::Signal<bool>(*this, "stalled_queue_down", 1),
-        vp::Signal<bool>(*this, "stalled_queue_local", 1)
-      }}
+      signal_req_size(*this, "req_size", 64,
+                      vp::SignalCommon::ResetKind::HighZ),
+      signal_req_is_write(*this, "req_is_write", 1,
+                          vp::SignalCommon::ResetKind::HighZ)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
 
     this->noc = noc;
-    this->x = x;
-    this->y = y;
+    this->node_id = node_id;
+    this->num_queues = num_queues;
     this->queue_size = queue_size;
+    this->input_queues.resize(this->num_queues, nullptr);
+    this->output_nodes.resize(this->num_queues, nullptr);
+    this->stalled_queues.resize(this->num_queues, nullptr);
+    this->input_latencies.resize(this->num_queues, 1);
+    this->collective_pending_queues.resize(this->num_queues);
+    this->output_full.resize(this->num_queues, 0);
 
-    // Create a queue for each direction (N, E, S, W, local)
-    for (int i = 0; i < 5; i++)
+    // Create a queue for each direction
+    for (int i = 0; i < this->num_queues; i++)
     {
-        this->input_queues[i] = new RouterQueue(this, "input_queue_" + std::to_string(i),
-            &this->fsm_event);
+        this->input_queues[i] = new RouterQueue(
+            this, "input_queue_" + std::to_string(i), &this->fsm_event);
 
-        this->stalled_queues[i] = false;
+        this->stalled_queues[i] = new vp::Signal<bool>(
+            *this, "stalled_queue_" + std::to_string(i), 1);
+
+        *(this->stalled_queues[i]) = false;
     }
+
+    std::string stat_prefix = this->get_name() + "/";
+    noc->stats.register_stat(&this->stat_routed_packets,
+                             stat_prefix + "routed_packets",
+                             "Number of packets forwarded by this router");
+    noc->stats.register_stat(
+        &this->stat_stall_cycles, stat_prefix + "stall_cycles",
+        "Number of times a packet could not be forwarded and was retried");
 }
 
 Router::~Router()
 {
-    for (int i = 0; i < 5; i++)
+    for (int i = 0; i < this->num_queues; i++)
     {
         delete this->input_queues[i];
+        delete this->stalled_queues[i];
     }
 }
 
-void Router::set_neighbour(int dir, FloonocNode *node)
+void Router::set_neighbour(int dir, FloonocNode *node, int neighbor_id,
+                           int latency)
 {
+    if (dir >= this->num_queues)
+    {
+        this->trace.fatal(
+            "Router %d tried to map neighbor %d to port %d, but num_queues is "
+            "%d (check the Python script for duplicate add_link() calls)\n",
+            this->node_id, neighbor_id, dir, this->num_queues);
+    }
     this->output_nodes[dir] = node;
+    this->neighbor_to_queue[neighbor_id] = dir;
+    this->queue_to_neighbor[dir] = neighbor_id;
+    this->input_latencies[dir] = latency;
 }
 
-bool Router::handle_request(FloonocNode *node, vp::IoReq *req, int from_x, int from_y)
+void Router::set_routing_table(std::vector<int> table)
 {
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Handle request (req: %p, base: 0x%x, size: 0x%x, from: (%d, %d)\n", req, req->get_addr(), req->get_size(), from_x, from_y);
+    this->routing_table = table;
+}
+
+void Router::set_direction_neighbour(int dir_index, int neighbor_node_id)
+{
+    this->direction_neighbour[dir_index] = neighbor_node_id;
+}
+
+bool Router::handle_request(FloonocNode *node, vp::IoReq *req, int from_node)
+{
+    this->trace.msg(
+        vp::Trace::LEVEL_DEBUG,
+        "Handle request (req: %p, base: 0x%x, size: 0x%x, from: %d)\n", req,
+        req->get_addr(), req->get_size(), from_node);
 
     this->signal_req.set_and_release(req->initiator_addr);
     this->signal_req_size.set_and_release(req->get_size());
     this->signal_req_is_write.set_and_release(req->get_is_write());
 
-    // Each direction has its own input queue to properly implement the round-robin
-    // Get the one for the router or network interface which sent this request
-    int queue_index = this->get_req_queue(from_x, from_y);
+    // Each direction has its own input queue to properly implement the
+    // round-robin Get the one for the router or network interface which sent
+    // this request
+    int queue_index = this->get_req_queue(from_node);
+    if (queue_index == -1)
+    {
+        this->trace.fatal(
+            "Received request from unknown node (from_node: %d)\n", from_node);
+        return true;
+    }
 
-    this->trace.msg(vp::Trace::LEVEL_DEBUG, "Pushed request to input queue (req: %p, queue: %d)\n", req, queue_index);
+    this->trace.msg(vp::Trace::LEVEL_DEBUG,
+                    "Pushed request to input queue (req: %p, queue: %d)\n", req,
+                    queue_index);
 
-    // And push it to the queue. The queue will automatically trigger the FSM if needed
+    // And push it to the queue. The queue will automatically trigger the FSM if
+    // needed
     RouterQueue *queue = this->input_queues[queue_index];
-    queue->queue.push_back(req, 1); // The queue has an intrinsic delay of 1. With this additional delay, we model the fact that a real router takes 2 cycles to forward a request
+    int latency = this->input_latencies[queue_index];
+    queue->queue.push_back(req,
+                           latency); // Delay representing link latency
 
-    // We let the source enqueue one more request than what is possible to model the fact
-    // the request is stalled. This will then stall the source which will not send any request there
-    // anymore until we unstall it
+    // We let the source enqueue one more request than what is possible to model
+    // the fact the request is stalled. This will then stall the source which
+    // will not send any request there anymore until we unstall it
     bool stalled = queue->queue.size() > this->queue_size;
     if (stalled)
     {
@@ -103,223 +157,401 @@ void Router::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
 {
     Router *_this = (Router *)__this;
     _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Checking pending requests\n");
-    // The routers can process 1 incoming request from each direction and send 1 request to each of the directions in 1 cycle
-    // The round robin is used to make sure we don't always process the same direction first
-    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Current queue: %d\n", _this->current_queue);
+    // The routers can process 1 incoming request from each direction and send 1
+    // request to each of the directions in 1 cycle The round robin is used to
+    // make sure we don't always process the same direction first
+    _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Current queue: %d\n",
+                     _this->current_queue);
     // Get the currently active queue and update it to implement the round-robin
     int in_queue_index = _this->current_queue;
 
-    // Update the current queue so that another one is checked first during the next cycle
-    // _this->current_queue += 1;
-    // if (_this->current_queue == 5)
-    // {
-    //     _this->current_queue = 0;
-    // }
-    bool output_full[5] = {false}; // Used to make sure we only send a single request per cycle to each direction
-    // Then go through the 5 input queues until we find a request which can be propagated
-    for (int i = 0; i < 5; i++)
+    // Used to make sure we only send a single request per cycle to each direction
+    std::vector<uint8_t> &output_full = _this->output_full;
+    std::fill(output_full.begin(), output_full.end(), 0);
+    // Then go through the num_queues input queues until we find a request which
+    // can be propagated
+    for (int i = 0; i < _this->num_queues; i++)
     {
         RouterQueue *queue = _this->input_queues[in_queue_index];
-        _this->trace.msg(vp::Trace::LEVEL_TRACE, "Checking input queue (queue_index: %d, queue size: %d)\n", in_queue_index, queue->queue.size());
+        _this->trace.msg(
+            vp::Trace::LEVEL_TRACE,
+            "Checking input queue (queue_index: %d, queue size: %d)\n",
+            in_queue_index, queue->queue.size());
         if (!queue->queue.empty())
         {
             vp::IoReq *req = (vp::IoReq *)queue->queue.head();
 
-            // Extract the destination from the request, that was filled in the network interface
-            // when the request was created
-            int to_x = req->get_int(FlooNoc::REQ_DEST_X);
-            int to_y = req->get_int(FlooNoc::REQ_DEST_Y);
+            // Extract the destination from the request, that was filled in the
+            // network interface when the request was created
 
-            // Get the next position in the grid. This takes care of deciding which path is taken
-            // to go to the destination
-            int next_x, next_y;
-            _this->get_next_router_pos(to_x, to_y, next_x, next_y);
-            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Resolved next position (req: %p, dest: (%d, %d), next_position: (%d, %d))\n",
-                             req, to_x, to_y, next_x, next_y);
+            int to_node = req->get_int(FlooNoc::REQ_DEST_ID);
+
+            // Collective primitives fan-out
+            int collective_op = req->get_int(FlooNoc::REQ_COLL_OP);
+            bool is_write_join = req->get_is_write() &&
+                                 FlooNoc::is_write_reduction_op(collective_op);
+            if (collective_op != FlooNoc::COLL_OP_UNICAST && !is_write_join)
+            {
+                std::vector<std::pair<int, int>> fanout;
+                bool local_member = false;
+                uint64_t mask =
+                    (uint64_t)(long)*req->arg_get(FlooNoc::REQ_COLL_MASK);
+                _this->noc->collective_policy->analyze(
+                    _this->node_id, req->get_int(FlooNoc::REQ_SRC_ID), mask,
+                    req->get_int(FlooNoc::REQ_COLL_STATE), fanout,
+                    local_member);
+
+                if (local_member && _this->local_ni_id != -1)
+                {
+                    fanout.push_back({_this->local_ni_id, 0});
+                }
+
+                if (fanout.empty())
+                {
+                    // A mask should never reach this for a root request 
+                    // (REQ_PARENT == NULL), throuw a warning
+                    if (*req->arg_get(FlooNoc::REQ_PARENT) == NULL)
+                    {
+                        _this->trace.msg(
+                            vp::Trace::LEVEL_WARNING,
+                            "[Collective] Request has zero members (src: "
+                            "%d, mask: 0x%llx) - completing immediately\n",
+                            req->get_int(FlooNoc::REQ_SRC_ID), mask);
+                    }
+                    queue->queue.pop();
+                    _this->noc->handle_collective_completion(req);
+                    in_queue_index += 1;
+                    if (in_queue_index == _this->num_queues)
+                    {
+                        in_queue_index = 0;
+                    }
+                    _this->fsm_event.enqueue();
+                    continue;
+                }
+                else if (fanout.size() > 1)
+                {
+                    // Fork the request and keep track of the children.
+                    // From this point on, req is purely an accumulator for
+                    // its children's merged results, so reset it to the
+                    // op's identity element first (it may still be holding
+                    // whatever garbage/stale data it had as a plain
+                    // request before becoming a fork point).
+                    queue->queue.pop();
+                    _this->noc->init_reduction_identity(req);
+                    for (auto &dest : fanout)
+                    {
+                        vp::IoReq *child = _this->fork_collective_child(
+                            req, dest.first, dest.second);
+                        int child_queue = _this->get_req_queue(dest.first);
+                        _this->collective_pending_queues[child_queue].push(
+                            child);
+                    }
+                    _this->noc->stat_collective_children_total +=
+                        fanout.size();
+                    in_queue_index += 1;
+                    if (in_queue_index == _this->num_queues)
+                    {
+                        in_queue_index = 0;
+                    }
+                    _this->fsm_event.enqueue();
+                    continue;
+                }
+                else
+                {
+                    // Exactly one destination: redirect the same request
+                    // object, no fork needed - falls through into the
+                    // normal unicast forwarding code below.
+                    to_node = fanout[0].first;
+                    req->set_int(FlooNoc::REQ_DEST_ID, to_node);
+                    req->set_int(FlooNoc::REQ_COLL_STATE, fanout[0].second);
+                }
+            }
+
+            // Get the next node id. This takes care of deciding
+            // which path is taken to go to the destination
+            int next_node;
+            _this->get_next_router_pos(to_node, next_node);
+            _this->trace.msg(vp::Trace::LEVEL_DEBUG,
+                             "Resolved next position (req: %p, dest: (%d), "
+                             "next_position: (%d))\n",
+                             req, to_node, next_node);
 
             // Get output queue ID from next position
-            int out_queue_id = _this->get_req_queue(next_x, next_y);
+            int out_queue_id = _this->get_req_queue(next_node);
+
+            if (out_queue_id < 0 || out_queue_id >= _this->num_queues)
+            {
+                _this->trace.fatal(
+                    "Router %d tried to route packet to next hop %d, but "
+                    "get_req_queue returned %d (destination: %d)\n",
+                    _this->node_id, next_node, out_queue_id, to_node);
+            }
 
             // Only send one request per cycle to the same output
             if (output_full[out_queue_id])
             {
-                _this->trace.msg(vp::Trace::LEVEL_TRACE, "Output queue is full, skipping (out queue: %d)\n", out_queue_id);
+                // Performance Counter
+                _this->stat_stall_cycles++;
+
+                _this->trace.msg(
+                    vp::Trace::LEVEL_TRACE,
+                    "Output queue is full, skipping (out queue: %d)\n",
+                    out_queue_id);
                 _this->fsm_event.enqueue(); // Check again in next cycle
                 in_queue_index += 1;
-                if (in_queue_index == 5)
+                if (in_queue_index == _this->num_queues)
                 {
                     in_queue_index = 0;
                 }
-                continue; // Skip this request and isntead check another input queue
+                continue; // Skip this request and instead check another input
+                          // queue
             }
-            output_full[out_queue_id] = true;
+            output_full[out_queue_id] = 1;
 
             // In case the request goes to a queue which is stalled, skip it
             // we'll retry later
-            if (_this->stalled_queues[out_queue_id])
+            if (*(_this->stalled_queues[out_queue_id]))
             {
-                _this->trace.msg(vp::Trace::LEVEL_TRACE, "Output queue is stalled, skipping (out queue: %d)\n", out_queue_id);
-                // Don't enque here because the stalled router will notifiy once it is unstalled
+                // Performance Counter
+                _this->stat_stall_cycles++;
+
+                _this->trace.msg(
+                    vp::Trace::LEVEL_TRACE,
+                    "Output queue is stalled, skipping (out queue: %d)\n",
+                    out_queue_id);
+                // Don't enque here because the stalled router will notifiy once
+                // it is unstalled
                 in_queue_index += 1;
-                if (in_queue_index == 5)
+                if (in_queue_index == _this->num_queues)
                 {
                     in_queue_index = 0;
                 }
                 continue;
             }
 
-            // Since we now know, that the request will be propagated, remove it from the queue
+            // Since we now know, that the request will be propagated, remove it
+            // from the queue
             queue->queue.pop();
 
-            if (queue->queue.size() == _this->queue_size) // Remember we let the source enqueue one more request than what is possible.
+            // Performance Counter
+            _this->stat_routed_packets++;
+
+            if (queue->queue.size() ==
+                _this->queue_size) // Remember we let the source enqueue one
+                                   // more request than what is possible.
             {
-                // In case the queue had one more element than possible, it means the output
-                // queue of the sending router is stalled. Unstall it now that we can accept
-                // one more request
-                queue->stalled_node->unstall_queue(_this->x, _this->y);
+                // In case the queue had one more element than possible, it
+                // means the output queue of the sending router is stalled.
+                // Unstall it now that we can accept one more request
+                queue->stalled_node->unstall_queue(_this->node_id);
             }
 
             // Otherwise forward to next position
             FloonocNode *node = _this->output_nodes[out_queue_id];
 
-            _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Forwarding request to next router (req: %p, base: 0x%x, size: 0x%x, next_position: (%d, %d), in_queue: %d)\n",
-                                req, req->get_addr(), req->get_size(), next_x, next_y, in_queue_index);
-            // Send the request to next router, and in case it reports that its input queue
-            // is full, stall the corresponding output queue to make sure we stop sending
-            // there until the queue is unstalled
-            if (node->handle_request(_this, req, _this->x, _this->y))
+            _this->trace.msg(vp::Trace::LEVEL_DEBUG,
+                             "Forwarding request to next router (req: %p, "
+                             "base: 0x%x, size: 0x%x, "
+                             "next_node: %d, in_queue: %d)\n",
+                             req, req->get_addr(), req->get_size(), next_node,
+                             in_queue_index);
+            // Send the request to next router, and in case it reports that its
+            // input queue is full, stall the corresponding output queue to make
+            // sure we stop sending there until the queue is unstalled
+            if (node->handle_request(_this, req, _this->node_id))
             {
-                _this->trace.msg(vp::Trace::LEVEL_DEBUG, "Stalling queue (position: (%d, %d), queue: %d)\n", _this->x, _this->y, out_queue_id);
-                _this->stalled_queues[out_queue_id] = true;
+                _this->trace.msg(vp::Trace::LEVEL_DEBUG,
+                                 "Stalling queue (node: %d, queue: %d)\n",
+                                 _this->node_id, out_queue_id);
+                *(_this->stalled_queues[out_queue_id]) = true;
             }
-            _this->current_queue = in_queue_index + 1; // Always start looking from the queue after the one that has been processed last
-            if (_this->current_queue == 5)
+            _this->current_queue =
+                in_queue_index + 1; // Always start looking from the queue after
+                                    // the one that has been processed last
+            if (_this->current_queue == _this->num_queues)
             {
                 _this->current_queue = 0;
             }
 
-            // Since we removed a request, check in next cycle if there is another one to handle
+            // Since we removed a request, check in next cycle if there is
+            // another one to handle
             _this->fsm_event.enqueue();
         }
         else
         {
             if (queue->queue.size())
             {
-               _this->fsm_event.enqueue();
+                _this->fsm_event.enqueue();
             }
         }
 
         // Go to next input queue
         in_queue_index += 1;
-        if (in_queue_index == 5)
+        if (in_queue_index == _this->num_queues)
         {
             in_queue_index = 0;
         }
     }
+
+    // Drain forked collective children into the normal per-neighbor output arbitration
+    for (int q = 0; q < _this->num_queues; q++)
+    {
+        std::queue<vp::IoReq *> &pending = _this->collective_pending_queues[q];
+        if (pending.empty())
+        {
+            continue;
+        }
+        if (output_full[q] || *(_this->stalled_queues[q]))
+        {
+            _this->fsm_event.enqueue();
+            continue;
+        }
+
+        vp::IoReq *child = pending.front();
+        pending.pop();
+
+        FloonocNode *node = _this->output_nodes[q];
+        if (node->handle_request(_this, child, _this->node_id))
+        {
+            *(_this->stalled_queues[q]) = true;
+        }
+        _this->fsm_event.enqueue();
+    }
 }
 
 // This is determining the routes the requests will take in the network
-void Router::get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_y)
+void Router::get_next_router_pos(int to_node, int &next_node)
 {
-    if (dest_x < 0)
+    // Direction-relative destination. This branch walks exactly one hop towards 
+    // the fixed neighbor registered for this direction. This terminates once 
+    // a hop lands on a network interface instead of a router.
+    if (to_node < 0)
     {
-        switch (dest_x + 4)
+        int dir_index = to_node + 4; // RIGHT=-4->0, LEFT=-3->1, UP=-2->2, DOWN=-1->3
+        if (dir_index < 0 || dir_index >= 4 ||
+            this->direction_neighbour[dir_index] == -1)
         {
-            case FlooNoc::DIR_UP: next_x = this->x; next_y = this->y + 1; break;
-            case FlooNoc::DIR_DOWN: next_x = this->x; next_y = this->y - 1; break;
-            case FlooNoc::DIR_RIGHT: next_y = this->y; next_x = this->x + 1; break;
-            case FlooNoc::DIR_LEFT: next_y = this->y; next_x = this->x - 1; break;
+            this->trace.fatal(
+                "Router %d has no neighbour registered for requested "
+                "direction (dest: %d)\n",
+                this->node_id, to_node);
         }
+        next_node = this->direction_neighbour[dir_index];
+        return;
+    }
+
+    if (to_node >= (int)this->routing_table.size())
+    {
+        this->trace.fatal(
+            "Router %d asked to route to node %d, but routing table size is "
+            "%lu\n",
+            this->node_id, to_node, this->routing_table.size());
+    }
+    if (to_node != this->node_id)
+    {
+        next_node = this->routing_table[to_node];
     }
     else
     {
-        // TODO If there is a gap in the mesh of routers this algorithm doesnt work
-        if (dest_x == this->x && dest_y == this->y)
-        {
-            next_x = this->x;
-            next_y = this->y;
-            return;
-        }
-
-        if (dest_x != this->x)
-        {
-            next_x = dest_x < this->x ? this->x - 1 : this->x + 1;
-            next_y = this->y;
-
-            // Only move on X if we don't hit the border unless we arrive at destination NI
-            if (next_x != 0 && next_x != this->noc->dim_x - 1 || next_y == dest_y)
-            {
-                return;
-            }
-        }
-
-        next_x = this->x;
-        next_y = dest_y < this->y ? this->y - 1 : this->y + 1;
+        next_node = this->node_id;
     }
 }
 
-void Router::unstall_queue(int from_x, int from_y)
+void Router::unstall_queue(int from_node)
 {
-    // This gets called when an output queue gets unstalled because the denied request gets granted.
-    // Just unstall the queue and trigger the fsm, in case we can now send a new request
-    int queue = this->get_req_queue(from_x, from_y);
-    this->trace.msg(vp::Trace::LEVEL_TRACE, "Unstalling queue (position: (%d, %d), queue: %d)\n", from_x, from_y, queue);
-    this->stalled_queues[queue] = false;
+    // This gets called when an output queue gets unstalled because the denied
+    // request gets granted. Just unstall the queue and trigger the fsm, in case
+    // we can now send a new request
+    int queue = this->get_req_queue(from_node);
+    if (queue == -1)
+    {
+        this->trace.fatal(
+            "Tried to unstall queue of unknown node (from_node: %d)\n",
+            from_node);
+        return;
+    }
+
+    this->trace.msg(vp::Trace::LEVEL_TRACE,
+                    "Unstalling queue (node: %d, queue: %d)\n", from_node,
+                    queue);
+    *(this->stalled_queues[queue]) = false;
     // And check in next cycle if another request can be sent
     this->fsm_event.enqueue();
 }
 
-void Router::stall_queue(int from_x, int from_y)
+void Router::stall_queue(int from_node)
 {
-    int queue = this->get_req_queue(from_x, from_y);
-    this->trace.msg(vp::Trace::LEVEL_TRACE, "Stalling queue (position: (%d, %d), queue: %d)\n", from_x, from_y, queue);
-    this->stalled_queues[queue] = true;
+    int queue = this->get_req_queue(from_node);
+    if (queue == -1)
+    {
+        this->trace.fatal(
+            "Tried to stall queue of unknown node (from_node: %d)\n",
+            from_node);
+        return;
+    }
+
+    this->trace.msg(vp::Trace::LEVEL_TRACE,
+                    "Stalling queue (node: %d, queue: %d)\n", from_node, queue);
+    *(this->stalled_queues[queue]) = true;
 }
 
-void Router::get_pos_from_queue(int queue, int &pos_x, int &pos_y)
+void Router::get_node_from_queue(int queue, int &node_id)
 {
-    switch (queue)
-    {
-    case FlooNoc::DIR_RIGHT:
-        pos_x = this->x + 1;
-        pos_y = this->y;
-        break;
-    case FlooNoc::DIR_LEFT:
-        pos_x = this->x - 1;
-        pos_y = this->y;
-        break;
-    case FlooNoc::DIR_UP:
-        pos_x = this->x;
-        pos_y = this->y + 1;
-        break;
-    case FlooNoc::DIR_DOWN:
-        pos_x = this->x;
-        pos_y = this->y - 1;
-        break;
-    case FlooNoc::DIR_LOCAL:
-        pos_x = this->x;
-        pos_y = this->y;
-        break;
-    }
+    node_id = this->queue_to_neighbor[queue];
 }
 
-int Router::get_req_queue(int from_x, int from_y)
+int Router::get_req_queue(int from_node)
 {
-    int queue_index = 0;
-    if (from_x != this->x)
+    // Local NI and neighbor routers will be mapped here
+    if (this->neighbor_to_queue.count(from_node))
     {
-        queue_index = from_x < this->x ? FlooNoc::DIR_LEFT : FlooNoc::DIR_RIGHT;
+        return this->neighbor_to_queue[from_node];
     }
-    else if (from_y != this->y)
-    {
-        queue_index = from_y < this->y ? FlooNoc::DIR_DOWN : FlooNoc::DIR_UP;
-    }
-    else
-    {
-        queue_index = FlooNoc::DIR_LOCAL;
-    }
+    this->trace.msg(vp::Trace::LEVEL_ERROR, "Unknown from_node %d\n",
+                    from_node);
+    return -1;
+}
 
-    return queue_index;
+// [Collective Only] Allocates a forked child of `parent`
+vp::IoReq *Router::fork_collective_child(vp::IoReq *parent, int dest_node,
+                                         int next_state)
+{
+    vp::IoReq *child = new vp::IoReq();
+    child->init();
+    child->arg_alloc(FlooNoc::REQ_NB_ARGS);
+
+    *child->arg_get(FlooNoc::REQ_SRC_NI) = *parent->arg_get(FlooNoc::REQ_SRC_NI);
+    *child->arg_get(FlooNoc::REQ_BURST) = *parent->arg_get(FlooNoc::REQ_BURST);
+    *child->arg_get(FlooNoc::REQ_IS_ADDRESS) =
+        *parent->arg_get(FlooNoc::REQ_IS_ADDRESS);
+    *child->arg_get(FlooNoc::REQ_WIDE) = *parent->arg_get(FlooNoc::REQ_WIDE);
+    *child->arg_get(FlooNoc::REQ_SRC_ID) = *parent->arg_get(FlooNoc::REQ_SRC_ID);
+    *child->arg_get(FlooNoc::REQ_COLL_OP) = *parent->arg_get(FlooNoc::REQ_COLL_OP);
+    *child->arg_get(FlooNoc::REQ_COLL_MASK) =
+        *parent->arg_get(FlooNoc::REQ_COLL_MASK);
+    *child->arg_get(FlooNoc::REQ_IS_REDUCTION_ACK) =
+        *parent->arg_get(FlooNoc::REQ_IS_REDUCTION_ACK);
+    child->set_int(FlooNoc::REQ_COLL_STATE, next_state);
+    *child->arg_get(FlooNoc::REQ_PARENT) = (void *)parent;
+    *child->arg_get(FlooNoc::REQ_PEND_KIDS) = (void *)(long)0;
+    *child->arg_get(FlooNoc::REQ_INJECT_TIME) =
+        *parent->arg_get(FlooNoc::REQ_INJECT_TIME);
+    child->set_int(FlooNoc::REQ_DEST_ID, dest_node);
+
+    uint64_t size = parent->get_size();
+    uint8_t *data_copy = new uint8_t[size];
+    std::memcpy(data_copy, parent->get_data(), size);
+    child->set_size(size);
+    child->set_data(data_copy);
+    child->set_addr(parent->get_addr());
+    child->set_is_write(parent->get_is_write());
+    child->set_opcode(parent->get_opcode());
+    child->set_second_data(parent->get_second_data());
+
+    parent->set_int(FlooNoc::REQ_PEND_KIDS,
+                    parent->get_int(FlooNoc::REQ_PEND_KIDS) + 1);
+
+    return child;
 }
 
 void Router::reset(bool active)
@@ -327,16 +559,15 @@ void Router::reset(bool active)
     if (active)
     {
         this->current_queue = 0;
-        for (int i = 0; i < 5; i++)
+        for (int i = 0; i < this->num_queues; i++)
         {
-            this->stalled_queues[i] = false;
+            *(this->stalled_queues[i]) = false;
         }
     }
-
 }
 
-RouterQueue::RouterQueue(vp::Block *parent, std::string name, vp::ClockEvent *ready_event)
-: queue(parent, name, ready_event)
+RouterQueue::RouterQueue(vp::Block *parent, std::string name,
+                         vp::ClockEvent *ready_event)
+    : queue(parent, name, ready_event)
 {
-
 }

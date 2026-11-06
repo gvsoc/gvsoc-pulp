@@ -13,7 +13,6 @@
 # SoftEx model
 /pulp/softex/ @AlessandroNadalini
 /softex_tb.py @AlessandroNadalini
-/pulp/floonoc_flex/ @rfamedina
 # ISS v2 cores
 /cpu/iss_v2/ @haugoug
 # CV32E40P core
@@ -37,6 +36,8 @@
 # DMA and interconnects
 /pulp/idma/ @haugoug
 /pulp/mchan/ @haugoug
+/pulp/floonoc/ @rfamedina
+/pulp/floonoc_flex/ @rfamedina
 /pulp/floonoc_v2/ @haugoug
 
 # SoC and cluster peripherals

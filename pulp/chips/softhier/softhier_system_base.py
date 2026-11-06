@@ -28,7 +28,7 @@ from pulp.chips.softhier.common.cluster_unit import ClusterUnit, ClusterArch
 from pulp.chips.softhier.common.softhier_ctrl import SoftHierCtrl
 from pulp.chips.softhier.common.error_detector import ErrorDetector
 from pulp.chips.softhier.softhier_arch_base import TOPOLOGIES, get_arch_overrides, SoftHierAttributes
-from pulp.floonoc_flex.floonoc_flex import FlooNocFlex
+from pulp.floonoc.floonoc import FlooNoc
 
 
 def _ni_node_name(arch, cluster_id):
@@ -154,7 +154,7 @@ class SoftHierSystem(gvsoc.systree.Component):
         if not os.path.exists(floogen_path):
             raise FileNotFoundError(f"FlooGen config not found at expected path: {floogen_path}")
 
-        noc = FlooNocFlex(self, 'noc',
+        noc = FlooNoc(self, 'noc',
                 narrow_width=8,
                 wide_width=arch.noc_link_width,
                 router_input_queue_size=16,

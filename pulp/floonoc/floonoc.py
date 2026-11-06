@@ -16,23 +16,18 @@
 
 from enum import IntEnum
 import gvsoc.systree
+import os
+import yaml
+from pathlib import Path
 
-class FlooNocDirection(IntEnum):
-    RIGHT = -4
-    LEFT = -3
-    UP = -2
-    DOWN = -1
+from floogen.config_parser import parse_config
+from floogen.model.network import Network
 
 
-class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
-    """FlooNoc instance for a 2D mesh
+class FlooNoc(gvsoc.systree.Component):
+    """FlooNoc instance for a flexible topology
 
-    This instantiates a FlooNoc 2D mesh for a grid of clusters.
-    It contains:
-     - a central part made of one cluster, one router and one network interface at each node
-     - a border of targets
-    If the grid contains X by Y clusters, the whole grid is X+2 by Y+2 as there are borders in each
-    direction for the targets.
+    This instantiates a Flexible Floonoc Topology
 
     Attributes
     ----------
@@ -42,7 +37,889 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         The name of the component within the parent space.
     width: int
         The width in bytes of the interconnect. This gives the number of bytes/cycles each node can
-        route.
+        route. 
+    nb_nodes: int
+        Number of nodes in the network.
+    router_degrees: int
+        Degree of ALL routers in the network. For different degrees, leave empty.
+    ni_outstanding_reqs: int
+        Number of outstanding requests each network interface can inject to the routers. This should
+        be increased when the size of the noc increases.
+    router_input_queue_size: int
+        Size of the routers input queues. This gives the number of requests which can be buffered
+        before the source output queue is stalled.
+    """
+    def __init__(self, parent: gvsoc.systree.Component, name, narrow_width: int, wide_width:int,
+            router_degrees: int=0, nb_nodes: int=0, ni_outstanding_reqs: int=8, router_input_queue_size: int=2,
+            network_path: str | None = None, routing_path: str | None = None,
+            default_link_latency: int=1, link_latencies_path: str | None = None):
+        super().__init__(parent, name)
+
+        self.add_sources([
+            'pulp/floonoc/floonoc.cpp',
+            'pulp/floonoc/floonoc_router.cpp',
+            'pulp/floonoc/floonoc_network_interface.cpp',
+            'pulp/floonoc/floonoc_collective_policy.cpp',
+            'cpu/iss/flexfloat/flexfloat.c',
+        ])
+
+        self.add_property('mappings', {})
+        self.add_property('routers', [])
+        self.add_property('network_interfaces', [])
+        self.add_property('ni_outstanding_reqs', ni_outstanding_reqs)
+        self.add_property('narrow_width', narrow_width)
+        self.add_property('wide_width', wide_width)
+        self.add_property('router_input_queue_size', router_input_queue_size)
+
+        self.add_property('nb_nodes', nb_nodes)
+        self.add_property('links', [])
+        self.add_property('router_degrees', router_degrees)
+        self.add_property('collective_enable', False)
+        self.add_property('collective_route_algo', 'none')
+        self.add_property('collective_coords', [])
+        self.id_map = {}
+        # floogen's own schema has no per-link timing field, so per-link
+        # latencies are sourced from an optional side file keyed
+        # by node name pairs (see load_from_floogen); any link not listed
+        # there falls back to this single uniform default.
+        self.default_link_latency = default_link_latency
+        if network_path is not None:
+            self.id_map = self.load_from_floogen(network_path, routing_path, link_latencies_path)
+
+    def _add_mapping(self, name: str, base: int, size: int, node_id: int, remove_offset:int =0):
+        self.get_property('mappings')[name] =  {'base': base, 'size': size, 'node_id': node_id, 'remove_offset':remove_offset}
+
+    def add_router(self, node_id: int, num_queues: int):
+        """Instantiate a router in the grid.
+
+        Parameters
+        ----------
+        node_id: int
+            ID of the router node
+        """
+        self.get_property('routers').append([node_id, num_queues])
+
+    def add_network_interface(self, node_id: int):
+        """Instantiate a network interface in the grid.
+
+        A network interface should be instantiated at every node where a burst can be injected,
+        typically next to each cluster.
+
+        Parameters
+        ----------
+        node_id: int
+            ID of the network interface node
+        """
+        self.get_property('network_interfaces').append([node_id])
+
+    def add_link(self, src_node_id: int, dest_node_id: int, latency: int = 1):
+        """Add a link between two nodes
+
+        Parameters
+        ----------
+        src_node_id: int
+            ID of the source node
+        dest_node_id: int
+            ID of the destination node
+        latency: int
+            Latency of the link in cycles
+        """
+        self.get_property('links').append([src_node_id, dest_node_id, latency])
+
+    def o_NARROW_MAP(self, itf: gvsoc.systree.SlaveItf, base: int, size: int,
+        node_id: int, name: str=None, rm_base: bool=False, remove_offset:int =0):
+        """Binds the output of a node to a target, associated to a memory-mapped region.
+
+        Parameters
+        ----------
+        itf: gvsoc.systree.SlaveItf
+            Slave interface where requests matching the memory-mapped region will be sent.
+        base: int
+            Base address of the memory-mapped region.
+        size: int
+            Size of the memory-mapped region.
+        node_id: int
+            ID of the target node
+        name: str
+            name of the mapping. Should be different for each mapping. Taken from itf component if
+            it is None
+        rm_base: bool
+            if True, the base address is substracted to the address of any request going through
+        remove_offset: int
+            Offset to remove from the address before applying the mapping
+        """
+        if name is None:
+            name = itf.component.name
+        if rm_base and remove_offset == 0:
+            remove_offset =base
+        self._add_mapping(f"narrow_{name}", base=base, size=size, node_id=node_id, remove_offset=remove_offset)
+        self.itf_bind(f"ni_narrow_{node_id}", itf, signature='io')
+
+
+    def o_WIDE_BIND(self, itf: gvsoc.systree.SlaveItf, node_id: int):
+        self.itf_bind(f"ni_wide_{node_id}", itf, signature='io')
+
+    def o_NARROW_BIND(self, itf: gvsoc.systree.SlaveItf, node_id: int):
+        self.itf_bind(f"ni_narrow_{node_id}", itf, signature='io')
+
+
+    def i_NARROW_INPUT(self, node_id: int) -> gvsoc.systree.SlaveItf:
+        """Returns the input port of a node.
+
+        Requests can be injected to the noc using this interface. The noc will then
+        forward it to the right target.
+
+        Parameters
+        ----------
+        x: int
+            The x position of the node in the grid
+        y: int
+            The y position of the node in the grid
+
+        Returns
+        ----------
+        gvsoc.systree.SlaveItf
+            The slave interface
+        """
+        return gvsoc.systree.SlaveItf(self, f'narrow_input_{node_id}', signature='io')
+
+    def i_WIDE_INPUT(self, node_id: int) -> gvsoc.systree.SlaveItf:
+        """Returns the input port of a node.
+
+        Requests can be injected to the noc using this interface. The noc will then
+        forward it to the right target.
+
+        Parameters
+        ----------
+        x: int
+            The x position of the node in the grid
+        y: int
+            The y position of the node in the grid
+
+        Returns
+        ----------
+        gvsoc.systree.SlaveItf
+            The slave interface
+        """
+        return gvsoc.systree.SlaveItf(self, f'wide_input_{node_id}', signature='io')
+
+    def _check_ni_router_links(self):
+        """
+        Every registered network interface must have exactly one link to a
+        router in the topology, otherwise the routing-table generators
+        silently leave that NI's entries as -1 (indistinguishable from an
+        unused node id), which only surfaces as a fatal error in the C++
+        model once traffic actually targets that NI.
+        """
+        routers = set(r[0] for r in self.get_property('routers'))
+        nis = set(n[0] for n in self.get_property('network_interfaces'))
+        links = self.get_property('links')
+
+        ni_to_router = {}
+        for link in links:
+            node_a, node_b = link[0], link[1]
+            if node_a in nis and node_b in routers:
+                ni_to_router[node_a] = node_b
+            elif node_b in nis and node_a in routers:
+                ni_to_router[node_b] = node_a
+
+        missing = [n for n in nis if n not in ni_to_router]
+        if missing:
+            id_to_name = {v: k for k, v in self.id_map.items()} if self.id_map else {}
+            names = [id_to_name.get(n, n) for n in missing]
+            raise ValueError(
+                f"Network interface(s) {names} have no router link in the "
+                f"topology (check the links / routing.yml configuration)")
+
+    def generate_routing_tables_shortest_path(self):
+        """
+        Generates routing tables based on the shortest path between 
+        all nodes using BFS.
+        """
+        nb_nodes = self.get_property('nb_nodes')
+        links = self.get_property('links')
+
+        routers = [r[0] for r in self.get_property('routers')]
+        nis = [n[0] for n in self.get_property('network_interfaces')]
+
+        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
+
+        adj = {r: [] for r in routers}
+        ni_to_router = {}
+        
+        for link in links:
+            node_a, node_b = link[0], link[1]
+            if node_a in nis and node_b in routers:
+                ni_to_router[node_a] = node_b
+            elif node_b in nis and node_a in routers:
+                ni_to_router[node_b] = node_a
+            elif node_a in routers and node_b in routers:
+                adj[node_a].append(node_b)
+                adj[node_b].append(node_a)
+
+        for r in routers:
+            adj[r] = list(set(adj[r]))
+
+        for src in routers:
+            best_first_hop = {}
+            visited = set([src])
+            
+            queue = []
+            
+            for neighbor in adj[src]:
+                queue.append((neighbor, neighbor))
+                visited.add(neighbor)
+                best_first_hop[neighbor] = neighbor
+
+            while queue:
+                curr, first_hop = queue.pop(0)
+                
+                for neighbor in adj[curr]:
+                    if neighbor not in visited:
+                        visited.add(neighbor)
+                        best_first_hop[neighbor] = first_hop
+                        queue.append((neighbor, first_hop))
+
+            for dst in range(nb_nodes):
+                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
+                
+                if target_router == -1:
+                    continue
+                
+                if src == target_router:
+                    routing_tables[str(src)][str(dst)] = dst
+                elif target_router in best_first_hop:
+                    routing_tables[str(src)][str(dst)] = best_first_hop[target_router]
+                else:
+                    routing_tables[str(src)][str(dst)] = src
+
+        self.add_property('routing_tables', routing_tables)
+
+    def generate_routing_tables_deadlock_free(self):
+        """
+        Generates deadlock-free routing tables for any topology using the Up/Down Spanning Tree Routing Algorithm.
+        It is however not minimal in terms of hops and therefore sacrifices BW/Latency.
+        To be used in topologies with deadlocks.
+        """
+        nb_nodes = self.get_property('nb_nodes')
+        links = self.get_property('links')
+
+        routers = [r[0] for r in self.get_property('routers')]
+        nis = [n[0] for n in self.get_property('network_interfaces')]
+
+        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
+
+        adj = {r: [] for r in routers}
+        ni_to_router = {}
+        
+        for link in links:
+            node_a, node_b = link[0], link[1]
+            if node_a in nis and node_b in routers:
+                ni_to_router[node_a] = node_b
+            elif node_b in nis and node_a in routers:
+                ni_to_router[node_b] = node_a
+            elif node_a in routers and node_b in routers:
+                adj[node_a].append(node_b)
+                adj[node_b].append(node_a)
+
+        for r in routers:
+            adj[r] = list(set(adj[r]))
+
+        root = routers[len(routers) // 2] 
+        levels = {r: -1 for r in routers}
+        levels[root] = 0
+        
+        queue = [root]
+        while queue:
+            curr = queue.pop(0)
+            for neighbor in adj[curr]:
+                if levels[neighbor] == -1:
+                    levels[neighbor] = levels[curr] + 1
+                    queue.append(neighbor)
+
+        def is_up(u, v):
+            if levels[v] < levels[u]:
+                return True
+            if levels[v] == levels[u] and v < u:
+                return True
+            return False
+
+        for src in routers:
+            best_first_hop = {}
+            visited = set() 
+            visited.add((src, False))
+            
+            bfs_queue = [(src, False, -1)]
+            
+            while bfs_queue:
+                curr, has_gone_down, first_hop = bfs_queue.pop(0)
+                
+                if curr != src and curr not in best_first_hop:
+                    best_first_hop[curr] = first_hop
+                    
+                for neighbor in adj[curr]:
+                    going_up = is_up(curr, neighbor)
+                    going_down = not going_up
+                    
+                    if has_gone_down and going_up:
+                        continue 
+                        
+                    new_has_gone_down = has_gone_down or going_down
+                    state = (neighbor, new_has_gone_down)
+                    
+                    if state not in visited:
+                        visited.add(state)
+                        fh = neighbor if first_hop == -1 else first_hop
+                        bfs_queue.append((neighbor, new_has_gone_down, fh))
+
+            for dst in range(nb_nodes):
+                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
+                
+                if target_router == -1:
+                    continue
+                if src == target_router:
+                    routing_tables[str(src)][str(dst)] = dst
+                elif target_router in best_first_hop:
+                    routing_tables[str(src)][str(dst)] = best_first_hop[target_router]
+                else:
+                    routing_tables[str(src)][str(dst)] = src
+
+        self.add_property('routing_tables', routing_tables)
+
+    def generate_routing_tables_hexamesh(self):
+        """
+        Generates routing tables for a HexaMesh topology using Axial Dimension Order Routing.
+        """
+        nb_nodes = self.get_property('nb_nodes')
+        links = self.get_property('links')
+
+        routers = sorted([r[0] for r in self.get_property('routers')])
+        nis = [n[0] for n in self.get_property('network_interfaces')]
+        num_routers = len(routers)
+
+        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
+
+        ni_to_router = {}
+        for link in links:
+            node_a, node_b = link[0], link[1]
+            if node_a in nis and node_b in routers:
+                ni_to_router[node_a] = node_b
+            elif node_b in nis and node_a in routers:
+                ni_to_router[node_b] = node_a
+
+        ring_walk_dirs = [(-1, 1), (-1, 0), (0, -1), (1, -1), (1, 0), (0, 1)]
+        coords = [(0, 0)]
+        ring = 1
+        
+        while len(coords) < num_routers:
+            q, r = ring, 0 
+            for dq, dr in ring_walk_dirs:
+                for _ in range(ring):
+                    if len(coords) < num_routers:
+                        coords.append((q, r))
+                    q += dq
+                    r += dr
+            ring += 1
+
+        id_to_coord = {r_id: coord for r_id, coord in zip(routers, coords)}
+        coord_to_id = {coord: r_id for r_id, coord in zip(routers, coords)}
+
+        for src in routers:
+            src_q, src_r = id_to_coord[src]
+
+            for dst in range(nb_nodes):
+                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
+                
+                if target_router == -1:
+                    continue 
+                
+                if src == target_router:
+                    routing_tables[str(src)][str(dst)] = dst
+                    continue
+
+                dst_q, dst_r = id_to_coord[target_router]
+
+                if src_q != dst_q:
+                    next_q = src_q + 1 if dst_q > src_q else src_q - 1
+                    next_r = src_r
+                else:
+                    next_q = src_q
+                    next_r = src_r + 1 if dst_r > src_r else src_r - 1
+
+                if (next_q, next_r) in coord_to_id:
+                    next_hop_router = coord_to_id[(next_q, next_r)]
+                else:
+                    best_dist = float('inf')
+                    best_neighbor = src
+                    
+                    for dq, dr in [(-1, 1), (1, -1), (0, 1), (0, -1), (1, 0), (-1, 0)]:
+                        test_q, test_r = src_q + dq, src_r + dr
+                        
+                        if (test_q, test_r) in coord_to_id:
+                            dist = (abs(test_q - dst_q) + abs(test_q + test_r - dst_q - dst_r) + abs(test_r - dst_r)) // 2
+                            if dist < best_dist:
+                                best_dist = dist
+                                best_neighbor = coord_to_id[(test_q, test_r)]
+                                
+                    next_hop_router = best_neighbor
+
+                routing_tables[str(src)][str(dst)] = next_hop_router
+
+        self.add_property('routing_tables', routing_tables)
+    
+    def generate_routing_tables_folded_hexatorus(self):
+        """
+        Generates routing tables using Multiple Spanning Trees.
+        Can be faster than simple Up/Down.
+        """
+        nb_nodes = self.get_property('nb_nodes')
+        links = self.get_property('links')
+        num_trees = 4
+
+        routers = sorted([r[0] for r in self.get_property('routers')])
+        nis = [n[0] for n in self.get_property('network_interfaces')]
+
+        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
+
+        adj = {r: [] for r in routers}
+        ni_to_router = {}
+        
+        for link in links:
+            node_a, node_b = link[0], link[1]
+            if node_a in nis and node_b in routers:
+                ni_to_router[node_a] = node_b
+            elif node_b in nis and node_a in routers:
+                ni_to_router[node_b] = node_a
+            elif node_a in routers and node_b in routers:
+                adj[node_a].append(node_b)
+                adj[node_b].append(node_a)
+
+        for r in routers:
+            adj[r] = sorted(list(set(adj[r])))
+
+        step = max(1, len(routers) // num_trees)
+        roots = [routers[(i * step) % len(routers)] for i in range(num_trees)]
+        
+        tree_levels = []
+        for root in roots:
+            levels = {r: -1 for r in routers}
+            levels[root] = 0
+            queue = [root]
+            while queue:
+                curr = queue.pop(0)
+                for neighbor in adj[curr]:
+                    if levels[neighbor] == -1:
+                        levels[neighbor] = levels[curr] + 1
+                        queue.append(neighbor)
+            tree_levels.append(levels)
+
+        router_to_tree_idx = {}
+        for r in routers:
+            closest_tree_idx = 0
+            min_dist = float('inf')
+            for t_idx, levels in enumerate(tree_levels):
+                if levels[r] < min_dist:
+                    min_dist = levels[r]
+                    closest_tree_idx = t_idx
+            router_to_tree_idx[r] = closest_tree_idx
+
+        best_next_hops = {i: {r: {} for r in routers} for i in range(num_trees)}
+
+        for t_idx, levels in enumerate(tree_levels):
+            def is_up(u, v, lvl=levels):
+                if lvl[v] < lvl[u]:
+                    return True
+                if lvl[v] == lvl[u] and v < u:
+                    return True
+                return False
+
+            for src in routers:
+                best_first_hop = {}
+                visited = set() 
+                visited.add((src, False))
+                
+                bfs_queue = [(src, False, -1)]
+                
+                while bfs_queue:
+                    curr, has_gone_down, first_hop = bfs_queue.pop(0)
+                    
+                    if curr != src and curr not in best_first_hop:
+                        best_first_hop[curr] = first_hop
+                        
+                    for neighbor in adj[curr]:
+                        going_up = is_up(curr, neighbor)
+                        going_down = not going_up
+                        
+                        if has_gone_down and going_up:
+                            continue 
+                            
+                        new_has_gone_down = has_gone_down or going_down
+                        state = (neighbor, new_has_gone_down)
+                        
+                        if state not in visited:
+                            visited.add(state)
+                            fh = neighbor if first_hop == -1 else first_hop
+                            bfs_queue.append((neighbor, new_has_gone_down, fh))
+                            
+                best_next_hops[t_idx][src] = best_first_hop
+
+        for src in routers:
+            for dst in range(nb_nodes):
+                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
+                
+                if target_router == -1:
+                    continue
+                if src == target_router:
+                    routing_tables[str(src)][str(dst)] = dst
+                    continue
+                
+                assigned_tree = router_to_tree_idx[target_router]
+                
+                if target_router in best_next_hops[assigned_tree][src]:
+                    routing_tables[str(src)][str(dst)] = best_next_hops[assigned_tree][src][target_router]
+                else:
+                    routing_tables[str(src)][str(dst)] = src
+
+        self.add_property('routing_tables', routing_tables)
+
+    def generate_routing_tables_arc_model(self, dim_x: int, dim_y: int):
+        """
+        Implementation of Algorithm 3 from 'Developing Deadlock-Free Routing Algorithms in Torus NoC'
+        Uses (EWs + WEs + NSe + SN FirstHop) arcs combined with XY routing.
+        """
+        nb_nodes = self.get_property('nb_nodes')
+        links = self.get_property('links')
+        routers = [r[0] for r in self.get_property('routers')]
+        nis = [n[0] for n in self.get_property('network_interfaces')]
+
+        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
+
+        ni_to_router = {}
+        for link in links:
+            node_a, node_b = link[0], link[1]
+            if node_a in nis and node_b in routers:
+                ni_to_router[node_a] = node_b
+            elif node_b in nis and node_a in routers:
+                ni_to_router[node_b] = node_a
+
+        min_x, max_x = 1, dim_x - 2
+        min_y, max_y = 1, dim_y - 2
+        w = max_x - min_x + 1
+        h = max_y - min_y + 1
+
+        for src in routers:
+            sx = src % dim_x
+            sy = src // dim_x
+
+            for dst in range(nb_nodes):
+                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
+                
+                if target_router == -1:
+                    continue
+                if src == target_router:
+                    routing_tables[str(src)][str(dst)] = dst
+                    continue
+
+                dx = target_router % dim_x
+                dy = target_router // dim_x
+                
+                delta_x = abs(dx - sx)
+                delta_y = abs(dy - sy)
+                
+                if (dy > sy) and (sx > dx) and (delta_x > w // 2):
+                    if sx == max_x:
+                        next_sx = min_x
+                    else:
+                        next_sx = sx + 1
+                    next_hop = sy * dim_x + next_sx
+                    
+                elif (dy > sy) and (dx > sx) and (delta_x > w // 2):
+                    if sx == min_x:
+                        next_sx = max_x
+                    else:
+                        next_sx = sx - 1
+                    next_hop = sy * dim_x + next_sx
+
+                elif (dx > sx) and (dy > sy) and (delta_y > h // 2):
+                    if sy == min_y:
+                        next_sy = max_y
+                    else:
+                        next_sy = sy - 1
+                    next_hop = next_sy * dim_x + sx
+
+                elif (sy == max_y) and (dy < sy) and (delta_y > h // 2):
+                    next_sy = min_y
+                    next_hop = next_sy * dim_x + sx
+
+                else:
+                    if sx != dx:
+                        if sx == min_x and dx > sx and dy > sy:
+                            next_sy = sy + 1
+                            next_hop = next_sy * dim_x + sx
+                        
+                        elif sx == max_x and dx < sx and dy > sy:
+                            next_sy = sy + 1
+                            next_hop = next_sy * dim_x + sx
+                            
+                        else:
+                            next_sx = sx + 1 if dx > sx else sx - 1
+                            next_hop = sy * dim_x + next_sx
+                    else:
+                        next_sy = sy + 1 if dy > sy else sy - 1
+                        next_hop = next_sy * dim_x + sx
+
+                routing_tables[str(src)][str(dst)] = next_hop
+
+        self.add_property('routing_tables', routing_tables)
+
+    def generate_routing_tables_dimension_order(self, node_to_id: dict, first_axis: str):
+        """
+        Dimension-order (XY or YX) routing for a rectangular mesh, used
+        by load_from_floogen() for FlooGen YAMLs with route_algo "XY"/
+        "YX". Each router's (x, y) is parsed from its floogen graph node 
+        name rather than assumed from node id order.
+
+        first_axis: "x" routes X-then-Y (XY), "y" routes Y-then-X (YX).
+        Falls back to generic shortest-path BFS if any router name lacks
+        a parseable coordinate suffix.
+        """
+
+        def _parse_router_coords():
+            """
+            Parses trailing `_x_y` coordinates out of each router's floogen
+            graph node name (e.g. "router_2_3" -> (2, 3)). Returns None if
+            any router's name doesn't end in a parseable `_x_y` suffix.
+            """
+            coords = {}
+            for r in routers:
+                parts = id_to_name.get(r, '').rsplit('_', 2)
+                try:
+                    x, y = int(parts[-2]), int(parts[-1])
+                except (IndexError, ValueError):
+                    return None
+                coords[r] = (x, y)
+            return coords
+        
+        nb_nodes = self.get_property('nb_nodes')
+        links = self.get_property('links')
+        routers = [r[0] for r in self.get_property('routers')]
+        nis = [n[0] for n in self.get_property('network_interfaces')]
+        id_to_name = {v: k for k, v in node_to_id.items()}
+
+        id_to_coord = _parse_router_coords()
+        if id_to_coord is None:
+            if self.get_property('collective_enable'):
+                raise ValueError(
+                    "routing.collective is enabled but router node names "
+                    "don't carry parseable '_x_y' coordinates")
+            self.generate_routing_tables_shortest_path()
+            return
+        coord_to_id = {c: r for r, c in id_to_coord.items()}
+
+        ni_to_router = {}
+        for link in links:
+            node_a, node_b = link[0], link[1]
+            if node_a in nis and node_b in routers:
+                ni_to_router[node_a] = node_b
+            elif node_b in nis and node_a in routers:
+                ni_to_router[node_b] = node_a
+
+        if self.get_property('collective_enable'):
+            self.add_property('collective_coords',
+                [[node_id, x, y] for node_id, (x, y) in id_to_coord.items()])
+
+        routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
+        for src in routers:
+            sx, sy = id_to_coord[src]
+            for dst in range(nb_nodes):
+                target_router = dst if dst in routers else ni_to_router.get(dst, -1)
+                if target_router == -1:
+                    continue
+                if src == target_router:
+                    routing_tables[str(src)][str(dst)] = dst
+                    continue
+
+                dx, dy = id_to_coord[target_router]
+                align_x_first = (first_axis == 'x')
+                if (align_x_first and sx != dx) or (not align_x_first and sy == dy):
+                    next_coord = (sx + (1 if dx > sx else -1), sy)
+                else:
+                    next_coord = (sx, sy + (1 if dy > sy else -1))
+
+                next_hop = coord_to_id.get(next_coord)
+                if next_hop is None:
+                    self.generate_routing_tables_shortest_path()
+                    return
+                routing_tables[str(src)][str(dst)] = next_hop
+
+        self.add_property('routing_tables', routing_tables)
+
+    def load_from_floogen(self, network_path: str, routing_path: str = None, link_latencies_path: str = None):
+            """
+            Parses a FlooGen YAML file and populates the GVSoC NoC topology.
+            """
+
+            # Parse the YAML into FlooGen's Network object
+            floo_net = parse_config(Network, Path(network_path))
+            floo_net.create_network()
+            floo_net.compile_network()
+
+            # Optional {src_name: {dst_name: latency}} side file for
+            # per-link latencies (see the matching comment in __init__).
+            link_latencies = {}
+            if link_latencies_path is not None and Path(link_latencies_path).exists():
+                with open(link_latencies_path, 'r') as f:
+                    for src_name, dsts in (yaml.safe_load(f) or {}).items():
+                        for dst_name, latency in dsts.items():
+                            link_latencies[(src_name, dst_name)] = latency
+
+            # Compatibility layer: Maps FlooGen string names to Floonoc-Flex IDs
+            node_to_id = {}
+            current_id = 0
+
+            # Extract Routers
+            for rt_name, rt_node in floo_net.graph.get_rt_nodes(with_name=True):
+                node_to_id[rt_name] = current_id
+                num_queues = getattr(rt_node, 'degree', 5)
+                self.add_router(current_id, num_queues=num_queues)
+                current_id += 1
+
+            # Extract Network Interfaces (NIs)
+            for ni_name, _ in floo_net.graph.get_ni_nodes(with_name=True):
+                node_to_id[ni_name] = current_id
+                self.add_network_interface(current_id)
+                current_id += 1
+
+            self.add_property('nb_nodes', current_id)
+            self.id_map = node_to_id
+
+            added_links = set()
+            
+            # Extract Links
+            for src_name, dst_name in floo_net.graph.get_link_edges(with_obj=False, with_name=True):
+                # Ensure both sides of the link exist in our ID map
+                if src_name in node_to_id and dst_name in node_to_id:
+                    src_id = node_to_id[src_name]
+                    dst_id = node_to_id[dst_name]
+                    
+                    link_pair = tuple(sorted((src_id, dst_id)))
+                    
+                    # Only add bidirectional link if not already added
+                    if link_pair not in added_links:
+                        latency = link_latencies.get((src_name, dst_name),
+                                  link_latencies.get((dst_name, src_name), self.default_link_latency))
+                        self.add_link(src_id, dst_id, latency=latency)
+                        added_links.add(link_pair)
+
+            # Extra generation-time validation, only run for DEBUG builds
+            # (make DEBUG=1 ...) since it adds an extra pass over the topology.
+            if os.environ.get('DEBUG'):
+                self._check_ni_router_links()
+
+            algo_name = floo_net.routing.route_algo.name
+
+            # Collective primitives configuration and check
+            collective_cfg = floo_net.routing.collective
+            if collective_cfg.en_collective:
+                if algo_name not in ("XY", "YX"):
+                    raise ValueError(
+                        f"routing.collective is enabled but route_algo is "
+                        f"'{algo_name}'. Currently only support plain 'XY'/'YX' "
+                        f"dimension-order mesh routing")
+
+                self.add_property('collective_enable', True)
+                self.add_property('collective_route_algo',
+                    'xy_mesh' if algo_name == 'XY' else 'yx_mesh')
+
+            match algo_name:
+                case "XY":
+                    self.generate_routing_tables_dimension_order(node_to_id, first_axis='x')
+
+                case "YX":
+                    self.generate_routing_tables_dimension_order(node_to_id, first_axis='y')
+                    
+                case "ID" | "SRC":
+                    if routing_path is not None and Path(routing_path).exists():
+                        self.load_custom_routing_tables(routing_path, node_to_id)
+                    else:
+                        raise FileNotFoundError(f"Routing path {routing_path} not found.")
+                    
+                case _:
+                    # Shortest path fallback
+                    self.generate_routing_tables_shortest_path()
+            
+            # Return the dictionary
+            return node_to_id
+
+    def load_custom_routing_tables(self, routing_path: str, node_to_id: dict):
+            """
+            Parses a custom routing.yml file.
+            Format expected:
+            router_name:
+            destination_name: next_hop_name
+            """
+            with open(routing_path, 'r') as f:
+                custom_yaml = yaml.safe_load(f)
+                
+            nb_nodes = self.get_property('nb_nodes')
+            routers = [r[0] for r in self.get_property('routers')]
+            
+            # Initialize an empty table for all routers
+            routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
+            
+            # Populate the table translating string names to integer IDs
+            for src_str, routes in custom_yaml.items():
+                if src_str not in node_to_id:
+                    raise ValueError(
+                        f"routing.yml ({routing_path}): router '{src_str}' not found in NoC "
+                        f"(known nodes: {sorted(node_to_id.keys())})")
+                    
+                src_id = node_to_id[src_str]
+                
+                for dst_str, next_hop_str in routes.items():
+                    if dst_str not in node_to_id:
+                        raise ValueError(
+                            f"routing.yml ({routing_path}): destination '{dst_str}' "
+                            f"(router '{src_str}') not found in NoC")
+                    if next_hop_str not in node_to_id:
+                        raise ValueError(
+                            f"routing.yml ({routing_path}): next hop '{next_hop_str}' "
+                            f"(router '{src_str}' -> '{dst_str}') not found in NoC")
+
+                    dst_id = node_to_id[dst_str]
+                    next_hop_id = node_to_id[next_hop_str]
+
+                    routing_tables[str(src_id)][str(dst_id)] = next_hop_id
+
+            self.add_property('routing_tables', routing_tables)
+
+
+class FlooNocDirection(IntEnum):
+    RIGHT = -4
+    LEFT = -3
+    UP = -2
+    DOWN = -1
+
+
+class FlooNoc2dMeshNarrowWide(FlooNoc):
+    """FlooNoc instance for a 2D mesh, API-compatible with the legacy
+    fixed-mesh floonoc.py.
+
+    This instantiates a FlooNoc 2D mesh for a grid of clusters.
+    It contains:
+     - a central part made of one cluster, one router and one network interface at each node
+     - a border of targets
+
+    Attributes
+    ----------
+    parent: gvsoc.systree.Component
+        The parent component where this one should be instantiated.
+    name: str
+        The name of the component within the parent space.
+    narrow_width: int
+        The width in bytes of the narrow network.
+    wide_width: int
+        The width in bytes of the wide network.
     dim_x: int
         The X dimension of the grid. This should also include targets on the borders.
     dim_y: int
@@ -53,56 +930,48 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
     router_input_queue_size: int
         Size of the routers input queues. This gives the number of requests which can be buffered
         before the source output queue is stalled.
+    collective_enable: bool
+        Enable DMA communication collectives (broadcast/reduction) over this mesh.
     """
-    def __init__(self, parent: gvsoc.systree.Component, name, narrow_width: int, wide_width:int,
-            dim_x: int, dim_y:int, ni_outstanding_reqs: int=8, router_input_queue_size: int=2):
-        super().__init__(parent, name)
+    def __init__(self, parent: gvsoc.systree.Component, name, narrow_width: int, wide_width: int,
+            dim_x: int, dim_y: int, ni_outstanding_reqs: int=8, router_input_queue_size: int=2,
+            collective_enable: bool=False):
+        # Upper bound: every position could end up with both a router and an NI, each needing its own id.
+        super().__init__(parent, name, narrow_width=narrow_width, wide_width=wide_width,
+            nb_nodes=2 * dim_x * dim_y, ni_outstanding_reqs=ni_outstanding_reqs,
+            router_input_queue_size=router_input_queue_size)
+        self.dim_x = dim_x
+        self.dim_y = dim_y
+        self._collective_enable = collective_enable
+        self._router_id = {}  # (x, y) -> node id, routers only
+        self._ni_id = {}      # (x, y) -> node id, network interfaces only
+        self._next_id = 0
 
-        self.add_sources([
-            'pulp/floonoc/floonoc.cpp',
-            'pulp/floonoc/floonoc_router.cpp',
-            'pulp/floonoc/floonoc_network_interface.cpp',
-        ])
-
-        self.add_property('mappings', {})
-        self.add_property('routers', [])
-        self.add_property('network_interfaces', [])
-        self.add_property('ni_outstanding_reqs', ni_outstanding_reqs)
-        self.add_property('narrow_width', narrow_width)
-        self.add_property('wide_width', wide_width)
-        self.add_property('dim_x', dim_x)
-        self.add_property('dim_y', dim_y)
-        self.add_property('router_input_queue_size', router_input_queue_size)
-
-    def __add_mapping(self, name: str, base: int, size: int, x: int, y: int, remove_offset:int =0):
-        self.get_property('mappings')[name] =  {'base': base, 'size': size, 'x': x, 'y': y, 'remove_offset':remove_offset}
+    def _alloc_id(self) -> int:
+        node_id = self._next_id
+        self._next_id += 1
+        return node_id
 
     def add_router(self, x: int, y: int):
-        """Instantiate a router in the grid.
-
-        Parameters
-        ----------
-        x: int
-            X position of the router in the grid
-        y: int
-            Y position of the router in the grid
-        """
-        self.get_property('routers').append([x, y])
+        """Instantiate a router in the grid."""
+        if (x, y) not in self._router_id:
+            self._router_id[(x, y)] = self._alloc_id()
+        super().add_router(self._router_id[(x, y)], num_queues=5)
 
     def add_network_interface(self, x: int, y: int):
         """Instantiate a network interface in the grid.
 
         A network interface should be instantiated at every node where a burst can be injected,
         typically next to each cluster.
-
-        Parameters
-        ----------
-        x: int
-            X position of the network interface in the grid
-        y: int
-            Y position of the network interface in the grid
         """
-        self.get_property('network_interfaces').append([x, y])
+        if (x, y) not in self._ni_id:
+            self._ni_id[(x, y)] = self._alloc_id()
+        super().add_network_interface(self._ni_id[(x, y)])
+
+    def _target_id(self, x: int, y: int) -> int:
+        """Id to use for the public, position-based target API (o_*_MAP, o_*_BIND, i_*_INPUT):
+        always the NI id, since every real target/initiator attaches at a network interface."""
+        return self._ni_id[(x, y)]
 
     def o_NARROW_MAP(self, itf: gvsoc.systree.SlaveItf, base: int, size: int,
             x: int, y: int, name: str=None, rm_base: bool=False, remove_offset:int =0):
@@ -130,105 +999,171 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         """
         if name is None:
             name = itf.component.name
-        if rm_base and remove_offset == 0:
-            remove_offset =base
-        self.__add_mapping(f"narrow_{name}", base=base, size=size, x=x, y=y, remove_offset=remove_offset)
-        self.itf_bind(f"ni_narrow_{x}_{y}", itf, signature='io')
-
+        super().o_NARROW_MAP(itf, base, size, node_id=self._target_id(x, y), name=name,
+            rm_base=rm_base, remove_offset=remove_offset)
 
     def o_WIDE_BIND(self, itf: gvsoc.systree.SlaveItf, x: int, y: int):
-        self.itf_bind(f"ni_wide_{x}_{y}", itf, signature='io')
+        super().o_WIDE_BIND(itf, self._target_id(x, y))
 
     def o_NARROW_BIND(self, itf: gvsoc.systree.SlaveItf, x: int, y: int):
-        self.itf_bind(f"ni_narrow_{x}_{y}", itf, signature='io')
+        super().o_NARROW_BIND(itf, self._target_id(x, y))
 
     def o_MAP_DIR(self, base: int, size: int, dir: FlooNocDirection, name: str,
             rm_base: bool=False, remove_offset:int =0):
+        """Binds an address range to a direction instead of to a fixed position: any router
+        forwards a matching request by moving towards that direction every hop until it
+        terminates at whichever border network interface is reached.
+        """
         if rm_base and remove_offset == 0:
-            remove_offset =base
-        self.__add_mapping(f"ni_{name}", base=base, size=size, x=dir, y=0, remove_offset=remove_offset)
+            remove_offset = base
+        self._add_mapping(f"ni_{name}", base=base, size=size, node_id=int(dir),
+            remove_offset=remove_offset)
 
     def o_MAP(self, base: int, size: int,
             x: int, y: int, name: str | None=None,
             rm_base: bool=False, remove_offset:int =0):
         """Binds the output of a node to a target, associated to a memory-mapped region.
-
-        Parameters
-        ----------
-        base: int
-            Base address of the memory-mapped region.
-        size: int
-            Size of the memory-mapped region.
-        x: int
-            X position of the target in the grid
-        y: int
-            Y position of the target in the grid
-        name: str
-            name of the mapping. Should be different for each mapping. Taken from itf component if
-            it is None
-        rm_base: bool
-            if True, the base address is substracted to the address of any request going through
-        remove_offset: int
-            Offset to remove from the address before applying the mapping
         """
         if rm_base and remove_offset == 0:
-            remove_offset =base
-        self.__add_mapping(f"ni_{x}_{y}" if name is None else name, base=base, size=size, x=x, y=y, remove_offset=remove_offset)
+            remove_offset = base
+        node_id = self._target_id(x, y)
+        self._add_mapping(f"ni_{node_id}" if name is None else name, base=base, size=size,
+            node_id=node_id, remove_offset=remove_offset)
 
     def o_WIDE_MAP(self, itf: gvsoc.systree.SlaveItf | None, base: int, size: int,
             x: int | FlooNocDirection, y: int | FlooNocDirection, name: str | None=None,
             rm_base: bool=False, remove_offset:int =0):
-        """This methods is deprecated
-        """
+        """This method is deprecated, kept for compatibility."""
         if name is None:
             name = itf.component.name
         if rm_base and remove_offset == 0:
-            remove_offset =base
-        self.__add_mapping(f"wide_{name}", base=base, size=size, x=x, y=y, remove_offset=remove_offset)
-        self.itf_bind(f"ni_wide_{x}_{y}", itf, signature='io')
+            remove_offset = base
+        self._add_mapping(f"wide_{name}", base=base, size=size, node_id=self._target_id(x, y),
+            remove_offset=remove_offset)
+        self.o_WIDE_BIND(itf, x, y)
 
     def i_NARROW_INPUT(self, x: int, y: int) -> gvsoc.systree.SlaveItf:
-        """Returns the input port of a node.
-
-        Requests can be injected to the noc using this interface. The noc will then
-        forward it to the right target.
-
-        Parameters
-        ----------
-        x: int
-            The x position of the node in the grid
-        y: int
-            The y position of the node in the grid
-
-        Returns
-        ----------
-        gvsoc.systree.SlaveItf
-            The slave interface
-        """
-        return gvsoc.systree.SlaveItf(self, f'narrow_input_{x}_{y}', signature='io')
+        """Returns the input port of a node."""
+        return super().i_NARROW_INPUT(self._target_id(x, y))
 
     def i_WIDE_INPUT(self, x: int, y: int) -> gvsoc.systree.SlaveItf:
-        """Returns the input port of a node.
+        """Returns the input port of a node."""
+        return super().i_WIDE_INPUT(self._target_id(x, y))
 
-        Requests can be injected to the noc using this interface. The noc will then
-        forward it to the right target.
+    def _neighbour_at(self, x: int, y: int):
+        """Mirrors legacy FlooNoc::get_router_neighbour: a router takes priority over a NI at the
+        same position (for continuing transit); returns None if neither exists there."""
+        if (x, y) in self._router_id:
+            return self._router_id[(x, y)]
+        if (x, y) in self._ni_id:
+            return self._ni_id[(x, y)]
+        return None
 
+    def _dimension_order_next_hop(self, sx, sy, dx, dy):
+        """Faithfully mirrors legacy Router::get_next_router_pos's dimension-order algorithm
+        (X-preferred, deferring to Y when an X-step would land on the border before reaching the
+        right row).
+        
         Parameters
         ----------
-        x: int
-            The x position of the node in the grid
-        y: int
-            The y position of the node in the grid
-
-        Returns
-        ----------
-        gvsoc.systree.SlaveItf
-            The slave interface
+        sx, sy: int
+            Source router's (x, y) coordinates.
+        dx, dy: int
+            Destination router's (x, y) coordinates.
         """
-        return gvsoc.systree.SlaveItf(self, f'wide_input_{x}_{y}', signature='io')
+        if dx == sx and dy == sy:
+            return (sx, sy)
+        if dx != sx:
+            nx = sx - 1 if dx < sx else sx + 1
+            ny = sy
+            if (nx != 0 and nx != self.dim_x - 1) or ny == dy:
+                return (nx, ny)
+        nx = sx
+        ny = sy - 1 if dy < sy else sy + 1
+        return (nx, ny)
 
+    def finalize(self):
+        """Builds the generic engine's links/routing-table/direction-routing properties from
+        the (x, y) positions accumulated via add_router/add_network_interface.
 
+        RIGHT < LEFT < UP < DOWN < LOCAL ordering holds for every router in the mesh
+        """
+        super().finalize()
 
+        added_links = set()
+
+        def add_link_once(node_a, node_b):
+            pair = tuple(sorted((node_a, node_b)))
+            if pair not in added_links:
+                self.add_link(node_a, node_b, latency=1)
+                added_links.add(pair)
+
+        def has_router(x, y):
+            return (x, y) in self._router_id
+
+        # Pass 1: horizontal (RIGHT/LEFT) links, decreasing x.
+        for x in range(self.dim_x - 2, -1, -1):
+            for y in range(self.dim_y):
+                if not (has_router(x, y) or has_router(x + 1, y)):
+                    continue  # only link FROM a router
+                node_a = self._neighbour_at(x, y)
+                node_b = self._neighbour_at(x + 1, y)
+                if node_a is not None and node_b is not None:
+                    add_link_once(node_a, node_b)
+
+        # Pass 2: vertical (UP/DOWN) links, decreasing y.
+        for y in range(self.dim_y - 2, -1, -1):
+            for x in range(self.dim_x):
+                if not (has_router(x, y) or has_router(x, y + 1)):
+                    continue
+                node_a = self._neighbour_at(x, y)
+                node_b = self._neighbour_at(x, y + 1)
+                if node_a is not None and node_b is not None:
+                    add_link_once(node_a, node_b)
+
+        # Pass 3: local (router <-> co-located NI) links, last.
+        for (x, y), router_id in self._router_id.items():
+            if (x, y) in self._ni_id:
+                add_link_once(router_id, self._ni_id[(x, y)])
+
+        # direction_links is a direct per-router lookup table (not order-sensitive, unlike the
+        # link list above), so it's computed independently of the emission passes.
+        direction_links = {}
+        deltas = [(1, 0), (-1, 0), (0, 1), (0, -1)]  # RIGHT, LEFT, UP, DOWN
+        for (x, y), node_id in self._router_id.items():
+            dirs = direction_links.setdefault(node_id, [-1, -1, -1, -1])
+            for dir_index, (ddx, ddy) in enumerate(deltas):
+                nx, ny = x + ddx, y + ddy
+                if not (0 <= nx < self.dim_x and 0 <= ny < self.dim_y):
+                    continue
+                neighbour_id = self._neighbour_at(nx, ny)
+                if neighbour_id is not None:
+                    dirs[dir_index] = neighbour_id
+
+        self.add_property('direction_links',
+            [[node_id] + dirs for node_id, dirs in direction_links.items()])
+
+        # Routing table: rows are routers, columns are every registered NI
+        routing_tables = {}
+        for (sx, sy), src_id in self._router_id.items():
+            table = {}
+            for (dx, dy), dst_id in self._ni_id.items():
+                if (dx, dy) == (sx, sy):
+                    next_hop_id = dst_id
+                else:
+                    nx, ny = self._dimension_order_next_hop(sx, sy, dx, dy)
+                    next_hop_id = self._neighbour_at(nx, ny)
+                table[str(dst_id)] = next_hop_id
+            routing_tables[str(src_id)] = table
+        self.add_property('routing_tables', routing_tables)
+
+        if self._collective_enable:
+            if not self._router_id:
+                raise ValueError(
+                    "collective_enable is set but no router was added to the mesh")
+            self.add_property('collective_route_algo', 'xy_mesh')
+            self.add_property('collective_coords',
+                [[node_id, x, y] for (x, y), node_id in self._router_id.items()])
 
 
 class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
@@ -247,80 +1182,48 @@ class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
         The parent component where this one should be instantiated.
     name: str
         The name of the component within the parent space.
-    width: int
-        The width in bytes of the interconnect. This gives the number of bytes/cycles each node can
-        route.
+    wide_width: int
+        The width in bytes of the wide network.
+    narrow_width: int
+        The width in bytes of the narrow network.
     nb_x_clusters: int
         Number of clusters on the X direction. This should not include the targets on the borders.
     nb_y_clusters: int
         Number of clusters on the Y direction. This should not include the targets on the borders.
+    collective_enable: bool
+        Enable DMA communication collectives (broadcast/reduction) over the mesh's interior
+        routers. Border targets (the +2 ring of NIs) never take part in collectives, since
+        collective membership is defined over routers only.
     """
-    def __init__(self, parent: gvsoc.systree.Component, name, wide_width: int,narrow_width:int, nb_x_clusters: int,
-            nb_y_clusters, router_input_queue_size=2, ni_outstanding_reqs: int=2):
+    def __init__(self, parent: gvsoc.systree.Component, name, wide_width: int, narrow_width: int,
+            nb_x_clusters: int, nb_y_clusters, router_input_queue_size=2,
+            ni_outstanding_reqs: int=2, collective_enable: bool=False):
         # The total grid contains 1 more node on each direction for the targets
-        super().__init__(parent, name, wide_width=wide_width, narrow_width=narrow_width, dim_x=nb_x_clusters+2, dim_y=nb_y_clusters+2, router_input_queue_size=router_input_queue_size, ni_outstanding_reqs=ni_outstanding_reqs)
+        super().__init__(parent, name, wide_width=wide_width, narrow_width=narrow_width,
+            dim_x=nb_x_clusters+2, dim_y=nb_y_clusters+2,
+            router_input_queue_size=router_input_queue_size,
+            ni_outstanding_reqs=ni_outstanding_reqs,
+            collective_enable=collective_enable)
 
         for tile_x in range(0, nb_x_clusters):
             for tile_y in range(0, nb_y_clusters):
                 # Add 1 as clusters, routers and network_interfaces are in the central part
-                self.add_router(tile_x+1, tile_y+1) # Add a router at each cluster
+                self.add_router(tile_x+1, tile_y+1)
         for tile_x in range(0, nb_x_clusters+2):
             for tile_y in range(0, nb_y_clusters+2):
-                # Add a NI at each node, excluding the corners, because it also (once finished) acts as an output to the targets
+                # Add a NI at each node, excluding the corners
                 if not ((tile_x == 0 and tile_y == 0) or (tile_x == 0 and tile_y == nb_y_clusters+1) \
                         or (tile_x == nb_x_clusters+1 and tile_y == 0) or \
                         (tile_x == nb_x_clusters+1 and tile_y == nb_y_clusters+1)):
                     self.add_network_interface(tile_x, tile_y)
 
     def i_CLUSTER_NARROW_INPUT(self, x: int, y: int) -> gvsoc.systree.SlaveItf:
-        """Returns the input port of a cluster tile.
-
-        The cluster can inject requests to the noc using this interface. The noc will then
-        forward it to the right target.
-
-        Parameters
-        ----------
-        x: int
-            The x position of the cluster in the grid
-        y: int
-            The y position of the cluster in the grid
-
-        Returns
-        ----------
-        gvsoc.systree.SlaveItf
-            The slave interface
-        """
+        """Returns the input port of a cluster tile."""
         return self.i_NARROW_INPUT(x+1, y+1)
 
     def i_CLUSTER_WIDE_INPUT(self, x: int, y: int) -> gvsoc.systree.SlaveItf:
-        """Returns the input port of a cluster tile.
-
-        The cluster can inject requests to the noc using this interface. The noc will then
-        forward it to the right target.
-
-        Parameters
-        ----------
-        x: int
-            The x position of the cluster in the grid
-        y: int
-            The y position of the cluster in the grid
-
-        Returns
-        ----------
-        gvsoc.systree.SlaveItf
-            The slave interface
-        """
+        """Returns the input port of a cluster tile."""
         return self.i_WIDE_INPUT(x+1, y+1)
-
-    def __gen_gui_router(self, routers, name, path):
-        router = gvsoc.gui.Signal(self, routers, name, path=f"{path}/req", groups=['regmap'])
-        gvsoc.gui.Signal(self, router, "size", path=f"{path}/req_size", groups=['regmap'])
-        gvsoc.gui.Signal(self, router, "is_write", path=f"{path}/req_is_write", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
-        gvsoc.gui.Signal(self, router, "stalled_queue_right", path=f"{path}/stalled_queue_right", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
-        gvsoc.gui.Signal(self, router, "stalled_queue_left", path=f"{path}/stalled_queue_left", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
-        gvsoc.gui.Signal(self, router, "stalled_queue_up", path=f"{path}/stalled_queue_up", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
-        gvsoc.gui.Signal(self, router, "stalled_queue_down", path=f"{path}/stalled_queue_down", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
-        gvsoc.gui.Signal(self, router, "stalled_queue_local", path=f"{path}/stalled_queue_local", display=gvsoc.gui.DisplayPulse(), groups=['regmap'])
 
     def gen_gui(self, parent_signal):
         top = gvsoc.gui.Signal(self, parent_signal, name=self.name)
@@ -328,15 +1231,15 @@ class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
         routers = gvsoc.gui.Signal(self, top, name="routers")
         for nw_name in ['req', 'rsp', 'wide']:
             nw = gvsoc.gui.Signal(self, routers, f"{nw_name}")
-            for router_id in self.get_property('routers'):
-                self.__gen_gui_router(nw, f"{router_id[0]}_{router_id[1]}", path=f"{nw_name}_router_{router_id[0]}_{router_id[1]}")
+            for router_id in self._router_id.values():
+                gvsoc.gui.Signal(self, nw, f"{router_id}", path=f"{nw_name}_router_{router_id}/req",
+                    groups=['regmap'])
 
         nis = gvsoc.gui.Signal(self, top, name="nis")
-        for ni_id in self.get_property('network_interfaces'):
-            ni = gvsoc.gui.Signal(self, nis, f"ni_{ni_id[0]}_{ni_id[1]}")
-            gvsoc.gui.Signal(self, ni, "narrow_req", path=f"ni_{ni_id[0]}_{ni_id[1]}/narrow_req", groups=['regmap'])
-            gvsoc.gui.Signal(self, ni, "wide_req", path=f"ni_{ni_id[0]}_{ni_id[1]}/wide_req", groups=['regmap'])
-
+        for ni_id in self._ni_id.values():
+            ni = gvsoc.gui.Signal(self, nis, f"ni_{ni_id}")
+            gvsoc.gui.Signal(self, ni, "narrow_req", path=f"ni_{ni_id}/narrow_req", groups=['regmap'])
+            gvsoc.gui.Signal(self, ni, "wide_req", path=f"ni_{ni_id}/wide_req", groups=['regmap'])
 
 
 class FlooNoc2dMesh(FlooNoc2dMeshNarrowWide):

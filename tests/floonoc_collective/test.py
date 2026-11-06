@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 
-# System for floonoc_flex's collective (multicast/reduction) correctness
+# System for floonoc's collective (multicast/reduction) correctness
 # and benchmarking tests.
 # CollectiveTestbench's expected interface (see test.cpp):
 #   CollectiveTestbench(parent, name, dim, node_size, node_base, scenario)
@@ -27,7 +27,7 @@ import gvsoc.systree
 import gvsoc.runner
 
 import vp.clock_domain
-from pulp.floonoc_flex.floonoc_flex import FlooNocFlex
+from pulp.floonoc.floonoc import FlooNoc
 from interco.traffic.generator import Generator
 from pulp.idma.snitch_dma import SnitchDma
 from memory.memory import Memory
@@ -97,7 +97,7 @@ class Soc(gvsoc.systree.Component):
         collective_enable = scenario != 'unicast_off'
         topology_file = 'mesh_4x4_unicast.yml' if not collective_enable \
             else 'mesh_4x4_collective.yml'
-        noc = FlooNocFlex(self, 'noc', narrow_width=NARROW_WIDTH, wide_width=WIDE_WIDTH,
+        noc = FlooNoc(self, 'noc', narrow_width=NARROW_WIDTH, wide_width=WIDE_WIDTH,
             ni_outstanding_reqs=32, router_input_queue_size=2,
             network_path=os.path.join(_THIS_DIR, 'floogen', topology_file))
 
@@ -160,6 +160,6 @@ class Chip(gvsoc.systree.Component):
 
 # This is the top target that gapy will instantiate.
 class Target(gvsoc.runner.Target):
-    gapy_description = "floonoc_flex collective (multicast/reduction) correctness and benchmark tests"
+    gapy_description = "floonoc collective (multicast/reduction) correctness and benchmark tests"
     model = Chip
     name = "test"
