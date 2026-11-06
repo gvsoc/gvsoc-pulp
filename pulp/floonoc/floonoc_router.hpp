@@ -18,21 +18,26 @@
 /*
  * Authors: Germain Haugou, ETH (germain.haugou@iis.ee.ethz.ch)
  *          Jonas Martin, ETH (martinjo@student.ethz.ch)
+ *          Siim Rausi, ETH (srausi@student.ethz.ch)
+ *          Rafael Medina, ETH (medinar@iis.ee.ethz.ch)
  */
 
 #pragma once
 
-#include <array>
-#include <vp/vp.hpp>
-#include <vp/signal.hpp>
 #include "floonoc.hpp"
+#include <array>
+#include <queue>
+#include <vp/signal.hpp>
+#include <vp/stats/stats.hpp>
+#include <vp/vp.hpp>
 
 class FlooNoc;
 
 class RouterQueue
 {
-public:
-    RouterQueue(vp::Block *parent, std::string name, vp::ClockEvent *ready_event=NULL);
+  public:
+    RouterQueue(vp::Block *parent, std::string name,
+                vp::ClockEvent *ready_event = NULL);
     vp::Queue queue;
     FloonocNode *stalled_node;
 };
@@ -40,60 +45,103 @@ public:
 /**
  * @brief FlooNoc router
  *
- * Router are the nodes of the noc which are moving internal requests from the network interface
- * to the target.
+ * Router are the nodes of the noc which are moving internal requests from the
+ * network interface to the target.
  */
 class Router : public FloonocNode
 {
-public:
-    Router(FlooNoc *noc, std::string name, int x, int y, int queue_size);
+  public:
+    Router(FlooNoc *noc, std::string name, int node_id, int num_queues,
+           int queue_size);
     ~Router();
 
     void reset(bool active);
 
-    // This gets called by other routers or a network interface to move a request to this router
-    bool handle_request(FloonocNode *node, vp::IoReq *req, int from_x, int from_y) override;
-    // Called by other routers or NI to unstall an output queue after an input queue became available
-    void unstall_queue(int from_x, int from_y) override;
-    // Called by NI to stall the queues in case no more request should be sent to NI
-    void stall_queue(int from_x, int from_y);
-    void set_neighbour(int dir, FloonocNode *node);
+    // This gets called by other routers or a network interface to move a
+    // request to this router
+    bool handle_request(FloonocNode *node, vp::IoReq *req,
+                        int from_node) override;
+    // Called by other routers or NI to unstall an output queue after an input
+    // queue became available
+    void unstall_queue(int from_node) override;
+    // Called by NI to stall the queues in case no more request should be sent
+    // to NI
+    void stall_queue(int from_node);
 
-    // X position of this router in the grid
-    int x;
-    // Y position of this router in the grid
-    int y;
+    // Node ID for flexible topologies
+    int node_id;
+    int num_queues;
 
-private:
-    // FSM event handler called when something happened and queues need to be checked to see
-    // if a request should be handled.
+    void set_neighbour(int dir, FloonocNode *node, int neighbor_id,
+                       int latency = 1);
+
+    // Pass the routing table during initialization
+    void set_routing_table(std::vector<int> table);
+
+    // default-mesh direction-relative routing to support legacy o_MAP_DIR
+    void set_direction_neighbour(int dir_index, int neighbor_node_id);
+
+    // [Collective Only] Sets which neighbor is this router's own NI (-1 if none)
+    void set_local_ni(int ni_id) { this->local_ni_id = ni_id; }
+
+    // Performance statistics, dumped by the stats engine when --stats is passed
+    vp::StatScalar stat_routed_packets;
+    vp::StatScalar stat_stall_cycles;
+
+  private:
+    // [Collective Only] Node id of this router's directly attached NI, -1 if none
+    int local_ni_id = -1;
+    // [Collective Only] Per-output-queue pending queues for forked
+    // collective child requests
+    std::vector<std::queue<vp::IoReq *>> collective_pending_queues;
+    // [Collective Only] Allocates a forked child of `parent` and increments
+    // parent's REQ_PEND_KIDS.
+    vp::IoReq *fork_collective_child(vp::IoReq *parent, int dest_node,
+                                     int next_state);
+
+    std::vector<int> routing_table; // Index: dest_node -> Value: next_hop_node
+    // Enable o_MAP_DIR routing
+    // Index: direction (RIGHT=0,LEFT=1,UP=2,DOWN=3) -> Value: neighbor_node_id, -1 if none
+    int direction_neighbour[4] = {-1, -1, -1, -1};
+    std::vector<int> input_latencies; // Index: queue_index -> Value: latency
+    std::unordered_map<int, int>
+        neighbor_to_queue; // Key: neighbor_id -> Value: queue_index
+    std::unordered_map<int, int>
+        queue_to_neighbor; // Key: queue_index -> Value: neighbor_id
+
+  private:
+    // FSM event handler called when something happened and queues need to be
+    // checked to see if a request should be handled.
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
     // Get the position of the next router which should handle a request.
-    void get_next_router_pos(int dest_x, int dest_y, int &next_x, int &next_y);
-    // Get the index of the queue corresponding to a source or destination position
-    int get_req_queue(int from_x, int from_y);
-    // Return the source or destination position which corresponds to a source or destination
-    // queue index
-    void get_pos_from_queue(int queue, int &pos_x, int &pos_y);
+    void get_next_router_pos(int dest_node, int &next_node);
+    // Get the index of the queue corresponding to a source or destination
+    // position
+    int get_req_queue(int from_node);
+    // Return the source or destination position which corresponds to a source
+    // or destination queue index
+    void get_node_from_queue(int queue, int &node_id);
 
     // Pointer to top
     FlooNoc *noc;
     // This block trace
     vp::Trace trace;
-    // Size of the input queues. This limits the number of requests from the same source which can
-    // be pending
+    // Size of the input queues. This limits the number of requests from the
+    // same source which can be pending
     int queue_size;
     // The input queues for each direction and the local one
-    RouterQueue *input_queues[5];
-    FloonocNode *output_nodes[5];
-    // Clock event used to schedule FSM handler. This is scheduled eveytime something may need to
-    // be done
+    std::vector<RouterQueue *> input_queues;
+    std::vector<FloonocNode *> output_nodes;
+    // Clock event used to schedule FSM handler. This is scheduled eveytime
+    // something may need to be done
     vp::ClockEvent fsm_event;
     // Current queue where next request will be taken from, used for round-robin
     int current_queue;
-    // State of the output queues, true if it is stalled and nothing can be sent to it anymore
-    // until it is unstalled.
-    std::array<vp::Signal<bool>, 5> stalled_queues;
+    // Buffer to track which output queues already got a request this cycle
+    std::vector<uint8_t> output_full;
+    // State of the output queues, true if it is stalled and nothing can be sent
+    // to it anymore until it is unstalled.
+    std::vector<vp::Signal<bool> *> stalled_queues;
     // Signal used for tracing router request address
     vp::Signal<uint64_t> signal_req;
     vp::Signal<uint64_t> signal_req_size;
