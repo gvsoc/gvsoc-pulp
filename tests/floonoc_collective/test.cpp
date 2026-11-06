@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Driver for floonoc_flex's collective (multicast/reduction) test matrix
+// Driver for floonoc's collective (multicast/reduction) test matrix
 // (see COLLECTIVES.md, "Test matrix"). The scenario property sets the test to run.
 
 #include <cstdint>
@@ -26,7 +26,7 @@
 #include <cpu/iss/flexfloat/flexfloat.h>
 #include <cpu/iss/include/offload.hpp>
 #include "interco/traffic/generator.hpp"
-#include "pulp/floonoc_flex/floonoc_flex.hpp"
+#include "pulp/floonoc/floonoc.hpp"
 
 #define MESH_DIM 4
 #define NODE(x, y) ((y) * MESH_DIM + (x))
@@ -321,7 +321,7 @@ private:
     {
         bool check_status = false;
         this->itf()[NODE(x, y)].get_result(&check_status, nullptr);
-        printf("[floonoc_flex_collective] %s: node (%d,%d) %s\n", label, x, y,
+        printf("[floonoc_collective] %s: node (%d,%d) %s\n", label, x, y,
             check_status ? "FAILED" : "passed");
         this->status |= check_status;
         return check_status;
@@ -330,7 +330,7 @@ private:
     {
         bool check_status = false;
         this->other_plane_itf()[NODE(x, y)].get_result(&check_status, nullptr);
-        printf("[floonoc_flex_collective] %s: node (%d,%d) %s\n", label, x, y,
+        printf("[floonoc_collective] %s: node (%d,%d) %s\n", label, x, y,
             check_status ? "FAILED" : "passed");
         this->status |= check_status;
         return check_status;
