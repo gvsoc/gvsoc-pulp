@@ -7,10 +7,10 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-GVSOC_ROOT ?= ../../..
+GVSOC_ROOT ?= ../../../..
 TARGET = test
 CASE ?= unicast_on
 
 TARGET := $(TARGET):scenario=$(CASE)
 
-include $(GVSOC_ROOT)/core/tests/common.mk
+include $(GVSOC_ROOT)/gvsoc/core/tests/common.mk
