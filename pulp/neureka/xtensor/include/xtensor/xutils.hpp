@@ -872,7 +872,14 @@ namespace xt
         using type = C<X, allocator>;
     };
 
-#if defined(__GNUC__) && __GNUC__ > 6 && !defined(__clang__) && __cplusplus >= 201703L
+// Use the std::array-specific specialization on clang too (upstream >= 19, Apple
+// clang >= 17). With C++17 relaxed template template matching (clang's default),
+// the generic C<T, N> form in the #else below also matches xt::svector<T, N, A,
+// Init>, colliding with svector's own rebind_container specialization (xstorage.hpp)
+// and making rebind_container<X, svector<...>> ambiguous. std::array and svector are
+// the only <class, std::size_t>-shaped shape containers used, and both have their own
+// specialization, so the generic form is not needed here.
+#if (defined(__GNUC__) && __GNUC__ > 6 && __cplusplus >= 201703L) || defined(__clang__)
     template <class X, class T, std::size_t N>
     struct rebind_container<X, std::array<T, N>>
     {
