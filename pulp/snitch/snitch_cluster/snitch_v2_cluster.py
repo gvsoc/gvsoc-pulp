@@ -71,7 +71,8 @@ class ClusterArch(Tree):
 
     def __init__(self, parent, name, base, first_hartid, auto_fetch=False,
             boot_addr=0x0000_1000, nb_core_per_cluster=9, isa='rv32imfdca',
-            peripheral_offset=0x0002_1000, old_periph_regmap=False, alias_base=None):
+            peripheral_offset=0x0002_1000, old_periph_regmap=False, alias_base=None,
+            cacheable_base=0x8000_0000, cacheable_size=0x8000_0000):
         super().__init__(parent, name)
 
         self.nb_core = nb_core_per_cluster
@@ -112,8 +113,10 @@ class ClusterArch(Tree):
         # older one of these clusters (CL_CLINT_SET/CLEAR at 0x180/0x188)
         self.old_periph_regmap = old_periph_regmap
         self.zero_mem      = Area(self, 'zero_mem', base + 0x0003_0000, 0x0001_0000, 'zero mem range')
-        # The only region the PMA marks cacheable for the icaches: the DRAM
-        self.cacheable     = Area(self, 'cacheable', 0x8000_0000, 0x8000_0000, 'icache cacheable range')
+        # The only region the PMA marks cacheable for the icaches, the DRAM by
+        # default
+        self.cacheable     = Area(self, 'cacheable', cacheable_base, cacheable_size,
+            'icache cacheable range')
         # SERIAL_LOOKUP of the shared L1 icache, 0 in the Snitch cluster
         self.icache_serial_lookup = Value(self, 'icache_serial_lookup', 0, cast=int,
             description='L1 icache serial lookup (SERIAL_LOOKUP), 0 or 1')
