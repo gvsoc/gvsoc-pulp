@@ -85,6 +85,8 @@ public:
     LightOpope(vp::ComponentConf &config);
 
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
+    static vp::IoReqStatus req_v2(vp::Block *__this, vp::IoReq *req);
+    void trigger();
     static void offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *insn);
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
 
@@ -109,6 +111,7 @@ private:
 
     vp::Trace           trace;
     vp::IoSlave         input_itf;
+    vp::IoSlave         input_itf_v2;
     vp::WireSlave<IssOffloadInsn<uint32_t> *> offload_itf;
     vp::WireMaster<IssOffloadInsnGrant<uint32_t> *> offload_grant_itf;
     vp::WireMaster<bool> done;
@@ -206,6 +209,8 @@ LightOpope::LightOpope(vp::ComponentConf &config)
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
     this->input_itf.set_req_meth(&LightOpope::req);
     this->new_slave_port("input", &this->input_itf);
+    this->input_itf_v2.set_req_meth(&LightOpope::req_v2);
+    this->new_slave_port("input_v2", &this->input_itf_v2);
     this->new_master_port("tcdm", &this->tcdm_itf);
     this->offload_itf.set_sync_meth(&LightOpope::offload_sync);
     this->new_slave_port("offload", &this->offload_itf, this);
@@ -641,6 +646,95 @@ void LightOpope::offload_sync(vp::Block *__this, IssOffloadInsn<uint32_t> *insn)
 }
 
 // Same register map as LightRedmule
+void LightOpope::trigger()
+{
+    if (this->state.get() == IDLE) {
+        this->trace.msg(vp::Trace::LEVEL_TRACE, "[LightOpope] configuration (M-N-K): %d, %d, %d. Compute able is %d\n", this->m_size, this->n_size, this->k_size, this->compute_able);
+        if ((this->m_size == 0) || (this->n_size == 0) || (this->k_size == 0))
+        {
+            this->trace.fatal("[LightOpope] INVALID configuration (M-N-K): %d, %d, %d\n", this->m_size, this->n_size, this->k_size);
+            return;
+        }
+        this->start_job();
+    }
+}
+
+// hwpe_ctrl_target register map, the one of the RedMulE HAL (hwpe_ctrl_target.h).
+// O-POPE has a single job context: ACQUIRE gives job 0 when it is idle and the
+// commit only starts the job.
+vp::IoReqStatus LightOpope::req_v2(vp::Block *__this, vp::IoReq *req)
+{
+    LightOpope *_this = (LightOpope *)__this;
+
+    uint64_t offset = req->get_addr();
+    uint8_t *data = req->get_data();
+    uint64_t size = req->get_size();
+
+    if (req->get_is_write()) {
+        uint32_t value = *(uint32_t *)data;
+        switch (offset) {
+            case 0x00: { //hwpe_commit_trigger
+                // 0: commit and start, 2: start only, 1 (commit only) and 3: nothing to do
+                uint32_t ct = value & 0x3;
+                if ((ct == 0) || (ct == 2))
+                    _this->trigger();
+                break;
+            }
+            case 0x14: //soft_clear
+                break;
+            case 0x20: //mcnfig0: M size [15:0], K size [31:16]
+                _this->m_size = value & 0xFFFF;
+                _this->k_size = value >> 16;
+                break;
+            case 0x24: { //mcnfig1: N size [15:0], GEMM_OPS [22:20], GEMM_INPUT_FMT [24:23]
+                _this->n_size = value & 0xFFFF;
+                uint32_t gemm_op  = (value >> 20) & 0x7;
+                uint32_t gemm_fmt = (value >> 23) & 0x3;
+                _this->compute_able = _this->op_format_parser((gemm_op << 3) | gemm_fmt);
+                break;
+            }
+            case 0x28: //mcnfig2, unused
+            case 0x38: //mopcnt, not modeled
+            case 0x3C: //mcnfig3: W_COLS_OFFSET, only the order of the W fetches
+                break;
+            case 0x2C:
+                _this->x_addr = value;
+                break;
+            case 0x30:
+                _this->w_addr = value;
+                break;
+            case 0x34:
+                _this->y_addr = value;
+                _this->z_addr = _this->y_addr;
+                break;
+            default:
+                _this->trace.msg(vp::Trace::LEVEL_TRACE, "[LightOpope] write to INVALID address 0x%x\n", offset);
+        }
+    } else {
+        int32_t idle = (_this->state.get() == IDLE);
+        switch (offset) {
+            case 0x04: { //acquire: job id, -1 when busy
+                int32_t id = idle ? 0 : -1;
+                memcpy((void *)data, (void *)&id, size);
+                break;
+            }
+            case 0x0C: { //status: bit 0, the job context is busy
+                uint32_t status = idle ? 0x0 : 0x1;
+                memcpy((void *)data, (void *)&status, size);
+                break;
+            }
+            case 0x10: { //running_job
+                uint32_t running_job = 0;
+                memcpy((void *)data, (void *)&running_job, size);
+                break;
+            }
+            default:
+                _this->trace.msg(vp::Trace::LEVEL_TRACE, "[LightOpope] read to INVALID address 0x%x\n", offset);
+        }
+    }
+    return vp::IO_REQ_OK;
+}
+
 vp::IoReqStatus LightOpope::req(vp::Block *__this, vp::IoReq *req)
 {
     LightOpope *_this = (LightOpope *)__this;
@@ -652,18 +746,9 @@ vp::IoReqStatus LightOpope::req(vp::Block *__this, vp::IoReq *req)
     if (req->get_is_write()) {
         uint32_t value = *(uint32_t *)data;
         switch (offset) {
-            case 0x00: {
-                if (_this->state.get() == IDLE) {
-                    _this->trace.msg(vp::Trace::LEVEL_TRACE, "[LightOpope] configuration (M-N-K): %d, %d, %d. Compute able is %d\n", _this->m_size, _this->n_size, _this->k_size, _this->compute_able);
-                    if ((_this->m_size == 0) || (_this->n_size == 0) || (_this->k_size == 0))
-                    {
-                        _this->trace.fatal("[LightOpope] INVALID configuration (M-N-K): %d, %d, %d\n", _this->m_size, _this->n_size, _this->k_size);
-                        return vp::IO_REQ_OK;
-                    }
-                    _this->start_job();
-                }
+            case 0x00:
+                _this->trigger();
                 break;
-            }
             case 0x40:
                 _this->x_addr = value;
                 break;

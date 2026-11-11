@@ -56,6 +56,9 @@ class LightOpope(gvsoc.systree.Component):
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')
 
+    def i_INPUT_V2(self) -> gvsoc.systree.SlaveItf:
+        return gvsoc.systree.SlaveItf(self, 'input_v2', signature='io')
+
     def i_OFFLOAD(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'offload', signature='wire<IssOffloadInsn<uint32_t>*>')
 

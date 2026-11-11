@@ -1345,8 +1345,23 @@ vp::IoReqStatus LightRedmule::req_v2(vp::Block *__this, vp::IoReq *req)
                 break;
             }
             case 0x24: { //REDMULE_MCFG1_PTR
+                //mcnfig1 of hwpe_ctrl_target: N size [15:0], GEMM_OPS [22:20],
+                //GEMM_INPUT_FMT [24:23] (GEMM_OUTPUT_FMT [26:25] is the same)
                 _this->cxt_n_size[_this->cxt_cfg_ptr] = value & 0xFFFF;
-                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set mcfg_reg1 -- N size %d)\n", _this->cxt_n_size[_this->cxt_cfg_ptr]);
+                uint32_t gemm_op  = (value >> 20) & 0x7;
+                uint32_t gemm_fmt = (value >> 23) & 0x3;
+                _this->cxt_compute_able[_this->cxt_cfg_ptr] = _this->op_foramt_parser((gemm_op << 3) | gemm_fmt, &_this->cxt_use_y[_this->cxt_cfg_ptr]);
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set mcfg_reg1 -- N size %d, op %d, fmt %d, compute_able %d)\n", _this->cxt_n_size[_this->cxt_cfg_ptr], gemm_op, gemm_fmt, _this->cxt_compute_able[_this->cxt_cfg_ptr]);
+                break;
+            }
+            case 0x38: { //REDMULE_MOPCNT
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set mopcnt 0x%x -- not modeled\n", value);
+                break;
+            }
+            case 0x3C: { //REDMULE_MCFG3_PTR
+                //W_COLS_OFFSET only rotates the order in which the W columns
+                //are fetched (bank spreading), the result does not change
+                _this->trace.msg(vp::Trace::LEVEL_TRACE,"[LightRedmule] Set mcfg_reg3 -- W cols offset %d, not modeled\n", value);
                 break;
             }
             case 0x28: { //REDMULE_MCFG2_PTR

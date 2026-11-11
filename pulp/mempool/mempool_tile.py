@@ -150,7 +150,9 @@ class Tile(st.Component):
         # Core 0 --> Redmule
         if has_redmule:
             ico_list[0].add_mapping('redmule_config', base=0x40020000, remove_offset=0x40020000, size=0x200)
-            self.bind(ico_list[0], 'redmule_config', redmule, 'input')
+            # RedMulE and O-POPE are programmed through the hwpe_ctrl_target
+            # register map of the RedMulE HAL (input_v2)
+            self.bind(ico_list[0], 'redmule_config', redmule, 'input_v2')
             #input connections to all 16 different tcdm connections of redmule
             self.bind(redmule, 'tcdm', l1, 'RedMulE_input')
 
