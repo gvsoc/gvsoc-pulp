@@ -286,6 +286,9 @@ class TensorpoolSystem(st.Component):
         clock = Clock_domain(self, 'clock', frequency=500000000)
 
         redmule_config = RedmuleParam()
+        # Without sub-groups, a group has one AXI master and one DMA backend
+        # (MemPool layout); with sub-groups, one per sub-group (TeraPool layout)
+        nb_sub_groups_per_group = int(os.environ.get('NUM_SUB_GROUPS_PER_GROUP', 4))
         #synchronous for now, since async has problems with the burst tcdm messaging system.
         soc = System(self, 'mempool_soc', parser, 
         	async_l1_interco=False, 
@@ -294,16 +297,20 @@ class TensorpoolSystem(st.Component):
         	terapool=False, 
         	total_cores=int(os.environ.get('NUM_CORES', 256)),
         	nb_redmule_tiles=int(os.environ.get('NUM_REDMULE_TILES', 16)),
-        	nb_cores_per_tile=4, 
-        	nb_sub_groups_per_group=4,
+        	nb_cores_per_tile=int(os.environ.get('NUM_CORES_PER_TILE', 4)),
+        	nb_sub_groups_per_group=nb_sub_groups_per_group,
         	nb_groups=4, 
-        	bank_factor=8, 
-        	bank_size=2048, 
+        	bank_factor=int(os.environ.get('BANK_FACTOR', 8)), 
+        	bank_size=int(os.environ.get('BANK_SIZE', 2048)), 
         	axi_data_width=64, 
-        	nb_axi_masters_per_group=4, 
-        	nb_dmas_per_group=4, 
+        	nb_axi_masters_per_group=nb_sub_groups_per_group, 
+        	nb_dmas_per_group=nb_sub_groups_per_group, 
         	l2_size=0x400000, 
         	nb_l2_banks=4, 
-        	redmule_bandwidth=64)
+        	redmule_bandwidth=64,
+        	# Remote-group access latency of the RTL (REMOTE_GROUP_LATENCY_CYCLES
+        	# of MemPool's config: 7 or 9; TensorPool uses 9); 9 adds the group
+        	# slave registers and the longer remote-group response
+        	terapool_group_latency=int(os.environ.get('REMOTE_GROUP_LATENCY', 9)))
 
         self.bind(clock, 'out', soc, 'clock')
