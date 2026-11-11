@@ -208,7 +208,9 @@ class L1_subsystem(gvsoc.systree.Component):
         for i in range(0, nb_remote_sub_group_masters):
             remote_sub_group_in_interfaces.append(L1_RemoteItf(self, f'remote_sub_group_in_itf{i}', bandwidth=bandwidth, resp_latency=2, synchronous=not async_l1_interco))
 
-        if terapool:
+        # A 9-cycle remote group (TeraPool, or TensorPool with
+        # REMOTE_GROUP_LATENCY=9) has the longer response
+        if terapool or terapool_group_latency == 9:
             if terapool_group_latency == 9:
                 remote_group_resp_latency = 4
             else:
