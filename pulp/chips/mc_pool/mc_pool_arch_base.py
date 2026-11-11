@@ -67,6 +67,10 @@ class McPoolArchBase:
         # Mempool cluster configuration
         self.nb_groups               = 4
 
+        # Remote-group access latency (REMOTE_GROUP_LATENCY_CYCLES of MemPool's
+        # config: 7 or 9)
+        self.remote_group_latency    = 7
+
         # Tensor engines (RedMulE), disabled by default
         self.tensorpool              = False
         self.nb_redmule_tiles        = 0
@@ -135,6 +139,8 @@ class McPoolArchTensorPool(McPoolArchBase):
         self.nb_l2_banks             = 4
 
         self.tensorpool              = True
+        # TensorPool has the 9-cycle remote group
+        self.remote_group_latency    = int(os.environ.get('REMOTE_GROUP_LATENCY', 9))
         self.nb_redmule_tiles        = int(os.environ.get('NUM_REDMULE_TILES', 16))
         self.redmule_height          = int(os.environ.get('REDMULE_HEIGHT', 8))
         self.redmule_width           = int(os.environ.get('REDMULE_WIDTH', 32))

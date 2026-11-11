@@ -23,7 +23,7 @@ import memory.memory as memory
 from pulp.chips.mc_pool.common.mc_pool_dma import McPoolDma
 from elftools.elf.elffile import *
 from pulp.mempool.mempool_cluster import Cluster
-from pulp.mempool.redmule_configurations import RedmuleParam
+from pulp.mempool.te_config import RedmuleParam
 from pulp.mempool.l2_subsystem import L2_subsystem
 from pulp.chips.mc_pool.common.cluster_csr import ClusterCSR
 from pulp.chips.mc_pool.common.util_dumpper import UtilDumpper
@@ -99,7 +99,8 @@ class ClusterArch:
                         redmule_stream_loads=False,
                         redmule_tcdm_bank_number=None,
                         bank_size=1024,
-                        auto_fetch=False):
+                        auto_fetch=False,
+                        remote_group_latency=7):
 
         self.base                   = base
         self.tcdm_size              = tcdm_size
@@ -130,6 +131,7 @@ class ClusterArch:
         self.dma_burst_queue_size       = dma_burst_queue_size
         self.nb_axi_masters_per_group   = nb_axi_masters_per_group
         self.nb_l2_banks                = nb_l2_banks
+        self.remote_group_latency       = remote_group_latency
 
         #Global Information
         self.num_cluster_x          = num_cluster_x
@@ -179,7 +181,8 @@ class ClusterUnit(gvsoc.systree.Component):
                                  bank_size=arch.bank_size,
                                  axi_data_width=arch.axi_data_width,
                                  nb_axi_masters_per_group=arch.nb_axi_masters_per_group,
-                                 nb_dmas_per_group=nb_dmas_per_group)
+                                 nb_dmas_per_group=nb_dmas_per_group,
+                                 terapool_group_latency=arch.remote_group_latency)
 
         # Boot Rom
         rom = memory.Memory(self, 'rom', size=0x1000, width_log2=(arch.axi_data_width - 1).bit_length(), stim_file=self.get_file_path('pulp/mempool/bootrom.bin'))
