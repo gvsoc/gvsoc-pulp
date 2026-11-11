@@ -139,7 +139,8 @@ class McPoolSystem(gvsoc.systree.Component):
                                         sync_base               =   arch.sync_base,
                                         sync_itlv               =   arch.sync_interleave,
                                         sync_special_mem        =   arch.sync_special_mem,
-                                        soc_register_base       =   arch.soc_register_base)
+                                        soc_register_base       =   arch.soc_register_base,
+                                        remote_group_latency    =   arch.remote_group_latency)
 
             cluster_list.append(ClusterUnit(self,f'cluster_{cluster_id}', cluster_arch, binary, parser))
             pass
