@@ -24,7 +24,7 @@ import math
 from pulp.mempool.mempool_tile import Tile
 from pulp.mempool.mempool_sub_group import Sub_group
 from pulp.mempool.l2_interconnect.hierarchical_interco import Hierarchical_Interco
-from pulp.mempool.redmule_configurations import RedmuleParam
+from pulp.mempool.te_config import RedmuleParam
 
 class Group(st.Component):
 

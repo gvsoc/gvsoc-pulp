@@ -33,6 +33,7 @@ class LightOpope(gvsoc.systree.Component):
                 elem_size: int=2,
                 mac_latency: int=0,   # pipeline drain charged after the last step of a tile
                 queue_depth: int=128, # request queue entries (beats), held until the array uses the data
+                first_job_latency: int=0, # cycles before the first job starts (once per run)
                 loc_base=0):
 
         super().__init__(parent, name)
@@ -45,6 +46,7 @@ class LightOpope(gvsoc.systree.Component):
             'elem_size'         : elem_size,
             'p'                 : p,
             'mac_latency'       : mac_latency,
+            'first_job_latency' : first_job_latency,
             'queue_depth'       : queue_depth,
             'loc_base'          : loc_base,
             # TE_REPORT=1: print a [TE] line (start/end cycle) per job

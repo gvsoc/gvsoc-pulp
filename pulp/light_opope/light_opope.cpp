@@ -43,6 +43,9 @@
  *     the Z store of tile t-1 overlap with the computation of tile t.
  *   - mac_latency extra cycles are charged after the last step of a tile
  *     before its accumulators can be stored (pipeline drain).
+ *   - first_job_latency cycles pass between the trigger and the first beat
+ *     of the first job of the engine: a fixed cost paid once per run, not per
+ *     job (calibrated against RTL, where Batch 128 pays it once for 2 jobs).
  *
  * The model is cycle driven: every cycle at most one beat is sent on the port
  * (priority: x/w of the next 2 steps, Z stores, Y preloads, x/w of later
@@ -121,6 +124,8 @@ private:
     uint32_t            p;
     uint32_t            tile;           // 2p: output tile side, elements per beat
     uint32_t            mac_latency;
+    uint32_t            first_job_latency; // cycles from the trigger to the first beat, first job only
+    bool                first_job;
     uint32_t            buffered_steps; // x/w slots: steps that can be in the queue
     uint32_t            queue_depth;    // request queue entries (beats)
     uint64_t            loc_base;
@@ -212,6 +217,8 @@ LightOpope::LightOpope(vp::ComponentConf &config)
     this->elem_size         = get_js_config()->get("elem_size")->get_int();
     this->p                 = get_js_config()->get("p")->get_int();
     this->mac_latency       = get_js_config()->get("mac_latency")->get_int();
+    this->first_job_latency = get_js_config()->get("first_job_latency")->get_int();
+    this->first_job         = true;
     this->queue_depth       = get_js_config()->get("queue_depth")->get_int();
     this->loc_base          = get_js_config()->get("loc_base")->get_double();
     this->report_jobs       = get_js_config()->get("report_jobs")->get_int() != 0;
@@ -302,7 +309,8 @@ void LightOpope::start_job()
     this->timer_start       = this->time.get_time();
     this->cycle_start       = this->clock.get_cycles();
     this->state.set(BUSY);
-    this->event_enqueue(this->fsm_event, 1);
+    this->event_enqueue(this->fsm_event, 1 + (this->first_job ? this->first_job_latency : 0));
+    this->first_job         = false;
 }
 
 // Sends one beat, returns the cycle at which its response is back. Y/Z beats

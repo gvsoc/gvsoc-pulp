@@ -21,7 +21,7 @@ import interco.router as router
 import gvsoc.systree as st
 import math
 from pulp.mempool.mempool_group import Group
-from pulp.mempool.redmule_configurations import RedmuleParam
+from pulp.mempool.te_config import RedmuleParam
 
 class Cluster(st.Component):
 

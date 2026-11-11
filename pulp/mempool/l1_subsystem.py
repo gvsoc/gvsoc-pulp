@@ -23,7 +23,7 @@ from interco.interleaver import Interleaver
 from pulp.mempool.xbar.mempool_xbar import MempoolXbar
 from pulp.mempool.l1_interconnect.l1_remote_itf import L1_RemoteItf
 from pulp.mempool.l1_interconnect.l1_bank_arbiter import L1_BankArbiter
-from pulp.mempool.redmule_configurations import DEFAULT_BANK_HOLD
+from pulp.mempool.te_config import _DEFAULT_BANK_HOLD
 from pulp.mempool.xbar.mempool_xbar_selector import MempoolXbarSelector
 import math
 
@@ -76,8 +76,8 @@ class L1_subsystem(gvsoc.systree.Component):
         redmule_path = tensorpool
         # Per-bank hold arbiter: cycles a bank is reserved per wide (TE) / narrow (PE) access.
         # The TE hold is calibrated per engine and can be overridden from the
-        # environment (L1_BANK_HOLD), see redmule_configurations.py.
-        bank_hold = DEFAULT_BANK_HOLD
+        # environment (L1_BANK_HOLD), see te_config.py.
+        bank_hold = _DEFAULT_BANK_HOLD
         bank_hold_pe = 0
         bank_queue_depth = 4
         l1_bank_size = size / nb_banks_per_tile

@@ -28,7 +28,7 @@ from pulp.light_redmule.light_redmule import LightRedmule
 from pulp.light_opope.light_opope import LightOpope
 from utils.common_cells import Or
 from pulp.mempool.irq_hold import IrqHold
-from pulp.mempool.redmule_configurations import RedmuleParam
+from pulp.mempool.te_config import RedmuleParam
 
 class Tile(st.Component):
 
@@ -47,7 +47,8 @@ class Tile(st.Component):
                                     p                   = redmule_config.opope_p,
                                     elem_size           = 2,
                                     mac_latency         = redmule_config.opope_mac_latency,
-                                    queue_depth         = redmule_config.queue_depth
+                                    queue_depth         = redmule_config.queue_depth,
+                                    first_job_latency   = redmule_config.first_job_latency
                                     )
         elif has_redmule:
             # REDMULE
