@@ -36,7 +36,7 @@ from elftools.elf.elffile import *
 from pulp.mempool.mempool_cluster import Cluster
 from pulp.mempool.ctrl_registers import CtrlRegisters
 from pulp.mempool.l2_subsystem import L2_subsystem
-from pulp.mempool.redmule_configurations import RedmuleParam
+from pulp.mempool.te_config import RedmuleParam
 
 class System(st.Component):
 
