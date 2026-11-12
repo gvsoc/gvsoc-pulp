@@ -43,9 +43,7 @@ void SnitchMempool::barrier_sync(vp::Block *__this, bool value)
         if (_this->iss.exec.wfi.get())
         {
             // Already sleeping on WFI: wake it (release the parked InsnEntry).
-            _this->iss.exec.wfi.set(false);
-            _this->iss.exec.retain_dec();
-            _this->iss.exec.insn_terminate(_this->iss.irq.wfi_entry);
+            _this->iss.exec.sleep_exit();
         }
         else
         {

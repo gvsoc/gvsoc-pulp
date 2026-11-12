@@ -17,9 +17,6 @@ void IrqMempool::wfi_handle(iss_insn_t *insn)
             return;
         }
 
-        this->iss.exec.wfi.set(true);
-        this->iss.exec.wfi_start = this->iss.clock.get_cycles();
-        this->iss.exec.retain_inc();
-        this->wfi_entry = this->iss.exec.insn_hold(insn);
+        this->iss.exec.sleep_enter(insn);
     }
 }

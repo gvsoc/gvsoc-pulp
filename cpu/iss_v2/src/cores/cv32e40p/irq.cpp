@@ -136,9 +136,7 @@ void Cv32e40pIrq::release_wfi()
 {
     if (this->iss.exec.wfi.get())
     {
-        this->iss.exec.wfi.set(false);
-        this->iss.exec.retain_dec();
-        this->iss.exec.insn_terminate(this->wfi_entry);
+        this->iss.exec.sleep_exit();
     }
 }
 

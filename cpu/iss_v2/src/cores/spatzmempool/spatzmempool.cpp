@@ -50,11 +50,9 @@ void SpatzMempool::barrier_sync(vp::Block *__this, bool value)
     if (_this->iss.exec.wfi.get())
     {
         // The core is already sleeping on WFI — wake it up. Mirror the
-        // IrqRiscv::check_interrupts wake sequence so we release the same
-        // InsnEntry that IrqMempool::wfi_handle parked via insn_hold.
-        _this->iss.exec.wfi.set(false);
-        _this->iss.exec.retain_dec();
-        _this->iss.exec.insn_terminate(_this->iss.irq.wfi_entry);
+        // IrqRiscv::check_interrupts wake sequence, which releases the
+        // InsnEntry that IrqMempool::wfi_handle parked with sleep_enter.
+        _this->iss.exec.sleep_exit();
     }
     else
     {
