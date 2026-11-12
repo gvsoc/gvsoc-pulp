@@ -1144,10 +1144,12 @@ class FlooNoc2dMeshNarrowWide(FlooNoc):
             [[node_id] + dirs for node_id, dirs in direction_links.items()])
 
         # Routing table: rows are routers, columns are every registered NI
+        # and router ids.
         routing_tables = {}
+        destinations = list(self._ni_id.items()) + list(self._router_id.items())
         for (sx, sy), src_id in self._router_id.items():
             table = {}
-            for (dx, dy), dst_id in self._ni_id.items():
+            for (dx, dy), dst_id in destinations:
                 if (dx, dy) == (sx, sy):
                     next_hop_id = dst_id
                 else:
