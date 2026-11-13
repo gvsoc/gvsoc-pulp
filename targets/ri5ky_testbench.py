@@ -65,6 +65,10 @@ class Target(gvsoc.runner.Target):
         super().__init__(parser=parser, options=options, **kwargs)
 
         args = self.args
+        if _is_rtl(args) and self.lists_components():
+            # The build only lists the components of the RTL board: the RTL
+            # simulator and the compiled design are only needed to run it
+            return
         if _is_rtl(args):
             # The RTL runs on gvsoc_svsim, one plugin for every use (GUI,
             # --rtl-trace)

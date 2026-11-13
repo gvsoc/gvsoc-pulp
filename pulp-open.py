@@ -64,6 +64,11 @@ class Target(gvsoc.Target):
         super(Target, self).__init__(parser, options,
             model=model, name=name)
 
+        if peek_args.platform == 'rtl' and self.lists_components():
+            # The build only lists the components of the RTL board: the RTL
+            # simulator and the compiled design are only needed to run it
+            return
+
         simulator = _rtl_simulator(self.args)
         if simulator is not None:
             self.model.work_dir = os.path.abspath(self.args.work_dir or os.getcwd())
