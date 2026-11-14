@@ -129,7 +129,7 @@ The test should pass without any issue. How do you know if your changes are refl
 .. admonition:: Information
    :class: explanation
 
-   GVSoC generates a ``gvsoc_config.json`` file in the ``$GVSOC_ROOT`` folder when an application is executed. This is a tool generated file and you can find all the address maps as well as the component connections. Now we can see the changes such as ``cluster_config_file: pulp/chips/pulp-open-hwpe/cluster.json`` in the generated ``gvsoc_config.json`` file.
+   GVSoC generates a ``gvsoc_platform.json`` file in the ``$GVSOC_ROOT`` folder when an application is executed. This is a tool generated file and you can find all the address maps as well as the component connections. Now we can see the changes such as ``cluster_config_file: pulp/chips/pulp-open-hwpe/cluster.json`` in the generated ``gvsoc_platform.json`` file.
 
 2 - Integrating a HWPE target to the hwpe-target
 ................................................
@@ -259,7 +259,7 @@ The last part of the integration is to connect the event signal ``irq`` of the H
 .. admonition:: Fixing failing build
    :class: task
 
-   Search for hwpe in the gvsoc_config.json file. What went wrong?
+   Search for hwpe in the gvsoc_platform.json file. What went wrong?
    Add the simple_hwpe folder in gvsoc/pulp/pulp/CMakeLists.txt. Then rebuild the model and run the hello application as done previously.
 
 3 - Intrinsics of the Hwpe development
