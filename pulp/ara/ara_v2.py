@@ -230,10 +230,12 @@ def attach(component: Component, vlen: int, nb_lanes: int, use_spatz: bool=False
         "cpu/iss_v2/src/vector.cpp",
     ])
 
-    component.add_property('vu/nb_lanes', nb_lanes)
+    # Vector unit description, in the RiscvConfig of the core
+    vu = component._component_config.vu
+    vu.nb_lanes = nb_lanes
     if nb_ipus is not None:
-        component.add_property('vu/nb_ipus', nb_ipus)
-    component.add_property('vu/lane_width', lane_width)
+        vu.nb_ipus = nb_ipus
+    vu.lane_width = lane_width
     if use_spatz:
-        component.add_property('vu/nb_ports', nb_lanes if spatz_nb_ports is None else spatz_nb_ports)
-        component.add_property('vu/nb_outstanding_reqs', nb_outstanding_reqs)
+        vu.nb_ports = nb_lanes if spatz_nb_ports is None else spatz_nb_ports
+        vu.nb_outstanding_reqs = nb_outstanding_reqs

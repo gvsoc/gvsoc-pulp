@@ -88,7 +88,7 @@ class Soc(st.Component):
             core_config.memory_size = 0x80000000
         host = iss.Riscv(self, 'host', timed=timed, binaries=[binary] if binary else [],
             config=core_config)
-        host.add_property('args', htif_args)
+        host.set_args(htif_args)
 
         loader = ElfLoader(self, 'loader', binary=binary)
 
@@ -123,7 +123,7 @@ class Soc(st.Component):
 
         args = self.get_parameter('args')
         if args is not None:
-            self.host.add_property('args', args.split())
+            self.host.set_args(args.split())
 
     def handle_binary(self, binary: str):
         # This gets called when an executable is attached to a hierarchy of components containing
