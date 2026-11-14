@@ -25,6 +25,7 @@
 #include <string.h>
 #include <vp/itf/jtag.hpp>
 #include <vp/itf/wire.hpp>
+#include <pulp/adv_dbg_unit/pulp_tap/pulp_tap_config.hpp>
 
 #define TCLK_BIT (1)
 #define TRST_BIT (2)
@@ -99,6 +100,7 @@ public:
   adv_dbg_unit(vp::ComponentConf &config);
 
 private:
+  PulpTapConfig cfg;
 
   static void sync(vp::Block *__this, int tck, int tdi, int tms, int trst);
   static void sync_cycle(vp::Block *__this, int tdi, int tms, int trst);
@@ -138,16 +140,12 @@ private:
 };
 
 adv_dbg_unit::adv_dbg_unit(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
   traces.new_trace("trace", &trace, vp::TRACE);
   traces.new_trace("debug", &debug, vp::DEBUG);
 
-  this->confreg_length = 4;
-  if (get_js_config()->get("confreg_length") != NULL)
-  {
-    this->confreg_length = get_js_config()->get_child_int("confreg_length");
-  }
+  this->confreg_length = this->cfg.confreg_length;
 
   this->new_master_port("confreg_ext", &this->confreg_ext_itf);
 
@@ -162,10 +160,7 @@ adv_dbg_unit::adv_dbg_unit(vp::ComponentConf &config)
 
   new_master_port("io", &io_itf);
 
-  if (get_js_config()->get("confreg_instr") == NULL)
-    this->confreg_instr = 7;
-  else
-    this->confreg_instr = get_js_config()->get_int("confreg_instr");
+  this->confreg_instr = this->cfg.confreg_instr;
 
   this->tap.capture_instr = 0;
 

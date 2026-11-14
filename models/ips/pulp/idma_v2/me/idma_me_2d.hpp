@@ -39,8 +39,10 @@ public:
      * @param idma The top iDMA block.
      * @param fe The front end.
      * @param be The back end.
+     * @param transfer_queue_size Maximum number of enqueued transfers.
      */
-    IDmaMe2D(vp::Component *idma, IdmaTransferProducer *fe, IdmaTransferConsumer *be);
+    IDmaMe2D(vp::Component *idma, IdmaTransferProducer *fe, IdmaTransferConsumer *be,
+        int64_t transfer_queue_size);
 
     void reset(bool active) override;
 

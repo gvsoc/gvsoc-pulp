@@ -15,17 +15,30 @@
 #
 
 import gvsoc.systree as st
+from config_tree import Config, cfg_field
+
+
+class RiscvTapHartConfig(Config):
+    """One hart reachable from the RISC-V debug TAP."""
+
+    hart_id: int = cfg_field(default=0, desc="Hart ID")
+    target: str = cfg_field(default='', desc="Name of the port connected to the hart")
+
+
+class RiscvTapConfig(Config):
+    """Configuration of the RISC-V debug TAP."""
+
+    harts: list[RiscvTapHartConfig] = cfg_field(default_factory=list, desc=(
+        "Harts reachable from the TAP"))
+
 
 class Riscv_tap(st.Component):
 
     def __init__(self, parent, name, nb_harts=0, idcode=0, harts=[]):
 
-        super(Riscv_tap, self).__init__(parent, name)
+        super(Riscv_tap, self).__init__(parent, name, config=RiscvTapConfig(
+            harts=[RiscvTapHartConfig(hart_id=hart_id, target=target)
+                for hart_id, target in harts]))
 
-        self.set_component('pulp.adv_dbg_unit.riscv_dtm_impl')
+        self.add_sources(['pulp/adv_dbg_unit/riscv_dtm_impl.cpp'])
 
-        self.add_properties({
-            'nb_harts': nb_harts,
-            'idcode': idcode,
-            'harts': harts
-        })

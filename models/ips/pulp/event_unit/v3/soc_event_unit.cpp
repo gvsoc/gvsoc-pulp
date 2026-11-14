@@ -11,8 +11,8 @@
 
 Soc_event_unit::Soc_event_unit(Event_unit *top) : top(top)
 {
-  this->nb_fifo_events = top->get_js_config()->get_child_int("**/nb_fifo_events");
-  this->fifo_soc_event = top->get_js_config()->get_child_int("**/fifo_event");
+  this->nb_fifo_events = top->cfg.nb_fifo_events;
+  this->fifo_soc_event = top->cfg.fifo_event;
 
   top->traces.new_trace("soc_eu/trace", &trace, vp::DEBUG);
 

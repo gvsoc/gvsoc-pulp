@@ -15,28 +15,23 @@
 #
 
 import gvsoc.systree as st
+from config_tree import Config, cfg_field
+
+
+class FllConfig(Config):
+    """Configuration of the FLL."""
+
+    status_reset: int = cfg_field(default=0x00000000, fmt="hex", desc="Reset value of STATUS")
+    conf1_reset: int = cfg_field(default=0x454C05F5, fmt="hex", desc="Reset value of CONF1")
+    conf2_reset: int = cfg_field(default=0x02004109, fmt="hex", desc="Reset value of CONF2")
+    integrator_reset: int = cfg_field(default=0x00000000, fmt="hex",
+        desc="Reset value of INTEGRATOR")
+
 
 class Fll(st.Component):
 
     def __init__(self, parent, name):
 
-        super(Fll, self).__init__(parent, name)
+        super(Fll, self).__init__(parent, name, config=FllConfig())
 
-        self.set_component('pulp.fll.fll_v1_impl')
-
-        self.add_properties({
-            'regmap': {
-                'status': {
-                    'reset': "0x00000000"
-                },
-                'conf1': {
-                    'reset': "0x454C05F5"
-                },
-                'conf2': {
-                    'reset': "0x02004109"
-                },
-                'integrator': {
-                    'reset': "0x00000000"
-                },
-            }
-        })
+        self.add_sources(['pulp/fll/fll_v1_impl.cpp'])

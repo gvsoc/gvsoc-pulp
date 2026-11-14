@@ -28,6 +28,7 @@
 #include <string.h>
 #include <optional>
 #include "archi/eu_v3.h"
+#include <ips/pulp/event_unit/v3/event_unit/event_unit_config.hpp>
 
 class Core_event_unit;
 class Event_unit;
@@ -204,6 +205,8 @@ class Event_unit : public vp::Component
 public:
 
   Event_unit(vp::ComponentConf &config);
+
+  EventUnitConfig cfg;
 
   void reset(bool active);
 

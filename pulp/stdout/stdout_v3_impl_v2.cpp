@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <vector>
+#include <pulp/stdout/stdout_v3/stdout_config.hpp>
 
 #define MAX_PUTC_LENGTH 1024
 
@@ -32,6 +33,7 @@ public:
   static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
+  StdoutConfig cfg;
 
   vp::Trace     trace;
   vp::IoSlave in{&Stdout::req};
@@ -47,15 +49,15 @@ private:
 };
 
 Stdout::Stdout(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
   traces.new_trace("trace", &trace, vp::DEBUG);
   new_slave_port("input", &in);
 
-  nb_cluster = get_js_config()->get_child_int("max_cluster");
-  nb_core = get_js_config()->get_child_int("max_core_per_cluster");
-  user_set_core_id = get_js_config()->get_child_int("user_set_core_id");
-  user_set_cluster_id = get_js_config()->get_child_int("user_set_cluster_id");
+  nb_cluster = this->cfg.max_cluster;
+  nb_core = this->cfg.max_core_per_cluster;
+  user_set_core_id = this->cfg.user_set_core_id;
+  user_set_cluster_id = this->cfg.user_set_cluster_id;
 
   putc_buffer_pos = new int[nb_cluster*nb_core];
   for (int j=0; j<nb_cluster; j++) {

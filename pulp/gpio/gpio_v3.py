@@ -15,16 +15,21 @@
 #
 
 import gvsoc.systree as st
+from config_tree import Config, cfg_field
+
+
+class GpioConfig(Config):
+    """Configuration of the GPIO controller."""
+
+    nb_gpio: int = cfg_field(default=32, desc="Number of GPIOs")
+    soc_event: int = cfg_field(default=-1, desc="SoC event raised on GPIO interrupts, -1 for none")
+
 
 class Gpio(st.Component):
 
     def __init__(self, parent, name, nb_gpio: int=32, soc_event: int=-1):
 
-        super(Gpio, self).__init__(parent, name)
+        super(Gpio, self).__init__(parent, name, config=GpioConfig(
+            nb_gpio=nb_gpio, soc_event=soc_event))
 
-        self.set_component('pulp.gpio.gpio_v3_impl')
-
-        self.add_properties({
-            'nb_gpio': nb_gpio,
-            'soc_event': soc_event,
-        })
+        self.add_sources(['pulp/gpio/gpio_v3_impl.cpp'])

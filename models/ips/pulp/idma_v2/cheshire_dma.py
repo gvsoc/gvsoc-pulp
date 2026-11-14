@@ -26,6 +26,7 @@ programming interface differs.
 """
 
 import gvsoc.systree
+from ips.pulp.idma_v2.reg_dma_config import RegDmaConfig
 from gvsoc.signature import IoV2Sync, IoV2Beat
 
 
@@ -65,9 +66,8 @@ class CheshireDmaV2(gvsoc.systree.Component):
     Parameters
     ~~~~~~~~~~
 
-    All parameters are constructor kwargs (no ``Config`` dataclass);
-    they are serialised into the JSON config tree and read by the
-    C++ model at reset.
+    All parameters are constructor kwargs, stored in a
+    :class:`RegDmaConfig` read by the C++ model.
 
     ``transfer_queue_size``
         Maximum number of in-flight transfer descriptors queued in
@@ -101,7 +101,9 @@ class CheshireDmaV2(gvsoc.systree.Component):
             burst_queue_size: int=8,
             axi_width: int=8):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=RegDmaConfig(
+            transfer_queue_size=transfer_queue_size, burst_queue_size=burst_queue_size,
+            axi_width=axi_width))
 
         self._axi_width = axi_width
 
@@ -113,11 +115,6 @@ class CheshireDmaV2(gvsoc.systree.Component):
             'ips/pulp/idma_v2/be/idma_be_axi.cpp',
         ])
 
-        self.add_properties({
-            "transfer_queue_size": transfer_queue_size,
-            "burst_queue_size": burst_queue_size,
-            "axi_width": axi_width,
-        })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         """Returns the Cheshire-side offload slave port.

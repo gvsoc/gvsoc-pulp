@@ -29,8 +29,8 @@ vp::IoReqStatus Dispatch_unit::enqueue_sleep(Dispatch *dispatch, vp::IoReq *req,
 Dispatch_unit::Dispatch_unit(Event_unit *top)
 : top(top)
 {
-  dispatch_event = top->get_js_config()->get_child_int("**/properties/events/dispatch");
-  size = top->get_js_config()->get_child_int("**/properties/dispatch/size");
+  dispatch_event = top->cfg.dispatch_event;
+  size = top->cfg.dispatch_size;
   core = new Dispatch_core[top->nb_core];
   dispatches = new Dispatch[size];
 }

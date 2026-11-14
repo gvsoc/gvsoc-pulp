@@ -15,12 +15,11 @@
 #
 
 
-from dataclasses import dataclass
-from gvrun.config import Config, cfg_field
+from config_tree import cfg_field
+from cpu.iss.riscv_config import IssConfig
 
 
-@dataclass(repr=False)
-class SnitchCoreConfig(Config):
+class SnitchCoreConfig(IssConfig):
     nb_outstanding: int = cfg_field(default=1, dump=True, desc=(
         "Maximum number of oustanding requests"
     ))

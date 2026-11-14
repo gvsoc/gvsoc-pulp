@@ -10,9 +10,9 @@
 #include "event_unit.hpp"
 
 Event_unit::Event_unit(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
-  nb_core = get_js_config()->get_child_int("nb_core");
+  nb_core = this->cfg.nb_core;
 
   traces.new_trace("trace", &trace, vp::DEBUG);
 

@@ -33,6 +33,7 @@
 #include <string.h>
 #include <string>
 #include <vector>
+#include <pulp/padframe/padframe_v1/padframe_config.hpp>
 
 using namespace std;
 
@@ -164,6 +165,7 @@ public:
   static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
+  PadframeConfig cfg;
 
   static void qspim_master_sync(vp::Block *__this, int sck, int data_0, int data_1, int data_2, int data_3, int mask, int id);
   static void qspim_sync(vp::Block *__this, int sck, int data_0, int data_1, int data_2, int data_3, int mask, int id);
@@ -217,7 +219,7 @@ private:
 };
 
 padframe::padframe(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
   traces.new_trace("trace", &trace, vp::DEBUG);
   in.set_req_meth(&padframe::req);
@@ -232,16 +234,12 @@ padframe::padframe(vp::ComponentConf &config)
 
   this->traces.new_trace_event("ref_clock", &this->ref_clock_trace, 1);
 
-  js::Config *groups = get_js_config()->get("groups");
-
-  for (auto& group: groups->get_childs())
+  for (size_t group_id = 0; group_id < this->cfg.groups_count; group_id++)
   {
-    std::string name = group.first;
-    js::Config *config = group.second;
-    js::Config *type_config = config->get("type");
-    if (type_config)
+    auto &group_cfg = this->cfg.groups[group_id];
+    std::string name = group_cfg.name;
     {
-      std::string type = type_config->get_str();
+      std::string type = group_cfg.type;
 
       trace.msg("Found pad group (group: %s, type: %s)\n",
         name.c_str(), type.c_str());
@@ -259,8 +257,7 @@ padframe::padframe(vp::ComponentConf &config)
         traces.new_trace_event(name + "/data_1", &group->data_1_trace, 1);
         traces.new_trace_event(name + "/data_2", &group->data_2_trace, 1);
         traces.new_trace_event(name + "/data_3", &group->data_3_trace, 1);
-        js::Config *nb_cs_config = config->get("nb_cs");
-        group->nb_cs = nb_cs_config ? nb_cs_config->get_int() : 1;
+        group->nb_cs = group_cfg.nb_cs;
         for (int i=0; i<group->nb_cs; i++)
         {
           vp::Trace *trace = new vp::Trace;
@@ -370,8 +367,7 @@ padframe::padframe(vp::ComponentConf &config)
         group->slave.set_cs_sync_meth_muxed(&padframe::hyper_cs_sync, nb_itf);
         this->groups.push_back(group);
         traces.new_trace_event(name + "/data", &group->data_trace, 8);
-        js::Config *nb_cs_config = config->get("nb_cs");
-        group->nb_cs = nb_cs_config ? nb_cs_config->get_int() : 1;
+        group->nb_cs = group_cfg.nb_cs;
         for (int i=0; i<group->nb_cs; i++)
         {
           vp::Trace *trace = new vp::Trace;
@@ -393,17 +389,15 @@ padframe::padframe(vp::ComponentConf &config)
       {
         Wire_group *group = new Wire_group(name);
         this->groups.push_back(group);
-        js::Config *is_master_config = config->get("is_master");
-        js::Config *is_slave_config = config->get("is_slave");
 
-        if (is_master_config != NULL && is_master_config->get_bool())
+        if (group_cfg.is_master)
         {
           group->master.set_sync_meth_muxed(&padframe::master_wire_sync, nb_itf);
           this->new_master_port(name + "_pad", &group->master);
           group->slave.set_sync_meth_muxed(&padframe::wire_sync, nb_itf);
           this->new_slave_port(name, &group->slave);
         }
-        else if (is_slave_config != NULL && is_slave_config->get_bool())
+        else if (group_cfg.is_slave)
         {
           group->master.set_sync_meth_muxed(&padframe::master_wire_sync, nb_itf);
           this->new_master_port(name, &group->master);
@@ -417,10 +411,8 @@ padframe::padframe(vp::ComponentConf &config)
       {
         Gpio_group *group = new Gpio_group(name);
         this->groups.push_back(group);
-        js::Config *is_master_config = config->get("is_master");
-        js::Config *is_slave_config = config->get("is_slave");
 
-        if (is_master_config != NULL && is_master_config->get_bool())
+        if (group_cfg.is_master)
         {
           group->master.set_sync_meth_muxed(&padframe::master_gpio_sync, nb_itf);
           this->new_master_port(name + "_pad", &group->master);

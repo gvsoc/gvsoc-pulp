@@ -15,13 +15,32 @@
 #
 
 import gvsoc.systree as st
+from ips.pulp.event_unit.v3.event_unit import EventUnitConfig
+
+
+def _get(config: dict, path: str):
+    for name in path.split('/'):
+        if not isinstance(config, dict) or name not in config:
+            return 0
+        config = config[name]
+    return int(config, 0) if isinstance(config, str) else config
+
 
 class Event_unit(st.Component):
 
     def __init__(self, parent, name, config):
 
-        super(Event_unit, self).__init__(parent, name)
+        # config is the JSON-like description of the event unit, as found in the
+        # chip property files; a missing entry is 0
+        super(Event_unit, self).__init__(parent, name, config=EventUnitConfig(
+            nb_core=_get(config, 'nb_core'),
+            nb_mutexes=_get(config, 'properties/mutex/nb_mutexes'),
+            dispatch_size=_get(config, 'properties/dispatch/size'),
+            nb_barriers=_get(config, 'properties/barriers/nb_barriers'),
+            nb_fifo_events=_get(config, 'properties/soc_event/nb_fifo_events'),
+            fifo_event=_get(config, 'properties/soc_event/fifo_event'),
+            barrier_event=_get(config, 'properties/events/barrier'),
+            mutex_event=_get(config, 'properties/events/mutex'),
+            dispatch_event=_get(config, 'properties/events/dispatch')))
 
-        self.set_component('pulp.event_unit.eu_v3_impl')
-
-        self.add_properties(config)
+        self.add_sources(['pulp/event_unit/eu_v3_impl.cpp'])

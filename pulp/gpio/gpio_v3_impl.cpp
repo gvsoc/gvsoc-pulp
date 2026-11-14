@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "archi/gpio_v3.h"
+#include <pulp/gpio/gpio_v3/gpio_config.hpp>
 
 class Gpio : public vp::Component
 {
@@ -36,6 +37,7 @@ public:
   Gpio(vp::ComponentConf &config);
 
 private:
+  GpioConfig cfg;
 
   static void gpio_sync(vp::Block *__this, bool value, int gpio);
   static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
@@ -75,7 +77,7 @@ private:
 
 
 Gpio::Gpio(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
   this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
@@ -84,8 +86,8 @@ Gpio::Gpio(vp::ComponentConf &config)
   this->new_master_port("event", &this->event_itf);
   this->new_master_port("irq", &this->irq_itf);
 
-  this->soc_event = this->get_js_config()->get_child_int("soc_event");
-  this->nb_gpio = this->get_js_config()->get_int("nb_gpio");
+  this->soc_event = this->cfg.soc_event;
+  this->nb_gpio = this->cfg.nb_gpio;
 
   for (int i=0; i<this->nb_gpio; i++)
   {

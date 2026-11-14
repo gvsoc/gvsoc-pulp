@@ -22,19 +22,24 @@ Reads return zero, writes are acknowledged and dropped. The single
 
 import gvsoc.systree
 from gvsoc.signature import IoV2Sync
+from config_tree import Config, cfg_field
+
+
+class ZeroMemConfig(Config):
+    """Configuration of the zero memory."""
+
+    size: int = cfg_field(default=0, fmt="hex", desc=(
+        "Size of the memory, accesses beyond it are errors"
+    ))
 
 
 class ZeroMem(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, size: int):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=ZeroMemConfig(size=size))
 
         self.add_sources(['pulp/snitch/zero_mem_v2.cpp'])
-
-        self.add_properties({
-            'size': size
-        })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature=IoV2Sync())

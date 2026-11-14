@@ -23,6 +23,7 @@
 #define __PULP_UDMA_UDMA_V2_IMPL_HPP__
 
 #include <vp/vp.hpp>
+#include <pulp/chips/pulp_open/udma/udma_config.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/qspim.hpp>
 #include <vp/itf/uart.hpp>
@@ -950,6 +951,8 @@ class udma : public vp::Component
 public:
 
   udma(vp::ComponentConf &config);
+
+  UdmaConfig cfg;
 
   void reset(bool active);
 

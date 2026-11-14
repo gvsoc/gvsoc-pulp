@@ -56,7 +56,8 @@
 class IDmaBeAxi : public vp::Block, public IdmaBeConsumer
 {
 public:
-    IDmaBeAxi(vp::Component *idma, std::string itf_name, IdmaBeProducer *be);
+    IDmaBeAxi(vp::Component *idma, std::string itf_name, IdmaBeProducer *be,
+        int64_t burst_queue_size, int64_t burst_size, int64_t axi_width);
     ~IDmaBeAxi();
 
     void reset(bool active) override;

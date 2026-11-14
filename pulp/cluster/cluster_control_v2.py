@@ -15,15 +15,20 @@
 #
 
 import gvsoc.systree as st
+from config_tree import Config, cfg_field
+
+
+class ClusterCtrlConfig(Config):
+    """Configuration of the cluster controller."""
+
+    nb_core: int = cfg_field(default=0, desc="Number of cores of the cluster")
+
 
 class Cluster_control(st.Component):
 
     def __init__(self, parent, name, nb_core=0):
 
-        super(Cluster_control, self).__init__(parent, name)
+        super(Cluster_control, self).__init__(parent, name,
+            config=ClusterCtrlConfig(nb_core=nb_core))
 
-        self.set_component('pulp.cluster.cluster_ctrl_v2_impl')
-
-        self.add_properties({
-            'nb_core': nb_core,
-        })
+        self.add_sources(['pulp/cluster/cluster_ctrl_v2_impl.cpp'])

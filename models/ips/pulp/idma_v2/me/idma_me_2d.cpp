@@ -22,7 +22,8 @@
 #include "idma_me_2d.hpp"
 
 
-IDmaMe2D::IDmaMe2D(vp::Component *idma, IdmaTransferProducer *fe, IdmaTransferConsumer *be)
+IDmaMe2D::IDmaMe2D(vp::Component *idma, IdmaTransferProducer *fe, IdmaTransferConsumer *be,
+    int64_t transfer_queue_size)
 :   Block(idma, "me"),
     fsm_event(this, &IDmaMe2D::fsm_handler)
 {
@@ -33,8 +34,7 @@ IDmaMe2D::IDmaMe2D(vp::Component *idma, IdmaTransferProducer *fe, IdmaTransferCo
     // Declare our own trace so that we can individually activate traces
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
-    // Get the top parameter giving the maximum number of enqueued transfers
-    this->transfer_queue_size = idma->get_js_config()->get_int("transfer_queue_size");
+    this->transfer_queue_size = transfer_queue_size;
 }
 
 

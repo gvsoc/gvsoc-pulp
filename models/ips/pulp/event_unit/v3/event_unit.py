@@ -6,6 +6,22 @@
 
 from gvsoc.systree import Component, SlaveItf
 from gvsoc.signature import IoV2Sync
+from config_tree import Config, cfg_field
+
+
+class EventUnitConfig(Config):
+    """Configuration of the cluster event unit v3."""
+
+    nb_core: int = cfg_field(default=9, desc="Number of cores")
+    nb_mutexes: int = cfg_field(default=1, desc="Number of mutexes")
+    dispatch_size: int = cfg_field(default=8, desc="Size of the dispatch FIFO")
+    nb_barriers: int = cfg_field(default=9, desc="Number of hardware barriers")
+    nb_fifo_events: int = cfg_field(default=8, desc="Size of the SoC event FIFO")
+    fifo_event: int = cfg_field(default=27, desc="Event raised when the SoC event FIFO is not empty")
+    barrier_event: int = cfg_field(default=16, desc="Event raised by the barriers")
+    mutex_event: int = cfg_field(default=17, desc="Event raised by the mutexes")
+    dispatch_event: int = cfg_field(default=18, desc="Event raised by the dispatcher")
+
 
 
 class EventUnit(Component):
@@ -26,7 +42,10 @@ class EventUnit(Component):
                  nb_fifo_events: int = 8, fifo_event: int = 27,
                  barrier_event: int = 16, mutex_event: int = 17,
                  dispatch_event: int = 18):
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=EventUnitConfig(
+            nb_core=nb_core, nb_mutexes=nb_mutexes, dispatch_size=dispatch_size,
+            nb_barriers=nb_barriers, nb_fifo_events=nb_fifo_events, fifo_event=fifo_event,
+            barrier_event=barrier_event, mutex_event=mutex_event, dispatch_event=dispatch_event))
 
         self.add_sources([
             'ips/pulp/event_unit/v3/event_unit.cpp',
@@ -36,22 +55,6 @@ class EventUnit(Component):
             'ips/pulp/event_unit/v3/barrier_unit.cpp',
             'ips/pulp/event_unit/v3/soc_event_unit.cpp',
         ])
-
-        # The C++ model reads these via recursive ("**/") js-config lookups.
-        self.add_properties({
-            'nb_core': nb_core,
-            'properties': {
-                'dispatch':   {'size': dispatch_size},
-                'mutex':      {'nb_mutexes': nb_mutexes},
-                'barriers':   {'nb_barriers': nb_barriers},
-                'soc_event':  {'nb_fifo_events': nb_fifo_events, 'fifo_event': fifo_event},
-                'events': {
-                    'barrier':   barrier_event,
-                    'mutex':     mutex_event,
-                    'dispatch':  dispatch_event,
-                },
-            },
-        })
 
         self.nb_core = nb_core
 

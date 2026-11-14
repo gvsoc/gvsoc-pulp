@@ -12,8 +12,8 @@ Mutex_unit::Mutex_unit(Event_unit *top)
 : top(top)
 {
   top->traces.new_trace("mutex/trace", &trace, vp::DEBUG);
-  nb_mutexes = top->get_js_config()->get_child_int("**/properties/mutex/nb_mutexes");
-  mutex_event = top->get_js_config()->get_child_int("**/properties/events/mutex");
+  nb_mutexes = top->cfg.nb_mutexes;
+  mutex_event = top->cfg.mutex_event;
   mutexes = new Mutex[nb_mutexes];
 }
 

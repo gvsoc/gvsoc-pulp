@@ -28,7 +28,8 @@
 #define AXI_PAGE_SIZE (1 << 12)
 
 
-IDmaBeAxi::IDmaBeAxi(vp::Component *idma, std::string itf_name, IdmaBeProducer *be)
+IDmaBeAxi::IDmaBeAxi(vp::Component *idma, std::string itf_name, IdmaBeProducer *be,
+    int64_t burst_queue_size, int64_t burst_size, int64_t axi_width)
 :   Block(idma, itf_name),
     bus(&IDmaBeAxi::retry_meth, &IDmaBeAxi::resp_meth),
     fsm_event(this, &IDmaBeAxi::fsm_handler)
@@ -45,9 +46,9 @@ IDmaBeAxi::IDmaBeAxi(vp::Component *idma, std::string itf_name, IdmaBeProducer *
 
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
-    this->burst_queue_size = idma->get_js_config()->get_int("burst_queue_size");
-    this->burst_size = idma->get_js_config()->get_int("burst_size");
-    this->axi_width = idma->get_js_config()->get_int("axi_width");
+    this->burst_queue_size = burst_queue_size;
+    this->burst_size = burst_size;
+    this->axi_width = axi_width;
     if (this->axi_width <= 0)
     {
         this->trace.fatal("idma_v2: axi_width must be > 0\n");

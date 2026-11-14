@@ -5,6 +5,7 @@
 import gvsoc.gui
 import gvsoc.systree
 import gvsoc.signature
+from pulp.itc.itc_v1 import ItcConfig
 
 
 class Itc_v1_V2(gvsoc.systree.Component):
@@ -13,14 +14,9 @@ class Itc_v1_V2(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name: str):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=ItcConfig())
 
-        self.set_component('pulp.itc.itc_v1_impl_v2')
-
-        self.add_properties({
-            "nb_fifo_events": 8,
-            "fifo_irq": 26
-        })
+        self.add_sources(['pulp/itc/itc_v1_impl_v2.cpp'])
 
     def o_IRQ_REQ(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('irq_req', itf, signature='wire<int>')

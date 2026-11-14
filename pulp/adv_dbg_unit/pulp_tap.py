@@ -15,17 +15,21 @@
 #
 
 import gvsoc.systree as st
+from config_tree import Config, cfg_field
+
+
+class PulpTapConfig(Config):
+    """Configuration of the PULP debug TAP."""
+
+    confreg_instr: int = cfg_field(default=0, desc="JTAG instruction of the configuration register")
+    confreg_length: int = cfg_field(default=0, desc="Length in bits of the configuration register")
+
 
 class Pulp_tap(st.Component):
 
     def __init__(self, parent, name, confreg_instr=0, confreg_length=0, idcode=0):
 
-        super(Pulp_tap, self).__init__(parent, name)
+        super(Pulp_tap, self).__init__(parent, name, config=PulpTapConfig(
+            confreg_instr=confreg_instr, confreg_length=confreg_length))
 
-        self.set_component('pulp.adv_dbg_unit.adv_dbg_unit_impl')
-
-        self.add_properties({
-            'confreg_instr': confreg_instr,
-            'confreg_length': confreg_length,
-            'idcode': idcode,
-        })
+        self.add_sources(['pulp/adv_dbg_unit/adv_dbg_unit_impl.cpp'])

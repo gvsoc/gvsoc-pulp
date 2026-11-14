@@ -13,8 +13,8 @@ Barrier_unit::Barrier_unit(Event_unit *top)
 : top(top)
 {
   top->traces.new_trace("barrier/trace", &trace, vp::DEBUG);
-  nb_barriers = top->get_js_config()->get_child_int("**/properties/barriers/nb_barriers");
-  barrier_event = top->get_js_config()->get_child_int("**/properties/events/barrier");
+  nb_barriers = top->cfg.nb_barriers;
+  barrier_event = top->cfg.barrier_event;
   barriers = new Barrier[nb_barriers];
 }
 

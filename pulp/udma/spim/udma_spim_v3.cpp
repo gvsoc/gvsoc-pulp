@@ -23,6 +23,7 @@
 #include "../archi/udma_spim_v3.h"
 #include "../archi/utils.h"
 #include "vp/itf/qspim.hpp"
+#include <string.h>
 
 
 
@@ -40,11 +41,15 @@ Spim_periph_v3::Spim_periph_v3(udma *top, int id, int itf_id) : Udma_periph(top,
   qspim_itf.set_sync_meth(&Spim_periph_v3::slave_sync);
   top->new_master_port(itf_name, &qspim_itf, (vp::Block *)this);
 
-  js::Config *config = this->top->get_js_config()->get("spim/eot_events");
-  if (config)
-    this->eot_event = config->get_elem(itf_id)->get_int();
-  else
-    this->eot_event = -1;
+  this->eot_event = -1;
+  for (size_t i = 0; i < this->top->cfg.interfaces_count; i++)
+  {
+    auto &itf_cfg = this->top->cfg.interfaces[i];
+    if (strcmp(itf_cfg.name, "spim") == 0 && (size_t)itf_id < itf_cfg.eot_events_count)
+    {
+      this->eot_event = itf_cfg.eot_events[itf_id].event;
+    }
+  }
 
 
   pending_spi_word_event = top->event_new((vp::Block *)this, Spim_periph_v3::handle_spi_pending_word);

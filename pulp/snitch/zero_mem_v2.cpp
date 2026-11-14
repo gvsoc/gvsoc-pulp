@@ -21,6 +21,7 @@
 
 #include <vp/vp.hpp>
 #include <vp/itf/io_v2.hpp>
+#include <pulp/snitch/zero_mem_v2/zero_mem_config.hpp>
 
 class ZeroMem : public vp::Component
 {
@@ -30,19 +31,20 @@ public:
 private:
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
+    ZeroMemConfig cfg;
     vp::Trace trace;
     vp::IoSlave input_itf{&ZeroMem::req};
     size_t size;
 };
 
 ZeroMem::ZeroMem(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
     this->new_slave_port("input", &this->input_itf);
 
-    this->size = this->get_js_config()->get("size")->get_int();
+    this->size = this->cfg.size;
 }
 
 vp::IoReqStatus ZeroMem::req(vp::Block *__this, vp::IoReq *req)

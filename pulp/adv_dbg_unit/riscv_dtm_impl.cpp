@@ -26,6 +26,7 @@
 #include <vp/itf/jtag.hpp>
 #include <vp/itf/wire.hpp>
 #include <unordered_map>
+#include <pulp/adv_dbg_unit/riscv_tap/riscv_tap_config.hpp>
 
 #define BYPASS_INSTR    0x00
 #define IDCODE_INSTR    0x01
@@ -114,6 +115,7 @@ public:
   void reset(bool value);
 
 private:
+  RiscvTapConfig cfg;
 
   static void sync(vp::Block *__this, int tck, int tdi, int tms, int trst);
   static void sync_cycle(vp::Block *__this, int tdi, int tms, int trst);
@@ -178,7 +180,7 @@ private:
 };
 
 riscv_dtm::riscv_dtm(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
   traces.new_trace("trace", &trace, vp::TRACE);
   traces.new_trace("debug", &debug, vp::DEBUG);
@@ -196,10 +198,10 @@ riscv_dtm::riscv_dtm(vp::ComponentConf &config)
 
   this->tclk = 0;
 
-  for (auto hart: this->get_js_config()->get("harts")->get_elems())
+  for (size_t i = 0; i < this->cfg.harts_count; i++)
   {
-    int hart_id = hart->get_elem(0)->get_int();
-    string target = hart->get_elem(1)->get_str();
+    int hart_id = this->cfg.harts[i].hart_id;
+    string target = this->cfg.harts[i].target;
 
     Dtm_slave *slave = new Dtm_slave(hart_id);
 

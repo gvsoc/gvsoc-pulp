@@ -452,7 +452,7 @@ void udma::trigger_event(int event)
 
 
 udma::udma(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
   traces.new_trace("trace", &trace, vp::DEBUG);
 
@@ -462,10 +462,10 @@ udma::udma(vp::ComponentConf &config)
   this->periph_clock_itf.set_reg_meth(&udma::clk_reg);
   new_slave_port("periph_clock", &this->periph_clock_itf);
 
-  nb_periphs = get_js_config()->get_child_int("nb_periphs");
+  nb_periphs = this->cfg.nb_periphs;
   periphs.resize(nb_periphs);
 
-  l2_read_fifo_size = get_js_config()->get_child_int("properties/l2_read_fifo_size");
+  l2_read_fifo_size = this->cfg.l2_read_fifo_size;
 
   l2_itf.set_resp_meth(&udma::l2_response);
   l2_itf.set_grant_meth(&udma::l2_grant);
@@ -495,31 +495,21 @@ udma::udma(vp::ComponentConf &config)
 
   trace.msg("Instantiating udma channels (nb_periphs: %d)\n", nb_periphs);
 
-  js::Config *interfaces = get_js_config()->get("interfaces");
-
-  for (int i=0; i<interfaces->get_size(); i++)
+  for (size_t i=0; i<this->cfg.interfaces_count; i++)
   {
-    std::string name = interfaces->get_elem(i)->get_str();
-    js::Config *interface = get_js_config()->get(name);
+    auto &itf_cfg = this->cfg.interfaces[i];
+    std::string name = itf_cfg.name;
 
-    if (interface == NULL)
-    {
-      //warning.warning("Invalid JSON config, didn't find interface description (name: )\n");
-      return;
-    }
-
-    int nb_channels = interface->get("nb_channels")->get_int();
-    js::Config *ids = interface->get("ids");
-    js::Config *offsets = interface->get("offsets");
-    int size = interface->get_child_int("size");
-    int version = interface->get("version")->get_int();
+    int nb_channels = itf_cfg.nb_channels;
+    int size = itf_cfg.size;
+    int version = itf_cfg.version;
 
     trace.msg("Instantiating interface (type: %s, nb_channels: %d, version: %d)\n", name.c_str(), nb_channels, version);
 
     for (int j=0; j<nb_channels; j++)
     {
-      int id = ids->get_elem(j)->get_int();
-      int offset = offsets->get_elem(j)->get_int();
+      int id = itf_cfg.slots[j].id;
+      int offset = itf_cfg.slots[j].offset;
 
 
       if (0)
@@ -566,7 +556,7 @@ udma::udma(vp::ComponentConf &config)
         {
           // The ids list gives the periph slots of the hyper: one per tran_id plus the
           // common registers one, which is the last
-          int nb_ids = (int)ids->get_size();
+          int nb_ids = (int)itf_cfg.slots_count;
           int nb_tran_ids = nb_ids - 1;
 
           if (nb_channels != 1)
@@ -581,16 +571,10 @@ udma::udma(vp::ComponentConf &config)
               std::to_string(nb_ids) + ")");
           }
 
-          if ((int)offsets->get_size() != nb_ids)
-          {
-            throw logic_error("Hyper v3 ids and offsets have different sizes (ids: " +
-              std::to_string(nb_ids) + ", offsets: " + std::to_string(offsets->get_size()) + ")");
-          }
-
           for (int k=1; k<nb_ids; k++)
           {
-            if (ids->get_elem(k)->get_int() != id + k ||
-                offsets->get_elem(k)->get_int() != offset + k*UDMA_PERIPH_AREA_SIZE)
+            if (itf_cfg.slots[k].id != id + k ||
+                itf_cfg.slots[k].offset != offset + k*UDMA_PERIPH_AREA_SIZE)
             {
               throw logic_error("Hyper v3 ids and offsets must be contiguous (index: " +
                 std::to_string(k) + ")");

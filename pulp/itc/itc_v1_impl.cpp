@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "archi/itc_v1.h"
+#include <pulp/itc/itc_v1/itc_config.hpp>
 
 
 class itc : public vp::Component
@@ -39,6 +40,7 @@ public:
 
 
 private:
+  ItcConfig cfg;
 
   static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
@@ -91,7 +93,7 @@ private:
 };
 
 itc::itc(vp::ComponentConf &config)
-: vp::Component(config),
+: vp::Component(config, this->cfg),
 trace_irq(*this, "irq", 1)
 {
 
@@ -112,8 +114,8 @@ trace_irq(*this, "irq", 1)
   irq_ack_itf.set_sync_meth(&itc::irq_ack_sync);
   new_slave_port("irq_ack", &irq_ack_itf);
 
-  nb_fifo_events = get_js_config()->get_child_int("**/nb_fifo_events");
-  fifo_irq = get_js_config()->get_child_int("**/fifo_irq");
+  nb_fifo_events = this->cfg.nb_fifo_events;
+  fifo_irq = this->cfg.fifo_irq;
 
   fifo_event = new int[nb_fifo_events];
 

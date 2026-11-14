@@ -26,6 +26,7 @@
 #include <string.h>
 
 #include "archi/cluster_ctrl_v2.h"
+#include <pulp/cluster/cluster_control_v2/cluster_ctrl_config.hpp>
 
 class Core_cluster_ctrl
 {
@@ -49,6 +50,7 @@ public:
   static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
+  ClusterCtrlConfig cfg;
 
 
   static void halt_status_sync(vp::Block *__this, bool status, int id);
@@ -69,9 +71,9 @@ private:
 };
 
 cluster_ctrl::cluster_ctrl(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
-  nb_core = get_js_config()->get_child_int("nb_core");
+  nb_core = this->cfg.nb_core;
 
   cores = (Core_cluster_ctrl *)new Core_cluster_ctrl[nb_core];
 

@@ -29,6 +29,7 @@
 using namespace std;
 
 #include "archi/mchan_v7.h"
+#include <pulp/mchan/mchan_v7/mchan_config.hpp>
 
 // The number of writes to an input port queue register, that triggers an enqueue
 #define MAX_CMD_WORDS 5
@@ -162,6 +163,7 @@ public:
   void reset(bool active);
 
 protected:
+  MchanConfig cfg;
   static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req, int id);
   uint32_t get_status();
   void free_counters(uint32_t counter_mask);
@@ -558,17 +560,17 @@ void mchan::loc_response(vp::Block *__this, vp::IoReq *req)
 
 
 mchan::mchan(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
-  nb_channels = get_js_config()->get_child_int("nb_channels");
-  core_queue_depth = get_js_config()->get_child_int("core_queue_depth");
-  global_queue_depth = get_js_config()->get_child_int("global_queue_depth");
-  is_64 = get_js_config()->get_child_bool("is_64");
-  max_nb_ext_read_req = get_js_config()->get_child_int("max_nb_ext_read_req");
-  max_nb_ext_write_req = get_js_config()->get_child_int("max_nb_ext_write_req");
-  max_burst_length = get_js_config()->get_child_int("max_burst_length");
-  nb_loc_ports = get_js_config()->get_child_int("nb_loc_ports");
-  tcdm_addr_width = get_js_config()->get_child_int("tcdm_addr_width");
+  nb_channels = this->cfg.nb_channels;
+  core_queue_depth = this->cfg.core_queue_depth;
+  global_queue_depth = this->cfg.global_queue_depth;
+  is_64 = this->cfg.is_64;
+  max_nb_ext_read_req = this->cfg.max_nb_ext_read_req;
+  max_nb_ext_write_req = this->cfg.max_nb_ext_write_req;
+  max_burst_length = this->cfg.max_burst_length;
+  nb_loc_ports = this->cfg.nb_loc_ports;
+  tcdm_addr_width = this->cfg.tcdm_addr_width;
 
   check_queue_event = event_new(mchan::check_queue_handler);
   check_ext_read_event = event_new(mchan::check_ext_read_handler);

@@ -27,6 +27,7 @@
 #include <math.h>
 
 #include "archi/fll_v1.h"
+#include <pulp/fll/fll_v1/fll_config.hpp>
 
 #define REG_MASK(offset,size) (((1<<(size))-1) << (offset))
 #define REG_GET(fullValue,offset,size) (((fullValue) & REG_MASK(offset, size)) >> offset)
@@ -43,6 +44,7 @@ public:
   static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
+  FllConfig cfg;
 
   vp::IoReqStatus status_req(int reg_offset, int size, bool is_write, uint8_t *data);
   vp::IoReqStatus conf1_req(int reg_offset, int size, bool is_write, uint8_t *data);
@@ -83,7 +85,7 @@ private:
 };
 
 fll::fll(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
   this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
@@ -96,10 +98,10 @@ fll::fll(vp::ComponentConf &config)
 
   new_master_port("clock_out", &fll_clock_itf);
 
-  this->status_reg_reset = get_js_config()->get("regmap/status/reset")->get_int();
-  this->conf1_reg_reset = get_js_config()->get("regmap/conf1/reset")->get_int();
-  this->conf2_reg_reset = get_js_config()->get("regmap/conf2/reset")->get_int();
-  this->integrator_reg_reset = get_js_config()->get("regmap/integrator/reset")->get_int();
+  this->status_reg_reset = this->cfg.status_reset;
+  this->conf1_reg_reset = this->cfg.conf1_reset;
+  this->conf2_reg_reset = this->cfg.conf2_reset;
+  this->integrator_reg_reset = this->cfg.integrator_reset;
 
 
 }

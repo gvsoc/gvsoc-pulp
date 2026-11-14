@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "archi/eu_v3.h"
+#include <ips/pulp/event_unit/v3/event_unit/event_unit_config.hpp>
 
 class Core_event_unit;
 class Event_unit;
@@ -207,6 +208,8 @@ public:
 
   Event_unit(vp::ComponentConf &config);
 
+  EventUnitConfig cfg;
+
   void reset(bool active);
 
   static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
@@ -297,9 +300,9 @@ private:
 
 
 Event_unit::Event_unit(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
-  nb_core = get_js_config()->get_child_int("nb_core");
+  nb_core = this->cfg.nb_core;
 
   traces.new_trace("trace", &trace, vp::DEBUG);
 
@@ -1023,8 +1026,8 @@ Mutex_unit::Mutex_unit(Event_unit *top)
 : top(top)
 {
   top->traces.new_trace("mutex/trace", &trace, vp::DEBUG);
-  nb_mutexes = top->get_js_config()->get_child_int("**/properties/mutex/nb_mutexes");
-  mutex_event = top->get_js_config()->get_child_int("**/properties/events/mutex");
+  nb_mutexes = top->cfg.nb_mutexes;
+  mutex_event = top->cfg.mutex_event;
   mutexes = new Mutex[nb_mutexes];
 }
 
@@ -1167,8 +1170,8 @@ vp::IoReqStatus Dispatch_unit::enqueue_sleep(Dispatch *dispatch, vp::IoReq *req,
 Dispatch_unit::Dispatch_unit(Event_unit *top)
 : top(top)
 {
-  dispatch_event = top->get_js_config()->get_child_int("**/properties/events/dispatch");
-  size = top->get_js_config()->get_child_int("**/properties/dispatch/size");
+  dispatch_event = top->cfg.dispatch_event;
+  size = top->cfg.dispatch_size;
   core = new Dispatch_core[top->nb_core];
   dispatches = new Dispatch[size];
 }
@@ -1329,8 +1332,8 @@ Barrier_unit::Barrier_unit(Event_unit *top)
 : top(top)
 {
   top->traces.new_trace("barrier/trace", &trace, vp::DEBUG);
-  nb_barriers = top->get_js_config()->get_child_int("**/properties/barriers/nb_barriers");
-  barrier_event = top->get_js_config()->get_child_int("**/properties/events/barrier");
+  nb_barriers = top->cfg.nb_barriers;
+  barrier_event = top->cfg.barrier_event;
   barriers = new Barrier[nb_barriers];
 }
 
@@ -1474,8 +1477,8 @@ void Barrier_unit::reset()
 
 Soc_event_unit::Soc_event_unit(Event_unit *top) : top(top)
 {
-  this->nb_fifo_events = top->get_js_config()->get_child_int("**/nb_fifo_events");
-  this->fifo_soc_event = top->get_js_config()->get_child_int("**/fifo_event");
+  this->nb_fifo_events = top->cfg.nb_fifo_events;
+  this->fifo_soc_event = top->cfg.fifo_event;
 
   top->traces.new_trace("soc_eu/trace", &trace, vp::DEBUG);
 

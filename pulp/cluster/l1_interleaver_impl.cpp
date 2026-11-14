@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <vector>
+#include <pulp/cluster/l1_interleaver/l1_interleaver_config.hpp>
 
 class interleaver : public vp::Component, public vp::DebugMemIf
 {
@@ -46,6 +47,7 @@ public:
 
 
 private:
+  L1InterleaverConfig cfg;
   vp::Trace     trace;
 
   vp::IoMaster **out;
@@ -66,18 +68,18 @@ private:
 };
 
 interleaver::interleaver(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
   traces.new_trace("trace", &trace, vp::DEBUG);
 
   in.set_req_meth(&interleaver::req);
   new_slave_port("in", &in);
 
-  nb_slaves = get_js_config()->get_child_int("nb_slaves");
-  nb_masters = get_js_config()->get_child_int("nb_masters");
-  stage_bits = get_js_config()->get_child_int("stage_bits");
-  offset_mask = get_js_config()->get_child_int("offset_mask");
-  interleaving_bits = get_js_config()->get_child_int("interleaving_bits");
+  nb_slaves = this->cfg.nb_slaves;
+  nb_masters = this->cfg.nb_masters;
+  stage_bits = this->cfg.stage_bits;
+  offset_mask = this->cfg.offset_mask;
+  interleaving_bits = this->cfg.interleaving_bits;
 
   if (stage_bits == 0)
   {

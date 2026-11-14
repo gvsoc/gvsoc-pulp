@@ -19,6 +19,7 @@
  */
 
 #include <vp/vp.hpp>
+#include <ips/pulp/idma_v2/reg_dma_config/reg_dma_config.hpp>
 #include "fe/idma_fe_xdma.hpp"
 #include "me/idma_me_2d.hpp"
 #include "be/idma_be.hpp"
@@ -41,6 +42,7 @@ public:
     SnitchDma(vp::ComponentConf &config);
 
 private:
+    RegDmaConfig cfg;
     IDmaFeXdma fe;
     IDmaMe2D me;
     IDmaBeAxi be_axi_read;
@@ -51,10 +53,13 @@ private:
 
 
 SnitchDma::SnitchDma(vp::ComponentConf &config)
-    : vp::Component(config),
+    : vp::Component(config, this->cfg),
     fe(this, &this->me),
-    me(this, &this->fe, &this->be),
-    be_axi_read(this, "axi_read", &this->be), be_axi_write(this, "axi_write", &this->be),
+    me(this, &this->fe, &this->be, this->cfg.transfer_queue_size),
+    be_axi_read(this, "axi_read", &this->be, this->cfg.burst_queue_size, this->cfg.burst_size,
+        this->cfg.axi_width),
+    be_axi_write(this, "axi_write", &this->be, this->cfg.burst_queue_size, this->cfg.burst_size,
+        this->cfg.axi_width),
     be(this, &this->me, &this->be_axi_read, &this->be_axi_write)
 {
 }

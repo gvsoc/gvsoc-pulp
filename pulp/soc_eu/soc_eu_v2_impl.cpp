@@ -26,6 +26,7 @@
 #include <vp/itf/clock.hpp>
 #include <string.h>
 #include "archi/soc_eu_v2.h"
+#include <pulp/soc_eu/soc_eu_v2/soc_eu_config.hpp>
 
 class soc_eu;
 
@@ -52,6 +53,7 @@ public:
   static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
+  SocEuConfig cfg;
 
   static void event_in_sync(vp::Block *__this, int event);
   static void ref_clock_sync(vp::Block *_this, bool value);
@@ -75,21 +77,21 @@ private:
 };
 
 soc_eu::soc_eu(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
   traces.new_trace("trace", &trace, vp::DEBUG);
   in.set_req_meth(&soc_eu::req);
   new_slave_port("input", &in);
 
-  this->ref_clock_event = this->get_js_config()->get_child_int("ref_clock_event");
+  this->ref_clock_event = this->cfg.ref_clock_event;
   this->ref_clock.set_sync_meth(&soc_eu::ref_clock_sync);
   this->new_slave_port("ref_clock", &this->ref_clock);
 
   event_in_itf.set_sync_meth(&soc_eu::event_in_sync);
   new_slave_port("event_in", &event_in_itf);
 
-  nb_fc_events = get_js_config()->get_child_int("properties/nb_fc_events");
-  first_fc_event = get_js_config()->get_child_int("properties/first_fc_event");
+  nb_fc_events = this->cfg.nb_fc_events;
+  first_fc_event = this->cfg.first_fc_event;
 
   new_master_port("ref_clock_event", &ref_clock_event_itf);
 

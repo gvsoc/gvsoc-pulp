@@ -16,19 +16,27 @@
 
 import gvsoc.gui
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class ItcConfig(Config):
+    """Configuration of the PULP interrupt controller."""
+
+    nb_fifo_events: int = cfg_field(default=8, desc=(
+        "Number of entries of the SoC event FIFO"
+    ))
+    fifo_irq: int = cfg_field(default=26, desc=(
+        "Interrupt raised when the SoC event FIFO is not empty"
+    ))
+
 
 class Itc_v1(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name: str):
 
-        super(Itc_v1, self).__init__(parent, name)
+        super(Itc_v1, self).__init__(parent, name, config=ItcConfig())
 
-        self.set_component('pulp.itc.itc_v1_impl')
-
-        self.add_properties({
-            "nb_fifo_events": 8,
-            "fifo_irq": 26
-        })
+        self.add_sources(['pulp/itc/itc_v1_impl.cpp'])
 
     def o_IRQ_REQ(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('irq_req', itf, signature=f'wire<int>')
