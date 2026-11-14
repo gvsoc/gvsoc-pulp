@@ -14,7 +14,6 @@
 # limitations under the License.
 #
 
-import os
 import gvsoc.systree as st
 import pulp.cpu.iss.pulp_cores as iss
 from cache.hierarchical_cache import Hierarchical_cache
@@ -103,12 +102,7 @@ class Cluster(st.Component):
         first_external_pcer = 12
         has_ne16 = False       # Because RedMulE is alternative to NE16!!
 
-        if os.environ.get('USE_GVRUN') is None:
-            has_redmule = self.declare_user_property(
-                name='redmule', value=False, cast=bool, description='Enable Redmule'
-            )
-        else:
-            has_redmule = self.get_property('has_redmule')
+        has_redmule = self.get_property('has_redmule')
 
         #
         # Components

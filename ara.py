@@ -19,7 +19,6 @@ try:
 except ImportError:
     from typing_extensions import override  # Python 3.10–3.11
 
-import os
 
 import gvsoc.runner
 import pulp.cva6.cva6
@@ -45,14 +44,8 @@ class Soc(st.Component):
             cast=str
         )
 
-        # With the legacy gvsoc launcher, configure() is never called and the binary comes
-        # from the command line, so it must be resolved now. With gvrun, it comes from a
-        # parameter and is handled in configure() since it can also be set from the build
-        # process.
+        # The binary is set in configure(), from the binary parameter.
         binary = None
-        if os.environ.get('USE_GVRUN') is None and parser is not None:
-            [args, __] = parser.parse_known_args()
-            binary = args.binary
 
         dram = memory.Memory(self, 'dram', size=0x10000000, atomics=True, width_log2=-1)
 

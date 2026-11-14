@@ -28,10 +28,7 @@ from devices.testbench.testbench import Testbench
 from devices.uart.uart_checker import Uart_checker
 import gvsoc.runner
 from pulp.chips.pulp_open.pulp_open import PulpOpenAttr
-if os.environ.get('USE_GVRUN') is None:
-    from gapylib.chips.pulp.flash import *
-else:
-    import gvrun.flash
+import gvrun.flash
 
 
 class Pulp_open_board(st.Component):
@@ -52,29 +49,20 @@ class Pulp_open_board(st.Component):
         hyperflash = Hyperflash(self, 'hyperflash')
         hyperram = Hyperram(self, 'ram')
 
-        if os.environ.get('USE_GVRUN') is None:
-            self.register_flash(
-                DefaultFlashRomV2(self, 'hyperflash', image_name=hyperflash.get_image_path(),
-                    flash_attributes={
-                        "flash_type": 'hyper'
-                    },
-                    size=8*1024*1024
-                ))
-        else:
-            default_content = os.path.join(
-                os.path.dirname(__file__), 'default_flash_content.json')
-            flash = gvrun.flash.Flash(
-                name='hyperflash',
-                size=8 * 1024 * 1024,
-                attributes={'flash_type': 'hyper'},
-                default_content_path=default_content,
-            )
-            self.register_flash(flash)
-            # Point the Hyperflash C++ model at the image gvrun will write.
-            # gvrun writes to {work_dir}/{image-basename}; GVSoC runs with
-            # cwd == work_dir (see gvsoc/runner.py), so a relative path is
-            # sufficient.
-            hyperflash.add_property('content/image', flash.get_image_basename())
+        default_content = os.path.join(
+            os.path.dirname(__file__), 'default_flash_content.json')
+        flash = gvrun.flash.Flash(
+            name='hyperflash',
+            size=8 * 1024 * 1024,
+            attributes={'flash_type': 'hyper'},
+            default_content_path=default_content,
+        )
+        self.register_flash(flash)
+        # Point the Hyperflash C++ model at the image gvrun will write.
+        # gvrun writes to {work_dir}/{image-basename}; GVSoC runs with
+        # cwd == work_dir (see gvsoc/runner.py), so a relative path is
+        # sufficient.
+        hyperflash.add_property('content/image', flash.get_image_basename())
 
         self.bind(pulp, 'hyper0_cs1_data', hyperflash, 'input')
 

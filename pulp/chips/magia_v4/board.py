@@ -17,7 +17,6 @@
 # Authors: Lorenzo Zuolo, Chips-IT (lorenzo.zuolo@chips.it)
 import gvsoc.systree
 import gvsoc.runner
-import os
 from pulp.chips.magia_v4.arch import MagiaTree, MagiaArch
 
 from pulp.chips.magia_v4.soc import MagiaV4Soc
@@ -33,12 +32,7 @@ class MagiaV4Board(gvsoc.systree.Component):
             self, name='binary', value=None, description='Binary to be loaded and started',
             cast=str
         )
-
-        # When using gvsoc script, keep getting the binary using the --binary option
         binary = None
-        if os.environ.get('USE_GVRUN') is None:
-            [args, __] = parser.parse_known_args()
-            binary = args.binary
 
         # Soc model
         tree = MagiaTree(self, 'magia_v4')

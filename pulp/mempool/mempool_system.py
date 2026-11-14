@@ -22,7 +22,6 @@ try:
 except ImportError:
     from typing_extensions import override  # Python 3.10–3.11
 
-import os
 
 import memory.memory as memory
 from vp.clock_domain import Clock_domain
@@ -52,14 +51,8 @@ class System(st.Component):
             cast=str
         )
 
-        # With the legacy gvsoc launcher, configure() is never called and the binary comes
-        # from the command line, so it must be resolved now. With gvrun, it comes from a
-        # parameter and is handled in configure() since it can also be set from the build
-        # process.
+        # The binary is set in configure(), from the binary parameter.
         binary = None
-        if os.environ.get('USE_GVRUN') is None and parser is not None:
-            [args, __] = parser.parse_known_args()
-            binary = args.binary
 
         nb_axi_masters = nb_axi_masters_per_group * nb_groups
         nb_banks_per_group = (total_cores // nb_groups) * bank_factor

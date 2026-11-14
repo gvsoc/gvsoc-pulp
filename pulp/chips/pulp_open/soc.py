@@ -14,7 +14,6 @@
 # limitations under the License.
 #
 
-import os
 import gvsoc.systree as st
 import pulp.cpu.iss.pulp_cores as iss
 import memory.memory as memory
@@ -79,12 +78,7 @@ class Soc(st.Component):
         udma_conf = self.load_property_file(udma_conf_path)
         fc_events = soc_conf.get_property('peripherals/fc_itc/irq')
 
-        if os.environ.get('USE_GVRUN') is None:
-            fic = self.declare_user_property(
-                name='fic', value=False, cast=bool, description='Enable Fic'
-            )
-        else:
-            fic = self.get_property('fic')
+        fic = self.get_property('fic')
 
 
         TargetParameter(
@@ -98,10 +92,6 @@ class Soc(st.Component):
 
         # Loader
         binary = None
-        if os.environ.get('USE_GVRUN') is None:
-            if parser is not None:
-                [args, otherArgs] = parser.parse_known_args()
-                binary = args.binary
 
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary)
 

@@ -19,7 +19,6 @@ try:
 except ImportError:
     from typing_extensions import override  # Python 3.10–3.11
 
-import os
 
 import gvsoc.runner
 import gvsoc.systree
@@ -306,17 +305,9 @@ class OccamyBoard(gvsoc.systree.Component):
     def __init__(self, parent, name, parser, options):
         super(OccamyBoard, self).__init__(parent, name, options=options)
 
-        # With the legacy gvsoc launcher, configure() is never called and the binary comes
-        # from the command line, so it must be resolved now. With gvrun, it comes from a
-        # parameter and is handled in configure() since it can also be set from the build
-        # process.
+        # The binary is set in configure(), from the binary parameter.
         binary = None
         debug_binaries = []
-        if os.environ.get('USE_GVRUN') is None and parser is not None:
-            [args, otherArgs] = parser.parse_known_args()
-            binary = args.binary
-            if binary is not None:
-                debug_binaries.append(binary)
 
         clock = Clock_domain(self, 'clock', frequency=10000000)
 

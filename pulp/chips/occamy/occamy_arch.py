@@ -14,7 +14,6 @@
 # limitations under the License.
 #
 
-import os
 
 from gvrun.attribute import Tree
 from pulp.snitch.snitch_cluster.snitch_v2_cluster import ClusterArch
@@ -72,11 +71,6 @@ class OccamyArch:
 
         if properties is None:
             properties = OccamyArchProperties()
-
-        # With the legacy gvsoc launcher, the architecture can be tuned through user
-        # properties. With gvrun, the defaults are used.
-        if os.environ.get('USE_GVRUN') is None:
-            properties.declare_target_properties(target)
         attr_parent = Tree(target, 'occamy')
 
         self.chip = OccamyArch.Chip(properties, attr_parent)

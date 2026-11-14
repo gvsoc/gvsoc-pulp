@@ -29,10 +29,7 @@ from pulp.chips.siracusa.soc import SiracusaSoc, SiracusaSocConfig
 from devices.hyperbus.hyperflash import Hyperflash
 from devices.hyperbus.hyperram import Hyperram
 from devices.uart.uart_checker import Uart_checker
-if os.environ.get('USE_GVRUN') is None:
-    from gapylib.chips.pulp.flash import DefaultFlashRomV2
-else:
-    import gvrun.flash
+import gvrun.flash
 
 
 class SiracusaConfig(Config):
@@ -80,26 +77,17 @@ class SiracusaBoard(Component):
         hyperflash = Hyperflash(self, 'hyperflash')
         hyperram = Hyperram(self, 'ram')
 
-        if os.environ.get('USE_GVRUN') is None:
-            self.register_flash(
-                DefaultFlashRomV2(self, 'hyperflash', image_name=hyperflash.get_image_path(),
-                    flash_attributes={
-                        "flash_type": 'hyper'
-                    },
-                    size=8*1024*1024
-                ))
-        else:
-            default_content = os.path.join(os.path.dirname(__file__), 'default_flash_content.json')
-            flash = gvrun.flash.Flash(
-                name='hyperflash',
-                size=8 * 1024 * 1024,
-                attributes={'flash_type': 'hyper'},
-                default_content_path=default_content,
-            )
-            self.register_flash(flash)
-            # gvrun writes the image to {work_dir}/{image-basename}, where
-            # GVSoC runs
-            hyperflash.add_property('content/image', flash.get_image_basename())
+        default_content = os.path.join(os.path.dirname(__file__), 'default_flash_content.json')
+        flash = gvrun.flash.Flash(
+            name='hyperflash',
+            size=8 * 1024 * 1024,
+            attributes={'flash_type': 'hyper'},
+            default_content_path=default_content,
+        )
+        self.register_flash(flash)
+        # gvrun writes the image to {work_dir}/{image-basename}, where
+        # GVSoC runs
+        hyperflash.add_property('content/image', flash.get_image_basename())
 
         self.bind(chip, 'hyper0_cs1', hyperflash, 'input')
         self.bind(chip, 'hyper0_cs0', hyperram, 'input')

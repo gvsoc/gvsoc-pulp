@@ -47,7 +47,6 @@ DMA accesses to the cluster peripherals are not decoded by the cluster, which
 sends them back out; do not use them.
 """
 
-import os
 
 import gvsoc.systree
 from gvsoc.signature import IoV2Beat
@@ -305,14 +304,10 @@ class SafetyIsland(gvsoc.systree.Component):
             # executables. Binaries built by gvrun register themselves, the
             # others, like the ones given through the binary parameter, are
             # registered here.
-            if os.environ.get('USE_GVRUN2') is None:
-                self.host.handle_executable(binary)
-                self.clusters.handle_executable(binary)
-            else:
-                from gvrun.systree import ExecutableContainer
-                registered = [exe.get_binary() for exe in self.get_executables()]
-                if binary not in registered:
-                    self.add_executable(ExecutableContainer(binary))
+            from gvrun.systree import ExecutableContainer
+            registered = [exe.get_binary() for exe in self.get_executables()]
+            if binary not in registered:
+                self.add_executable(ExecutableContainer(binary))
 
     def handle_binary(self, binary: str):
         # Called when an executable is attached to a hierarchy of components

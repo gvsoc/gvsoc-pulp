@@ -19,7 +19,6 @@ try:
 except ImportError:
     from typing_extensions import override  # Python 3.10–3.11
 
-import os
 
 import gvsoc.runner
 from pulp.cpu.iss.cva6 import Cva6
@@ -51,22 +50,9 @@ class Soc(st.Component):
             cast=str
         )
 
-        # With the legacy gvsoc launcher, configure() is never called and options come
-        # from the command line, so they must be resolved now. With gvrun, they come
-        # from parameters, the binary being handled in configure() since it can also
-        # be set from the build process.
+        # The binary is set in configure(), from the binary parameter.
         binary = None
-        if os.environ.get('USE_GVRUN') is None and parser is not None:
-            parser.add_argument("--isa", dest="isa", type=str, default=None,
-                help="RISCV-V ISA string (default: rv64imafdc)")
-
-            [args, __] = parser.parse_known_args()
-            binary = args.binary
-            # The build also generates the tree through this path, with the isa
-            # coming as a target parameter (e.g. cva6:soc/isa=rv32imafc)
-            isa = args.isa if args.isa is not None else self.get_parameter('isa')
-        else:
-            isa = self.get_parameter('isa')
+        isa = self.get_parameter('isa')
 
         mem = memory.Memory(self, 'mem', size=0x80000000, atomics=True)
         rom = memory.Memory(self, 'rom', size=0x10000, stim_file=self.get_file_path('pulp/chips/rv64/rom.bin'))

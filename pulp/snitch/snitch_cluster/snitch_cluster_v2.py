@@ -154,15 +154,6 @@ class SnitchCluster(gvsoc.systree.Component):
         binary = None
         binaries = []
 
-        if os.environ.get('USE_GVRUN') is None:
-            if parser is not None:
-                [args, __] = parser.parse_known_args()
-
-                if parser is not None:
-                    [args, otherArgs] = parser.parse_known_args()
-                    binary = args.binary
-                    if binary is not None:
-                        binaries = [binary]
 
         for core_id in range(0, arch.nb_core):
 

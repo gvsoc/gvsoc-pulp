@@ -191,14 +191,10 @@ class Soc(gvsoc.systree.Component):
             # handle it at generate time, once it has been built. Binaries built by gvrun
             # register themselves as executables, so only register the missing ones,
             # like prebuilt binaries given through the binary parameter.
-            if os.environ.get('USE_GVRUN2') is None:
-                for cluster in self.clusters:
-                    cluster.handle_executable(binary)
-            else:
-                from gvrun.systree import ExecutableContainer
-                registered = [exe.get_binary() for exe in self.get_executables()]
-                if binary not in registered:
-                    self.add_executable(ExecutableContainer(binary))
+            from gvrun.systree import ExecutableContainer
+            registered = [exe.get_binary() for exe in self.get_executables()]
+            if binary not in registered:
+                self.add_executable(ExecutableContainer(binary))
 
 
     def handle_binary(self, binary):
@@ -358,11 +354,6 @@ class SnitchBoard(gvsoc.systree.Component):
 
         binary = None
         debug_binaries = []
-        if os.environ.get('USE_GVRUN') is None:
-            [args, otherArgs] = parser.parse_known_args()
-            binary = args.binary
-            if binary is not None:
-                debug_binaries.append(binary)
 
         clock = Clock_domain(self, 'clock', frequency=10000000)
 

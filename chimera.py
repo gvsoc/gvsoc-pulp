@@ -3,7 +3,6 @@ try:
 except ImportError:
     from typing_extensions import override  # Python 3.10–3.11
 
-import os
 
 import gvsoc.runner
 import gvsoc.systree
@@ -23,10 +22,7 @@ import pulp.itc.itc_v1 as itc
 import cpu.clint
 import cpu.iss.riscv
 from pulp.snitch.snitch_cluster.snitch_cluster import ClusterArch, SnitchCluster
-if os.environ.get('USE_GVRUN') is None:
-    from pulp.chips.snitch.snitch import SnitchArchProperties
-else:
-    from gvrun.attribute import Tree
+from gvrun.attribute import Tree
 from pulp.stdout.stdout_v3 import Stdout
 from gvrun.parameter import TargetParameter
 
@@ -61,28 +57,17 @@ class SnitchClusterGroup(gvsoc.systree.Component):
         # peripherals and zero memory at this cluster-independent address.
         alias_base = 0x18000000
 
-        # With the legacy gvsoc launcher, the cluster arch comes from the legacy snitch
-        # properties. With gvrun, it is rooted in an attribute tree.
-        if os.environ.get('USE_GVRUN') is not None:
-            attr_parent = Tree(self, 'snitch')
+        # The cluster arch is rooted in an attribute tree.
+        attr_parent = Tree(self, 'snitch')
 
         self.clusters = []
         for id in range(0, nb_clusters):
-            if os.environ.get('USE_GVRUN') is None:
-                properties = SnitchArchProperties()
-                cluster_arch = ClusterArch(properties=properties,
-                                           base=cluster_start_addr[id],
-                                           first_hartid=(id * 9) + 1,
-                                           auto_fetch=True,
-                                           boot_addr=0x30000000,
-                                           alias_base=alias_base)
-            else:
-                cluster_arch = ClusterArch(attr_parent, 'cluster',
-                                           cluster_start_addr[id],
-                                           (id * 9) + 1,
-                                           auto_fetch=True,
-                                           boot_addr=0x30000000,
-                                           alias_base=alias_base)
+            cluster_arch = ClusterArch(attr_parent, 'cluster',
+                                       cluster_start_addr[id],
+                                       (id * 9) + 1,
+                                       auto_fetch=True,
+                                       boot_addr=0x30000000,
+                                       alias_base=alias_base)
             self.clusters.append(
                 SnitchCluster(self, f'cluster_{id}', cluster_arch,
                               entry=entry))
@@ -161,14 +146,8 @@ class SafetyIsland(gvsoc.systree.Component):
             cast=str
         )
 
-        # With the legacy gvsoc launcher, configure() is never called and the binary comes
-        # from the command line, so it must be resolved now. With gvrun, it comes from a
-        # parameter and is handled in configure() since it can also be set from the build
-        # process.
+        # The binary is set in configure(), from the binary parameter.
         binary = None
-        if os.environ.get('USE_GVRUN') is None and parser is not None:
-            [args, otherArgs] = parser.parse_known_args()
-            binary = args.binary
 
         # Load configuration from HJSON file
         with open(self.get_file_path('pulp/chips/chimera/safety-island.hjson'), 'r') as file:
