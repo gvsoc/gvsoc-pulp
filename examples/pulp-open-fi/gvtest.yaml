@@ -1,2 +1,2 @@
 targets:
-  pulp-open:chip/soc/fic=true:
+  pulp-open:attr.chip/soc/fic=true:

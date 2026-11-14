@@ -18,7 +18,7 @@ FIC = 'chip/soc/fic'
 # The FIC is instantiated at generation time, so the campaign needs the
 # fic-enabled variant of pulp-open. It is built and installed by the
 # normal SDK build (see TARGETS in the root Makefile).
-TARGET = 'pulp-open:chip/soc/fic=true'
+TARGET = 'pulp-open:attr.chip/soc/fic=true'
 
 TOTAL_RUNS = 3
 
@@ -27,9 +27,6 @@ EXPECTED_CLASSIFICATION = {
     "0-1": "SDC",
     "0-2": "DUE",
 }
-
-NB_PE                   = 8
-NB_CLUSTER              = 4
 
 PRINT_INJECTIONS        = True
 PRINT_DETAILS           = True
@@ -162,10 +159,6 @@ def main():
         binary=binary,
         workdir=workdir,
         gvsoc_bin=args.gvsoc,
-        config_opts=(
-            f"--config-opt=cluster/nb_pe={NB_PE} "
-            f"--config-opt=**/nb_cluster={NB_CLUSTER}"
-        ),
         print_injections=PRINT_INJECTIONS,
         print_details=PRINT_DETAILS,
         threads=1,
