@@ -17,6 +17,16 @@
 # Authors: Lorenzo Zuolo, Chips-IT (lorenzo.zuolo@chips.it)
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class FractalSyncConfig(Config):
+    """Configuration of a FractalSync node."""
+
+    level: int = cfg_field(default=0, desc=(
+        "Level of the node in the synchronization tree"
+    ))
+
 
 class FractalSync(gvsoc.systree.Component):
 
@@ -25,11 +35,7 @@ class FractalSync(gvsoc.systree.Component):
                 name: str,
                 level: int):
 
-        super().__init__(parent, name)
-
-        self.add_properties({
-            'level' : level,
-        })
+        super().__init__(parent, name, config=FractalSyncConfig(level=level))
 
         self.add_sources(['pulp/chips/magia_v2/fractal_sync/fractal_sync.cpp'])
 

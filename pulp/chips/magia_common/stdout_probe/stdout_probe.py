@@ -18,6 +18,15 @@
 
 import gvsoc.systree
 from gvsoc.signature import IoV2Beat
+from config_tree import Config, cfg_field
+
+
+class StdoutProbeConfig(Config):
+    """Configuration of the stdout probe."""
+
+    addr: int = cfg_field(default=0, fmt="hex", desc=(
+        "Address whose writes are characters of the standard output"
+    ))
 
 
 class StdoutProbe(gvsoc.systree.Component):
@@ -31,12 +40,9 @@ class StdoutProbe(gvsoc.systree.Component):
     """
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, width: int, addr: int):
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=StdoutProbeConfig(addr=addr))
 
         self.add_sources(['pulp/chips/magia_common/stdout_probe/stdout_probe.cpp'])
-        self.add_properties({
-            'addr': addr,
-        })
         self.width = width
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:

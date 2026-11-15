@@ -18,6 +18,16 @@
 
 import gvsoc.systree
 from gvsoc.signature import IoV2Sync
+from config_tree import Config, cfg_field
+
+
+class ClusterRegsConfig(Config):
+    """Configuration of the MAGIA cluster registers."""
+
+    nb_pulp_cores: int = cfg_field(default=0, desc=(
+        "Number of PULP cores of the cluster"
+    ))
+
 
 class ClusterRegs(gvsoc.systree.Component):
 
@@ -26,11 +36,7 @@ class ClusterRegs(gvsoc.systree.Component):
                 name: str,
                 nb_pulp_cores: int):
 
-        super().__init__(parent, name)
-
-        self.add_properties({
-            'nb_pulp_cores' : nb_pulp_cores,
-        })
+        super().__init__(parent, name, config=ClusterRegsConfig(nb_pulp_cores=nb_pulp_cores))
 
         self.add_sources(['pulp/chips/magia_v3/cluster_regs/cluster_regs.cpp'])
 

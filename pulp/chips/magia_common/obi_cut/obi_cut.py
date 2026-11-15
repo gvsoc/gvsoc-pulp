@@ -18,6 +18,18 @@
 
 import gvsoc.systree
 from gvsoc.signature import IoV2Beat, IoV2SingleReq
+from config_tree import Config, cfg_field
+
+
+class ObiCutConfig(Config):
+    """Configuration of the OBI cut."""
+
+    width: int = cfg_field(default=0, desc=(
+        "Width in bytes of the port"
+    ))
+    resp_latency: int = cfg_field(default=0, desc=(
+        "Latency in cycles added to each response"
+    ))
 
 
 class ObiCut(gvsoc.systree.Component):
@@ -34,13 +46,9 @@ class ObiCut(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, width: int,
             resp_latency: int=0):
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=ObiCutConfig(width=width, resp_latency=resp_latency))
 
         self.add_sources(['pulp/chips/magia_common/obi_cut/obi_cut.cpp'])
-        self.add_properties({
-            'width': width,
-            'resp_latency': resp_latency,
-        })
         self.width = width
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:

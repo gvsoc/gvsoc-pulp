@@ -26,6 +26,7 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
+#include <pulp/chips/magia_v3/cluster_regs/cluster_regs/cluster_regs_config.hpp>
 
 /*****************************************************
 *                   Class Definition                 *
@@ -41,6 +42,7 @@ public:
     static void pulp_start_deassert_handler(vp::Block *__this, vp::ClockEvent *event);
 
 protected:
+  ClusterRegsConfig cfg;
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
     vp::IoSlave         input_itf{&ClusterRegs::req};
 
@@ -105,7 +107,7 @@ extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 }
 
 ClusterRegs::ClusterRegs(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
@@ -128,7 +130,7 @@ ClusterRegs::ClusterRegs(vp::ComponentConf &config)
     this->pulp_start_reg.set(0x00000000);
     this->pulp_ready_reg.set(0x00000000);
 
-    this->nb_pulp_cores      = get_js_config()->get("nb_pulp_cores")->get_int();
+    this->nb_pulp_cores      = this->cfg.nb_pulp_cores;
     this->nb_recv_ack_reqs   = 0;
     this->nb_recv_end_reqs   = 0;
     this->nb_recv_ready_reqs = 0;

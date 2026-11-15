@@ -22,6 +22,7 @@
 #include <string>
 #include <vp/vp.hpp>
 #include <vp/itf/io_v2.hpp>
+#include <pulp/chips/magia_common/stdout_probe/stdout_probe/stdout_probe_config.hpp>
 
 /*
  * Print monitor of the MAGIA testbench (magia_vip.sv, print_monitor), on the
@@ -40,6 +41,7 @@ public:
     StdoutProbe(vp::ComponentConf &config);
 
 private:
+  StdoutProbeConfig cfg;
     static vp::IoReqStatus in_req(vp::Block *__this, vp::IoReq *req);
     static void in_resp_retry(vp::Block *__this, vp::IoRetryChannel channel);
     static vp::IoRespAck out_resp(vp::Block *__this, vp::IoReq *req);
@@ -55,14 +57,14 @@ private:
 };
 
 StdoutProbe::StdoutProbe(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
     this->new_slave_port("input", &this->in);
     this->new_master_port("output", &this->out);
 
-    this->addr = this->get_js_config()->get_uint("addr");
+    this->addr = this->cfg.addr;
 }
 
 vp::IoReqStatus StdoutProbe::in_req(vp::Block *__this, vp::IoReq *req)

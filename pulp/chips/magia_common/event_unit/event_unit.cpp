@@ -60,6 +60,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "pulp/event_unit/archi/eu_v3.h"
+#include <pulp/chips/magia_common/event_unit/event_unit/magia_event_unit_config.hpp>
 
 class Core_event_unit;
 class Event_unit;
@@ -68,14 +69,6 @@ class Mutex_unit;
 
 
 // Timing constants
-
-// Cycles required by the core to really wakeup after his clock is back
-// Could actually be split into 2 latencies:
-//   - THe one required by the event unit to grant the access.
-//   - The one required by the core to continue after the grant is back.
-//     This one should be 2 or 3 cycles and should be moved to the core.
-// Default of the wakeup_req_latency property.
-#define EU_WAKEUP_REQ_LATENCY 6
 
 // Cycles needed by the event unit to send back the clock once
 // a core is waken-up
@@ -251,6 +244,8 @@ public:
 
   Event_unit(vp::ComponentConf &config);
 
+  MagiaEventUnitConfig cfg;
+
   void reset(bool active);
 
   static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
@@ -277,7 +272,11 @@ protected:
   Soc_event_unit *soc_event_unit;
 
   int nb_core;
-  // Latency added to the reply of an event wait (EU_WAKEUP_REQ_LATENCY)
+  // Latency added to the reply of an event wait: cycles required by the core
+  // to really wake up after its clock is back. Could be split into the one
+  // the event unit needs to grant the access and the one the core needs to
+  // continue after the grant, which should be 2 or 3 cycles and moved to the
+  // core.
   int wakeup_req_latency;
   // Event raised by SW event 0, the next ones above it (the event map of the
   // instance: 0 for the v1 model, 4 for the cluster map of event_unit_flex)
@@ -357,14 +356,11 @@ private:
 
 
 Event_unit::Event_unit(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
-  nb_core = get_js_config()->get_child_int("nb_core");
-  js::Config *sw_event_base_cfg = get_js_config()->get("sw_event_base");
-  sw_event_base = sw_event_base_cfg ? sw_event_base_cfg->get_int() : 0;
-  js::Config *wakeup_req_latency_cfg = get_js_config()->get("wakeup_req_latency");
-  wakeup_req_latency = wakeup_req_latency_cfg ? wakeup_req_latency_cfg->get_int()
-                                              : EU_WAKEUP_REQ_LATENCY;
+  nb_core = this->cfg.nb_core;
+  sw_event_base = this->cfg.sw_event_base;
+  wakeup_req_latency = this->cfg.wakeup_req_latency;
 
   traces.new_trace("trace", &trace, vp::DEBUG);
 
@@ -1120,8 +1116,8 @@ Mutex_unit::Mutex_unit(Event_unit *top)
 : top(top)
 {
   top->traces.new_trace("mutex/trace", &trace, vp::DEBUG);
-  nb_mutexes = top->get_js_config()->get_child_int("**/properties/mutex/nb_mutexes");
-  mutex_event = top->get_js_config()->get_child_int("**/properties/events/mutex");
+  nb_mutexes = top->cfg.nb_mutexes;
+  mutex_event = top->cfg.mutex_event;
   mutexes = new Mutex[nb_mutexes];
 }
 
@@ -1264,8 +1260,8 @@ vp::IoReqStatus Dispatch_unit::enqueue_sleep(Dispatch *dispatch, vp::IoReq *req,
 Dispatch_unit::Dispatch_unit(Event_unit *top)
 : top(top)
 {
-  dispatch_event = top->get_js_config()->get_child_int("**/properties/events/dispatch");
-  size = top->get_js_config()->get_child_int("**/properties/dispatch/size");
+  dispatch_event = top->cfg.dispatch_event;
+  size = top->cfg.dispatch_size;
   core = new Dispatch_core[top->nb_core];
   dispatches = new Dispatch[size];
 }
@@ -1426,8 +1422,8 @@ Barrier_unit::Barrier_unit(Event_unit *top)
 : top(top)
 {
   top->traces.new_trace("barrier/trace", &trace, vp::DEBUG);
-  nb_barriers = top->get_js_config()->get_child_int("**/properties/barriers/nb_barriers");
-  barrier_event = top->get_js_config()->get_child_int("**/properties/events/barrier");
+  nb_barriers = top->cfg.nb_barriers;
+  barrier_event = top->cfg.barrier_event;
   barriers = new Barrier[nb_barriers];
 }
 
@@ -1571,8 +1567,8 @@ void Barrier_unit::reset()
 
 Soc_event_unit::Soc_event_unit(Event_unit *top) : top(top)
 {
-  this->nb_fifo_events = top->get_js_config()->get_child_int("**/nb_fifo_events");
-  this->fifo_soc_event = top->get_js_config()->get_child_int("**/fifo_event");
+  this->nb_fifo_events = top->cfg.nb_fifo_events;
+  this->fifo_soc_event = top->cfg.fifo_event;
 
   top->traces.new_trace("soc_eu/trace", &trace, vp::DEBUG);
 

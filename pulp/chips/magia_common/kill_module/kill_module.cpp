@@ -30,6 +30,7 @@
 #include <vp/itf/wire.hpp>
 #include <stdio.h>
 #include <vector>
+#include <pulp/chips/magia_common/kill_module/kill_module/kill_module_config.hpp>
 
 class KillModule : public vp::Component
 {
@@ -42,6 +43,7 @@ public:
   static void done_fsm_handler(vp::Block *__this, vp::ClockEvent *event);
 
 private:
+  KillModuleConfig cfg;
 
   vp::Trace     trace;
   std::vector<vp::IoSlave *> in;
@@ -58,18 +60,18 @@ private:
 };
 
 KillModule::KillModule(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
   this->traces.new_trace("trace", &trace, vp::DEBUG);
   this->new_master_port("irq_done", &this->irq_done);
 
-  this->kill_base_address = get_js_config()->get("kill_addr_base")->get_int();
-  this->kill_addr_size = get_js_config()->get("kill_addr_size")->get_int();
-  this->nb_cores_to_wait = get_js_config()->get("nb_cores_to_wait")->get_int();
-  this->done_irq_enable = get_js_config()->get("done_irq_enable")->get_bool();
+  this->kill_base_address = this->cfg.kill_addr_base;
+  this->kill_addr_size = this->cfg.kill_addr_size;
+  this->nb_cores_to_wait = this->cfg.nb_cores_to_wait;
+  this->done_irq_enable = this->cfg.done_irq_enable;
   this->irq_done_event = this->event_new(&KillModule::done_fsm_handler);
 
-  int nb_inputs = get_js_config()->get("nb_inputs")->get_int();
+  int nb_inputs = this->cfg.nb_inputs;
   for (int i=0; i<nb_inputs; i++)
   {
     this->in.push_back(new vp::IoSlave(i, &KillModule::req));

@@ -18,6 +18,21 @@
 
 import gvsoc.systree
 from gvsoc.signature import IoV2Beat, IoV2SingleReq
+from config_tree import Config, cfg_field
+
+
+class L2PortConfig(Config):
+    """Configuration of the MAGIA L2 port."""
+
+    width: int = cfg_field(default=0, desc=(
+        "Width in bytes of the port"
+    ))
+    req_latency: int = cfg_field(default=0, desc=(
+        "Latency in cycles added to each request"
+    ))
+    max_reads: int = cfg_field(default=0, desc=(
+        "Maximum number of reads in flight, 0 for no limit"
+    ))
 
 
 class L2Port(gvsoc.systree.Component):
@@ -38,11 +53,10 @@ class L2Port(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, width: int,
             req_latency: int=0, max_reads: int=0):
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=L2PortConfig(
+            width=width, req_latency=req_latency, max_reads=max_reads))
 
         self.add_sources(['pulp/chips/magia_common/l2_port/l2_port.cpp'])
-        self.add_properties({'width': width, 'req_latency': req_latency,
-            'max_reads': max_reads})
         self.width = width
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:

@@ -17,6 +17,22 @@
 # Authors: Lorenzo Zuolo, Chips-IT (lorenzo.zuolo@chips.it)
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class KillModuleConfig(Config):
+    """Configuration of the MAGIA kill module."""
+
+    kill_addr_base: int = cfg_field(default=0, fmt="hex", desc=(
+        "Base address of the kill registers"
+    ))
+    kill_addr_size: int = cfg_field(default=0, fmt="hex", desc=(
+        "Size of the kill register area"
+    ))
+    nb_cores_to_wait: int = cfg_field(default=0, desc=(
+        "Number of cores whose end is waited for before ending the simulation"
+    ))
+
 
 class KillModule(gvsoc.systree.Component):
 
@@ -27,13 +43,9 @@ class KillModule(gvsoc.systree.Component):
                 kill_addr_size: int,
                 nb_cores_to_wait: int):
 
-        super().__init__(parent, name)
-
-        self.add_properties({
-            'kill_addr_base' : kill_addr_base,
-            'kill_addr_size' : kill_addr_size,
-            'nb_cores_to_wait' : nb_cores_to_wait,
-        })
+        super().__init__(parent, name, config=KillModuleConfig(
+            kill_addr_base=kill_addr_base, kill_addr_size=kill_addr_size,
+            nb_cores_to_wait=nb_cores_to_wait))
 
         self.add_sources(['pulp/chips/magia/kill_module/kill_module.cpp'])
 

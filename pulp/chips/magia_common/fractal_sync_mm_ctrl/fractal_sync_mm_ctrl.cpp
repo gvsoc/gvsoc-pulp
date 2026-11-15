@@ -32,6 +32,7 @@
 
 #include <cpu/iss/include/offload.hpp>
 #include "../fractal_sync/fractal_sync.hpp"
+#include <pulp/chips/magia_common/fractal_sync_mm_ctrl/fractal_sync_mm_ctrl/f_sync_mm_ctrl_config.hpp>
 
 /* Memory-mapped FractalSync register offsets */
 #define FSYNC_MM_AGGR_REG_OFFSET    (0x00)
@@ -64,6 +65,7 @@ public:
     FSync_mm_ctrl(vp::ComponentConf &config);
 
 protected:
+  FSyncMmCtrlConfig cfg;
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
     static void fsm_irq_clear(vp::Block *__this, vp::ClockEvent *event);
@@ -115,7 +117,7 @@ uint32_t FSync_mm_ctrl::width_mask(int width)
 }
 
 FSync_mm_ctrl::FSync_mm_ctrl(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     //Initialize interface
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
@@ -145,10 +147,10 @@ FSync_mm_ctrl::FSync_mm_ctrl(vp::ComponentConf &config)
 
     this->clear_irq = this->event_new(&FSync_mm_ctrl::fsm_irq_clear);
 
-    this->aggr_mask = width_mask(get_js_config()->get_child_int("aggr_width"));
-    this->id_mask = width_mask(get_js_config()->get_child_int("id_width"));
-    this->nbr_aggr_mask = width_mask(get_js_config()->get_child_int("nbr_aggr_width"));
-    this->nbr_id_mask = width_mask(get_js_config()->get_child_int("nbr_id_width"));
+    this->aggr_mask = width_mask(this->cfg.aggr_width);
+    this->id_mask = width_mask(this->cfg.id_width);
+    this->nbr_aggr_mask = width_mask(this->cfg.nbr_aggr_width);
+    this->nbr_id_mask = width_mask(this->cfg.nbr_id_width);
 
     this->trace.msg(vp::Trace::LEVEL_TRACE,"[FSync_mm_ctrl] Instantiated\n");
 }

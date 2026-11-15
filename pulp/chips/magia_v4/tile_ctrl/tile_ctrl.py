@@ -18,6 +18,15 @@
 
 import gvsoc.systree
 from gvsoc.signature import IoV2SingleReq
+from config_tree import Config, cfg_field
+
+
+class TileCtrlConfig(Config):
+    """Configuration of the MAGIA tile controller."""
+
+    nb_cluster_cores: int = cfg_field(default=0, desc=(
+        "Number of cores of the cluster"
+    ))
 
 
 class TileCtrl(gvsoc.systree.Component):
@@ -39,10 +48,9 @@ class TileCtrl(gvsoc.systree.Component):
     """
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, nb_cluster_cores: int):
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=TileCtrlConfig(nb_cluster_cores=nb_cluster_cores))
 
         self.add_sources(['pulp/chips/magia_v4/tile_ctrl/tile_ctrl.cpp'])
-        self.add_properties({'nb_cluster_cores': nb_cluster_cores})
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature=IoV2SingleReq())
