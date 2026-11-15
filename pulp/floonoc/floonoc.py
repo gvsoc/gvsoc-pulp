@@ -16,6 +16,74 @@
 
 from enum import IntEnum
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class FlooNocMappingConfig(Config):
+    """Target of the noc: requests to its address range go to node (x, y)."""
+
+    name: str = cfg_field(default='', desc=(
+        "Name of the mapping, also the name of the output port of the node"
+    ))
+    base: int = cfg_field(default=0, fmt="hex", desc=(
+        "Base address of the range"
+    ))
+    size: int = cfg_field(default=0, fmt="hex", desc=(
+        "Size of the range, 0 for a node without address range"
+    ))
+    x: int = cfg_field(default=0, desc=(
+        "X position of the target node"
+    ))
+    y: int = cfg_field(default=0, desc=(
+        "Y position of the target node"
+    ))
+    remove_offset: int = cfg_field(default=0, fmt="hex", desc=(
+        "Offset removed from the address of the requests sent to the target"
+    ))
+
+
+class FlooNocNodeConfig(Config):
+    """Position of a router or network interface."""
+
+    x: int = cfg_field(default=0, desc=(
+        "X position of the node"
+    ))
+    y: int = cfg_field(default=0, desc=(
+        "Y position of the node"
+    ))
+
+
+class FlooNocConfig(Config):
+    """Configuration of the FlooNoc 2D mesh."""
+
+    narrow_width: int = cfg_field(default=0, desc=(
+        "Width in bytes of the narrow network"
+    ))
+    wide_width: int = cfg_field(default=0, desc=(
+        "Width in bytes of the wide network"
+    ))
+    dim_x: int = cfg_field(default=0, desc=(
+        "X dimension of the grid, targets on the borders included"
+    ))
+    dim_y: int = cfg_field(default=0, desc=(
+        "Y dimension of the grid, targets on the borders included"
+    ))
+    ni_outstanding_reqs: int = cfg_field(default=8, desc=(
+        "Number of outstanding requests each network interface can inject"
+    ))
+    router_input_queue_size: int = cfg_field(default=2, desc=(
+        "Size of the router input queues"
+    ))
+    mappings: list[FlooNocMappingConfig] = cfg_field(default_factory=list, desc=(
+        "Targets of the noc, in name order"
+    ))
+    routers: list[FlooNocNodeConfig] = cfg_field(default_factory=list, desc=(
+        "Positions of the routers"
+    ))
+    network_interfaces: list[FlooNocNodeConfig] = cfg_field(default_factory=list, desc=(
+        "Positions of the network interfaces"
+    ))
+
 
 class FlooNocDirection(IntEnum):
     RIGHT = -4
@@ -56,7 +124,14 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
     """
     def __init__(self, parent: gvsoc.systree.Component, name, narrow_width: int, wide_width:int,
             dim_x: int, dim_y:int, ni_outstanding_reqs: int=8, router_input_queue_size: int=2):
-        super().__init__(parent, name)
+        self._mappings = {}
+        self._routers = []
+        self._network_interfaces = []
+        self._config = FlooNocConfig(narrow_width=narrow_width, wide_width=wide_width,
+            dim_x=dim_x, dim_y=dim_y, ni_outstanding_reqs=ni_outstanding_reqs,
+            router_input_queue_size=router_input_queue_size)
+
+        super().__init__(parent, name, config=self._config)
 
         self.add_sources([
             'pulp/floonoc/floonoc.cpp',
@@ -64,18 +139,12 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
             'pulp/floonoc/floonoc_network_interface.cpp',
         ])
 
-        self.add_property('mappings', {})
-        self.add_property('routers', [])
-        self.add_property('network_interfaces', [])
-        self.add_property('ni_outstanding_reqs', ni_outstanding_reqs)
-        self.add_property('narrow_width', narrow_width)
-        self.add_property('wide_width', wide_width)
-        self.add_property('dim_x', dim_x)
-        self.add_property('dim_y', dim_y)
-        self.add_property('router_input_queue_size', router_input_queue_size)
-
     def __add_mapping(self, name: str, base: int, size: int, x: int, y: int, remove_offset:int =0):
-        self.get_property('mappings')[name] =  {'base': base, 'size': size, 'x': x, 'y': y, 'remove_offset':remove_offset}
+        # A mapping added again under the same name replaces the first one, and
+        # the model goes through them in name order
+        self._mappings[name] = FlooNocMappingConfig(name=name, base=base, size=size, x=int(x), y=y,
+            remove_offset=remove_offset)
+        self._config.mappings = [self._mappings[key] for key in sorted(self._mappings)]
 
     def add_router(self, x: int, y: int):
         """Instantiate a router in the grid.
@@ -87,7 +156,8 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         y: int
             Y position of the router in the grid
         """
-        self.get_property('routers').append([x, y])
+        self._routers.append([x, y])
+        self._config.routers.append(FlooNocNodeConfig(x=x, y=y))
 
     def add_network_interface(self, x: int, y: int):
         """Instantiate a network interface in the grid.
@@ -102,7 +172,8 @@ class FlooNoc2dMeshNarrowWide(gvsoc.systree.Component):
         y: int
             Y position of the network interface in the grid
         """
-        self.get_property('network_interfaces').append([x, y])
+        self._network_interfaces.append([x, y])
+        self._config.network_interfaces.append(FlooNocNodeConfig(x=x, y=y))
 
     def o_NARROW_MAP(self, itf: gvsoc.systree.SlaveItf, base: int, size: int,
             x: int, y: int, name: str=None, rm_base: bool=False, remove_offset:int =0):
@@ -328,11 +399,11 @@ class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):
         routers = gvsoc.gui.Signal(self, top, name="routers")
         for nw_name in ['req', 'rsp', 'wide']:
             nw = gvsoc.gui.Signal(self, routers, f"{nw_name}")
-            for router_id in self.get_property('routers'):
+            for router_id in self._routers:
                 self.__gen_gui_router(nw, f"{router_id[0]}_{router_id[1]}", path=f"{nw_name}_router_{router_id[0]}_{router_id[1]}")
 
         nis = gvsoc.gui.Signal(self, top, name="nis")
-        for ni_id in self.get_property('network_interfaces'):
+        for ni_id in self._network_interfaces:
             ni = gvsoc.gui.Signal(self, nis, f"ni_{ni_id[0]}_{ni_id[1]}")
             gvsoc.gui.Signal(self, ni, "narrow_req", path=f"ni_{ni_id[0]}_{ni_id[1]}/narrow_req", groups=['regmap'])
             gvsoc.gui.Signal(self, ni, "wide_req", path=f"ni_{ni_id[0]}_{ni_id[1]}/wide_req", groups=['regmap'])

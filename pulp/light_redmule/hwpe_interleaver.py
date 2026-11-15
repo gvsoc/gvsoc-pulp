@@ -15,18 +15,27 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class HwpeInterleaverConfig(Config):
+    """Configuration of the interleaver to the TCDM banks."""
+
+    nb_banks: int = cfg_field(default=0, desc=(
+        "Number of TCDM banks"
+    ))
+    bank_width: int = cfg_field(default=0, desc=(
+        "Width in bytes of a bank"
+    ))
+
 
 class HWPEInterleaver(gvsoc.systree.Component):
 
     def __init__(self, parent, slave, nb_master_ports, nb_banks, bank_width):
 
-        super(HWPEInterleaver, self).__init__(parent, slave)
+        super(HWPEInterleaver, self).__init__(parent, slave, config=HwpeInterleaverConfig(
+            nb_banks=nb_banks, bank_width=bank_width))
 
         self.add_sources(
             ['pulp/light_redmule/hwpe_interleaver.cpp']
         )
-
-        self.add_properties({
-            'nb_banks': nb_banks,
-            'bank_width': bank_width
-        })

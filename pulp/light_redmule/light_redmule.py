@@ -19,6 +19,43 @@
 #         Yinrong Li <yinrli@student.ethz.ch>
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class LightRedmuleConfig(Config):
+    """Configuration of the light RedMulE matrix engine."""
+
+    tcdm_bank_width: int = cfg_field(default=0, desc=(
+        "Width in bytes of a TCDM bank"
+    ))
+    tcdm_bank_number: int = cfg_field(default=0, desc=(
+        "Number of TCDM banks the engine accesses in parallel"
+    ))
+    elem_size: int = cfg_field(default=0, desc=(
+        "Size in bytes of a matrix element"
+    ))
+    ce_height: int = cfg_field(default=0, desc=(
+        "Height of the array of computing elements"
+    ))
+    ce_width: int = cfg_field(default=0, desc=(
+        "Width of the array of computing elements"
+    ))
+    ce_pipe: int = cfg_field(default=0, desc=(
+        "Number of pipeline stages of a computing element"
+    ))
+    queue_depth: int = cfg_field(default=128, desc=(
+        "Depth of the queue of TCDM requests"
+    ))
+    fold_tiles_mapping: int = cfg_field(default=0, desc=(
+        "Non-zero to fold the tile mapping of the accesses"
+    ))
+    loc_base: int = cfg_field(default=0, fmt="hex", desc=(
+        "Base address of the local TCDM"
+    ))
+    stream_loads: bool = cfg_field(default=False, desc=(
+        "True to send the ROUTINE requests ahead of the array (synchronous TCDM only, v1 model)"
+    ))
+
 
 class LightRedmule(gvsoc.systree.Component):
 
@@ -36,25 +73,16 @@ class LightRedmule(gvsoc.systree.Component):
                 loc_base=0, #here we might add also local size to check that tcdm requests do not overflow...
                 stream_loads: bool=False): # send the ROUTINE requests ahead of the array (synchronous TCDM only)
 
-        super().__init__(parent, name)
+        # WARNING!!! Perform a height width inversion as per Chi's suggestion. Orignal
+        # Light_RedMulE model was based on a temp RedMulE architecture.
+        super().__init__(parent, name, config=LightRedmuleConfig(
+            tcdm_bank_width=tcdm_bank_width, tcdm_bank_number=tcdm_bank_number,
+            elem_size=elem_size, ce_height=ce_width, ce_width=ce_height, ce_pipe=ce_pipe,
+            queue_depth=queue_depth, fold_tiles_mapping=fold_tiles_mapping,
+            loc_base=loc_base,
+            stream_loads=stream_loads))
 
         self.add_sources(['pulp/light_redmule/light_redmule.cpp', 'cpu/iss/flexfloat/flexfloat.c'])
-
-        self.add_properties({
-            'tcdm_bank_width'   : tcdm_bank_width,
-            'tcdm_bank_number'  : tcdm_bank_number,
-            'elem_size'         : elem_size,
-            # 'ce_height'         : ce_height,
-            # 'ce_width'          : ce_width,
-            # WARNING!!! Perform a height width inversion as per Chi's suggestion. Orignal Light_RedMulE model was based on a temp RedMulE architecture.
-            'ce_height'         : ce_width,
-            'ce_width'          : ce_height,
-            'ce_pipe'           : ce_pipe,
-            'queue_depth'       : queue_depth,
-            'fold_tiles_mapping': fold_tiles_mapping,
-            'loc_base'          : loc_base,
-            'stream_loads'      : int(stream_loads),
-        })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')

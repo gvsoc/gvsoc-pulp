@@ -21,6 +21,7 @@
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 #include <math.h>
+#include <pulp/light_redmule/hwpe_interleaver/hwpe_interleaver_config.hpp>
 
 class HWPEInterleaver : public vp::Component
 {
@@ -31,6 +32,7 @@ public:
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
 private:
+  HwpeInterleaverConfig cfg;
     vp::Trace trace;
 
     std::vector<vp::IoMaster> output_ports;
@@ -44,12 +46,12 @@ private:
 };
 
 HWPEInterleaver::HWPEInterleaver(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
 
-    int nb_banks = this->get_js_config()->get_child_int("nb_banks");
-    int bank_width = this->get_js_config()->get_child_int("bank_width");
+    int nb_banks = this->cfg.nb_banks;
+    int bank_width = this->cfg.bank_width;
 
     this->bank_width = bank_width;
     this->id_shift = log2(bank_width);

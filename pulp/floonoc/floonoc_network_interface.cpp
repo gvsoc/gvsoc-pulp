@@ -256,7 +256,7 @@ NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y, std::string itf_n
     noc->new_slave_port("wide_input_" + std::to_string(x) + "_" + std::to_string(y),
                         &this->wide_input_itf, this);
 
-    this->ni_outstanding_reqs = this->noc->get_js_config()->get("ni_outstanding_reqs")->get_int();
+    this->ni_outstanding_reqs = this->noc->cfg.ni_outstanding_reqs;
 }
 
 void NetworkInterface::set_router(int nw, Router *router)

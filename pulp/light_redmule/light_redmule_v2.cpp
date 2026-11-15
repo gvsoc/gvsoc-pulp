@@ -49,6 +49,7 @@
 
 #include <cpu/iss/include/offload.hpp>
 #include <cpu/iss/flexfloat/flexfloat.h>
+#include <pulp/light_redmule/light_redmule/light_redmule_config.hpp>
 
 /****************************************************
 *                   Type Definition                 *
@@ -119,6 +120,8 @@ class LightRedmule : public vp::Component
 
 public:
     LightRedmule(vp::ComponentConf &config);
+
+    LightRedmuleConfig cfg;
 
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
     static vp::IoReqStatus req_v2(vp::Block *__this, vp::IoReq *req);
@@ -320,7 +323,7 @@ extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 }
 
 LightRedmule::LightRedmule(vp::ComponentConf &config)
-    : vp::Component(config),
+    : vp::Component(config, this->cfg),
     reg_fsm_state(*this, "fsm_state", 32, true, IDLE),
     reg_busy(*this, "busy", 1, true, 0)
 {
@@ -342,15 +345,15 @@ LightRedmule::LightRedmule(vp::ComponentConf &config)
     
     
     //Initialize configuration
-    this->tcdm_bank_width   = get_js_config()->get("tcdm_bank_width")->get_int();
-    this->tcdm_bank_number  = get_js_config()->get("tcdm_bank_number")->get_int();
-    this->elem_size         = get_js_config()->get("elem_size")->get_int();
-    this->ce_height         = get_js_config()->get("ce_height")->get_int();
-    this->ce_width          = get_js_config()->get("ce_width")->get_int();
-    this->ce_pipe           = get_js_config()->get("ce_pipe")->get_int();
-    this->queue_depth       = get_js_config()->get("queue_depth")->get_int();
-    this->fold_tiles_mapping= get_js_config()->get("fold_tiles_mapping")->get_int();
-    this->loc_base          = get_js_config()->get("loc_base")->get_double();
+    this->tcdm_bank_width   = this->cfg.tcdm_bank_width;
+    this->tcdm_bank_number  = this->cfg.tcdm_bank_number;
+    this->elem_size         = this->cfg.elem_size;
+    this->ce_height         = this->cfg.ce_height;
+    this->ce_width          = this->cfg.ce_width;
+    this->ce_pipe           = this->cfg.ce_pipe;
+    this->queue_depth       = this->cfg.queue_depth;
+    this->fold_tiles_mapping= this->cfg.fold_tiles_mapping;
+    this->loc_base          = this->cfg.loc_base;
     this->compute_able      = 0;
     this->bandwidth         = this->tcdm_bank_width * this->tcdm_bank_number;
     this->LOCAL_BUFFER_H    = this->ce_height;

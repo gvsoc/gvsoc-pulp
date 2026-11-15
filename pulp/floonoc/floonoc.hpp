@@ -24,6 +24,7 @@
 
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
+#include <pulp/floonoc/floonoc/floo_noc_config.hpp>
 
 class Router;
 class NetworkInterface;
@@ -117,6 +118,7 @@ public:
     int dim_x;
     // Y dimension of the network. This includes both routers but also targets on the edges
     int dim_y;
+    FlooNocConfig cfg;
 
 private:
     FloonocNode *get_router_neighbour(std::vector<Router *> &routers, int x, int y);

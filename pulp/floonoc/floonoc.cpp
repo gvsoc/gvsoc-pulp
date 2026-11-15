@@ -28,80 +28,69 @@
 
 
 FlooNoc::FlooNoc(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
     // Get properties from generator
-    this->wide_width = get_js_config()->get("wide_width")->get_int();
-    this->narrow_width = get_js_config()->get("narrow_width")->get_int();
-    this->dim_x = get_js_config()->get_int("dim_x");
-    this->dim_y = get_js_config()->get_int("dim_y");
-    this->router_input_queue_size = get_js_config()->get_int("router_input_queue_size");
+    this->wide_width = this->cfg.wide_width;
+    this->narrow_width = this->cfg.narrow_width;
+    this->dim_x = this->cfg.dim_x;
+    this->dim_y = this->cfg.dim_y;
+    this->router_input_queue_size = this->cfg.router_input_queue_size;
 
     // Reserve the array for the target. We may have one target at each node.
     this->itf_names.resize(this->dim_x * this->dim_y);
 
     // Go through the mappings to create one master IO interface for each target
-    js::Config *mappings = get_js_config()->get("mappings");
-    if (mappings != NULL)
+    // For now entries are stored in a classic array. When a request is received, we will
+    // to compare to each entry which may be slow when having lots of target.
+    // We could optimize it by using a tree.
+    this->entries.resize(this->cfg.mappings_count);
+    for (size_t id = 0; id < this->cfg.mappings_count; id++)
     {
-        // For now entries are stored in a classic array. When a request is received, we will
-        // to compare to each entry which may be slow when having lots of target.
-        // We could optimize it by using a tree.
-        this->entries.resize(mappings->get_childs().size());
-        int id = 0;
-        for (auto& mapping: mappings->get_childs())
+        // For each mapping we create the master interface where we'll forward request to the
+        // target
+        const FlooNocMappingConfig *mapping = &this->cfg.mappings[id];
+
+        uint64_t base = mapping->base;
+        uint64_t size = mapping->size;
+        uint64_t remove_offset = mapping->remove_offset;
+        int x = mapping->x;
+        int y = mapping->y;
+
+        if (size > 0)
         {
-            // For each mapping we create the master interface where we'll forward request to the
-            // target
-            js::Config *config = mapping.second;
+            // And we add an entry so that we can turn an address into a target position
+            this->entries[id].base = base;
+            this->entries[id].size = size;
+            this->entries[id].x = x;
+            this->entries[id].y = y;
+            this->entries[id].remove_offset = remove_offset;
+        }
 
-            uint64_t base = config->get_uint("base");
-            uint64_t size = config->get_uint("size");
-            uint64_t remove_offset = config->get_uint("remove_offset");
-            int x = config->get_int("x");
-            int y = config->get_int("y");
+        if (x >= 0 && y >= 0)
+        {
+            // Once a request reaches the right position, the target will be retrieved through
+            // this array indexed by the position
+            this->itf_names[y * this->dim_x + x] = mapping->name;
 
-            if (size > 0)
-            {
-                // And we add an entry so that we can turn an address into a target position
-                this->entries[id].base = base;
-                this->entries[id].size = size;
-                this->entries[id].x = x;
-                this->entries[id].y = y;
-                this->entries[id].remove_offset = remove_offset;
-            }
-
-            if (x >= 0 && y >= 0)
-            {
-                // Once a request reaches the right position, the target will be retrieved through
-                // this array indexed by the position
-                this->itf_names[y * this->dim_x + x] = mapping.first;
-
-                this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding target (name: %s, base: 0x%x, "
-                    "size: 0x%x, x: %d, y: %d, remove_offset: 0x%x)\n",
-                    mapping.first.c_str(), base, size, x, y, remove_offset);
-            }
-
-            id++;
+            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding target (name: %s, base: 0x%x, "
+                "size: 0x%x, x: %d, y: %d, remove_offset: 0x%x)\n",
+                mapping->name, base, size, x, y, remove_offset);
         }
     }
 
     // Create the array of networks interfaces
     this->network_interfaces.resize(this->dim_x * this->dim_y);
-    js::Config *network_interfaces = get_js_config()->get("network_interfaces");
-    if (network_interfaces != NULL)
+    for (size_t i = 0; i < this->cfg.network_interfaces_count; i++)
     {
-        for (js::Config *network_interface: network_interfaces->get_elems())
-        {
-            int x = network_interface->get_elem(0)->get_int();
-            int y = network_interface->get_elem(1)->get_int();
+        int x = this->cfg.network_interfaces[i].x;
+        int y = this->cfg.network_interfaces[i].y;
 
-            this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding network interface (x: %d, y: %d)\n", x, y);
+        this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding network interface (x: %d, y: %d)\n", x, y);
 
-            this->network_interfaces[y*this->dim_x + x] =
-                new NetworkInterface(this, x, y, this->itf_names[y * this->dim_x + x]);
-        }
+        this->network_interfaces[y*this->dim_x + x] =
+            new NetworkInterface(this, x, y, this->itf_names[y * this->dim_x + x]);
     }
 
     // Create the array of routers
@@ -110,13 +99,12 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
     this->wide_routers.resize(this->dim_x * this->dim_y);
 
 
-    js::Config *routers = get_js_config()->get("routers");
-    if (routers != NULL)
+    if (this->cfg.routers_count > 0)
     {
-        for (js::Config *router: routers->get_elems())
+        for (size_t i = 0; i < this->cfg.routers_count; i++)
         {
-            int x = router->get_elem(0)->get_int();
-            int y = router->get_elem(1)->get_int();
+            int x = this->cfg.routers[i].x;
+            int y = this->cfg.routers[i].y;
 
             this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding routers (req, rsp and wide) (x: %d, y: %d)\n", x, y);
 

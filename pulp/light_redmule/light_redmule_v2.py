@@ -19,6 +19,7 @@
 #         Yinrong Li <yinrli@student.ethz.ch>
 
 import gvsoc.systree
+from pulp.light_redmule.light_redmule import LightRedmuleConfig
 from gvsoc.signature import IoV2SingleReq
 
 
@@ -53,24 +54,15 @@ class LightRedmule(gvsoc.systree.Component):
                 fold_tiles_mapping: int=0,
                 loc_base=0): #here we might add also local size to check that tcdm requests do not overflow...
 
-        super().__init__(parent, name)
+        # WARNING!!! Perform a height width inversion as per Chi's suggestion. Orignal
+        # Light_RedMulE model was based on a temp RedMulE architecture.
+        super().__init__(parent, name, config=LightRedmuleConfig(
+            tcdm_bank_width=tcdm_bank_width, tcdm_bank_number=tcdm_bank_number,
+            elem_size=elem_size, ce_height=ce_width, ce_width=ce_height, ce_pipe=ce_pipe,
+            queue_depth=queue_depth, fold_tiles_mapping=fold_tiles_mapping,
+            loc_base=loc_base))
 
         self.add_sources(['pulp/light_redmule/light_redmule_v2.cpp', 'cpu/iss/flexfloat/flexfloat.c'])
-
-        self.add_properties({
-            'tcdm_bank_width'   : tcdm_bank_width,
-            'tcdm_bank_number'  : tcdm_bank_number,
-            'elem_size'         : elem_size,
-            # 'ce_height'         : ce_height,
-            # 'ce_width'          : ce_width,
-            # WARNING!!! Perform a height width inversion as per Chi's suggestion. Orignal Light_RedMulE model was based on a temp RedMulE architecture.
-            'ce_height'         : ce_width,
-            'ce_width'          : ce_height,
-            'ce_pipe'           : ce_pipe,
-            'queue_depth'       : queue_depth,
-            'fold_tiles_mapping': fold_tiles_mapping,
-            'loc_base'          : loc_base,
-        })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature=IoV2SingleReq())
