@@ -31,6 +31,7 @@
 
 #include "fractal_sync.hpp"
 #include <cmath>
+#include <pulp/chips/magia_common/fractal_sync/fractal_sync/fractal_sync_config.hpp>
 
 enum fractalsync_input_directions {
     NORD,
@@ -69,6 +70,7 @@ public:
     FractalSync(vp::ComponentConf &config);
 
 protected:    
+  FractalSyncConfig cfg;
     static void master_input_method(vp::Block *__this, PortResp<uint32_t> *req, int id);
     static void slave_input_method(vp::Block *__this, PortReq<uint32_t> *req, int id);
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
@@ -131,7 +133,7 @@ extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 }
 
 FractalSync::FractalSync(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     //Initialize interface
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
@@ -170,7 +172,7 @@ FractalSync::FractalSync(vp::ComponentConf &config)
     this->fsm_event = this->event_new(&FractalSync::fsm_handler);
 
 
-    this->level   = 1 << get_js_config()->get("level")->get_int(); //in one hot coding
+    this->level   = 1 << this->cfg.level; //in one hot coding
 
     this->directions[fractalsync_input_directions::NORD] = "NORD";
     this->directions[fractalsync_input_directions::SUD] = "SUD";

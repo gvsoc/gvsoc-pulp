@@ -22,6 +22,7 @@
 #include <unordered_map>
 #include <vp/vp.hpp>
 #include <vp/itf/io_v2.hpp>
+#include <pulp/chips/magia_common/obi_cut/obi_cut/obi_cut_config.hpp>
 
 /*
  * RTL obi_cut (a spill register on the A and on the R channel) in front of a
@@ -52,6 +53,7 @@ public:
     void reset(bool active) override;
 
 private:
+  ObiCutConfig cfg;
     enum { CH_READ = 0, CH_WRITE = 1, NB_CHANNELS = 2 };
 
     // An access between the master and the slave. down is what is sent to
@@ -106,7 +108,7 @@ private:
 #define OBI_CUT_DEPTH 2
 
 ObiCut::ObiCut(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
@@ -115,8 +117,8 @@ ObiCut::ObiCut(vp::ComponentConf &config)
 
     this->fsm_event = this->event_new(&ObiCut::fsm_handler);
 
-    this->width = this->get_js_config()->get_child_int("width");
-    this->resp_latency = this->get_js_config()->get_child_int("resp_latency");
+    this->width = this->cfg.width;
+    this->resp_latency = this->cfg.resp_latency;
     this->beat_allocator = vp::IoReqAllocator::get(this->width);
 }
 

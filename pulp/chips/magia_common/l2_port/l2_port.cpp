@@ -22,6 +22,7 @@
 #include <vp/vp.hpp>
 #include <vp/itf/io_v2.hpp>
 #include <vp/itf/wire.hpp>
+#include <pulp/chips/magia_common/l2_port/l2_port/l2_port_config.hpp>
 
 /*
  * AXI port of the L2 of the testbench (axi_sim_mem), from the beat plane of
@@ -56,6 +57,7 @@ public:
     void reset(bool active) override;
 
 private:
+  L2PortConfig cfg;
     struct Response {
         vp::IoReq *req;
         int64_t ready;
@@ -114,7 +116,7 @@ private:
 };
 
 L2Port::L2Port(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
@@ -125,9 +127,9 @@ L2Port::L2Port(vp::ComponentConf &config)
 
     this->fsm_event = this->event_new(&L2Port::fsm_handler);
 
-    this->width = this->get_js_config()->get_child_int("width");
-    this->req_latency = this->get_js_config()->get_child_int("req_latency");
-    this->max_reads = this->get_js_config()->get_child_int("max_reads");
+    this->width = this->cfg.width;
+    this->req_latency = this->cfg.req_latency;
+    this->max_reads = this->cfg.max_reads;
     this->beat_allocator = vp::IoReqAllocator::get(this->width);
 }
 

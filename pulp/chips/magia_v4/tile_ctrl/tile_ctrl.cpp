@@ -21,6 +21,7 @@
 #include <vp/vp.hpp>
 #include <vp/itf/io_v2.hpp>
 #include <vp/itf/wire.hpp>
+#include <pulp/chips/magia_v4/tile_ctrl/tile_ctrl/tile_ctrl_config.hpp>
 
 /*
  * Control registers of a MAGIA v4 tile, at 0x1700: the three RTL slaves
@@ -93,6 +94,7 @@ public:
     void reset(bool active) override;
 
 private:
+  TileCtrlConfig cfg;
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
     // End of the one-cycle pulses
     static void pulse_end_handler(vp::Block *__this, vp::ClockEvent *event);
@@ -127,11 +129,11 @@ private:
 };
 
 TileCtrl::TileCtrl(vp::ComponentConf &config)
-    : vp::Component(config), pulse_end_event(this, &TileCtrl::pulse_end_handler)
+    : vp::Component(config, this->cfg), pulse_end_event(this, &TileCtrl::pulse_end_handler)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
-    this->nb_cluster_cores = this->get_js_config()->get_child_int("nb_cluster_cores");
+    this->nb_cluster_cores = this->cfg.nb_cluster_cores;
 
     this->new_slave_port("input", &this->input_itf);
     this->new_master_port("spatz_clock_en", &this->spatz_clock_en_itf);

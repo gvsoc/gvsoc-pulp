@@ -18,6 +18,25 @@
 
 import gvsoc.systree
 from gvsoc.signature import IoV2Sync
+from config_tree import Config, cfg_field
+
+
+class FSyncMmCtrlConfig(Config):
+    """Configuration of the FractalSync memory-mapped controller."""
+
+    aggr_width: int = cfg_field(default=32, desc=(
+        "Width in bits of the aggregate field"
+    ))
+    id_width: int = cfg_field(default=32, desc=(
+        "Width in bits of the barrier ID field"
+    ))
+    nbr_aggr_width: int = cfg_field(default=32, desc=(
+        "Width in bits of the neighbour aggregate field"
+    ))
+    nbr_id_width: int = cfg_field(default=32, desc=(
+        "Width in bits of the neighbour barrier ID field"
+    ))
+
 
 class FSync_mm_ctrl(gvsoc.systree.Component):
     """Memory-mapped controller of the fractal sync network.
@@ -39,15 +58,11 @@ class FSync_mm_ctrl(gvsoc.systree.Component):
                 nbr_aggr_width: int=32,
                 nbr_id_width: int=32):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=FSyncMmCtrlConfig(
+            aggr_width=aggr_width, id_width=id_width, nbr_aggr_width=nbr_aggr_width,
+            nbr_id_width=nbr_id_width))
 
         self.add_sources(['pulp/chips/magia_common/fractal_sync_mm_ctrl/fractal_sync_mm_ctrl.cpp'])
-        self.add_properties({
-            'aggr_width': aggr_width,
-            'id_width': id_width,
-            'nbr_aggr_width': nbr_aggr_width,
-            'nbr_id_width': nbr_id_width,
-        })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature=IoV2Sync())

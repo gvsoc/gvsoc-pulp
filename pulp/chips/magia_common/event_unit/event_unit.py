@@ -18,6 +18,19 @@
 
 import gvsoc.systree as st
 from gvsoc.signature import IoV2SingleReq
+from config_tree import cfg_field
+from ips.pulp.event_unit.v3.event_unit import EventUnitConfig
+
+
+class MagiaEventUnitConfig(EventUnitConfig):
+    """Configuration of the MAGIA event unit."""
+
+    wakeup_req_latency: int = cfg_field(default=6, desc=(
+        "Cycles added to the reply of an event wait on top of the wake-up itself"
+    ))
+    sw_event_base: int = cfg_field(default=0, desc=(
+        "Event raised by SW event 0, the next ones above it"
+    ))
 
 
 class MagiaEventUnit(st.Component):
@@ -75,26 +88,13 @@ class MagiaEventUnit(st.Component):
             mutex_event: int, barrier_event: int, wakeup_req_latency: int=6,
             sw_event_base: int=0):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=MagiaEventUnitConfig(
+            nb_core=nb_core, nb_mutexes=nb_mutexes, dispatch_size=dispatch_size,
+            nb_barriers=nb_barriers, nb_fifo_events=nb_fifo_events, fifo_event=fifo_event,
+            barrier_event=barrier_event, mutex_event=mutex_event, dispatch_event=dispatch_event,
+            wakeup_req_latency=wakeup_req_latency, sw_event_base=sw_event_base))
 
         self.add_sources(['pulp/chips/magia_common/event_unit/event_unit.cpp'])
-
-        self.add_properties({
-            'nb_core': nb_core,
-            'wakeup_req_latency': wakeup_req_latency,
-            'sw_event_base': sw_event_base,
-            'properties': {
-                'dispatch': {'size': dispatch_size},
-                'mutex': {'nb_mutexes': nb_mutexes},
-                'barriers': {'nb_barriers': nb_barriers},
-                'soc_event': {'nb_fifo_events': nb_fifo_events, 'fifo_event': fifo_event},
-                'events': {
-                    'dispatch': dispatch_event,
-                    'mutex': mutex_event,
-                    'barrier': barrier_event
-                }
-            }
-        })
 
     def i_INPUT(self) -> st.SlaveItf:
         """Shared memory-mapped input (the whole event-unit register space)."""
