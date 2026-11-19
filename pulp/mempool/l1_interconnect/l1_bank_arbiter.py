@@ -15,6 +15,15 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class L1BankArbiterConfig(Config):
+    hold: int = cfg_field(default=0, desc="Reserve per wide (TE) access, i.e. the service time S, in cycles")
+    hold_pe: int = cfg_field(default=0, desc="Reserve per narrow (PE) access, in cycles (0 = straight to the bank)")
+    queue_depth: int = cfg_field(default=0, desc="Number of buffered wide reads, bounding the backlog to depth*S")
+    serial: bool = cfg_field(default=False, desc="True if the bank parts of one wide access are served one after the other")
+
 
 class L1_BankArbiter(gvsoc.systree.Component):
     """
@@ -29,11 +38,7 @@ class L1_BankArbiter(gvsoc.systree.Component):
     """
     def __init__(self, parent: gvsoc.systree.Component, name: str, hold: int=1, hold_pe: int=1, queue_depth: int=16,
                  serial: bool=False):
-        super(L1_BankArbiter, self).__init__(parent, name)
-
-        self.add_property('hold', hold)              # reserve per wide (TE) access = service time S
-        self.add_property('hold_pe', hold_pe)        # reserve per narrow (PE) access (0 = straight to bank)
-        self.add_property('queue_depth', queue_depth)  # buffered wide reads; bounds backlog to depth*S
-        self.add_property('serial', serial)          # bank parts of one wide access served one after the other
+        super().__init__(parent, name, config=L1BankArbiterConfig(hold=hold, hold_pe=hold_pe, queue_depth=queue_depth,
+            serial=serial))
 
         self.add_sources(['pulp/mempool/l1_interconnect/l1_bank_arbiter.cpp'])

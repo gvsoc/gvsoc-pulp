@@ -22,6 +22,7 @@
 #include <cstring>
 #include <functional>
 #include <vector>
+#include <collective_testbench_config/collective_testbench_config.hpp>
 #include <vp/vp.hpp>
 #include <cpu/iss/flexfloat/flexfloat.h>
 #include <cpu/iss/include/offload.hpp>
@@ -155,6 +156,8 @@ static uint64_t node_addr(uint64_t base, uint64_t node_size, int x, int y)
 class CollectiveTestbench : public vp::Component
 {
 public:
+    CollectiveTestbenchConfig cfg;
+
     CollectiveTestbench(vp::ComponentConf &config);
 
     void reset(bool active);
@@ -377,7 +380,7 @@ private:
 };
 
 CollectiveTestbench::CollectiveTestbench(vp::ComponentConf &config)
-    : vp::Component(config), fsm_event(this, CollectiveTestbench::fsm_handler),
+    : vp::Component(config, this->cfg), fsm_event(this, CollectiveTestbench::fsm_handler),
     dma_poll_event(this, CollectiveTestbench::dma_poll_handler),
     gen_wait_event(this, CollectiveTestbench::gen_wait_handler)
 {
@@ -387,9 +390,9 @@ CollectiveTestbench::CollectiveTestbench(vp::ComponentConf &config)
     this->dma_offload_grant_itf.set_sync_meth(&CollectiveTestbench::dma_offload_grant_sync);
     this->new_slave_port("dma_offload_grant", &this->dma_offload_grant_itf, this);
 
-    this->node_size = this->get_js_config()->get_uint("node_size");
-    this->node_base = this->get_js_config()->get_uint("node_base");
-    this->scenario = this->get_js_config()->get_child_str("scenario");
+    this->node_size = this->cfg.node_size;
+    this->node_base = this->cfg.node_base;
+    this->scenario = this->cfg.scenario;
     // "<row>_wide" runs that same test entirely over the wide link instead of the narrow one
     static const std::string wide_suffix = "_wide";
     if (this->scenario.size() > wide_suffix.size() &&

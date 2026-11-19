@@ -41,6 +41,9 @@
 class MemPoolDma : public vp::Component
 {
 public:
+    // Shared with the front-end, middle-ends and back-ends
+    MemPoolDmaConfig cfg;
+
     MemPoolDma(vp::ComponentConf &config);
 
 private:
@@ -59,28 +62,28 @@ private:
 
 
 MemPoolDma::MemPoolDma(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
-    int nb_groups = get_js_config()->get_int("nb_groups");
-    int nb_dmas_per_group = get_js_config()->get_int("nb_dmas_per_group");
+    int nb_groups = this->cfg.nb_groups;
+    int nb_dmas_per_group = this->cfg.nb_dmas_per_group;
     int nb_be = nb_groups * nb_dmas_per_group;
-    int be_width = get_js_config()->get_int("be_width");
+    int be_width = this->cfg.be_width;
 
     this->fe = new IDmaFeXdma(this, nullptr);
 
-    this->me = new IDmaMe2D(this, this->fe, nullptr);
+    this->me = new IDmaMe2D(this, this->cfg, this->fe, nullptr);
     this->fe->set_me(this->me);
 
-    this->me_split = new IDmaMeSplit(this, this->me, nullptr, nb_be * be_width);
+    this->me_split = new IDmaMeSplit(this, this->cfg, this->me, nullptr, nb_be * be_width);
     this->me->set_be(this->me_split);
 
-    this->me_cluster_dist = new IDmaMeDist(this, "me_cluster_dist", this->me_split, {}, nb_dmas_per_group * be_width);
+    this->me_cluster_dist = new IDmaMeDist(this, this->cfg, "me_cluster_dist", this->me_split, {}, nb_dmas_per_group * be_width);
     this->me_split->set_be(this->me_cluster_dist);
 
     this->me_group_dist.resize(nb_groups);
     for (int i = 0; i < nb_groups; i++)
     {
-        this->me_group_dist[i] = new IDmaMeDist(this, "me_group_dist_" + std::to_string(i), this->me_cluster_dist, {}, be_width);
+        this->me_group_dist[i] = new IDmaMeDist(this, this->cfg, "me_group_dist_" + std::to_string(i), this->me_cluster_dist, {}, be_width);
     }
     std::vector<IdmaTransferConsumer *> me_dist_itfs;
     for (auto *me_group_dist: this->me_group_dist)
@@ -100,11 +103,11 @@ MemPoolDma::MemPoolDma(vp::ComponentConf &config)
         for (int j = 0; j < nb_dmas_per_group; j++)
         {
             int idx = i * nb_dmas_per_group + j;
-            this->be_axi_read[idx] = new IDmaBeAxi(this, "axi_read_" + std::to_string(i) + "_" + std::to_string(j), nullptr);
-            this->be_axi_write[idx] = new IDmaBeAxi(this, "axi_write_" + std::to_string(i) + "_" + std::to_string(j), nullptr);
-            this->be_tcdm_read[idx] = new IDmaBeTcdm(this, "tcdm_read_" + std::to_string(i) + "_" + std::to_string(j), nullptr);
-            this->be_tcdm_write[idx] = new IDmaBeTcdm(this, "tcdm_write_" + std::to_string(i) + "_" + std::to_string(j), nullptr);
-            this->be[idx] = new IDmaBe(this, "be_" + std::to_string(i) + "_" + std::to_string(j), this->me_group_dist[i], this->be_tcdm_read[idx], this->be_tcdm_write[idx], this->be_axi_read[idx], this->be_axi_write[idx]);
+            this->be_axi_read[idx] = new IDmaBeAxi(this, this->cfg, "axi_read_" + std::to_string(i) + "_" + std::to_string(j), nullptr);
+            this->be_axi_write[idx] = new IDmaBeAxi(this, this->cfg, "axi_write_" + std::to_string(i) + "_" + std::to_string(j), nullptr);
+            this->be_tcdm_read[idx] = new IDmaBeTcdm(this, this->cfg, "tcdm_read_" + std::to_string(i) + "_" + std::to_string(j), nullptr);
+            this->be_tcdm_write[idx] = new IDmaBeTcdm(this, this->cfg, "tcdm_write_" + std::to_string(i) + "_" + std::to_string(j), nullptr);
+            this->be[idx] = new IDmaBe(this, this->cfg, "be_" + std::to_string(i) + "_" + std::to_string(j), this->me_group_dist[i], this->be_tcdm_read[idx], this->be_tcdm_write[idx], this->be_axi_read[idx], this->be_axi_write[idx]);
 
             this->be_axi_read[idx]->set_be(this->be[idx]);
             this->be_axi_write[idx]->set_be(this->be[idx]);

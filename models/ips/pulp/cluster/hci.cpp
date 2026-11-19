@@ -89,6 +89,7 @@
 #include <climits>
 #include <memory>
 #include <vector>
+#include <ips/pulp/cluster/hci/hci_config.hpp>
 #include <vp/vp.hpp>
 #include <vp/itf/io_v2.hpp>
 #include <vp/itf/wire.hpp>
@@ -172,6 +173,8 @@ class Hci : public vp::Component, public vp::DebugMemIf
     friend struct WideState;
 
 public:
+    HciConfig cfg;
+
     Hci(vp::ComponentConf &conf);
     void reset(bool active) override;
 
@@ -348,19 +351,19 @@ void WideState::report(AccessState state)
 //
 
 Hci::Hci(vp::ComponentConf &config)
-    : vp::Component(config),
+    : vp::Component(config, this->cfg),
       fsm_event(this, &Hci::fsm_handler),
       next_cycle_event(this, &Hci::next_cycle_handler)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
-    this->nb_masters         = get_js_config()->get_child_int("nb_masters");
-    this->nb_slaves          = get_js_config()->get_child_int("nb_slaves");
-    this->interleaving_width = get_js_config()->get_child_int("interleaving_width");
-    this->nb_wide_masters    = get_js_config()->get_child_int("nb_wide_masters");
-    this->nb_group0_masters  = get_js_config()->get_child_int("nb_group0_masters");
-    this->cfg_wide_max_stall = get_js_config()->get_child_int("wide_max_stall");
-    this->cfg_wide_prio      = get_js_config()->get_child_bool("wide_prio");
+    this->nb_masters         = this->cfg.nb_masters;
+    this->nb_slaves          = this->cfg.nb_slaves;
+    this->interleaving_width = this->cfg.interleaving_width;
+    this->nb_wide_masters    = this->cfg.nb_wide_masters;
+    this->nb_group0_masters  = this->cfg.nb_group0_masters;
+    this->cfg_wide_max_stall = this->cfg.wide_max_stall;
+    this->cfg_wide_prio      = this->cfg.wide_prio;
     this->wide_max_stall     = this->cfg_wide_max_stall;
     this->wide_prio          = this->cfg_wide_prio;
 

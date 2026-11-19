@@ -15,6 +15,55 @@
 #
 
 import gvsoc.systree
+from typing import ClassVar
+from config_tree import Config, cfg_field
+
+
+class FlooNocMappingConfig(Config):
+    """One memory-mapped target of the noc. The Config ``name`` field carries the name of the
+    master port where requests to the target are sent."""
+
+    _defer_parent_init: ClassVar[bool] = True
+
+    base: int = cfg_field(default=0, fmt="hex", desc="Base address of the target")
+    size: int = cfg_field(default=0, fmt="hex", desc="Size of the target")
+    x: int = cfg_field(default=0, desc="X position of the target in the grid")
+    y: int = cfg_field(default=0, desc="Y position of the target in the grid")
+
+
+class FlooNocNodeConfig(Config):
+    """Position of one node (network interface) in the grid."""
+
+    _defer_parent_init: ClassVar[bool] = True
+
+    x: int = cfg_field(default=0, desc="X position in the grid")
+    y: int = cfg_field(default=0, desc="Y position in the grid")
+
+
+class FlooNocConfig(Config):
+    """Configuration of the SoftHier (old) FlooNoc 2D mesh."""
+
+    mappings: list[FlooNocMappingConfig] = cfg_field(default_factory=list, desc=(
+        "Memory-mapped targets, sorted by name"))
+    network_interfaces: list[FlooNocNodeConfig] = cfg_field(default_factory=list, desc=(
+        "Positions of the network interfaces, a router is also instantiated at each of them"))
+    ni_outstanding_reqs: int = cfg_field(default=0, dump=True, desc=(
+        "Number of outstanding requests each network interface can inject to the routers"))
+    width: int = cfg_field(default=0, dump=True, desc="Width in bytes of the interconnect")
+    dim_x: int = cfg_field(default=0, dump=True, desc="X dimension of the grid, including the borders")
+    dim_y: int = cfg_field(default=0, dump=True, desc="Y dimension of the grid, including the borders")
+    router_input_queue_size: int = cfg_field(default=0, dump=True, desc="Size of the routers input queues")
+    atomics: int = cfg_field(default=0, dump=True, desc="1 to support atomics")
+    collective: int = cfg_field(default=0, dump=True, desc="1 to support collective operations")
+    interleave_enable: int = cfg_field(default=0, dump=True, desc="1 to enable address interleaving")
+    interleave_region_base: int = cfg_field(default=0, fmt="hex", dump=True, desc="Base of the interleaved region")
+    interleave_region_size: int = cfg_field(default=0, fmt="hex", dump=True, desc="Size of the interleaved region")
+    interleave_granularity: int = cfg_field(default=0, dump=True, desc="Interleaving granularity")
+    interleave_bit_start: int = cfg_field(default=0, dump=True, desc="First address bit of the interleaving")
+    interleave_bit_width: int = cfg_field(default=0, dump=True, desc="Number of address bits of the interleaving")
+    edge_node_alias: int = cfg_field(default=0, dump=True, desc="1 to alias the edge nodes")
+    edge_node_alias_start_bit: int = cfg_field(default=0, dump=True, desc="First address bit of the edge node alias")
+
 
 class FlooNoc2dMesh(gvsoc.systree.Component):
     """FlooNoc instance for a 2D mesh
@@ -50,7 +99,20 @@ class FlooNoc2dMesh(gvsoc.systree.Component):
             dim_x: int, dim_y:int, ni_outstanding_reqs: int=8, router_input_queue_size: int=2, atomics: int=0, collective: int=0,
             edge_node_alias: int=0, edge_node_alias_start_bit: int=48,
             interleave_enable: int=0, interleave_region_base: int=0, interleave_region_size: int=0, interleave_granularity: int=0, interleave_bit_start: int=0, interleave_bit_width: int=0):
-        super(FlooNoc2dMesh, self).__init__(parent, name)
+        self.noc_config = FlooNocConfig(ni_outstanding_reqs=ni_outstanding_reqs,
+            width=int(width), dim_x=dim_x, dim_y=dim_y,
+            router_input_queue_size=router_input_queue_size, atomics=atomics,
+            collective=collective, interleave_enable=interleave_enable,
+            interleave_region_base=interleave_region_base,
+            interleave_region_size=interleave_region_size,
+            interleave_granularity=interleave_granularity,
+            interleave_bit_start=interleave_bit_start, interleave_bit_width=interleave_bit_width,
+            edge_node_alias=edge_node_alias, edge_node_alias_start_bit=edge_node_alias_start_bit)
+        # Router positions, only kept for the generator: the model instantiates one router at
+        # each network interface
+        self.routers = []
+
+        super(FlooNoc2dMesh, self).__init__(parent, name, config=self.noc_config)
 
         self.add_sources([
             'pulp/chips/soft_hier_old/floonoc/floonoc.cpp',
@@ -58,27 +120,14 @@ class FlooNoc2dMesh(gvsoc.systree.Component):
             'pulp/chips/soft_hier_old/floonoc/floonoc_network_interface.cpp',
         ])
 
-        self.add_property('mappings', {})
-        self.add_property('routers', [])
-        self.add_property('network_interfaces', [])
-        self.add_property('ni_outstanding_reqs', ni_outstanding_reqs)
-        self.add_property('width', width)
-        self.add_property('dim_x', dim_x)
-        self.add_property('dim_y', dim_y)
-        self.add_property('router_input_queue_size', router_input_queue_size)
-        self.add_property('atomics', atomics)
-        self.add_property('collective', collective)
-        self.add_property('interleave_enable', interleave_enable)
-        self.add_property('interleave_region_base', interleave_region_base)
-        self.add_property('interleave_region_size', interleave_region_size)
-        self.add_property('interleave_granularity', interleave_granularity)
-        self.add_property('interleave_bit_start', interleave_bit_start)
-        self.add_property('interleave_bit_width', interleave_bit_width)
-        self.add_property('edge_node_alias', edge_node_alias)
-        self.add_property('edge_node_alias_start_bit', edge_node_alias_start_bit)
 
     def __add_mapping(self, name: str, base: int, size: int, x: int, y: int):
-        self.get_property('mappings')[name] =  {'base': base, 'size': size, 'x': x, 'y': y}
+        # Same semantics as the former name-indexed dict: a name mapped again replaces its
+        # entry, and entries are kept sorted by name, which is the order the model uses.
+        mappings = [mapping for mapping in self.noc_config.mappings if mapping.name != name]
+        mappings.append(FlooNocMappingConfig(name=name, base=base, size=size, x=x, y=y))
+        mappings.sort(key=lambda mapping: mapping.name)
+        self.noc_config.mappings = mappings
 
     def add_router(self, x: int, y: int):
         """Instantiate a router in the grid.
@@ -90,7 +139,7 @@ class FlooNoc2dMesh(gvsoc.systree.Component):
         y: int
             Y position of the router in the grid
         """
-        self.get_property('routers').append([x, y])
+        self.routers.append([x, y])
 
     def add_network_interface(self, x: int, y: int):
         """Instantiate a network interface in the grid.
@@ -105,7 +154,7 @@ class FlooNoc2dMesh(gvsoc.systree.Component):
         y: int
             Y position of the network interface in the grid
         """
-        self.get_property('network_interfaces').append([x, y])
+        self.noc_config.network_interfaces.append(FlooNocNodeConfig(x=x, y=y))
 
     def o_MAP(self, itf: gvsoc.systree.SlaveItf, base: int, size: int,
             x: int, y: int):

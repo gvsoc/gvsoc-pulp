@@ -22,7 +22,7 @@
 #include "idma_me_3d.hpp"
 
 
-IDmaMe3d::IDmaMe3d(vp::Component *idma, IdmaTransferProducer *fe, IdmaTransferConsumer *be)
+IDmaMe3d::IDmaMe3d(vp::Component *idma, const IdmaConfig &cfg, IdmaTransferProducer *fe, IdmaTransferConsumer *be)
     : Block(idma, "me"),
     fsm_event(this, &IDmaMe3d::fsm_handler),
     me_state(*this, "me_state", 32, true, ME3D_IDLE)
@@ -35,7 +35,7 @@ IDmaMe3d::IDmaMe3d(vp::Component *idma, IdmaTransferProducer *fe, IdmaTransferCo
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
     // Get the top parameter giving the maximum number of enqueued transfers
-    this->transfer_queue_size = idma->get_js_config()->get_int("transfer_queue_size");
+    this->transfer_queue_size = cfg.transfer_queue_size;
 
     this->current_transfer = NULL;
 }

@@ -22,6 +22,7 @@
 
 #include <vp/vp.hpp>
 #include "../idma.hpp"
+#include <pulp/chips/soft_hier_old/idma/snitch_dma/snitch_dma_config.hpp>
 #include "vp/itf/io.hpp"
 
 class IdmaTransferProducer;
@@ -219,7 +220,7 @@ public:
      * @param ext_be The external backend, selected when an address does not fall into the local
      *  range.
      */
-    IDmaBe(vp::Component *idma, IdmaTransferProducer *me, IdmaBeConsumer *loc_be_read,
+    IDmaBe(vp::Component *idma, const SnitchDmaConfig &cfg, IdmaTransferProducer *me, IdmaBeConsumer *loc_be_read,
         IdmaBeConsumer *loc_be_write, IdmaBeConsumer *ext_be_read, IdmaBeConsumer *ext_be_write);
 
     void reset(bool active);

@@ -15,14 +15,27 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
 from pulp.chips.soft_hier_old.c2c_platform.d2dlink import D2DLink
 from pulp.chips.soft_hier_old.c2c_platform.router import Router
 from pulp.chips.soft_hier_old.c2c_platform.endpoint import Endpoint
 
 
+class FatTreeConfig(Config):
+    """Configuration of a fat-tree topology manager."""
+
+    radix: int = cfg_field(default=0, dump=True, desc="Radix of the routers")
+    level: int = cfg_field(default=0, dump=True, desc="Number of levels of the tree")
+    half_radix: int = cfg_field(default=0, dump=True, desc="Half of the radix")
+    endpoints: int = cfg_field(default=0, dump=True, desc="Number of endpoints")
+    num_top_router: int = cfg_field(default=0, dump=True, desc="Number of top-level routers")
+    num_mid_router: int = cfg_field(default=0, dump=True, desc="Number of routers of a middle level")
+    pos_idx: int = cfg_field(default=0, dump=True, desc="Index of the attached router in its level")
+    pos_lvl: int = cfg_field(default=0, dump=True, desc="Level of the attached router")
+
+
 class FatTree(gvsoc.systree.Component):
     def __init__(self, parent, name, radix, level, pos_idx = 0, pos_lvl = 0, cfg = None):
-        super(FatTree, self).__init__(parent, name)
         self.cfg            = cfg
         self.radix          = radix
         self.level          = level
@@ -31,14 +44,10 @@ class FatTree(gvsoc.systree.Component):
         self.num_top_router = self.half_radix ** (level - 1)
         self.num_mid_router = 2 * (self.half_radix ** (level - 1))
         self.num_edg_router = 2 * (self.half_radix ** (level - 1))
-        self.add_property('radix', radix)
-        self.add_property('level', level)
-        self.add_property('half_radix', self.half_radix)
-        self.add_property('endpoints', self.endpoints)
-        self.add_property('num_top_router', self.num_top_router)
-        self.add_property('num_mid_router', self.num_mid_router)
-        self.add_property('pos_idx', pos_idx)
-        self.add_property('pos_lvl', pos_lvl)
+        super(FatTree, self).__init__(parent, name, config=FatTreeConfig(
+            radix=radix, level=level, half_radix=self.half_radix, endpoints=self.endpoints,
+            num_top_router=self.num_top_router, num_mid_router=self.num_mid_router,
+            pos_idx=pos_idx, pos_lvl=pos_lvl))
         self.add_sources(['pulp/chips/soft_hier_old/c2c_platform/topology_manager/fattree.cpp'])
 
     def i_TOP_INPUT(self) -> gvsoc.systree.SlaveItf:

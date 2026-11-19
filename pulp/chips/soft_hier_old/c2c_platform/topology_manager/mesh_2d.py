@@ -15,6 +15,7 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
 from pulp.chips.soft_hier_old.c2c_platform.d2dlink import D2DLink
 from pulp.chips.soft_hier_old.c2c_platform.router import Router
 
@@ -30,14 +31,20 @@ route_algo = {
     "xy"        : 0,
 }
 
+class Mesh2DConfig(Config):
+    """Configuration of a 2D-mesh topology manager."""
+
+    x_dim: int = cfg_field(default=0, dump=True, desc="X dimension of the mesh")
+    y_dim: int = cfg_field(default=0, dump=True, desc="Y dimension of the mesh")
+    x_pos: int = cfg_field(default=0, dump=True, desc="X position of the attached router")
+    y_pos: int = cfg_field(default=0, dump=True, desc="Y position of the attached router")
+    ralgo: int = cfg_field(default=0, dump=True, desc="Routing algorithm, 0 for XY")
+
+
 class Mesh2D(gvsoc.systree.Component):
     def __init__(self, parent, name, x_dim, y_dim, x_pos = 0, y_pos = 0, ralgo = 0):
-        super(Mesh2D, self).__init__(parent, name)
-        self.add_property('x_dim', x_dim)
-        self.add_property('y_dim', y_dim)
-        self.add_property('x_pos', x_pos)
-        self.add_property('y_pos', y_pos)
-        self.add_property('ralgo', ralgo)
+        super(Mesh2D, self).__init__(parent, name, config=Mesh2DConfig(x_dim=x_dim, y_dim=y_dim,
+            x_pos=x_pos, y_pos=y_pos, ralgo=ralgo))
         self.add_sources(['pulp/chips/soft_hier_old/c2c_platform/topology_manager/mesh_2d.cpp'])
 
     def i_TOP_INPUT(self) -> gvsoc.systree.SlaveItf:

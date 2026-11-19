@@ -16,6 +16,7 @@
 
 from typing_extensions import override
 import gvsoc.systree
+from pulp.idma.idma_config import IdmaConfig
 from gvsoc.gui import Signal, DisplayPulse, DisplayLogicBox
 from pulp.idma.reg_dma_config import RegDmaConfig
 
@@ -38,7 +39,9 @@ class RegDma(gvsoc.systree.Component):
     def __init__(self, parent: gvsoc.systree.Component, name: str, config: RegDmaConfig,
     ):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=IdmaConfig(transfer_queue_size=config.transfer_queue_size,
+            burst_queue_size=config.burst_queue_size, burst_size=config.burst_size,
+            loc_base=config.loc_base, loc_size=config.loc_size, tcdm_width=config.tcdm_width))
 
         self.add_sources([
             'pulp/idma/reg_dma.cpp',
@@ -48,15 +51,6 @@ class RegDma(gvsoc.systree.Component):
             'pulp/idma/be/idma_be_axi.cpp',
             'pulp/idma/be/idma_be_tcdm.cpp',
         ])
-
-        self.add_properties({
-            "transfer_queue_size": config.transfer_queue_size,
-            "burst_queue_size": config.burst_queue_size,
-            "burst_size" : config.burst_size,
-            "loc_base": config.loc_base,
-            "loc_size": config.loc_size,
-            "tcdm_width": config.tcdm_width,
-        })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         """Returns the input port.

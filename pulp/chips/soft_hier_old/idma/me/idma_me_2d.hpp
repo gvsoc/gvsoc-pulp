@@ -22,6 +22,7 @@
 
 #include <vp/vp.hpp>
 #include "../idma.hpp"
+#include <pulp/chips/soft_hier_old/idma/snitch_dma/snitch_dma_config.hpp>
 
 
 
@@ -40,7 +41,7 @@ public:
      * @param fe The front end.
      * @param be The back end.
      */
-    IDmaMe2D(vp::Component *idma, IdmaTransferProducer *fe, IdmaTransferConsumer *be);
+    IDmaMe2D(vp::Component *idma, const SnitchDmaConfig &cfg, IdmaTransferProducer *fe, IdmaTransferConsumer *be);
 
     void reset(bool active) override;
 

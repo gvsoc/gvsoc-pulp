@@ -24,7 +24,7 @@
 
 
 
-IDmaBeTcdm::IDmaBeTcdm(vp::Component *idma, std::string itf_name, IdmaBeProducer *be)
+IDmaBeTcdm::IDmaBeTcdm(vp::Component *idma, const SnitchDmaConfig &cfg, std::string itf_name, IdmaBeProducer *be)
 :   Block(idma, itf_name),
     fsm_event(this, &IDmaBeTcdm::fsm_handler)
 {
@@ -39,13 +39,13 @@ IDmaBeTcdm::IDmaBeTcdm(vp::Component *idma, std::string itf_name, IdmaBeProducer
 
     // Get the width of the TCDM interconnect. This is used to constrain the size of the
     // requests which are sent to the TCDM
-    this->width = idma->get_js_config()->get_int("tcdm_width");
+    this->width = cfg.tcdm_width;
 
     // Max number of pending bursts
-    this->burst_queue_maxsize = idma->get_js_config()->get_int("burst_queue_size");
+    this->burst_queue_maxsize = cfg.burst_queue_size;
 
     // Local memory base
-    this->loc_base = idma->get_js_config()->get_int("loc_base");
+    this->loc_base = cfg.loc_base;
 }
 
 

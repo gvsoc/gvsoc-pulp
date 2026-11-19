@@ -18,6 +18,7 @@
  * Authors: Yinrong Li, ETH Zurich (yinrli@student.ethz.ch)
  */
 
+#include <pulp/teranoc/l1_interconnect/l1_noc_itf/l1_noc_itf_config.hpp>
 #include <vp/vp.hpp>
 #include <vp/signal.hpp>
 #include <vp/itf/io.hpp>
@@ -102,6 +103,8 @@ public:
 class L1_NocItf : public vp::Component
 {
 public:
+    L1NocItfConfig cfg;
+
     L1_NocItf(vp::ComponentConf &conf);
 
 private:
@@ -156,23 +159,23 @@ private:
 };
 
 L1_NocItf::L1_NocItf(vp::ComponentConf &config)
-    : vp::Component(config), fsm_event(this, L1_NocItf::fsm_handler)
+    : vp::Component(config, this->cfg), fsm_event(this, L1_NocItf::fsm_handler)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
 
-    this->nb_req_ports = this->get_js_config()->get_int("nb_req_ports");
-    this->nb_resp_ports = this->get_js_config()->get_int("nb_resp_ports");
+    this->nb_req_ports = this->cfg.nb_req_ports;
+    this->nb_resp_ports = this->cfg.nb_resp_ports;
 
-    this->tile_id = this->get_js_config()->get_int("tile_id");
-    this->group_id_x = this->get_js_config()->get_int("group_id_x");
-    this->group_id_y = this->get_js_config()->get_int("group_id_y");
-    this->nb_x_groups = this->get_js_config()->get_int("nb_x_groups");
-    this->nb_y_groups = this->get_js_config()->get_int("nb_y_groups");
+    this->tile_id = this->cfg.tile_id;
+    this->group_id_x = this->cfg.group_id_x;
+    this->group_id_y = this->cfg.group_id_y;
+    this->nb_x_groups = this->cfg.nb_x_groups;
+    this->nb_y_groups = this->cfg.nb_y_groups;
 
     int num_groups = this->nb_x_groups * this->nb_y_groups;
-    int byte_offset = this->get_js_config()->get_int("byte_offset");
-    int num_tiles_per_group = this->get_js_config()->get_int("num_tiles_per_group");
-    int num_banks_per_tile = this->get_js_config()->get_int("num_banks_per_tile");
+    int byte_offset = this->cfg.byte_offset;
+    int num_tiles_per_group = this->cfg.num_tiles_per_group;
+    int num_banks_per_tile = this->cfg.num_banks_per_tile;
 
     this->constant_bits_lsb = byte_offset + clog2(num_banks_per_tile) + clog2(num_tiles_per_group);
     this->group_id_bits = clog2(num_groups);

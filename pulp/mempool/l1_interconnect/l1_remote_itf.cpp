@@ -18,6 +18,7 @@
  * Authors: Yinrong Li, ETH Zurich (yinrli@student.ethz.ch)
  */
 
+#include <pulp/mempool/l1_interconnect/l1_remote_itf/l1_remote_itf_config.hpp>
 #include <vp/vp.hpp>
 #include <vp/signal.hpp>
 #include <vp/itf/io.hpp>
@@ -29,6 +30,8 @@
 class L1_RemoteItf : public vp::Component
 {
 public:
+    L1RemoteItfConfig cfg;
+
     L1_RemoteItf(vp::ComponentConf &conf);
 
 private:
@@ -51,14 +54,14 @@ private:
 
 
 L1_RemoteItf::L1_RemoteItf(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     traces.new_trace("trace", &trace, vp::DEBUG);
-    req_latency = this->get_js_config()->get_int("req_latency");
-    resp_latency = this->get_js_config()->get_int("resp_latency");
-    int bandwidth = this->get_js_config()->get_int("bandwidth");
-    bool shared_rw_bandwidth = this->get_js_config()->get_child_bool("shared_rw_bandwidth");
-    throttle = this->get_js_config()->get_int("throttle");
+    req_latency = this->cfg.req_latency;
+    resp_latency = this->cfg.resp_latency;
+    int bandwidth = this->cfg.bandwidth;
+    bool shared_rw_bandwidth = this->cfg.shared_rw_bandwidth;
+    throttle = this->cfg.throttle;
 
     this->req_bw_limiter = new BandwidthLimiter(bandwidth, req_latency, shared_rw_bandwidth, throttle, &this->trace);
     this->resp_bw_limiter = new BandwidthLimiter(bandwidth, resp_latency, shared_rw_bandwidth, 0, &this->trace);

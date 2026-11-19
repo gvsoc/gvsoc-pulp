@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 #include <vp/vp.hpp>
+#include <pulp/chips/soft_hier_old/cluster_registers/cluster_registers_config.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
 #include <pulp/chips/soft_hier_old/snitch/snitch_cluster/cluster_periph_regfields.h>
@@ -179,6 +180,7 @@ bool annotation_words_are_valid(const std::string &words)
 
 class ClusterRegisters : public vp::Component
 {
+    ClusterRegistersConfig cfg;
 
 public:
 
@@ -253,24 +255,24 @@ private:
 };
 
 ClusterRegisters::ClusterRegisters(vp::ComponentConf &config)
-: vp::Component(config), regmap(*this, "regmap")
+: vp::Component(config, this->cfg), regmap(*this, "regmap")
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
 
     this->in.set_req_meth(&ClusterRegisters::req);
     this->new_slave_port("input", &this->in);
 
-    this->bootaddr = this->get_js_config()->get("boot_addr")->get_int();
-    this->nb_cores = this->get_js_config()->get("nb_cores")->get_int();
-    this->cluster_id = this->get_js_config()->get("cluster_id")->get_int();
-    this->num_cluster_x = this->get_js_config()->get("num_cluster_x")->get_int();
-    this->num_cluster_y = this->get_js_config()->get("num_cluster_y")->get_int();
+    this->bootaddr = this->cfg.boot_addr;
+    this->nb_cores = this->cfg.nb_cores;
+    this->cluster_id = this->cfg.cluster_id;
+    this->num_cluster_x = this->cfg.num_cluster_x;
+    this->num_cluster_y = this->cfg.num_cluster_y;
 
     this->global_barrier_slave_itf.set_req_meth(&ClusterRegisters::global_barrier_sync);
     this->new_slave_port("global_barrier_slave", &this->global_barrier_slave_itf);
     this->new_master_port("global_barrier_master", &this->global_barrier_master_itf);
     this->global_barrier_master_req = this->global_barrier_master_itf.req_new(0, 0, 0, 0);
-    this->global_barrier_addr = this->get_js_config()->get("global_barrier_addr")->get_int();
+    this->global_barrier_addr = this->cfg.global_barrier_addr;
     this->global_barrier_buffer = new uint8_t[4];
     this->global_barrier_master_itf.set_resp_meth(&ClusterRegisters::response);
     this->global_barrier_master_itf.set_grant_meth(&ClusterRegisters::grant);

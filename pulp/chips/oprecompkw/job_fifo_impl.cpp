@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <pulp/chips/oprecompkw/job_fifo/job_fifo_config.hpp>
 
 class job_fifo : public vp::Component {
 
@@ -36,6 +37,7 @@ public:
 
 private:
 
+  JobFifoConfig cfg;
   vp::Trace trace;
   vp::WireMaster<bool> irq; 
   vp::IoSlave in;
@@ -56,7 +58,7 @@ private:
 };
 
 job_fifo::job_fifo(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
   this->in.set_req_meth(&job_fifo::req);
   new_slave_port("input", &this->in);
@@ -72,8 +74,8 @@ job_fifo::job_fifo(vp::ComponentConf &config)
   this->fifo_tail = 0;
   this->nb_elems = 0;
 
-  this->size = this->get_js_config()->get_child_int("size");
-  this->width = this->get_js_config()->get_child_int("width");
+  this->size = this->cfg.size;
+  this->width = this->cfg.width;
 
   this->fifo = new uint8_t *[this->size];
 

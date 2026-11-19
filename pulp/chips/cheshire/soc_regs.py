@@ -15,10 +15,18 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class ControlRegsConfig(Config):
+    """Configuration of the Cheshire SoC control registers."""
+
+    dram_end: int = cfg_field(default=0, fmt="hex", dump=True, desc="End address of the DRAM")
+
 
 class ControlRegs(gvsoc.systree.Component):
     def __init__(self, parent: gvsoc.systree.Component, name: str, dram_end=0x0, latency: int=0):
-        super(ControlRegs, self).__init__(parent, name)
+        super(ControlRegs, self).__init__(parent, name, config=ControlRegsConfig(dram_end=dram_end))
 
         self.add_sources(['pulp/chips/cheshire/soc_regs.cpp'])
 

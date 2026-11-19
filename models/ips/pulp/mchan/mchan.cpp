@@ -682,14 +682,14 @@ Mchan::Mchan(vp::ComponentConf &config)
       ext_burst_size(*this, "ext_burst_size", 32, true, 0),
       ext_burst_write(*this, "ext_burst_write", 1, true, 0)
 {
-    nb_channels = get_js_config()->get_child_int("nb_channels");
-    core_queue_depth = get_js_config()->get_child_int("core_queue_depth");
-    global_queue_depth = get_js_config()->get_child_int("global_queue_depth");
-    max_nb_ext_read_req = get_js_config()->get_child_int("max_nb_ext_read_req");
-    max_nb_ext_write_req = get_js_config()->get_child_int("max_nb_ext_write_req");
-    max_burst_length = get_js_config()->get_child_int("max_burst_length");
-    nb_loc_ports = get_js_config()->get_child_int("nb_loc_ports");
-    tcdm_addr_width = get_js_config()->get_child_int("tcdm_addr_width");
+    nb_channels = this->cfg.nb_channels;
+    core_queue_depth = this->cfg.core_queue_depth;
+    global_queue_depth = this->cfg.global_queue_depth;
+    max_nb_ext_read_req = this->cfg.max_nb_ext_read_req;
+    max_nb_ext_write_req = this->cfg.max_nb_ext_write_req;
+    max_burst_length = this->cfg.max_burst_length;
+    nb_loc_ports = this->cfg.nb_loc_ports;
+    tcdm_addr_width = this->cfg.tcdm_addr_width;
 
     check_queue_event = event_new(Mchan::check_queue_handler);
     check_ext_read_event = event_new(Mchan::check_ext_read_handler);

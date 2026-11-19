@@ -75,11 +75,6 @@ apb_soc_ctrl::apb_soc_ctrl(vp::ComponentConf &config)
 
   new_master_port("cluster_clock_gate_irq", &cluster_clock_gate_irq_itf);
 
-#if 0
-  cluster_power_event = this->get_js_config()->get("cluster_power_event")->get_int();
-  cluster_clock_gate_event = this->get_js_config()->get("cluster_clock_gate_event")->get_int();
-#endif
-
   core_status = 0;
 
 

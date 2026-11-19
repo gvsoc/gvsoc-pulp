@@ -22,6 +22,7 @@
 
 #include <vector>
 #include <vp/vp.hpp>
+#include <pulp/idma/idma_config/idma_config.hpp>
 
 
 

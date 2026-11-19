@@ -15,10 +15,52 @@
 #
 
 import gvsoc.systree
+from typing import Annotated, ClassVar
+from config_tree import Config, cfg_field
+from gvrun.runtime import Runtime
+from vp.power_config import PowerSourceConfig
 from pulp.chips.soft_hier_old.power_models import (
     memory_power_sources,
+    power_source_config,
     validate_power_profile,
 )
+
+
+class MemoryPowerConfig(Config):
+    """Power tables of the memory, computed from its size and the selected power profile."""
+
+    _defer_parent_init: ClassVar[bool] = True
+
+    background: PowerSourceConfig = cfg_field(default_factory=PowerSourceConfig, desc=(
+        "Background power and leakage, registered as power source 'leakage'"))
+    access_byte: PowerSourceConfig = cfg_field(default_factory=PowerSourceConfig, desc=(
+        "Energy of one accessed byte"))
+
+
+class MemoryConfig(Config):
+    """Configuration of the SoftHier (old) memory."""
+
+    size: int = cfg_field(default=0, fmt="hex", dump=True, desc="Size of the memory, in bytes")
+    stim_file: Annotated[str, Runtime] = cfg_field(default="", dump=True, desc=(
+        "Raw binary file preloaded at the beginning of the memory, empty for none"))
+    power_trigger: bool = cfg_field(default=False, dump=True, desc=(
+        "True if the memory triggers power report generation on dedicated accesses"))
+    check: bool = cfg_field(default=False, dump=True, desc=(
+        "True to check accesses to uninitialized data"))
+    width_bits: int = cfg_field(default=0, dump=True, desc=(
+        "Log2 of the bandwidth, in bytes per cycle, no bandwidth model if negative"))
+    align: int = cfg_field(default=0, dump=True, desc="Alignment of the allocated memory, 0 for none")
+    latency: int = cfg_field(default=0, dump=True, desc="Extra latency added to every request")
+    memcheck_id: int = cfg_field(default=0, dump=True, desc=(
+        "Global memory check id, -1 if the memory does not track buffer overflows"))
+    memcheck_base: int = cfg_field(default=0, fmt="hex", dump=True, desc=(
+        "Absolute base of memory where buffer overflow is tracked"))
+    memcheck_virtual_base: int = cfg_field(default=0, fmt="hex", dump=True, desc=(
+        "Absolute virtual base of allocated buffers"))
+    memcheck_expansion_factor: int = cfg_field(default=0, dump=True, desc=(
+        "Extra size used to track buffer overflow"))
+    power: MemoryPowerConfig = cfg_field(default_factory=MemoryPowerConfig, desc="Power tables")
+
 
 class Memory(gvsoc.systree.Component):
     """Memory array
@@ -67,7 +109,23 @@ class Memory(gvsoc.systree.Component):
             memcheck_virtual_base: int=0, memcheck_expansion_factor: int=5, tech_node: str="5nm",
             power_profile: str="constant"):
 
-        super().__init__(parent, name)
+        power_profile = validate_power_profile(power_profile)
+
+        config = MemoryConfig(size=int(size), stim_file=stim_file if stim_file is not None else "",
+            power_trigger=power_trigger, width_bits=width_log2, align=align, latency=latency,
+            memcheck_id=memcheck_id, memcheck_base=memcheck_base,
+            memcheck_virtual_base=memcheck_virtual_base,
+            memcheck_expansion_factor=memcheck_expansion_factor)
+
+        power_sources = memory_power_sources(
+            size_bytes=size,
+            tech_node=tech_node,
+            profile=power_profile,
+        )
+        config.power.background = power_source_config('background', power_sources['background'])
+        config.power.access_byte = power_source_config('access_byte', power_sources['access_byte'])
+
+        super().__init__(parent, name, config=config)
 
         self.add_sources(['pulp/chips/soft_hier_old/memory.cpp'])
 
@@ -77,28 +135,6 @@ class Memory(gvsoc.systree.Component):
         if atomics:
             self.add_c_flags(['-DCONFIG_ATOMICS=1'])
 
-        power_profile = validate_power_profile(power_profile)
-
-        self.add_properties({
-            'size': size,
-            'stim_file': stim_file,
-            'power_trigger': power_trigger,
-            'width_bits': width_log2,
-            'align': align,
-            'latency': latency,
-            'memcheck_id': memcheck_id,
-            'memcheck_base': memcheck_base,
-            'memcheck_virtual_base': memcheck_virtual_base,
-            'memcheck_expansion_factor': memcheck_expansion_factor,
-            'tech_node': tech_node,
-            'power_profile': power_profile,
-        })
-
-        self.add_properties(memory_power_sources(
-            size_bytes=size,
-            tech_node=tech_node,
-            profile=power_profile,
-        ))
 
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:

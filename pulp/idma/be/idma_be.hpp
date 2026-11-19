@@ -225,13 +225,14 @@ public:
      * @brief Construct a new backend
      *
      * @param idma The top iDMA block.
+     * @param cfg The configuration of the top iDMA block.
      * @param me The middle-end
      * @param loc_be The local backend, selected when an address falls into the local range.
      * @param ext_be The external backend, selected when an address does not fall into the local
      *  range.
      */
-    IDmaBe(vp::Component *idma, IdmaTransferProducer *me, IdmaBeConsumer *loc_be_read,
-        IdmaBeConsumer *loc_be_write, IdmaBeConsumer *ext_be_read, IdmaBeConsumer *ext_be_write);
+    IDmaBe(vp::Component *idma, const IdmaConfig &cfg, IdmaTransferProducer *me,
+        IdmaBeConsumer *loc_be_read, IdmaBeConsumer *loc_be_write, IdmaBeConsumer *ext_be_read, IdmaBeConsumer *ext_be_write);
 
     void reset(bool active);
 

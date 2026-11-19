@@ -15,22 +15,25 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
 import regmap.regmap
 import regmap.regmap_hjson
 import regmap.regmap_c_header
+
+
+class ZeroMemConfig(Config):
+    """Configuration of the SoftHier (old) zero memory."""
+
+    size: int = cfg_field(default=0, fmt="hex", dump=True, desc="Size of the memory, in bytes")
 
 
 class ZeroMem(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, size: int):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=ZeroMemConfig(size=size))
 
         self.add_sources(['pulp/chips/soft_hier_old/snitch/zero_mem.cpp'])
-
-        self.add_properties({
-            'size': size
-        })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')

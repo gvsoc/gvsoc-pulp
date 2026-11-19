@@ -18,6 +18,9 @@
  * Authors: Nazareno Bruschi, Unibo (nazareno.bruschi@unibo.it)
  */
 
+#include <vp/vp.hpp>
+#include <pulp/ima/ima_v1/ima_v1_config.hpp>
+
 /* IMA main FSM States */
 #define IMA_STATE_IDLE            0
 #define IMA_STATE_ACQUIRE         1
@@ -121,6 +124,8 @@ class ima_v1 : public vp::Component
 {
 
 public:
+
+  ImaV1Config cfg;
 
   ima_v1(vp::ComponentConf &config);
 

@@ -17,15 +17,21 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class L1NocRouterRemapperConfig(Config):
+    nb_ports: int = cfg_field(default=0, desc="Number of ports")
+    remap_batch_size: int = cfg_field(default=0, desc="Number of requests remapped in a batch")
+    shuffle: bool = cfg_field(default=False, desc="True if the ports are shuffled")
+
 
 class L1NocRouterRemapper(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, nb_ports: int=2, remap_batch_size: int=1, shuffle: bool=False):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=L1NocRouterRemapperConfig(nb_ports=nb_ports,
+            remap_batch_size=remap_batch_size, shuffle=shuffle))
 
         self.add_sources(['pulp/teranoc/l1_interconnect/l1_noc_router_remapper.cpp'])
 
-        self.add_property("nb_ports", nb_ports)
-        self.add_property("remap_batch_size", remap_batch_size)
-        self.add_property("shuffle", shuffle)

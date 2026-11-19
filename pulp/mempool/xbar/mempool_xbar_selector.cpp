@@ -18,6 +18,7 @@
  * Authors: Yinrong Li, ETH Zurich (yinrli@student.ethz.ch)
  */
 
+#include <pulp/mempool/xbar/mempool_xbar_selector/mempool_xbar_selector_config.hpp>
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
@@ -26,6 +27,8 @@ class MempoolXbarSelector : public vp::Component
 {
 
 public:
+    MempoolXbarSelectorConfig cfg;
+
     MempoolXbarSelector(vp::ComponentConf &config);
 
 private:
@@ -46,7 +49,7 @@ private:
 
 
 MempoolXbarSelector::MempoolXbarSelector(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
     this->input_itf.set_req_meth(&MempoolXbarSelector::req);
@@ -56,10 +59,10 @@ MempoolXbarSelector::MempoolXbarSelector(vp::ComponentConf &config)
     this->new_slave_port("input", &this->input_itf);
     this->new_master_port("output", &this->output_itf);
 
-    this->interleaver_mode = get_js_config()->get_child_bool("interleaver_mode");
-    this->output_id = get_js_config()->get_child_int("output_id");
-    this->interleaving_bits = get_js_config()->get_child_int("interleaving_bits");
-    this->stage_bits = get_js_config()->get_child_int("stage_bits");
+    this->interleaver_mode = this->cfg.interleaver_mode;
+    this->output_id = this->cfg.output_id;
+    this->interleaving_bits = this->cfg.interleaving_bits;
+    this->stage_bits = this->cfg.stage_bits;
 }
 
 vp::IoReqStatus MempoolXbarSelector::req(vp::Block *__this, vp::IoReq *req)

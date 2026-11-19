@@ -28,15 +28,15 @@
 
 
 FlooNoc::FlooNoc(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
     // Get properties from generator
-    this->narrow_width = get_js_config()->get("narrow_width")->get_int();
-    this->dim_x = get_js_config()->get_int("dim_x");
-    this->dim_y = get_js_config()->get_int("dim_y");
-    this->router_input_queue_size = get_js_config()->get_int("router_input_queue_size");
-    this->router_output_queue_size = get_js_config()->get_int("router_output_queue_size");
+    this->narrow_width = this->cfg.narrow_width;
+    this->dim_x = this->cfg.dim_x;
+    this->dim_y = this->cfg.dim_y;
+    this->router_input_queue_size = this->cfg.router_input_queue_size;
+    this->router_output_queue_size = this->cfg.router_output_queue_size;
 
     // Reserve the array for the target. We may have one target at each node.
     this->targets.resize(this->dim_x * this->dim_y);

@@ -15,16 +15,21 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class SoftHierOldOffloadDecoderConfig(Config):
+    """Configuration of the SoftHier (old) offload decoder."""
+
+    nb_cores: int = cfg_field(default=0, dump=True, desc="Number of cores offloading instructions")
+
 
 
 class SoftHierOldOffloadDecoder(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, nb_cores: int=1):
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=SoftHierOldOffloadDecoderConfig(nb_cores=nb_cores))
         self.add_sources(['pulp/chips/soft_hier_old/offload_decoder.cpp'])
-        self.add_properties({
-            "nb_cores": nb_cores,
-        })
 
     def i_OFFLOAD(self, core_id: int=0) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'offload_{core_id}', signature='wire<IssOffloadInsn<uint32_t>*>')

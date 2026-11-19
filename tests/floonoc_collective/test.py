@@ -32,6 +32,7 @@ from interco.traffic.generator import Generator
 from pulp.idma.snitch_dma import SnitchDma
 from memory.memory import Memory
 from gvrun.parameter import TargetParameter
+from collective_testbench_config import CollectiveTestbenchConfig
 
 NARROW_WIDTH = 8
 WIDE_WIDTH = 64
@@ -67,12 +68,8 @@ def _ni_name(x, y):
 class CollectiveTestbench(gvsoc.systree.Component):
     def __init__(self, parent: gvsoc.systree.Component, name: str, dim: int,
             node_size: int, node_base: int, scenario: str):
-        super().__init__(parent, name)
-
-        self.add_property('dim', dim)
-        self.add_property('node_size', node_size)
-        self.add_property('node_base', node_base)
-        self.add_property('scenario', scenario)
+        super().__init__(parent, name, config=CollectiveTestbenchConfig(dim=dim,
+            node_size=node_size, node_base=node_base, scenario=scenario))
 
         self.add_sources(['test.cpp', 'cpu/iss/flexfloat/flexfloat.c'])
 

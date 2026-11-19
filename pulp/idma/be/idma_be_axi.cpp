@@ -46,7 +46,7 @@ static inline void stamp_collective_payload(vp::IoReq *req, IdmaTransfer *transf
 
 
 
-IDmaBeAxi::IDmaBeAxi(vp::Component *idma, std::string itf_name, IdmaBeProducer *be)
+IDmaBeAxi::IDmaBeAxi(vp::Component *idma, const IdmaConfig &cfg, std::string itf_name, IdmaBeProducer *be)
 :   Block(idma, itf_name),
     fsm_event(this, &IDmaBeAxi::fsm_handler)
 {
@@ -61,10 +61,10 @@ IDmaBeAxi::IDmaBeAxi(vp::Component *idma, std::string itf_name, IdmaBeProducer *
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
     // Get the top parameter giving the maximum number of outstanding bursts to AXI interconnect
-    int burst_queue_size = idma->get_js_config()->get_int("burst_queue_size");
+    int burst_queue_size = cfg.burst_queue_size;
 
     // Get the top parameter giving the maximum burst size for AXI transactions. TCDM will alight to this parameter
-    this->burst_size = idma->get_js_config()->get_int("burst_size");
+    this->burst_size = cfg.burst_size;
 
     // Use it to size the array of bursts and associated timestamps
     this->bursts.resize(burst_queue_size);

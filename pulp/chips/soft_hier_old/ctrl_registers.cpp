@@ -21,6 +21,7 @@
  */
 
 #include <vp/vp.hpp>
+#include <pulp/chips/soft_hier_old/ctrl_registers/ctrl_registers_config.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
 #include <unordered_map>
@@ -29,6 +30,7 @@
 
 class CtrlRegisters : public vp::Component
 {
+    CtrlRegistersConfig cfg;
 
 public:
     CtrlRegisters(vp::ComponentConf &config);
@@ -58,11 +60,11 @@ private:
 
 
 CtrlRegisters::CtrlRegisters(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
-    this->num_cluster_x = this->get_js_config()->get("num_cluster_x")->get_int();
-    this->num_cluster_y = this->get_js_config()->get("num_cluster_y")->get_int();
-    this->has_preload_binary = this->get_js_config()->get("has_preload_binary")->get_int();
+    this->num_cluster_x = this->cfg.num_cluster_x;
+    this->num_cluster_y = this->cfg.num_cluster_y;
+    this->has_preload_binary = this->cfg.has_preload_binary;
     this->num_cluster_all = this->num_cluster_x * this->num_cluster_y;
 
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);

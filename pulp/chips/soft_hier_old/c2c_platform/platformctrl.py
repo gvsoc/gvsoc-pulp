@@ -15,18 +15,22 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class PlatformCtrlConfig(Config):
+    """Configuration of the C2C platform controller."""
+
+    num_chip: int = cfg_field(default=0, dump=True, desc="Number of chips (endpoints)")
+
 
 class PlatformCtrl(gvsoc.systree.Component):
     def __init__(self, parent, name, num_chip):
         #Initialize the parent class
-        super(PlatformCtrl, self).__init__(parent, name)
+        super(PlatformCtrl, self).__init__(parent, name, config=PlatformCtrlConfig(num_chip=num_chip))
 
         # Add sources
         self.add_sources(['pulp/chips/soft_hier_old/c2c_platform/platformctrl.cpp'])
-
-        self.add_properties({
-            'num_chip': num_chip,
-        })
 
     def i_BARRIER_ACK(self, i : int) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, f'barrier_ack_{i}', signature='wire<bool>')

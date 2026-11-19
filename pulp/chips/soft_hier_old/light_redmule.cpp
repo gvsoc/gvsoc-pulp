@@ -21,8 +21,10 @@
  */
 
 #include <vp/vp.hpp>
+#include <pulp/chips/soft_hier_old/light_redmule/light_redmule_config.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
+#include <vp/power/power_table_convert.hpp>
 #include <stdio.h>
 #include <iostream>
 #include <sstream>
@@ -90,6 +92,7 @@ void matmul_fp8e5m2(fp8e5m2 * z, fp8e5m2 * y, fp8e5m2 * x, fp8e5m2 * w, uint16_t
 
 class LightRedmule : public vp::Component
 {
+    LightRedmuleConfig cfg;
 
 public:
     LightRedmule(vp::ComponentConf &config);
@@ -212,7 +215,7 @@ extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 }
 
 LightRedmule::LightRedmule(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     //Initialize interface
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
@@ -227,14 +230,14 @@ LightRedmule::LightRedmule(vp::ComponentConf &config)
     
     
     //Initialize configuration
-    this->tcdm_bank_width   = get_js_config()->get("tcdm_bank_width")->get_int();
-    this->tcdm_bank_number  = get_js_config()->get("tcdm_bank_number")->get_int();
-    this->elem_size         = get_js_config()->get("elem_size")->get_int();
-    this->ce_height         = get_js_config()->get("ce_height")->get_int();
-    this->ce_width          = get_js_config()->get("ce_width")->get_int();
-    this->ce_pipe           = get_js_config()->get("ce_pipe")->get_int();
-    this->queue_depth       = get_js_config()->get("queue_depth")->get_int();
-    this->fold_tiles_mapping= get_js_config()->get("fold_tiles_mapping")->get_int();
+    this->tcdm_bank_width   = this->cfg.tcdm_bank_width;
+    this->tcdm_bank_number  = this->cfg.tcdm_bank_number;
+    this->elem_size         = this->cfg.elem_size;
+    this->ce_height         = this->cfg.ce_height;
+    this->ce_width          = this->cfg.ce_width;
+    this->ce_pipe           = this->cfg.ce_pipe;
+    this->queue_depth       = this->cfg.queue_depth;
+    this->fold_tiles_mapping= this->cfg.fold_tiles_mapping;
     this->compute_able      = 0;
     this->bandwidth         = this->tcdm_bank_width * this->tcdm_bank_number;
     this->LOCAL_BUFFER_H    = this->ce_height;
@@ -305,7 +308,8 @@ LightRedmule::LightRedmule(vp::ComponentConf &config)
     this->num_matmul        = 0;
 
     //Power
-    this->power.new_power_source("gemm_tile_energy", &this->gemm_tile_energy, this->get_js_config()->get("**/gemm_tile_energy"));
+    vp::new_power_source_from_config(this->power, "gemm_tile_energy", &this->gemm_tile_energy,
+        this->cfg.power.gemm_tile_energy);
     // Both selectable profiles provide an always-on leakage table.
     this->gemm_tile_energy.leakage_power_start();
 

@@ -21,6 +21,7 @@
  *          Yinrong Li, ETH Zurich (yinrli@student.ethz.ch)
  */
 
+#include <pulp/teranoc/ctrl_registers/teranoc_ctrl_registers_config.hpp>
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
@@ -31,6 +32,8 @@ class CtrlRegisters : public vp::Component
 {
 
 public:
+    TeranocCtrlRegistersConfig cfg;
+
     CtrlRegisters(vp::ComponentConf &config);
 
 private:
@@ -50,7 +53,7 @@ private:
 
 
 CtrlRegisters::CtrlRegisters(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
     this->input_itf.set_req_meth(&CtrlRegisters::req);
@@ -60,7 +63,7 @@ CtrlRegisters::CtrlRegisters(vp::ComponentConf &config)
     this->new_master_port("dpi_check", &this->dpi_check_itf);
     this->new_master_port("rocache_cfg", &this->rocache_cfg_itf);
     this->wakeup_event = this->event_new(&CtrlRegisters::wakeup_event_handler);
-    wakeup_latency = get_js_config()->get_child_int("wakeup_latency");
+    wakeup_latency = this->cfg.wakeup_latency;
     eoc_reached = false;
 }
 

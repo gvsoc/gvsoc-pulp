@@ -15,17 +15,22 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class PriorityArbiterFilterConfig(Config):
+    """Configuration of the SoftHier (old) TCDM priority arbiter filter."""
+
+    bank_width: int = cfg_field(default=0, dump=True, desc="Width of the TCDM bank, in bytes")
+
 
 class PriorityArbiterFilter(gvsoc.systree.Component):
 
     def __init__(self, parent, name, bank_width):
 
-        super(PriorityArbiterFilter, self).__init__(parent, name)
+        super(PriorityArbiterFilter, self).__init__(parent, name,
+            config=PriorityArbiterFilterConfig(bank_width=int(bank_width)))
 
         self.add_sources(
             ['pulp/chips/soft_hier_old/priority_arbiter_filter.cpp']
         )
-
-        self.add_properties({
-            'bank_width': bank_width
-        })

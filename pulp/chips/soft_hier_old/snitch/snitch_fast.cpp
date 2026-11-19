@@ -118,7 +118,7 @@ void IssWrapper::start()
     // vp_assert_always(this->irq_ack_itf.is_bound(), &this->trace, "IRQ ack master port is not connected\n");
 
     this->trace.msg("ISS start (fetch: %d, boot_addr: 0x%lx)\n",
-        iss.exec.fetch_enable_reg.get(), get_js_config()->get_child_int("boot_addr"));
+        iss.exec.fetch_enable_reg.get(), this->iss.cfg.boot_addr);
 
     this->iss.timing.background_power.leakage_power_start();
     this->iss.timing.background_power.dynamic_power_start();
@@ -160,7 +160,7 @@ void IssWrapper::reset(bool active)
 }
 
 IssWrapper::IssWrapper(vp::ComponentConf &config)
-    : vp::Component(config), iss(*this)
+    : vp::Component(config, this->iss.cfg), iss(*this)
 {
     this->iss.syscalls.build();
     this->iss.decode.build();

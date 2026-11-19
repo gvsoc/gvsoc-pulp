@@ -54,16 +54,6 @@ class Hci(Component):
 
         self.nb_slaves = config.nb_slaves
 
-        self.add_properties({
-            'nb_masters': config.nb_masters,
-            'nb_slaves': config.nb_slaves,
-            'interleaving_width': config.interleaving_width,
-            'nb_wide_masters': config.nb_wide_masters,
-            'wide_max_stall': config.wide_max_stall,
-            'wide_prio': config.wide_prio,
-            'nb_group0_masters': config.nb_group0_masters,
-        })
-
     # -------- ports --------
 
     def i_INPUT(self, id: int) -> SlaveItf:

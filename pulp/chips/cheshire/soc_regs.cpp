@@ -11,6 +11,7 @@
 #include <vector>
 #include <vp/itf/io.hpp>
 #include <vp/vp.hpp>
+#include <pulp/chips/cheshire/soc_regs/control_regs_config.hpp>
 
 class ControlRegs : public vp::Component
 {
@@ -21,6 +22,7 @@ class ControlRegs : public vp::Component
     private:
         static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
 
+        ControlRegsConfig cfg;
         vp::Trace trace;
         vp::IoSlave in;
         uint64_t dram_end;
@@ -50,12 +52,12 @@ class ControlRegs : public vp::Component
 
 };
 
-ControlRegs::ControlRegs(vp::ComponentConf &config) : vp::Component(config)
+ControlRegs::ControlRegs(vp::ComponentConf &config) : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
     this->in.set_req_meth(&ControlRegs::req);
     this->new_slave_port("input", &this->in);
-    this->dram_end = this->get_js_config()->get_uint("dram_end");
+    this->dram_end = this->cfg.dram_end;
 }
 
 vp::IoReqStatus ControlRegs::req(vp::Block *__this, vp::IoReq *req)

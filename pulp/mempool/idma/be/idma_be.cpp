@@ -23,7 +23,7 @@
 
 
 
-IDmaBe::IDmaBe(vp::Component *idma, std::string name, IdmaTransferProducer *me,
+IDmaBe::IDmaBe(vp::Component *idma, const MemPoolDmaConfig &cfg, std::string name, IdmaTransferProducer *me,
     IdmaBeConsumer *loc_be_read, IdmaBeConsumer *loc_be_write,
     IdmaBeConsumer *ext_be_read, IdmaBeConsumer *ext_be_write)
 :   Block(idma, name),
@@ -40,8 +40,8 @@ IDmaBe::IDmaBe(vp::Component *idma, std::string name, IdmaTransferProducer *me,
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
     // Get the local area description to differentiate local and remote backend protocols
-    this->loc_base = idma->get_js_config()->get_int("loc_base");
-    this->loc_size = idma->get_js_config()->get_int("loc_size");
+    this->loc_base = cfg.loc_base;
+    this->loc_size = cfg.loc_size;
 }
 
 

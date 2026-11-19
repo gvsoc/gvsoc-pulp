@@ -24,6 +24,7 @@
 #define __NEUREKA_HPP__
 
 #include <vp/vp.hpp>
+#include <pulp/neureka/neureka/neureka_config.hpp>
 #include <vp/itf/io_v2.hpp>
 #include <iostream>
 #include <fstream>
@@ -213,6 +214,8 @@ class Neureka : public vp::Component
     friend class Neureka_base;
 
 public:
+    NeurekaConfig cfg;
+
     Neureka(vp::ComponentConf &config);
 
     void reset(bool active);

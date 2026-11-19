@@ -19,11 +19,13 @@
  */
 
 #include <vp/vp.hpp>
+#include <pulp/chips/soft_hier_old/snitch/zero_mem/zero_mem_config.hpp>
 #include <vp/itf/io.hpp>
 
 
 class ZeroMem : public vp::Component
 {
+    ZeroMemConfig cfg;
 
 public:
     ZeroMem(vp::ComponentConf &config);
@@ -40,14 +42,14 @@ private:
 
 
 ZeroMem::ZeroMem(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
     this->input_itf.set_req_meth(&ZeroMem::req);
 
     this->new_slave_port("input", &this->input_itf);
 
-    this->size = this->get_js_config()->get("size")->get_int();
+    this->size = this->cfg.size;
 }
 
 

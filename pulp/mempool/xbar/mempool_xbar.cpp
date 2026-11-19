@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <climits>
+#include <pulp/mempool/xbar/mempool_xbar/mempool_xbar_config.hpp>
 #include <vp/vp.hpp>
 #include <vp/signal.hpp>
 #include <vp/itf/io.hpp>
@@ -178,6 +179,8 @@ class MempoolXbar : public vp::Component
     friend class Channel;
 
 public:
+    MempoolXbarConfig cfg;
+
     MempoolXbar(vp::ComponentConf &conf);
 
 private:
@@ -219,17 +222,17 @@ private:
 
 
 MempoolXbar::MempoolXbar(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
 
-    this->bandwidth = this->get_js_config()->get_int("bandwidth");
-    this->latency = this->get_js_config()->get_int("latency");
-    this->nb_input_port = this->get_js_config()->get_int("nb_input_port");
-    this->nb_output_port = this->get_js_config()->get_int("nb_output_port");
-    this->shared_rw_bandwidth = this->get_js_config()->get_child_bool("shared_rw_bandwidth");
-    this->max_input_pending_size = this->get_js_config()->get_child_int("max_input_pending_size");
-    this->use_selector = this->get_js_config()->get_child_bool("use_selector");
+    this->bandwidth = this->cfg.bandwidth;
+    this->latency = this->cfg.latency;
+    this->nb_input_port = this->cfg.nb_input_port;
+    this->nb_output_port = this->cfg.nb_output_port;
+    this->shared_rw_bandwidth = this->cfg.shared_rw_bandwidth;
+    this->max_input_pending_size = this->cfg.max_input_pending_size;
+    this->use_selector = this->cfg.use_selector;
     if (this->max_input_pending_size == 0)
     {
         // If no FIFO is specified, set to max to not have any limitation

@@ -20,12 +20,14 @@
  */
 
 #include <vp/vp.hpp>
+#include <pulp/chips/soft_hier_old/hbm_ctrl/hbm_ctrl_config.hpp>
 #include <vp/itf/io.hpp>
 #include <stdio.h>
 #include <math.h>
 
 class hbm_ctrl : public vp::Component
 {
+    HbmCtrlConfig cfg;
 
 public:
 
@@ -58,21 +60,21 @@ private:
 };
 
 hbm_ctrl::hbm_ctrl(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
   traces.new_trace("trace", &trace, vp::DEBUG);
 
   in.set_req_meth(&hbm_ctrl::req);
   new_slave_port("in", &in);
 
-  nb_slaves = get_js_config()->get_child_int("nb_slaves");
-  nb_masters = get_js_config()->get_child_int("nb_masters");
-  stage_bits = get_js_config()->get_child_int("stage_bits");
-  interleaving_bits = get_js_config()->get_child_int("interleaving_bits");
-  node_addr_offset = get_js_config()->get_child_int("node_addr_offset");
-  hbm_node_aliase = get_js_config()->get_child_int("hbm_node_aliase");
-  xor_scrambling = get_js_config()->get_child_int("xor_scrambling");
-  red_scrambling = get_js_config()->get_child_int("red_scrambling");
+  nb_slaves = this->cfg.nb_slaves;
+  nb_masters = this->cfg.nb_masters;
+  stage_bits = this->cfg.stage_bits;
+  interleaving_bits = this->cfg.interleaving_bits;
+  node_addr_offset = this->cfg.node_addr_offset;
+  hbm_node_aliase = this->cfg.hbm_node_aliase;
+  xor_scrambling = this->cfg.xor_scrambling;
+  red_scrambling = this->cfg.red_scrambling;
 
   if (stage_bits == 0)
   {

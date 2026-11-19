@@ -22,6 +22,7 @@
 
 #include <vector>
 #include <vp/vp.hpp>
+#include <pulp/mempool/idma/mempool_dma/mem_pool_dma_config.hpp>
 
 
 

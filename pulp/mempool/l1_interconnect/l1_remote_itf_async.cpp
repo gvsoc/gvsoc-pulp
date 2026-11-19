@@ -18,6 +18,7 @@
  * Authors: Yinrong Li, ETH Zurich (yinrli@student.ethz.ch)
  */
 
+#include <pulp/mempool/l1_interconnect/l1_remote_itf/l1_remote_itf_config.hpp>
 #include <vp/vp.hpp>
 #include <vp/signal.hpp>
 #include <vp/itf/io.hpp>
@@ -29,6 +30,8 @@
 class L1_RemoteItf : public vp::Component
 {
 public:
+    L1RemoteItfConfig cfg;
+
     L1_RemoteItf(vp::ComponentConf &conf);
 
 private:
@@ -63,16 +66,16 @@ private:
 
 
 L1_RemoteItf::L1_RemoteItf(vp::ComponentConf &config)
-    : vp::Component(config), fsm_event(this, L1_RemoteItf::fsm_handler),
+    : vp::Component(config, this->cfg), fsm_event(this, L1_RemoteItf::fsm_handler),
     forward_queue(this, "forward_queue"), backward_queue(this, "backward_queue")
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
 
     stalled = false;
-    req_latency = this->get_js_config()->get_int("req_latency");
-    resp_latency = this->get_js_config()->get_int("resp_latency");
-    int bandwidth = this->get_js_config()->get_int("bandwidth");
-    bool shared_rw_bandwidth = this->get_js_config()->get_child_bool("shared_rw_bandwidth");
+    req_latency = this->cfg.req_latency;
+    resp_latency = this->cfg.resp_latency;
+    int bandwidth = this->cfg.bandwidth;
+    bool shared_rw_bandwidth = this->cfg.shared_rw_bandwidth;
 
     this->resp_bw_limiter = new BandwidthLimiter(bandwidth, resp_latency, shared_rw_bandwidth, 0, &this->trace);
 

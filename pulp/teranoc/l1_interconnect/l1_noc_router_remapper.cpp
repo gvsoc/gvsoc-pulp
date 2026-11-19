@@ -18,6 +18,7 @@
  * Authors: Yinrong Li, ETH Zurich (yinrli@student.ethz.ch)
  */
 
+#include <pulp/teranoc/l1_interconnect/l1_noc_router_remapper/l1_noc_router_remapper_config.hpp>
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
@@ -27,6 +28,8 @@ class L1NocRouterRemapper : public vp::Component
 {
 
 public:
+    L1NocRouterRemapperConfig cfg;
+
     L1NocRouterRemapper(vp::ComponentConf &config);
 
 private:
@@ -56,14 +59,14 @@ private:
 
 
 L1NocRouterRemapper::L1NocRouterRemapper(vp::ComponentConf &config)
-    : vp::Component(config), fsm_event(this, L1NocRouterRemapper::fsm_handler)
+    : vp::Component(config, this->cfg), fsm_event(this, L1NocRouterRemapper::fsm_handler)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
-    this->nb_ports = get_js_config()->get_int("nb_ports");
-    this->remap_batch_size = get_js_config()->get_int("remap_batch_size");
+    this->nb_ports = this->cfg.nb_ports;
+    this->remap_batch_size = this->cfg.remap_batch_size;
     this->nb_groups = this->nb_ports / this->remap_batch_size;
-    this->shuffle = get_js_config()->get_child_bool("shuffle");
+    this->shuffle = this->cfg.shuffle;
     this->remap_pos = 0;
     this->remap_timestamp = 0;
 

@@ -20,6 +20,7 @@
             Chi     Zhang , ETH Zurich (chizhang@iis.ee.ethz.ch)
  */
 
+#include <pulp/mempool/ctrl_registers/mempool_ctrl_registers_config.hpp>
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
@@ -32,6 +33,8 @@ class CtrlRegisters : public vp::Component
 {
 
 public:
+    MempoolCtrlRegistersConfig cfg;
+
     CtrlRegisters(vp::ComponentConf &config);
 
 private:
@@ -54,12 +57,12 @@ private:
 
 
 CtrlRegisters::CtrlRegisters(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
     this->input_itf.set_req_meth(&CtrlRegisters::req);
 
-    this->nb_cores = get_js_config()->get_child_int("nb_cores");
+    this->nb_cores = this->cfg.nb_cores;
 
     this->new_slave_port("input", &this->input_itf);
     this->barrier_ack_itf.resize(this->nb_cores);
@@ -69,7 +72,7 @@ CtrlRegisters::CtrlRegisters(vp::ComponentConf &config)
     }
     this->new_master_port("rocache_cfg", &this->rocache_cfg_itf);
     this->wakeup_event = this->event_new(&CtrlRegisters::wakeup_event_handler);
-    wakeup_latency = get_js_config()->get_child_int("wakeup_latency");
+    wakeup_latency = this->cfg.wakeup_latency;
     eoc_reached = false;
 }
 

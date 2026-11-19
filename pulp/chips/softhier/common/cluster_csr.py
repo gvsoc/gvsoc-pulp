@@ -15,18 +15,23 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class ClusterCsrConfig(Config):
+    """Configuration of the SoftHier cluster control registers."""
+
+    nb_cores: int = cfg_field(default=1, dump=True, desc="Number of cores of the cluster")
+    cluster_id: int = cfg_field(default=0, dump=True, desc="Cluster ID")
+
 
 class ClusterCSR(gvsoc.systree.Component):
 
     def __init__(self, parent, name, nb_cores=1, cluster_id=0):
-        super(ClusterCSR, self).__init__(parent, name)
+        super(ClusterCSR, self).__init__(parent, name, config=ClusterCsrConfig(
+            nb_cores=nb_cores, cluster_id=cluster_id))
 
         self.add_sources(['pulp/chips/softhier/common/cluster_csr.cpp'])
-
-        self.add_properties({
-            'nb_cores': nb_cores,
-            'cluster_id': cluster_id,
-        })
 
     def o_EXTERNAL_IRQ(self, core: int, itf: gvsoc.systree.SlaveItf):
         self.itf_bind(f'external_irq_{core}', itf, signature='wire<bool>')

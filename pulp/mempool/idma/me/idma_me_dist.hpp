@@ -39,10 +39,11 @@ public:
      * @brief Construct a new IDmaFeXdma frontend
      *
      * @param idma The top iDMA block.
+     * @param cfg The configuration of the top iDMA block.
      * @param fe The front end.
      * @param be The back end.
      */
-    IDmaMeDist(vp::Component *idma, std::string name, IdmaTransferProducer *fe, std::vector<IdmaTransferConsumer *> be, int be_region_size);
+    IDmaMeDist(vp::Component *idma, const MemPoolDmaConfig &cfg, std::string name, IdmaTransferProducer *fe, std::vector<IdmaTransferConsumer *> be, int be_region_size);
 
     void reset(bool active) override;
 

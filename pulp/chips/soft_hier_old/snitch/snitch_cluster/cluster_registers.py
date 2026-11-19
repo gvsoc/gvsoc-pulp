@@ -15,21 +15,25 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
 import regmap.regmap
 import regmap.regmap_hjson
 import regmap.regmap_c_header
 
+class ClusterRegistersConfig(Config):
+    """Configuration of the SoftHier (old) snitch cluster registers."""
+
+    boot_addr: int = cfg_field(default=0, fmt="hex", dump=True, desc="Boot address of the cores")
+    nb_cores: int = cfg_field(default=0, dump=True, desc="Number of cores of the cluster")
+
+
 class ClusterRegisters(gvsoc.systree.Component):
 
     def __init__(self, parent, name, boot_addr=0, nb_cores=1, binary=None):
-        super(ClusterRegisters, self).__init__(parent, name)
+        super(ClusterRegisters, self).__init__(parent, name, config=ClusterRegistersConfig(
+            boot_addr=boot_addr, nb_cores=nb_cores))
 
         self.add_sources(['pulp/chips/soft_hier_old/snitch/snitch_cluster/cluster_registers.cpp'])
-
-        self.add_properties({
-            'boot_addr': boot_addr,
-            'nb_cores': nb_cores
-        })
 
     def gen(self, builddir, installdir):
         comp_path = 'pulp/chips/soft_hier_old/snitch/snitch_cluster'

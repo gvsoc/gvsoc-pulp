@@ -16,17 +16,19 @@
 
 import gvsoc.systree
 from gvsoc.signature import IoV2Sync
+from config_tree import Config, cfg_field
+
+
+class Cva6ControlRegsV2Config(Config):
+    dram_end: int = cfg_field(default=0, fmt="hex", desc="End address of the DRAM, returned by the DRAM end register")
+
 
 class ControlRegsV2(gvsoc.systree.Component):
     """io_v2 variant of ControlRegs, answering every access inline."""
     def __init__(self, parent: gvsoc.systree.Component, name: str, dram_end=0x0, latency: int=0):
-        super(ControlRegsV2, self).__init__(parent, name)
+        super().__init__(parent, name, config=Cva6ControlRegsV2Config(dram_end=dram_end))
 
         self.add_sources(['pulp/cva6/control_regs_v2.cpp'])
-
-        self.add_properties({
-            'dram_end': dram_end
-        })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature=IoV2Sync())

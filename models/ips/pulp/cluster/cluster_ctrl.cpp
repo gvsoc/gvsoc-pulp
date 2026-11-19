@@ -10,6 +10,7 @@
 // replies inline with IO_RESP_OK / IO_RESP_INVALID and IO_REQ_DONE. The
 // bootaddr wire is uint64_t so it binds directly to the iss_v2 core i_ENTRY.
 
+#include <ips/pulp/cluster/cluster_ctrl/cluster_ctrl_config.hpp>
 #include <vp/vp.hpp>
 #include <vp/itf/io_v2.hpp>
 #include <vp/itf/wire.hpp>
@@ -33,6 +34,8 @@ class cluster_ctrl : public vp::Component
 
 public:
     cluster_ctrl(vp::ComponentConf &config);
+    ClusterCtrlConfig cfg;
+
 
     void reset(bool active);
 
@@ -73,9 +76,9 @@ private:
 };
 
 cluster_ctrl::cluster_ctrl(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
-    nb_core = get_js_config()->get_child_int("nb_core");
+    nb_core = this->cfg.nb_core;
 
     cores = new Core_cluster_ctrl[nb_core];
 

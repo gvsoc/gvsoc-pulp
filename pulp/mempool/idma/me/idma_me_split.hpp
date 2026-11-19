@@ -37,10 +37,11 @@ public:
      * @brief Construct a new IDmaFeXdma frontend
      *
      * @param idma The top iDMA block.
+     * @param cfg The configuration of the top iDMA block.
      * @param fe The front end.
      * @param be The back end.
      */
-    IDmaMeSplit(vp::Component *idma, IdmaTransferProducer *fe, IdmaTransferConsumer *be, int dma_split_size);
+    IDmaMeSplit(vp::Component *idma, const MemPoolDmaConfig &cfg, IdmaTransferProducer *fe, IdmaTransferConsumer *be, int dma_split_size);
 
     void reset(bool active) override;
 

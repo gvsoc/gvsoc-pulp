@@ -54,6 +54,7 @@
  * from the synchronous TCDM responses (bank conflicts and interconnect).
  */
 
+#include <pulp/light_opope/light_opope/light_opope_config.hpp>
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
@@ -82,6 +83,8 @@ enum opope_state {
 class LightOpope : public vp::Component
 {
 public:
+    LightOpopeConfig cfg;
+
     LightOpope(vp::ComponentConf &config);
 
     static vp::IoReqStatus req(vp::Block *__this, vp::IoReq *req);
@@ -204,7 +207,7 @@ static fp16 fp16_fma(fp16 a, fp16 b, fp16 c)
 }
 
 LightOpope::LightOpope(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
     this->input_itf.set_req_meth(&LightOpope::req);
@@ -217,16 +220,16 @@ LightOpope::LightOpope(vp::ComponentConf &config)
     this->new_master_port("offload_grant", &this->offload_grant_itf, this);
     this->new_master_port("done_irq", &this->done, this);
 
-    this->tcdm_bank_width   = get_js_config()->get("tcdm_bank_width")->get_int();
-    this->tcdm_bank_number  = get_js_config()->get("tcdm_bank_number")->get_int();
-    this->elem_size         = get_js_config()->get("elem_size")->get_int();
-    this->p                 = get_js_config()->get("p")->get_int();
-    this->mac_latency       = get_js_config()->get("mac_latency")->get_int();
-    this->first_job_latency = get_js_config()->get("first_job_latency")->get_int();
+    this->tcdm_bank_width   = this->cfg.tcdm_bank_width;
+    this->tcdm_bank_number  = this->cfg.tcdm_bank_number;
+    this->elem_size         = this->cfg.elem_size;
+    this->p                 = this->cfg.p;
+    this->mac_latency       = this->cfg.mac_latency;
+    this->first_job_latency = this->cfg.first_job_latency;
     this->first_job         = true;
-    this->queue_depth       = get_js_config()->get("queue_depth")->get_int();
-    this->loc_base          = get_js_config()->get("loc_base")->get_double();
-    this->report_jobs       = get_js_config()->get("report_jobs")->get_int() != 0;
+    this->queue_depth       = this->cfg.queue_depth;
+    this->loc_base          = this->cfg.loc_base;
+    this->report_jobs       = this->cfg.report_jobs != 0;
     this->tile              = 2 * this->p;
     this->compute_able      = 0;
 

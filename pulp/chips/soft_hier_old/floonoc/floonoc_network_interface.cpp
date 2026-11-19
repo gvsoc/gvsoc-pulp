@@ -45,7 +45,7 @@ NetworkInterface::NetworkInterface(FlooNoc *noc, int x, int y)
     // Create one req for each possible outstanding req.
     // Internal requests will be taken from here to model the fact only a limited number
     // of requests can be sent at the same time
-    int ni_outstanding_reqs = this->noc->get_js_config()->get("ni_outstanding_reqs")->get_int();
+    int ni_outstanding_reqs = this->noc->cfg.ni_outstanding_reqs;
     for (int i=0; i<ni_outstanding_reqs; i++)
     {
         this->free_reqs.push(new vp::IoReq());

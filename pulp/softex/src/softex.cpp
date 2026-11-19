@@ -21,7 +21,7 @@
 #include <cmath>
 
 Softex::Softex(vp::ComponentConf &config)
-    : vp::Component(config),
+    : vp::Component(config, this->cfg),
       reg_fsm_state(*this, "fsm_state", 32, true, SOFTEX_FSM_IDLE),
       reg_busy(*this, "busy", 1, true, 0)
 {
@@ -33,8 +33,8 @@ Softex::Softex(vp::ComponentConf &config)
     this->in.set_req_meth(&Softex::cfg_slave);
     this->new_slave_port("input", &this->in);
 
-    this->n_state_slots  = this->get_js_config()->get_child_int("n_state_slots");
-    this->cache_slot_size= this->get_js_config()->get_child_int("cache_slot_size");
+    this->n_state_slots  = this->cfg.n_state_slots;
+    this->cache_slot_size= this->cfg.cache_slot_size;
     if (this->n_state_slots <= 0)
     {
         this->n_state_slots = 2; // softex_pkg::N_CTRL_STATE_SLOTS default
@@ -45,13 +45,13 @@ Softex::Softex(vp::ComponentConf &config)
     }
     this->local_slots.resize(this->n_state_slots);
 
-    this->queue_depth = this->get_js_config()->get_child_int("queue_depth");
+    this->queue_depth = this->cfg.queue_depth;
     if ((int32_t)this->queue_depth <= 0)
     {
         this->queue_depth = 8;
     }
 
-    int32_t data_width_bits = this->get_js_config()->get_child_int("data_width_bits");
+    int32_t data_width_bits = this->cfg.data_width_bits;
     if (data_width_bits <= 0)
     {
         this->trace.fatal("Softex: data_width_bits must be > 0\n");

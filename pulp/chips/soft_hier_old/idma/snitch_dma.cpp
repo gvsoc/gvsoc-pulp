@@ -39,6 +39,9 @@
 class SnitchDma : public vp::Component
 {
 public:
+    // Shared with the front-end, middle-end and back-ends
+    SnitchDmaConfig cfg;
+
     SnitchDma(vp::ComponentConf &config);
 
 private:
@@ -54,12 +57,14 @@ private:
 
 
 SnitchDma::SnitchDma(vp::ComponentConf &config)
-    : vp::Component(config),
+    : vp::Component(config, this->cfg),
     fe(this, &this->me),
-    me(this, &this->fe, &this->be),
-    be_axi_read(this, "axi_read", &this->be), be_axi_write(this, "axi_write", &this->be),
-    be_tcdm_read(this, "tcdm_read", &this->be), be_tcdm_write(this, "tcdm_write", &this->be),
-    be(this, &this->me, &this->be_tcdm_read, &this->be_tcdm_write,
+    me(this, this->cfg, &this->fe, &this->be),
+    be_axi_read(this, this->cfg, "axi_read", &this->be),
+    be_axi_write(this, this->cfg, "axi_write", &this->be),
+    be_tcdm_read(this, this->cfg, "tcdm_read", &this->be),
+    be_tcdm_write(this, this->cfg, "tcdm_write", &this->be),
+    be(this, this->cfg, &this->me, &this->be_tcdm_read, &this->be_tcdm_write,
         &this->be_axi_read, &this->be_axi_write)
 {
 }

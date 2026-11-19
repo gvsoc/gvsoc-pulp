@@ -39,6 +39,7 @@
 
 #include <deque>
 #include <vector>
+#include <pulp/snitch/snitch_cluster/spatz/cluster_registers_v2/spatz_cluster_registers_v2_config.hpp>
 #include <vp/vp.hpp>
 #include <vp/itf/io_v2.hpp>
 #include <vp/itf/wire.hpp>
@@ -53,6 +54,8 @@ class ClusterRegisters : public vp::Component
 {
 
 public:
+    SpatzClusterRegistersV2Config cfg;
+
 
     ClusterRegisters(vp::ComponentConf &config);
 
@@ -109,13 +112,13 @@ private:
 };
 
 ClusterRegisters::ClusterRegisters(vp::ComponentConf &config)
-: vp::Component(config), regmap(*this, "regmap"),
+: vp::Component(config, this->cfg), regmap(*this, "regmap"),
   release_event(this, &ClusterRegisters::release_handler)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
 
-    this->bootaddr = this->get_js_config()->get("boot_addr")->get_int();
-    this->nb_cores = this->get_js_config()->get("nb_cores")->get_int();
+    this->bootaddr = this->cfg.boot_addr;
+    this->nb_cores = this->cfg.nb_cores;
 
     this->new_slave_port("input", &this->in);
 

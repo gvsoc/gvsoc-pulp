@@ -25,25 +25,25 @@
 using namespace std::placeholders;
 
 Neureka::Neureka(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
-    this->TP_IN           = this->get_js_config()->get_child_int("tp_in");
-    this->TP_IN_S         = this->get_js_config()->get_child_int("tp_in_s");
-    this->TP_OUT          = this->get_js_config()->get_child_int("tp_out");
-    this->QA_IN           = this->get_js_config()->get_child_int("qa_in");
-    this->QA_OUT          = this->get_js_config()->get_child_int("qa_out");
-    this->H_SIZE          = this->get_js_config()->get_child_int("h_size");
-    this->W_SIZE          = this->get_js_config()->get_child_int("w_size");
+    this->TP_IN           = this->cfg.tp_in;
+    this->TP_IN_S         = this->cfg.tp_in_s;
+    this->TP_OUT          = this->cfg.tp_out;
+    this->QA_IN           = this->cfg.qa_in;
+    this->QA_OUT          = this->cfg.qa_out;
+    this->H_SIZE          = this->cfg.h_size;
+    this->W_SIZE          = this->cfg.w_size;
     this->NR_COLUMN       = this->H_SIZE*this->W_SIZE;
-    this->COLUMN_SIZE     = this->get_js_config()->get_child_int("column_size");
-    this->BLOCK_SIZE      = this->get_js_config()->get_child_int("block_size");
-    this->F_BUFFER_SIZE   = this->get_js_config()->get_child_int("f_buffer_size");
-    this->FILTER_SIZE     = this->get_js_config()->get_child_int("filter_size");
-    this->SHIFT_CYCLES    = this->get_js_config()->get_child_int("shift_cycles");
-    this->OVERHEAD_LD_1X1 = this->get_js_config()->get_child_int("overhead_ld_1x1");
-    this->OVERHEAD_LD_3X3 = this->get_js_config()->get_child_int("overhead_ld_3x3");
-    this->OVERHEAD_MV     = this->get_js_config()->get_child_int("overhead_mv");
-    this->QUANT_PER_CYCLE = this->get_js_config()->get_child_int("quant_per_cycle");
+    this->COLUMN_SIZE     = this->cfg.column_size;
+    this->BLOCK_SIZE      = this->cfg.block_size;
+    this->F_BUFFER_SIZE   = this->cfg.f_buffer_size;
+    this->FILTER_SIZE     = this->cfg.filter_size;
+    this->SHIFT_CYCLES    = this->cfg.shift_cycles;
+    this->OVERHEAD_LD_1X1 = this->cfg.overhead_ld_1x1;
+    this->OVERHEAD_LD_3X3 = this->cfg.overhead_ld_3x3;
+    this->OVERHEAD_MV     = this->cfg.overhead_mv;
+    this->QUANT_PER_CYCLE = this->cfg.quant_per_cycle;
 
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
     this->new_reg("fsm_state", &this->state, 32);//public in hpp

@@ -18,18 +18,20 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class TeranocCtrlRegistersConfig(Config):
+    wakeup_latency: int = cfg_field(default=0, desc="Latency of the core wakeup")
+
 
 class CtrlRegisters(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, wakeup_latency: int=0):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=TeranocCtrlRegistersConfig(wakeup_latency=wakeup_latency))
 
         self.add_sources(['pulp/teranoc/ctrl_registers.cpp'])
-
-        self.add_properties({
-            'wakeup_latency': wakeup_latency
-        })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')

@@ -784,15 +784,15 @@ Mchan::Mchan(vp::ComponentConf &config)
 {
     // Make the DMA known as a watchpoint-capable master (block path is valid at construction).
     this->traces.register_as_master();
-    nb_channels = get_js_config()->get_child_int("nb_channels");
-    core_queue_depth = get_js_config()->get_child_int("core_queue_depth");
-    global_queue_depth = get_js_config()->get_child_int("global_queue_depth");
-    max_nb_ext_read_req = get_js_config()->get_child_int("max_nb_ext_read_req");
-    max_nb_ext_write_req = get_js_config()->get_child_int("max_nb_ext_write_req");
-    max_burst_length = get_js_config()->get_child_int("max_burst_length");
-    nb_loc_ports = get_js_config()->get_child_int("nb_loc_ports");
-    tcdm_addr_width = get_js_config()->get_child_int("tcdm_addr_width");
-    ext_width = get_js_config()->get_child_int("ext_width");
+    nb_channels = this->cfg.nb_channels;
+    core_queue_depth = this->cfg.core_queue_depth;
+    global_queue_depth = this->cfg.global_queue_depth;
+    max_nb_ext_read_req = this->cfg.max_nb_ext_read_req;
+    max_nb_ext_write_req = this->cfg.max_nb_ext_write_req;
+    max_burst_length = this->cfg.max_burst_length;
+    nb_loc_ports = this->cfg.nb_loc_ports;
+    tcdm_addr_width = this->cfg.tcdm_addr_width;
+    ext_width = this->cfg.ext_width;
     // FIFO width = the loc (L1) write-fetch bandwidth: half the loc ports fetch
     // for ext writes, each a 4-byte word per cycle.
     ext_write_fifo_size = MCHAN_EXT_WRITE_FIFO_DEPTH * (nb_loc_ports / 2) * 4;

@@ -15,12 +15,20 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class RouterConfig(Config):
+    """Configuration of a C2C router."""
+
+    radix: int = cfg_field(default=0, dump=True, desc="Number of ports")
+    virtual_ch: int = cfg_field(default=0, dump=True, desc="Number of virtual channels")
+
 
 class Router(gvsoc.systree.Component):
     def __init__(self, parent, name, radix, virtual_ch):
-        super(Router, self).__init__(parent, name)
-        self.add_property('radix', radix)
-        self.add_property('virtual_ch', virtual_ch)
+        super(Router, self).__init__(parent, name, config=RouterConfig(radix=radix,
+            virtual_ch=virtual_ch))
         self.add_sources(['pulp/chips/soft_hier_old/c2c_platform/router.cpp'])
 
     def i_PORT_INPUT(self, i: int) -> gvsoc.systree.SlaveItf:

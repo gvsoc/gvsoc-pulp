@@ -20,6 +20,7 @@
  */
 
 #include <vp/vp.hpp>
+#include <pulp/chips/soft_hier_old/cluster/cluster_control_v2/cluster_control_config.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
 #include <stdio.h>
@@ -39,6 +40,7 @@ public:
 
 class cluster_ctrl : public vp::Component
 {
+    ClusterControlConfig cfg;
 
 public:
 
@@ -69,9 +71,9 @@ private:
 };
 
 cluster_ctrl::cluster_ctrl(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
-  nb_core = get_js_config()->get_child_int("nb_core");
+  nb_core = this->cfg.nb_core;
 
   cores = (Core_cluster_ctrl *)new Core_cluster_ctrl[nb_core];
 

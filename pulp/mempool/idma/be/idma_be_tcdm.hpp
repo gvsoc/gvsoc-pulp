@@ -38,10 +38,11 @@ public:
      * @brief Construct a new TCDM back-end
      *
      * @param idma The top iDMA block.
+     * @param cfg The configuration of the top iDMA block.
      * @param itf_name Name of the TCDM interface where the back-end should send requests.
      * @param be The top back-end.
      */
-    IDmaBeTcdm(vp::Component *idma, std::string itf_name, IdmaBeProducer *be);
+    IDmaBeTcdm(vp::Component *idma, const MemPoolDmaConfig &cfg, std::string itf_name, IdmaBeProducer *be);
 
     void reset(bool active) override;
 

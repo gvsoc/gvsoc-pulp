@@ -17,6 +17,7 @@
 #
 
 import gvsoc.systree
+from pulp.idma.idma_config import IdmaConfig
 
 
 class PulpOpenDma(gvsoc.systree.Component):
@@ -78,7 +79,13 @@ class PulpOpenDma(gvsoc.systree.Component):
             loc_size: int=0,
             tcdm_width: int=0):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=IdmaConfig(nb_cores=nb_cores,
+            # The front-end sees one flat set of register file ports, the per-core ones first
+            nb_ports=nb_cores + nb_pe_ports,
+            nb_streams=nb_streams, multireg_count=multireg_count,
+            global_queue_depth=global_queue_depth, transfer_queue_size=transfer_queue_size,
+            burst_queue_size=burst_queue_size, burst_size=burst_size, loc_base=loc_base,
+            loc_size=loc_size, tcdm_width=tcdm_width))
 
         self.add_sources([
             'pulp/idma/pulp_open_dma.cpp',
@@ -91,21 +98,6 @@ class PulpOpenDma(gvsoc.systree.Component):
 
         self.nb_cores = nb_cores
         self.nb_pe_ports = nb_pe_ports
-
-        self.add_properties({
-            "nb_cores": nb_cores,
-            # The front-end sees one flat set of register file ports, the per-core ones first
-            "nb_ports": nb_cores + nb_pe_ports,
-            "nb_streams": nb_streams,
-            "multireg_count": multireg_count,
-            "global_queue_depth": global_queue_depth,
-            "transfer_queue_size": transfer_queue_size,
-            "burst_queue_size": burst_queue_size,
-            "burst_size": burst_size,
-            "loc_base": loc_base,
-            "loc_size": loc_size,
-            "tcdm_width": tcdm_width,
-        })
 
     def i_CTRL(self, core: int) -> gvsoc.systree.SlaveItf:
         """Returns the control port of one core.

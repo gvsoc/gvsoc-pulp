@@ -19,6 +19,7 @@
  */
 
 #include <vp/vp.hpp>
+#include <pulp/chips/soft_hier_old/c2c_platform/endpoint/endpoint_config.hpp>
 #include <vp/itf/io.hpp>
 #include <queue>
 #include <iostream>
@@ -30,6 +31,7 @@
 
 class Endpoint : public vp::Component
 {
+    EndpointConfig cfg;
 
 public:
     Endpoint(vp::ComponentConf &config);
@@ -70,7 +72,7 @@ private:
 };
 
 Endpoint::Endpoint(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
     this->input_itf.set_req_meth(&Endpoint::req);
@@ -83,18 +85,18 @@ Endpoint::Endpoint(vp::ComponentConf &config)
     this->new_master_port("barrier_req", &this->barrier_req_itf);
     this->tx_fsm_event          = this->event_new(&Endpoint::tx_fsm_handler);
 
-    this->endpoint_id           = this->get_js_config()->get("endpoint_id")->get_int();
-    this->is_dummy_endpoint     = (this->get_js_config()->get("endpoint_type")->get_str() == "dummy")? 1 : 0;
-    this->use_trace_file        = this->get_js_config()->get("use_trace_file")->get_int();
-    this->num_tx_flit           = this->get_js_config()->get("num_tx_flit")->get_int();
-    this->flit_granularity_byte = this->get_js_config()->get("flit_granularity_byte")->get_int();
+    this->endpoint_id           = this->cfg.endpoint_id;
+    this->is_dummy_endpoint     = (std::string(this->cfg.endpoint_type) == "dummy")? 1 : 0;
+    this->use_trace_file        = this->cfg.use_trace_file;
+    this->num_tx_flit           = this->cfg.num_tx_flit;
+    this->flit_granularity_byte = this->cfg.flit_granularity_byte;
     this->trace_file_handle     = NULL;
     if (this->use_trace_file)
     {
-        this->trace_file_handle = new std::ifstream(this->get_js_config()->get("trace_file")->get_str());
+        this->trace_file_handle = new std::ifstream(this->cfg.trace_file);
         if (!this->trace_file_handle->is_open())
         {
-            this->trace.fatal("Error: cannot open trace file %s\n", this->get_js_config()->get("trace_file")->get_str().c_str());
+            this->trace.fatal("Error: cannot open trace file %s\n", this->cfg.trace_file);
         }
     }
     this->cnt_tx_flit           = 0;

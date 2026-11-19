@@ -15,25 +15,30 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class FlooNoc2dMeshNarrowConfig(Config):
+    narrow_width: int = cfg_field(default=0, desc="Width in bytes of the narrow network")
+    dim_x: int = cfg_field(default=0, desc="X dimension of the mesh, including the targets on the edges")
+    dim_y: int = cfg_field(default=0, desc="Y dimension of the mesh, including the targets on the edges")
+    router_input_queue_size: int = cfg_field(default=0, desc="Size of the input queues of the routers")
+    router_output_queue_size: int = cfg_field(default=0, desc="Size of the output queues of the routers")
 
 
 class FlooNoc2dMeshNarrow(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name, narrow_width: int,
             dim_x: int, dim_y:int, router_input_queue_size: int=2, router_output_queue_size: int=2):
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=FlooNoc2dMeshNarrowConfig(narrow_width=narrow_width,
+            dim_x=dim_x, dim_y=dim_y, router_input_queue_size=router_input_queue_size,
+            router_output_queue_size=router_output_queue_size))
 
         self.add_sources([
             'pulp/teranoc/l1_interconnect/floonoc.cpp',
             'pulp/teranoc/l1_interconnect/floonoc_router.cpp',
             'pulp/teranoc/l1_interconnect/floonoc_network_interface.cpp',
         ])
-
-        self.add_property('narrow_width', narrow_width)
-        self.add_property('dim_x', dim_x)
-        self.add_property('dim_y', dim_y)
-        self.add_property('router_input_queue_size', router_input_queue_size)
-        self.add_property('router_output_queue_size', router_output_queue_size)
 
     def o_MAP(self, itf: gvsoc.systree.SlaveItf, x: int, y: int):
         """Binds the output of a node to a target.

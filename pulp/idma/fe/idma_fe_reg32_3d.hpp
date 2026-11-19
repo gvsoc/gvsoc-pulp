@@ -151,9 +151,10 @@ public:
      * @brief Construct a new IDmaFeReg32_3d front-end
      *
      * @param idma The top iDMA block.
+     * @param cfg The configuration of the top iDMA block.
      * @param me The middle end.
      */
-    IDmaFeReg32_3d(vp::Component *idma, IdmaTransferConsumer *me);
+    IDmaFeReg32_3d(vp::Component *idma, const IdmaConfig &cfg, IdmaTransferConsumer *me);
 
     void reset(bool active) override;
 

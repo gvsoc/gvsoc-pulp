@@ -131,7 +131,6 @@ class RedMule : public vp::Component {
 	friend class RedMule_base;
 
 	public:
-    	// RedMule(js::Config *config);
 		RedMule(vp::ComponentConf &config);
 		
 		//int build();

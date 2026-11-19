@@ -15,6 +15,7 @@
 #
 
 import gvsoc.systree
+from pulp.idma.idma_config import IdmaConfig
 
 class CheshireDma(gvsoc.systree.Component):
     """
@@ -44,7 +45,8 @@ class CheshireDma(gvsoc.systree.Component):
             loc_base: int=0,
             loc_size: int=0):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=IdmaConfig(transfer_queue_size=transfer_queue_size, burst_queue_size=burst_queue_size,
+            loc_base=loc_base, loc_size=loc_size))
 
         self.add_sources([
             'pulp/idma/cheshire_dma.cpp',
@@ -54,13 +56,6 @@ class CheshireDma(gvsoc.systree.Component):
             'pulp/idma/be/idma_be_axi.cpp',
             'pulp/idma/be/idma_be_tcdm.cpp',
         ])
-
-        self.add_properties({
-            "transfer_queue_size": transfer_queue_size,
-            "burst_queue_size": burst_queue_size,
-            "loc_base": loc_base,
-            "loc_size": loc_size,
-        })
         
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')

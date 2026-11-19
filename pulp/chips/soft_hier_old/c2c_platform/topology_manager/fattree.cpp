@@ -19,6 +19,7 @@
  */
 
 #include <vp/vp.hpp>
+#include <pulp/chips/soft_hier_old/c2c_platform/topology_manager/fattree/fat_tree_config.hpp>
 #include <vp/itf/io.hpp>
 #include <queue>
 #include <cmath>  // for pow()
@@ -26,6 +27,7 @@
 
 class FatTree : public vp::Component
 {
+    FatTreeConfig cfg;
 
 public:
     FatTree(vp::ComponentConf &config);
@@ -46,20 +48,20 @@ private:
 };
 
 FatTree::FatTree(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
     this->input_itf.set_req_meth(&FatTree::req);
     this->new_slave_port("in", &this->input_itf);
 
-    this->radix             = this->get_js_config()->get("radix")->get_int();
-    this->level             = this->get_js_config()->get("level")->get_int();
-    this->half_radix        = this->get_js_config()->get("half_radix")->get_int();
-    this->endpoints         = this->get_js_config()->get("endpoints")->get_int();
-    this->num_top_router    = this->get_js_config()->get("num_top_router")->get_int();
-    this->num_mid_router    = this->get_js_config()->get("num_mid_router")->get_int();
-    this->pos_idx           = this->get_js_config()->get("pos_idx")->get_int();
-    this->pos_lvl           = this->get_js_config()->get("pos_lvl")->get_int();
+    this->radix             = this->cfg.radix;
+    this->level             = this->cfg.level;
+    this->half_radix        = this->cfg.half_radix;
+    this->endpoints         = this->cfg.endpoints;
+    this->num_top_router    = this->cfg.num_top_router;
+    this->num_mid_router    = this->cfg.num_mid_router;
+    this->pos_idx           = this->cfg.pos_idx;
+    this->pos_lvl           = this->cfg.pos_lvl;
 }
 
 void FatTree::reset(bool active)

@@ -22,7 +22,7 @@
 #include "idma_me_dist.hpp"
 
 
-IDmaMeDist::IDmaMeDist(vp::Component *idma, std::string name, IdmaTransferProducer *fe, std::vector<IdmaTransferConsumer *> be, int be_region_size)
+IDmaMeDist::IDmaMeDist(vp::Component *idma, const MemPoolDmaConfig &cfg, std::string name, IdmaTransferProducer *fe, std::vector<IdmaTransferConsumer *> be, int be_region_size)
 :   Block(idma, name)
 {
     // Frontend and backend will be used later for interaction
@@ -31,14 +31,14 @@ IDmaMeDist::IDmaMeDist(vp::Component *idma, std::string name, IdmaTransferProduc
     this->be = be;
     this->transfer_queue.resize(this->nb_be);
     this->be_region_size = be_region_size;
-    this->dma_region_start = idma->get_js_config()->get_int("loc_base");
-    this->dma_region_end = this->dma_region_start + idma->get_js_config()->get_int("loc_size");
+    this->dma_region_start = cfg.loc_base;
+    this->dma_region_end = this->dma_region_start + cfg.loc_size;
 
     // Declare our own trace so that we can individually activate traces
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
     // Get the top parameter giving the maximum number of enqueued transfers
-    this->transfer_queue_size = idma->get_js_config()->get_int("transfer_queue_size");
+    this->transfer_queue_size = cfg.transfer_queue_size;
 }
 
 

@@ -20,10 +20,12 @@
  *          Kexin Li, ETH Zurich (likexi@ethz.ch)
  */
 
-// Temporary workaround to let this component include ISS headers
-#include <../../../../isa_snitch_rv32imfdva.hpp>
+// ISS headers workaround. Must come first: it defines ISA_NB_TAGS, which
+// types.hpp otherwise sets to 0
+#include <isa_snitch_rv32imfda.hpp>
 
 #include <vp/vp.hpp>
+#include <pulp/chips/soft_hier_old/snitch/sequencer/sequencer_config.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
 #include <vp/proxy.hpp>
@@ -106,6 +108,7 @@ req(req), is_outer(is_outer), max_inst(max_inst), max_rpt(max_rpt), stagger_max(
 // Class for fp sequencer
 class sequencer : public vp::Component
 {
+    SequencerConfig cfg;
     friend class BufferEntry;
     friend class FrepConfig;
 
@@ -178,7 +181,7 @@ private:
 
 
 sequencer::sequencer(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     traces.new_trace("trace", &trace, vp::DEBUG);
 
@@ -195,7 +198,7 @@ sequencer::sequencer(vp::ComponentConf &config)
 
     new_master_port("acc_req_ready_o", &this->ready_o_itf, (vp::Block *)this);
 
-    this->latency = get_js_config()->get_child_int("latency");
+    this->latency = this->cfg.latency;
 
 }
 

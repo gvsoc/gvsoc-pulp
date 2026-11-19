@@ -15,6 +15,7 @@
 #
 
 import gvsoc.systree
+from pulp.idma.idma_config import IdmaConfig
 
 class SnitchDma(gvsoc.systree.Component):
     """
@@ -48,7 +49,8 @@ class SnitchDma(gvsoc.systree.Component):
             loc_size: int=0,
             tcdm_width: int=0):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=IdmaConfig(transfer_queue_size=transfer_queue_size, burst_queue_size=burst_queue_size,
+            burst_size=burst_size, loc_base=loc_base, loc_size=loc_size, tcdm_width=tcdm_width))
 
         self.add_sources([
             'pulp/idma/snitch_dma.cpp',
@@ -58,15 +60,6 @@ class SnitchDma(gvsoc.systree.Component):
             'pulp/idma/be/idma_be_axi.cpp',
             'pulp/idma/be/idma_be_tcdm.cpp',
         ])
-
-        self.add_properties({
-            "transfer_queue_size": transfer_queue_size,
-            "burst_queue_size": burst_queue_size,
-            "burst_size" : burst_size,
-            "loc_base": loc_base,
-            "loc_size": loc_size,
-            "tcdm_width": tcdm_width,
-        })
 
     def i_OFFLOAD(self) -> gvsoc.systree.SlaveItf:
         """Returns the offload port.

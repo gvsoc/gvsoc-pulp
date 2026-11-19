@@ -199,10 +199,8 @@ class SoftHierSystem(gvsoc.systree.Component):
             wide_base = arch.cluster_tcdm_remote + cluster_id * arch.cluster_tcdm_size
             wide_name = cluster_list[cluster_id].i_WIDE_INPUT().component.name
 
-            noc.get_property('mappings')[f"wide_{wide_name}"] = {
-                'base': wide_base, 'size': arch.cluster_tcdm_size, 'node_id': ni_node_id,
-                'remove_offset': wide_base
-            }
+            noc.add_mapping(f"wide_{wide_name}", base=wide_base, size=arch.cluster_tcdm_size,
+                node_id=ni_node_id, remove_offset=wide_base)
             noc.o_WIDE_BIND(cluster_list[cluster_id].i_WIDE_INPUT(), ni_node_id)
 
     def configure(self):

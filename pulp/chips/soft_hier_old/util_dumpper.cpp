@@ -21,6 +21,7 @@
  */
 
 #include <vp/vp.hpp>
+#include <pulp/chips/soft_hier_old/util_dumpper/util_dumpper_config.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
 #include <unordered_map>
@@ -30,6 +31,7 @@
 
 class UtilDumpper : public vp::Component
 {
+    UtilDumpperConfig cfg;
 
 public:
     UtilDumpper(vp::ComponentConf &config);
@@ -51,9 +53,9 @@ private:
 
 
 UtilDumpper::UtilDumpper(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
-    this->dumpper_id = this->get_js_config()->get("dumpper_id")->get_int();
+    this->dumpper_id = this->cfg.dumpper_id;
     this->filename = "dump_" + std::to_string(this->dumpper_id);
     this->dump_file = nullptr;
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);

@@ -15,19 +15,24 @@
 #
 
 import gvsoc.systree as st
+from config_tree import Config, cfg_field
+
+
+class L1InterleaverConfig(Config):
+    """Configuration of the SoftHier (old) L1 interleaver."""
+
+    nb_slaves: int = cfg_field(default=0, dump=True, desc="Number of output ports (banks)")
+    nb_masters: int = cfg_field(default=0, dump=True, desc="Number of input ports")
+    stage_bits: int = cfg_field(default=0, dump=True, desc="Number of address bits of a stage")
+    interleaving_bits: int = cfg_field(default=0, dump=True, desc="Log2 of the interleaving granularity")
+
 
 class L1_interleaver(st.Component):
 
     def __init__(self, parent, slave, nb_slaves=0, nb_masters=0, stage_bits=0, interleaving_bits=2):
 
-        super(L1_interleaver, self).__init__(parent, slave)
+        super(L1_interleaver, self).__init__(parent, slave, config=L1InterleaverConfig(
+            nb_slaves=nb_slaves, nb_masters=nb_masters, stage_bits=stage_bits,
+            interleaving_bits=interleaving_bits))
 
-        self.set_component('pulp.chips.soft_hier_old.cluster.l1_interleaver_impl')
         self.add_sources(['pulp/chips/soft_hier_old/cluster/l1_interleaver_impl.cpp'])
-
-        self.add_properties({
-            'nb_slaves': nb_slaves,
-            'nb_masters': nb_masters,
-            'stage_bits': stage_bits,
-            'interleaving_bits': interleaving_bits
-        })

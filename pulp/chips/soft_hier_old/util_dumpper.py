@@ -17,6 +17,14 @@
 # Author: Chi Zhang <chizhang@iis.ee.ethz.ch>
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class UtilDumpperConfig(Config):
+    """Configuration of the SoftHier (old) data dumper."""
+
+    dumpper_id: int = cfg_field(default=0, dump=True, desc="Identifier of the dumper, used in the dump file names")
+
 
 class UtilDumpper(gvsoc.systree.Component):
 
@@ -25,13 +33,9 @@ class UtilDumpper(gvsoc.systree.Component):
                 name: str,
                 dumpper_id: int):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=UtilDumpperConfig(dumpper_id=dumpper_id))
 
         self.add_sources(['pulp/chips/soft_hier_old/util_dumpper.cpp'])
-
-        self.add_properties({
-            'dumpper_id'   : dumpper_id,
-        })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')

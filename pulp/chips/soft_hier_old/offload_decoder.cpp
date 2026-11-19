@@ -15,6 +15,7 @@
  */
 
 #include <vp/vp.hpp>
+#include <pulp/chips/soft_hier_old/offload_decoder/soft_hier_old_offload_decoder_config.hpp>
 #include <vp/itf/wire.hpp>
 #include <cpu/iss/include/offload.hpp>
 #include <vector>
@@ -22,6 +23,7 @@
 
 class SoftHierOldOffloadDecoder : public vp::Component
 {
+    SoftHierOldOffloadDecoderConfig cfg;
 public:
     SoftHierOldOffloadDecoder(vp::ComponentConf &config);
 
@@ -55,11 +57,11 @@ extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 
 
 SoftHierOldOffloadDecoder::SoftHierOldOffloadDecoder(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
-    this->nb_cores = this->get_js_config()->get_int("nb_cores");
+    this->nb_cores = this->cfg.nb_cores;
     this->offload_itf.resize(this->nb_cores);
     this->offload_grant_itf.resize(this->nb_cores);
 

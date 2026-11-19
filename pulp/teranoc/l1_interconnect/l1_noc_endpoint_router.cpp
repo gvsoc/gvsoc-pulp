@@ -18,6 +18,7 @@
  * Authors: Yinrong Li, ETH Zurich (yinrli@student.ethz.ch)
  */
 
+#include <pulp/teranoc/l1_interconnect/l1_noc_endpoint_router/l1_noc_endpoint_router_config.hpp>
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
@@ -28,6 +29,8 @@ class L1NocEndpointRouter : public vp::Component
 {
 
 public:
+    L1NocEndpointRouterConfig cfg;
+
     L1NocEndpointRouter(vp::ComponentConf &config);
 
 private:
@@ -49,12 +52,12 @@ private:
 
 
 L1NocEndpointRouter::L1NocEndpointRouter(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
-    this->req_mode = get_js_config()->get_child_bool("req_mode");
-    this->nb_tiles_per_group = get_js_config()->get_int("nb_tiles_per_group");
+    this->req_mode = this->cfg.req_mode;
+    this->nb_tiles_per_group = this->cfg.nb_tiles_per_group;
 
     this->input_itfs.resize(this->nb_tiles_per_group);
     for (int i = 0; i < this->nb_tiles_per_group; i++)
@@ -70,8 +73,8 @@ L1NocEndpointRouter::L1NocEndpointRouter(vp::ComponentConf &config)
         this->new_master_port("output_" + std::to_string(i), &this->output_itfs[i]);
     }
 
-    int num_banks_per_tile = get_js_config()->get_int("num_banks_per_tile");
-    int byte_offset = get_js_config()->get_int("byte_offset");
+    int num_banks_per_tile = this->cfg.num_banks_per_tile;
+    int byte_offset = this->cfg.byte_offset;
     this->constant_bits_lsb = byte_offset + clog2(num_banks_per_tile);
     this->tile_id_bits = clog2(this->nb_tiles_per_group);
 }

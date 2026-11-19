@@ -107,18 +107,6 @@ class Mchan(Component):
 
         self.add_sources([_SOURCES[config.kind]])
 
-        self.add_properties({
-            'nb_channels': config.nb_channels,
-            'core_queue_depth': config.core_queue_depth,
-            'global_queue_depth': config.global_queue_depth,
-            'max_nb_ext_read_req': config.max_nb_ext_read_req,
-            'max_nb_ext_write_req': config.max_nb_ext_write_req,
-            'max_burst_length': config.max_burst_length,
-            'nb_loc_ports': config.nb_loc_ports,
-            'tcdm_addr_width': config.tcdm_addr_width,
-            'ext_width': config.ext_width,
-        })
-
     def configure(self):
         # Consumed here rather than in __init__ so the power_model path can
         # also be set after instantiation (e.g. through a target parameter).

@@ -22,7 +22,7 @@
 #include "idma_me_split.hpp"
 
 
-IDmaMeSplit::IDmaMeSplit(vp::Component *idma, IdmaTransferProducer *fe, IdmaTransferConsumer *be, int dma_split_size)
+IDmaMeSplit::IDmaMeSplit(vp::Component *idma, const MemPoolDmaConfig &cfg, IdmaTransferProducer *fe, IdmaTransferConsumer *be, int dma_split_size)
 :   Block(idma, "me"),
     fsm_event(this, &IDmaMeSplit::fsm_handler)
 {
@@ -34,8 +34,8 @@ IDmaMeSplit::IDmaMeSplit(vp::Component *idma, IdmaTransferProducer *fe, IdmaTran
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
     this->dma_split_size = dma_split_size;
-    this->dma_region_start = idma->get_js_config()->get_int("loc_base");
-    this->dma_region_end = this->dma_region_start + idma->get_js_config()->get_int("loc_size");
+    this->dma_region_start = cfg.loc_base;
+    this->dma_region_end = this->dma_region_start + cfg.loc_size;
 }
 
 

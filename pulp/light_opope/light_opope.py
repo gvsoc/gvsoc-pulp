@@ -15,7 +15,27 @@
 #
 
 import os
+from typing import Annotated
 import gvsoc.systree
+from config_tree import Config, cfg_field
+from gvrun.runtime import Runtime
+
+
+class LightOpopeConfig(Config):
+    tcdm_bank_width: int = cfg_field(default=0, desc="Width of a TCDM bank, in bytes")
+    tcdm_bank_number: int = cfg_field(default=0, desc="Number of TCDM banks")
+    elem_size: int = cfg_field(default=0, desc="Size of an element, in bytes")
+    p: int = cfg_field(default=0, desc="Size of the p x p MAC array")
+    mac_latency: int = cfg_field(default=0, desc=(
+        "Pipeline drain charged after the last step of a tile"))
+    first_job_latency: int = cfg_field(default=0, desc=(
+        "Cycles before the first job starts (once per run)"))
+    queue_depth: int = cfg_field(default=0, desc=(
+        "Request queue entries (beats), held until the array uses the data"))
+    loc_base: int = cfg_field(default=0, fmt="hex", desc="Base address of the local memory")
+    # Taken from the environment of the run
+    report_jobs: Annotated[int, Runtime] = cfg_field(default=0, desc=(
+        "Print a [TE] line (start/end cycle) per job if not 0 (TE_REPORT environment variable)"))
 
 class LightOpope(gvsoc.systree.Component):
     """Outer-product engine: p x p fp16 MACs, 2p x 16-bit memory port.
@@ -36,22 +56,14 @@ class LightOpope(gvsoc.systree.Component):
                 first_job_latency: int=0, # cycles before the first job starts (once per run)
                 loc_base=0):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=LightOpopeConfig(
+            tcdm_bank_width=tcdm_bank_width, tcdm_bank_number=tcdm_bank_number,
+            elem_size=elem_size, p=p, mac_latency=mac_latency,
+            first_job_latency=first_job_latency, queue_depth=queue_depth, loc_base=loc_base,
+            # TE_REPORT=1: print a [TE] line (start/end cycle) per job
+            report_jobs=int(os.environ.get('TE_REPORT', 0))))
 
         self.add_sources(['pulp/light_opope/light_opope.cpp', 'cpu/iss/flexfloat/flexfloat.c'])
-
-        self.add_properties({
-            'tcdm_bank_width'   : tcdm_bank_width,
-            'tcdm_bank_number'  : tcdm_bank_number,
-            'elem_size'         : elem_size,
-            'p'                 : p,
-            'mac_latency'       : mac_latency,
-            'first_job_latency' : first_job_latency,
-            'queue_depth'       : queue_depth,
-            'loc_base'          : loc_base,
-            # TE_REPORT=1: print a [TE] line (start/end cycle) per job
-            'report_jobs'       : int(os.environ.get('TE_REPORT', 0)),
-        })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')

@@ -22,6 +22,7 @@
 #pragma once
 
 #include <vp/vp.hpp>
+#include <pulp/chips/soft_hier_old/floonoc/floonoc/floo_noc_config.hpp>
 
 class Router;
 class NetworkInterface;
@@ -69,6 +70,8 @@ public:
 class FlooNoc : public vp::Component
 {
 public:
+    FlooNocConfig cfg;
+
     FlooNoc(vp::ComponentConf &config);
 
     void reset(bool active);

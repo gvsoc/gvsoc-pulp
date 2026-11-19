@@ -36,6 +36,7 @@
  * the field widths from the level-specific topology parameters.
  */
 
+#include <pulp/mempool/common/address_scrambler/address_scrambler_config/address_scrambler_config.hpp>
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
@@ -44,6 +45,8 @@
 class AddressScrambler : public vp::Component
 {
 public:
+    AddressScramblerConfig cfg;
+
     AddressScrambler(vp::ComponentConf &config);
 
 private:
@@ -66,7 +69,7 @@ private:
 };
 
 AddressScrambler::AddressScrambler(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
     this->input_itf.set_req_meth(&AddressScrambler::req);
@@ -76,13 +79,13 @@ AddressScrambler::AddressScrambler(vp::ComponentConf &config)
     this->new_slave_port("input", &this->input_itf);
     this->new_master_port("output", &this->output_itf);
 
-    this->bypass = get_js_config()->get_child_bool("bypass");
-    this->base_addr = get_js_config()->get_uint("base_addr");
-    this->size = get_js_config()->get_uint("size");
-    this->lsb_constant_bits = get_js_config()->get_uint("lsb_constant_bits");
-    this->low_field_bits = get_js_config()->get_uint("low_field_bits");
-    this->high_field_bits = get_js_config()->get_uint("high_field_bits");
-    this->msb_constant_bits = get_js_config()->get_uint("msb_constant_bits");
+    this->bypass = this->cfg.bypass;
+    this->base_addr = this->cfg.base_addr;
+    this->size = this->cfg.size;
+    this->lsb_constant_bits = this->cfg.lsb_constant_bits;
+    this->low_field_bits = this->cfg.low_field_bits;
+    this->high_field_bits = this->cfg.high_field_bits;
+    this->msb_constant_bits = this->cfg.msb_constant_bits;
     this->addr_width = 32;
 }
 

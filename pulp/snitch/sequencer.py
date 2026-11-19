@@ -15,6 +15,12 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class SnitchSequencerConfig(Config):
+    latency: int = cfg_field(default=0, desc="Latency applied to all incoming requests")
+
 
 class Sequencer(gvsoc.systree.Component):
     """Interconnect sequencer
@@ -36,9 +42,9 @@ class Sequencer(gvsoc.systree.Component):
         Global latency applied to all incoming requests. This impacts the start time of the burst.
     """
     def __init__(self, parent: gvsoc.systree.Component, name: str, latency: int=0):
-        super(Sequencer, self).__init__(parent, name)
+        super().__init__(parent, name, config=SnitchSequencerConfig(latency=latency))
 
-        self.set_component('pulp.snitch.sequencer')
+        self.add_sources(['pulp/snitch/sequencer.cpp'])
 
         self.add_property('latency', latency)
 

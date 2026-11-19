@@ -1,0 +1,57 @@
+# PULP-open L1 (TCDM) bank access power model, converted from l1.json.
+# Voltages in V. There is no read_8 characterization; that source stays inert.
+background:
+  dynamic:
+    type: linear
+    unit: W
+    values:
+      25.0:
+        1.2:
+          any: 0.0
+  leakage:
+    type: linear
+    unit: W
+    values:
+      25.0:
+        1.2:
+          any: 5.2e-06
+read_16:
+  dynamic:
+    type: linear
+    unit: pJ
+    values:
+      25.0:
+        1.2:
+          any: 2.124280487
+read_32:
+  dynamic:
+    type: linear
+    unit: pJ
+    values:
+      25.0:
+        1.2:
+          any: 2.124280487
+write_8:
+  dynamic:
+    type: linear
+    unit: pJ
+    values:
+      25.0:
+        1.2:
+          any: 2.124280487
+write_16:
+  dynamic:
+    type: linear
+    unit: pJ
+    values:
+      25.0:
+        1.2:
+          any: 2.124280487
+write_32:
+  dynamic:
+    type: linear
+    unit: pJ
+    values:
+      25.0:
+        1.2:
+          any: 2.124280487

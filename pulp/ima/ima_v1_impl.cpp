@@ -29,19 +29,19 @@
 
 
 ima_v1::ima_v1(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
   this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
-  this->nb_master_ports = get_js_config()->get_child_int("nb_masters");
-  this->xbar_x = get_js_config()->get_child_int("xbar_x");
-  this->xbar_y = get_js_config()->get_child_int("xbar_y");
+  this->nb_master_ports = this->cfg.nb_masters;
+  this->xbar_x = this->cfg.xbar_x;
+  this->xbar_y = this->cfg.xbar_y;
 
-  this->eval_time = get_js_config()->get_child_int("eval_ns");
-  this->plot_write_time = get_js_config()->get_child_int("plot_write_ns");
-  this->plot_read_time = get_js_config()->get_child_int("plot_read_ns");
+  this->eval_time = this->cfg.eval_ns;
+  this->plot_write_time = this->cfg.plot_write_ns;
+  this->plot_read_time = this->cfg.plot_read_ns;
 
-  this->stats = get_js_config()->get_child_bool("statistics");
+  this->stats = this->cfg.statistics;
 
   this->out = new vp::IoMaster[this->nb_master_ports];
   this->reqs = new vp::IoReq[this->nb_master_ports];

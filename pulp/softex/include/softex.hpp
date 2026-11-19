@@ -20,6 +20,7 @@
 #define __SOFTEX_HPP__
 
 #include <vp/vp.hpp>
+#include <pulp/softex/softex/softex_config.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
 #include <vp/register.hpp>
@@ -181,6 +182,8 @@ struct SoftexSlot
 class Softex : public vp::Component
 {
 public:
+    SoftexConfig cfg;
+
     Softex(vp::ComponentConf &config);
 
     void reset(bool active);

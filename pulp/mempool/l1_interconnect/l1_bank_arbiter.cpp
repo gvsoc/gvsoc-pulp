@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <pulp/mempool/l1_interconnect/l1_bank_arbiter/l1_bank_arbiter_config.hpp>
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 #include <algorithm>
@@ -35,6 +36,8 @@
 class L1_BankArbiter : public vp::Component
 {
 public:
+    L1BankArbiterConfig cfg;
+
     L1_BankArbiter(vp::ComponentConf &conf);
 
 private:
@@ -70,14 +73,14 @@ uint64_t L1_BankArbiter::serial_latency = 0;
 
 
 L1_BankArbiter::L1_BankArbiter(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
-    this->hold = this->get_js_config()->get_int("hold");
-    this->hold_pe = this->get_js_config()->get_int("hold_pe");
-    this->queue_depth = this->get_js_config()->get_int("queue_depth");
-    this->serial = this->get_js_config()->get_child_bool("serial");
+    this->hold = this->cfg.hold;
+    this->hold_pe = this->cfg.hold_pe;
+    this->queue_depth = this->cfg.queue_depth;
+    this->serial = this->cfg.serial;
 
     this->input_itf.set_req_meth(&L1_BankArbiter::req);
     this->new_slave_port("input", &this->input_itf);

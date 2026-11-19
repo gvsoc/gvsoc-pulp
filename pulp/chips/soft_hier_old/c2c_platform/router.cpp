@@ -19,6 +19,7 @@
  */
 
 #include <vp/vp.hpp>
+#include <pulp/chips/soft_hier_old/c2c_platform/router/router_config.hpp>
 #include <vp/itf/io.hpp>
 #include <iostream>
 #include <vector>
@@ -29,6 +30,7 @@
 
 class Router : public vp::Component
 {
+    RouterConfig cfg;
 
 public:
     Router(vp::ComponentConf &config);
@@ -59,10 +61,10 @@ private:
 
 
 Router::Router(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
-    this->radix              = this->get_js_config()->get("radix")->get_int();
-    this->virtual_ch              = this->get_js_config()->get("virtual_ch")->get_int();
+    this->radix              = this->cfg.radix;
+    this->virtual_ch              = this->cfg.virtual_ch;
     this->routing_fsm_event     = this->event_new(&Router::routing_fsm_handler);
     this->rrb_port              = 0;
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);

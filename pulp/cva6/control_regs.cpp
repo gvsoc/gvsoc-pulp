@@ -15,6 +15,7 @@
  */
 
 #include <vector>
+#include <pulp/cva6/control_regs/cva6_control_regs_config.hpp>
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 
@@ -22,6 +23,8 @@ class ControlRegs : public vp::Component
 {
 
 public:
+    Cva6ControlRegsConfig cfg;
+
 
     ControlRegs(vp::ComponentConf &config);
 
@@ -35,14 +38,14 @@ private:
 };
 
 ControlRegs::ControlRegs(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
 
     this->in.set_req_meth(&ControlRegs::req);
     this->new_slave_port("input", &this->in);
 
-    this->dram_end = this->get_js_config()->get_uint("dram_end");
+    this->dram_end = this->cfg.dram_end;
 }
 
 vp::IoReqStatus ControlRegs::req(vp::Block *__this, vp::IoReq *req)

@@ -40,10 +40,11 @@ public:
      * @brief Construct a new AXI backend
      *
      * @param idma The top iDMA block.
+     * @param cfg The configuration of the top iDMA block.
      * @param itf_name Name of the AXI interface where the backend should send requests.
      * @param be The top backend.
      */
-    IDmaBeAxi(vp::Component *idma, std::string itf_name, IdmaBeProducer *be);
+    IDmaBeAxi(vp::Component *idma, const MemPoolDmaConfig &cfg, std::string itf_name, IdmaBeProducer *be);
 
     /**
      * @brief Destroy an AXI backend

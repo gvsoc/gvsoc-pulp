@@ -18,6 +18,7 @@
  * Authors: Yinrong Li, ETH Zurich (yinrli@student.ethz.ch)
  */
 
+#include <pulp/mempool/l2_interconnect/cache_filter/cache_filter_config.hpp>
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
@@ -32,6 +33,8 @@ class CacheFilter : public vp::Component
 {
 
 public:
+    CacheFilterConfig cfg;
+
     CacheFilter(vp::ComponentConf &config);
 
 private:
@@ -64,7 +67,7 @@ private:
 
 
 CacheFilter::CacheFilter(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
     this->config_itf.set_sync_meth(&CacheFilter::config_sync);
@@ -79,21 +82,11 @@ CacheFilter::CacheFilter(vp::ComponentConf &config)
     this->new_master_port("cache", &this->cache_itf);
     this->new_master_port("bypass", &this->bypass_itf);
 
-    bypass = get_js_config()->get_child_bool("bypass");
-    cache_latency = get_js_config()->get_child_int("cache_latency");
-    js::Config *cache_rules_config = get_js_config()->get("cache_rules");
-    if (cache_rules_config != NULL)
+    bypass = this->cfg.bypass;
+    cache_latency = this->cfg.cache_latency;
+    for (size_t i = 0; i < this->cfg.cache_rules_count; i++)
     {
-        for (auto rule : cache_rules_config->get_elems())
-        {
-            uint64_t start = rule->get_elem(0)->get_uint();
-            uint64_t end = rule->get_elem(1)->get_uint();
-            add_rule(start, end);
-        }
-    }
-    else
-    {
-        this->trace.msg("CacheFilter: no cache rules defined\n");
+        add_rule(this->cfg.cache_rules[i].start, this->cfg.cache_rules[i].end);
     }
 }
 

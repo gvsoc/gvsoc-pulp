@@ -19,12 +19,14 @@
  */
 
 #include <vp/vp.hpp>
+#include <pulp/chips/soft_hier_old/c2c_platform/topology_manager/mesh_2d/mesh2_d_config.hpp>
 #include <vp/itf/io.hpp>
 #include <queue>
 #include "../c2c_platform.hpp"
 
 class Mesh2D : public vp::Component
 {
+    Mesh2DConfig cfg;
 
 public:
     Mesh2D(vp::ComponentConf &config);
@@ -45,17 +47,17 @@ private:
 };
 
 Mesh2D::Mesh2D(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
     this->input_itf.set_req_meth(&Mesh2D::req);
     this->new_slave_port("in", &this->input_itf);
 
-    this->x_dim = this->get_js_config()->get("x_dim")->get_int();
-    this->y_dim = this->get_js_config()->get("y_dim")->get_int();
-    this->x_pos = this->get_js_config()->get("x_pos")->get_int();
-    this->y_pos = this->get_js_config()->get("y_pos")->get_int();
-    this->ralgo = this->get_js_config()->get("ralgo")->get_int();
+    this->x_dim = this->cfg.x_dim;
+    this->y_dim = this->cfg.y_dim;
+    this->x_pos = this->cfg.x_pos;
+    this->y_pos = this->cfg.y_pos;
+    this->ralgo = this->cfg.ralgo;
 }
 
 void Mesh2D::reset(bool active)

@@ -19,6 +19,19 @@ import os
 import os
 import subprocess
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class EndpointConfig(Config):
+    """Configuration of a C2C endpoint."""
+
+    endpoint_id: int = cfg_field(default=0, dump=True, desc="Identifier of the endpoint")
+    endpoint_type: str = cfg_field(default="", dump=True, desc="Type of the endpoint, 'dummy' for a dummy one")
+    use_trace_file: int = cfg_field(default=0, dump=True, desc="1 if the flits are taken from a trace file")
+    trace_file: str = cfg_field(default="", dump=True, desc="Path of the trace file")
+    num_tx_flit: int = cfg_field(default=0, dump=True, desc="Number of flits to send")
+    flit_granularity_byte: int = cfg_field(default=0, dump=True, desc="Size of a flit, in bytes")
+
 
 class Endpoint(gvsoc.systree.Component):
     def __init__(self, parent, name,
@@ -27,15 +40,12 @@ class Endpoint(gvsoc.systree.Component):
             trace_file: str='',
             num_tx_flit: int=1000,
             flit_granularity_byte: int=64):
-        super(Endpoint, self).__init__(parent, name)
-
-        self.add_property('endpoint_id',            endpoint_id)
-        self.add_property('endpoint_type',          endpoint_type)
+        config = EndpointConfig(endpoint_id=endpoint_id, endpoint_type=endpoint_type)
         if len(trace_file) > 0:
             if os.path.exists(trace_file):
                 # If it exists, use the absolute path
-                self.add_property('use_trace_file',     1)
-                self.add_property('trace_file',         os.path.abspath(trace_file))
+                config.use_trace_file = 1
+                config.trace_file = os.path.abspath(trace_file)
                 # Get the number of lines in the trace file
                 num_lines = int(subprocess.check_output(['wc', '-l', trace_file]).split()[0])
                 num_tx_flit = num_lines
@@ -43,10 +53,12 @@ class Endpoint(gvsoc.systree.Component):
                 raise RuntimeError(f"Trace file {trace_file} does not exist")
             pass
         else:
-            self.add_property('use_trace_file',     0)
-            self.add_property('trace_file',         trace_file)
-        self.add_property('num_tx_flit',            num_tx_flit)
-        self.add_property('flit_granularity_byte',  flit_granularity_byte)
+            config.use_trace_file = 0
+            config.trace_file = trace_file
+        config.num_tx_flit = num_tx_flit
+        config.flit_granularity_byte = flit_granularity_byte
+
+        super(Endpoint, self).__init__(parent, name, config=config)
 
         self.add_sources(['pulp/chips/soft_hier_old/c2c_platform/endpoint.cpp'])
 

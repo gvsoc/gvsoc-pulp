@@ -15,6 +15,7 @@
 #
 
 import gvsoc.systree
+from pulp.mempool.common.address_scrambler.address_scrambler_config import AddressScramblerConfig
 
 
 def _clog2(value: int) -> int:
@@ -35,22 +36,20 @@ class L1AddressScrambler(gvsoc.systree.Component):
     def __init__(self, parent: gvsoc.systree.Component, name: str, *,
                  bypass: bool, num_tiles: int, seq_mem_size_per_tile: int,
                  byte_offset: int, num_banks_per_tile: int):
-        super().__init__(parent, name)
-
-        self.add_sources(['pulp/mempool/common/address_scrambler/address_scrambler.cpp'])
-
         seq_per_tile_bits = _clog2(seq_mem_size_per_tile)
         bank_offset_bits = _clog2(num_banks_per_tile)
         lsb_constant_bits = byte_offset + bank_offset_bits
         low_field_bits = max(seq_per_tile_bits - lsb_constant_bits, 0)
         high_field_bits = _clog2(num_tiles)
 
-        self.add_properties({
-            'bypass': bypass,
-            'base_addr': 0,
-            'size': num_tiles * seq_mem_size_per_tile,
-            'lsb_constant_bits': lsb_constant_bits,
-            'low_field_bits': low_field_bits,
-            'high_field_bits': high_field_bits,
-            'msb_constant_bits': 0,
-        })
+        super().__init__(parent, name, config=AddressScramblerConfig(
+            bypass=bypass,
+            base_addr=0,
+            size=num_tiles * seq_mem_size_per_tile,
+            lsb_constant_bits=lsb_constant_bits,
+            low_field_bits=low_field_bits,
+            high_field_bits=high_field_bits,
+            msb_constant_bits=0,
+        ))
+
+        self.add_sources(['pulp/mempool/common/address_scrambler/address_scrambler.cpp'])

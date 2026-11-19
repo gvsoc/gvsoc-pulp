@@ -25,6 +25,7 @@
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 #include "../idma.hpp"
+#include <pulp/chips/soft_hier_old/idma/snitch_dma/snitch_dma_config.hpp>
 #include "idma_be.hpp"
 
 typedef struct IDmaBeAxiWriteBurstInfo {
@@ -49,7 +50,7 @@ public:
      * @param itf_name Name of the AXI interface where the backend should send requests.
      * @param be The top backend.
      */
-    IDmaBeAxi(vp::Component *idma, std::string itf_name, IdmaBeProducer *be);
+    IDmaBeAxi(vp::Component *idma, const SnitchDmaConfig &cfg, std::string itf_name, IdmaBeProducer *be);
 
     /**
      * @brief Destroy an AXI backend

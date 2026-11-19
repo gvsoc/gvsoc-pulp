@@ -152,7 +152,7 @@ vp::IoReqStatus IDmaFeReg32_3dPort::req(vp::Block *__this, vp::IoReq *req)
 
 
 
-IDmaFeReg32_3d::IDmaFeReg32_3d(vp::Component *idma, IdmaTransferConsumer *me)
+IDmaFeReg32_3d::IDmaFeReg32_3d(vp::Component *idma, const IdmaConfig &cfg, IdmaTransferConsumer *me)
     : Block(idma, "fe"),
     trace_busy(*this, "busy", 1, vp::SignalCommon::ResetKind::HighZ),
     trace_src(*this, "src", 32, vp::SignalCommon::ResetKind::HighZ),
@@ -166,12 +166,11 @@ IDmaFeReg32_3d::IDmaFeReg32_3d(vp::Component *idma, IdmaTransferConsumer *me)
     // Declare our own trace so that we can individually activate traces
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
-    js::Config *config = idma->get_js_config();
-    this->nb_ports = config->get_int("nb_ports");
-    this->nb_streams = config->get_int("nb_streams");
-    this->nb_cores = config->get_int("nb_cores");
-    this->global_queue_depth = config->get_int("global_queue_depth");
-    this->multireg_count = config->get_int("multireg_count");
+    this->nb_ports = cfg.nb_ports;
+    this->nb_streams = cfg.nb_streams;
+    this->nb_cores = cfg.nb_cores;
+    this->global_queue_depth = cfg.global_queue_depth;
+    this->multireg_count = cfg.multireg_count;
 
     // The three multiregs sit back to back, each holding multireg_count entries
     this->status_base = IDMA_REG32_3D_MULTIREG_BASE;

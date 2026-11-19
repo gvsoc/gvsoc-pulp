@@ -15,19 +15,21 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class MempoolCtrlRegistersConfig(Config):
+    wakeup_latency: int = cfg_field(default=0, desc="Latency of the core wakeup")
+    nb_cores: int = cfg_field(default=0, desc="Number of cores")
+
 
 class CtrlRegisters(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, wakeup_latency: int=0, nb_cores: int=256):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=MempoolCtrlRegistersConfig(wakeup_latency=wakeup_latency, nb_cores=nb_cores))
 
         self.add_sources(['pulp/mempool/ctrl_registers.cpp'])
-
-        self.add_properties({
-            'wakeup_latency': wakeup_latency,
-            'nb_cores': nb_cores
-        })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')

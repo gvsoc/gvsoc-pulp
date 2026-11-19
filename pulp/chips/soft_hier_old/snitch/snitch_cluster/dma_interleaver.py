@@ -15,21 +15,26 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class DmaInterleaverConfig(Config):
+    """Configuration of the SoftHier (old) DmaInterleaver."""
+
+    nb_banks: int = cfg_field(default=0, dump=True, desc="Number of TCDM banks")
+    bank_width: int = cfg_field(default=0, dump=True, desc="Width of a TCDM bank, in bytes")
+
 
 class DmaInterleaver(gvsoc.systree.Component):
 
     def __init__(self, parent, slave, nb_master_ports, nb_banks, bank_width):
 
-        super(DmaInterleaver, self).__init__(parent, slave)
+        super(DmaInterleaver, self).__init__(parent, slave, config=DmaInterleaverConfig(
+            nb_banks=int(nb_banks), bank_width=int(bank_width)))
 
         self.add_sources(
             ['pulp/chips/soft_hier_old/snitch/snitch_cluster/dma_interleaver.cpp']
         )
-
-        self.add_properties({
-            'nb_banks': nb_banks,
-            'bank_width': bank_width
-        })
 
     # def i_INPUT(self, id) -> gvsoc.systree.SlaveItf:
     #     return gvsoc.systree.SlaveItf(self, f'in_{id}', signature='io')

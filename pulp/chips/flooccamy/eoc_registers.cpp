@@ -21,6 +21,7 @@
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
+#include <pulp/chips/flooccamy/eoc_registers/eoc_registers_config.hpp>
 
 
 class EoC_Registers : public vp::Component
@@ -33,6 +34,7 @@ private:
     static void eoc_event_handler(vp::Block *__this, vp::ClockEvent *event);
     void reset(bool active);
 
+    EocRegistersConfig  cfg;
     vp::Trace           trace;
     vp::IoMaster        output_itf;
     vp::IoReq*          output_req;
@@ -45,14 +47,14 @@ private:
 
 
 EoC_Registers::EoC_Registers(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
     this->new_master_port("output", &this->output_itf);
     this->output_req    = this->output_itf.req_new(0, 0, 0, 0);
     this->eoc_event     = this->event_new(&EoC_Registers::eoc_event_handler);
-    this->eoc_entry     = get_js_config()->get("eoc_entry")->get_int();
-    this->interval      = get_js_config()->get("interval")->get_int();
+    this->eoc_entry     = this->cfg.eoc_entry;
+    this->interval      = this->cfg.interval;
     this->access_buffer = new uint32_t[1];
 }
 

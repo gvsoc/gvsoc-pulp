@@ -18,6 +18,7 @@
 #include <vector>
 #include <algorithm>
 #include <vp/vp.hpp>
+#include <pulp/chips/soft_hier_old/c2c_platform/platformctrl/platform_ctrl_config.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
 
@@ -27,6 +28,7 @@ using namespace std::placeholders;
 
 class PlatformCtrl : public vp::Component
 {
+    PlatformCtrlConfig cfg;
 
 public:
 
@@ -43,9 +45,9 @@ private:
 };
 
 PlatformCtrl::PlatformCtrl(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
-    this->num_chip = this->get_js_config()->get("num_chip")->get_int();
+    this->num_chip = this->cfg.num_chip;
     this->traces.new_trace("trace", &trace, vp::DEBUG);
     this->barrier_ack_itf.resize(this->num_chip);
     this->start_itf.resize(this->num_chip);

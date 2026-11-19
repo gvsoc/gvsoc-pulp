@@ -15,6 +15,18 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class MempoolXbarConfig(Config):
+    latency: int = cfg_field(default=0, desc="Global latency applied to all incoming requests")
+    bandwidth: int = cfg_field(default=0, desc="Global bandwidth, in bytes per cycle")
+    nb_input_port: int = cfg_field(default=0, desc="Number of input ports")
+    nb_output_port: int = cfg_field(default=0, desc="Number of output ports")
+    shared_rw_bandwidth: bool = cfg_field(default=False, desc="True if the read and write requests share the bandwidth")
+    max_input_pending_size: int = cfg_field(default=0, desc="Size of the FIFO of each input (asynchronous mode)")
+    use_selector: bool = cfg_field(default=False, desc="True if the outputs are chosen by a selector")
+
 
 class MempoolXbar(gvsoc.systree.Component):
     """Interconnect router
@@ -90,20 +102,12 @@ class MempoolXbar(gvsoc.systree.Component):
     def __init__(self, parent: gvsoc.systree.Component, name: str, latency: int=0, bandwidth: int=0,
             nb_input_port: int=1, nb_output_port: int=1, shared_rw_bandwidth: bool=False, max_input_pending_size=0,
             use_selector: bool=True):
-        super(MempoolXbar, self).__init__(parent, name)
+        super().__init__(parent, name, config=MempoolXbarConfig(latency=latency, bandwidth=bandwidth,
+            nb_input_port=nb_input_port, nb_output_port=nb_output_port,
+            shared_rw_bandwidth=shared_rw_bandwidth, max_input_pending_size=max_input_pending_size,
+            use_selector=use_selector))
 
         assert use_selector or (nb_output_port == 1), "If selector is not used, only one output port is allowed."
         assert latency <= 1, "Currently only latency 0 or 1 is supported."
-        # This will store the whole set of mappings and passed to model as a dictionary
-        self.add_property('mappings', {})
-        self.add_property('latency', latency)
-        self.add_property('bandwidth', bandwidth)
-        self.add_property('shared_rw_bandwidth', shared_rw_bandwidth)
-        self.add_property('max_input_pending_size', max_input_pending_size)
-        # The number of input port is automatically increased each time i_INPUT is called if needed.
-        # Set number of input ports to 1 by default because some models do not use i_INPUT yet.
-        self.add_property('nb_input_port', nb_input_port)
-        self.add_property('nb_output_port', nb_output_port)
-        self.add_property('use_selector', use_selector)
 
         self.add_sources(['pulp/mempool/xbar/mempool_xbar.cpp'])

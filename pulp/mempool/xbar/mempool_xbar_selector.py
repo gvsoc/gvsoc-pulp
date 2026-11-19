@@ -15,18 +15,21 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class MempoolXbarSelectorConfig(Config):
+    interleaver_mode: bool = cfg_field(default=False, desc="True if the selector interleaves the outputs")
+    output_id: int = cfg_field(default=0, desc="Identifier of the output selected by this selector")
+    interleaving_bits: int = cfg_field(default=0, desc="Number of interleaving bits")
+    stage_bits: int = cfg_field(default=0, desc="Number of bits of the address selecting the stage output")
+
 
 class MempoolXbarSelector(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, interleaver_mode: bool=False, output_id: int=0, interleaving_bits: int=0, stage_bits: int=0):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=MempoolXbarSelectorConfig(interleaver_mode=interleaver_mode,
+            output_id=output_id, interleaving_bits=interleaving_bits, stage_bits=stage_bits))
 
         self.add_sources(['pulp/mempool/xbar/mempool_xbar_selector.cpp'])
-
-        self.add_properties({
-            "interleaver_mode": interleaver_mode,
-            "output_id": output_id,
-            "interleaving_bits": interleaving_bits,
-            "stage_bits": stage_bits
-        })

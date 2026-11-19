@@ -22,6 +22,7 @@ memory when the job asks for it (o_WMEM). The register file is i_INPUT and the
 end of a job raises o_IRQ, bound to the event unit of every core.
 """
 
+import os
 from config_tree import Config, cfg_field
 from gvsoc.systree import Component, SlaveItf
 from gvsoc.signature import IoV2Sync, IoV2SingleReq
@@ -53,26 +54,28 @@ class Neureka(Component):
             config = NeurekaConfig()
         super().__init__(parent, name, config=config)
 
-        self.set_component('pulp.neureka.neureka')
-
-        self.add_properties({
-            "tp_in"             :   config.tp_in,
-            "tp_in_s"           :   config.tp_in_s,
-            "tp_out"            :   config.tp_out,
-            "qa_in"             :   config.qa_in,
-            "qa_out"            :   config.qa_out,
-            "h_size"            :   config.h_size,
-            "w_size"            :   config.w_size,
-            "column_size"       :   config.column_size,
-            "block_size"        :   config.block_size,
-            "f_buffer_size"     :   config.f_buffer_size,
-            "filter_size"       :   config.filter_size,
-            "shift_cycles"      :   config.shift_cycles,
-            "overhead_ld_1x1"   :   config.overhead_ld_1x1,
-            "overhead_ld_3x3"   :   config.overhead_ld_3x3,
-            "overhead_mv"       :   config.overhead_mv,
-            "quant_per_cycle"   :   config.quant_per_cycle,
-        })
+        self.add_sources([
+            'pulp/neureka/src/neureka_fsm.cpp',
+            'pulp/neureka/src/neureka.cpp',
+            'pulp/neureka/src/neureka_clear.cpp',
+            'pulp/neureka/src/neureka_debug.cpp',
+            'pulp/neureka/src/neureka_index.cpp',
+            'pulp/neureka/src/neureka_load.cpp',
+            'pulp/neureka/src/neureka_matrixvec.cpp',
+            'pulp/neureka/src/neureka_normquant.cpp',
+            'pulp/neureka/src/neureka_regfile.cpp',
+            'pulp/neureka/src/neureka_streamin.cpp',
+            'pulp/neureka/src/neureka_streamout.cpp',
+            'pulp/neureka/src/neureka_stream.cpp',
+        ])
+        this_dir = os.path.dirname(os.path.abspath(__file__))
+        xtensor_dir = os.environ.get('XTENSOR_INCLUDE_DIR',
+            os.path.join(this_dir, 'xtensor', 'include'))
+        flags = [f'-I{os.path.join(this_dir, "include")}', f'-I{xtensor_dir}',
+            '-DXTENSOR_USE_XSIMD']
+        if os.environ.get('XTL_INCLUDE_DIR') is not None:
+            flags.append(f'-I{os.environ["XTL_INCLUDE_DIR"]}')
+        self.add_c_flags(flags)
 
     def i_INPUT(self) -> SlaveItf:
         """Register file."""

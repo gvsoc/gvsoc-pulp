@@ -243,11 +243,8 @@ class Soc(st.Component):
 
             tohost_addr, fromhost_addr, entry = _get_elf_info(binary)
             for watchpoint in self.bus_watchpoints:
-                watchpoint.add_properties({
-                    'riscv_fesvr_tohost_addr': tohost_addr,
-                    'riscv_fesvr_fromhost_addr': fromhost_addr,
-                })
-            self.cluster_registers.add_properties({'boot_addr': entry})
+                watchpoint.set_fesvr_addresses(tohost_addr, fromhost_addr)
+            self.cluster_registers.get_config().boot_addr = entry
 
     def handle_binary(self, binary: str):
         # This gets called when an executable is attached to a hierarchy of components containing

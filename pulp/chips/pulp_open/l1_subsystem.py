@@ -59,9 +59,9 @@ class L1_subsystem(st.Component):
         # Memory banks
         l1_banks = []
         for i in range(0, nb_l1_banks):
-            mem = Memory(self, 'bank%d' % i, size=l1_bank_size, power_trigger=True if i == 0 else False)
+            mem = Memory(self, 'bank%d' % i, size=l1_bank_size, power_trigger=True if i == 0 else False,
+                power_model=power_models)
             l1_banks.append(mem)
-            mem.add_properties(self.load_property_file(power_models))
 
         # Per-PE interconnects
         pe_icos = []

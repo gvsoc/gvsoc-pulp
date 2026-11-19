@@ -24,9 +24,6 @@ class IDma(gvsoc.systree.Component):
 
         self.add_sources(['pulp/chips/soft_hier_old/idma/idma_functional.cpp'])
 
-        self.add_properties({
-        })
-
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')
 

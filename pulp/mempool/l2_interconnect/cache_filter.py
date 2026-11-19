@@ -16,15 +16,29 @@
 
 import gvsoc.systree
 from typing import List, Tuple
+from config_tree import Config, cfg_field
+
+
+class CacheRuleConfig(Config):
+    """One address range going through the cache."""
+
+    start: int = cfg_field(default=0, fmt="hex", desc="Start address of the range")
+    end: int = cfg_field(default=0, fmt="hex", desc="End address of the range")
+
+
+class CacheFilterConfig(Config):
+    bypass: bool = cfg_field(default=False, desc="True if every request goes to the bypass port")
+    cache_rules: list[CacheRuleConfig] = cfg_field(default_factory=list, desc=(
+        "Address ranges going through the cache"))
+    cache_latency: int = cfg_field(default=0, desc="Latency of the cache path, in cycles")
+
 
 class CacheFilter(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, bypass: bool = False, cache_rules: List[Tuple[int, int]]=[], cache_latency: int=0):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=CacheFilterConfig(bypass=bypass,
+            cache_rules=[CacheRuleConfig(start=start, end=end) for start, end in cache_rules],
+            cache_latency=cache_latency))
 
         self.add_sources(['pulp/mempool/l2_interconnect/cache_filter.cpp'])
-
-        self.add_property('bypass', bypass)
-        self.add_property('cache_rules', cache_rules)
-        self.add_property('cache_latency', cache_latency)

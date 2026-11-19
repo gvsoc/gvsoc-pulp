@@ -15,6 +15,20 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class D2dLinkConfig(Config):
+    """Configuration of a die-to-die link."""
+
+    link_id: int = cfg_field(default=0, dump=True, desc="Identifier of the link")
+    fifo_depth_rx: int = cfg_field(default=0, dump=True, desc="Depth of the RX FIFO, in flits")
+    fifo_depth_tx: int = cfg_field(default=0, dump=True, desc="Depth of the TX FIFO, in flits")
+    fifo_credit_bar: int = cfg_field(default=0, dump=True, desc="Credit threshold of the RX FIFO")
+    flit_granularity_byte: int = cfg_field(default=0, dump=True, desc="Size of a flit, in bytes")
+    link_latency_ns: int = cfg_field(default=0, dump=True, desc="Latency of the link, in ns")
+    link_bandwidth_GBps: int = cfg_field(default=0, dump=True, desc="Bandwidth of the link, in GB/s")
+
 
 class D2DLink(gvsoc.systree.Component):
     def __init__(self, parent, name,
@@ -27,17 +41,10 @@ class D2DLink(gvsoc.systree.Component):
             link_latency_ns: int=256,
             link_bandwidth_GBps: int=256):
         #Initialize the parent class
-        super(D2DLink, self).__init__(parent, name)
-
-        # Define properties
-        self.add_property('link_id',                link_id)
-        self.add_property('link_type',              link_type)
-        self.add_property('fifo_depth_rx',          fifo_depth_rx)
-        self.add_property('fifo_depth_tx',          fifo_depth_tx)
-        self.add_property('fifo_credit_bar',        fifo_credit_bar)
-        self.add_property('flit_granularity_byte',  flit_granularity_byte)
-        self.add_property('link_latency_ns',        link_latency_ns)
-        self.add_property('link_bandwidth_GBps',    link_bandwidth_GBps)
+        super(D2DLink, self).__init__(parent, name, config=D2dLinkConfig(
+            link_id=link_id, fifo_depth_rx=fifo_depth_rx, fifo_depth_tx=fifo_depth_tx,
+            fifo_credit_bar=fifo_credit_bar, flit_granularity_byte=flit_granularity_byte,
+            link_latency_ns=link_latency_ns, link_bandwidth_GBps=link_bandwidth_GBps))
 
         # Add sources
         self.add_sources(['pulp/chips/soft_hier_old/c2c_platform/d2dlink.cpp'])

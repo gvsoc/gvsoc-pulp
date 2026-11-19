@@ -19,11 +19,13 @@
  */
 
 #include <vp/vp.hpp>
+#include <pulp/chips/soft_hier_old/snitch/snitch_cluster/dma_interleaver/dma_interleaver_config.hpp>
 #include <vp/itf/io.hpp>
 #include <math.h>
 
 class DmaInterleaver : public vp::Component
 {
+    DmaInterleaverConfig cfg;
 
 public:
     DmaInterleaver(vp::ComponentConf &config);
@@ -44,12 +46,12 @@ private:
 };
 
 DmaInterleaver::DmaInterleaver(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
 
-    int nb_banks = this->get_js_config()->get_child_int("nb_banks");
-    int bank_width = this->get_js_config()->get_child_int("bank_width");
+    int nb_banks = this->cfg.nb_banks;
+    int bank_width = this->cfg.bank_width;
 
     this->bank_width = bank_width;
     this->id_shift = log2(bank_width);

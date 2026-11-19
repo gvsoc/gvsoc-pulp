@@ -19,6 +19,7 @@
  */
 
 #include <vp/vp.hpp>
+#include <pulp/chips/soft_hier_old/c2c_platform/d2dlink/d2d_link_config.hpp>
 #include <vp/itf/io.hpp>
 #include <queue>
 #include "c2c_platform.hpp"
@@ -33,6 +34,7 @@
 
 class D2DLink : public vp::Component
 {
+    D2dLinkConfig cfg;
 
 public:
     D2DLink(vp::ComponentConf &config);
@@ -86,7 +88,7 @@ private:
 
 
 D2DLink::D2DLink(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
     this->input_itf.set_req_meth(&D2DLink::req);
@@ -98,13 +100,13 @@ D2DLink::D2DLink(vp::ComponentConf &config)
     this->tx_fsm_event          = this->event_new(&D2DLink::tx_fsm_handler);
     this->ot_fsm_event          = this->event_new(&D2DLink::ot_fsm_handler);
 
-    this->link_id               = this->get_js_config()->get("link_id")->get_int();
-    this->fifo_depth_rx         = this->get_js_config()->get("fifo_depth_rx")->get_int();
-    this->fifo_depth_tx         = this->get_js_config()->get("fifo_depth_tx")->get_int();
-    this->fifo_credit_bar       = this->get_js_config()->get("fifo_credit_bar")->get_int();
-    this->flit_granularity_byte = this->get_js_config()->get("flit_granularity_byte")->get_int();
-    this->link_latency_ns       = this->get_js_config()->get("link_latency_ns")->get_int();
-    this->link_bandwidth_GBps   = this->get_js_config()->get("link_bandwidth_GBps")->get_int();
+    this->link_id               = this->cfg.link_id;
+    this->fifo_depth_rx         = this->cfg.fifo_depth_rx;
+    this->fifo_depth_tx         = this->cfg.fifo_depth_tx;
+    this->fifo_credit_bar       = this->cfg.fifo_credit_bar;
+    this->flit_granularity_byte = this->cfg.flit_granularity_byte;
+    this->link_latency_ns       = this->cfg.link_latency_ns;
+    this->link_bandwidth_GBps   = this->cfg.link_bandwidth_GBps;
     this->tx_allowed            = this->fifo_depth_rx; //initially assume remote side RX FIFO is empty
     this->fifo_credit_cnt       = 0;
     this->output_stalled        = 0;

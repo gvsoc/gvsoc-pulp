@@ -21,6 +21,7 @@
  */
 
 #include <vp/vp.hpp>
+#include <pulp/chips/soft_hier_old/transpose_engine/transpose_engine_config.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
 #include <stdio.h>
@@ -55,6 +56,7 @@ enum transpose_engine_state {
 
 class TransposeEngine : public vp::Component
 {
+    TransposeEngineConfig cfg;
 
 public:
     TransposeEngine(vp::ComponentConf &config);
@@ -108,7 +110,7 @@ extern "C" vp::Component *gv_new(vp::ComponentConf &config)
 }
 
 TransposeEngine::TransposeEngine(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     //Initialize interface
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
@@ -117,10 +119,10 @@ TransposeEngine::TransposeEngine(vp::ComponentConf &config)
     this->new_master_port("tcdm", &this->tcdm_itf);
 
     //Initialize configuration
-    this->tcdm_bank_width   = get_js_config()->get("tcdm_bank_width")->get_int();
-    this->tcdm_bank_number  = get_js_config()->get("tcdm_bank_number")->get_int();
-    this->queue_depth       = get_js_config()->get("queue_depth")->get_int();
-    this->buffer_dim        = get_js_config()->get("buffer_dim")->get_int();
+    this->tcdm_bank_width   = this->cfg.tcdm_bank_width;
+    this->tcdm_bank_number  = this->cfg.tcdm_bank_number;
+    this->queue_depth       = this->cfg.queue_depth;
+    this->buffer_dim        = this->cfg.buffer_dim;
     this->bandwidth         = this->tcdm_bank_width * this->tcdm_bank_number;
     this->m_size            = 0;
     this->n_size            = 0;

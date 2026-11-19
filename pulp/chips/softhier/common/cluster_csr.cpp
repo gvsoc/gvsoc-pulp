@@ -20,6 +20,7 @@
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
 #include <iostream>
+#include <pulp/chips/softhier/common/cluster_csr/cluster_csr_config.hpp>
 #include <string>
 
 
@@ -39,6 +40,7 @@ public:
 private:
     static void barrier_sync(vp::Block *__this, bool value, int id);
 
+    ClusterCsrConfig cfg;
     vp::Trace       trace;
     vp::IoSlave     in;
     int             nb_cores;
@@ -52,14 +54,14 @@ private:
 };
 
 ClusterCSR::ClusterCSR(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
 
     this->in.set_req_meth(&ClusterCSR::req);
     this->new_slave_port("input", &this->in);
-    this->nb_cores = this->get_js_config()->get("nb_cores")->get_int();
-    this->cluster_id = this->get_js_config()->get("cluster_id")->get_int();
+    this->nb_cores = this->cfg.nb_cores;
+    this->cluster_id = this->cfg.cluster_id;
     this->barrier_req_itf.resize(this->nb_cores);
     for (int i=0; i<this->nb_cores; i++)
     {

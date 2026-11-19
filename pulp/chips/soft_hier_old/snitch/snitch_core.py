@@ -325,16 +325,6 @@ class SnitchFast(cpu.iss.riscv.RiscvCommon):
             "pulp/chips/soft_hier_old/snitch/redmule_legacy.cpp",
         ])
 
-        path = os.path.dirname(__file__)
-        self.add_properties({
-            'regmap': {
-                'name': 'ssr',
-                'spec': f'{path}/archi/ssr.md',
-                'header_prefix':  f'{path}/archi/ssr',
-                'headers': [ 'gvsoc', 'regfields' ]
-            }
-        })
-
 
     def o_BARRIER_REQ(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('barrier_req', itf, signature='wire<bool>')

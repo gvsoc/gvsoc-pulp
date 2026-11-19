@@ -15,18 +15,23 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class HWPEInterleaverConfig(Config):
+    """Configuration of the SoftHier (old) HWPEInterleaver."""
+
+    nb_banks: int = cfg_field(default=0, dump=True, desc="Number of TCDM banks")
+    bank_width: int = cfg_field(default=0, dump=True, desc="Width of a TCDM bank, in bytes")
+
 
 class HWPEInterleaver(gvsoc.systree.Component):
 
     def __init__(self, parent, slave, nb_master_ports, nb_banks, bank_width):
 
-        super(HWPEInterleaver, self).__init__(parent, slave)
+        super(HWPEInterleaver, self).__init__(parent, slave, config=HWPEInterleaverConfig(
+            nb_banks=int(nb_banks), bank_width=int(bank_width)))
 
         self.add_sources(
             ['pulp/chips/soft_hier_old/hwpe_interleaver.cpp']
         )
-
-        self.add_properties({
-            'nb_banks': nb_banks,
-            'bank_width': bank_width
-        })

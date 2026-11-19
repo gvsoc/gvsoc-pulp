@@ -25,10 +25,6 @@ class ClusterCtrl(Component):
 
         self.add_sources(['ips/pulp/cluster/cluster_ctrl.cpp'])
 
-        self.add_properties({
-            'nb_core': config.nb_core,
-        })
-
     def i_INPUT(self) -> SlaveItf:
         return SlaveItf(self, 'input', signature=IoV2Sync())
 

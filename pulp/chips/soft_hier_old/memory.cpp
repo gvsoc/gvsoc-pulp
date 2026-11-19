@@ -20,8 +20,10 @@
  */
 
 #include <vp/vp.hpp>
+#include <pulp/chips/soft_hier_old/memory/memory_config.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
+#include <vp/power/power_table_convert.hpp>
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
@@ -50,6 +52,7 @@ public:
 
 class Memory : public vp::Component
 {
+    MemoryConfig cfg;
 
 public:
     Memory(vp::ComponentConf &config);
@@ -116,7 +119,7 @@ private:
 
 
 Memory::Memory(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     traces.new_trace("trace", &trace, vp::DEBUG);
     in.set_req_meth(&Memory::req);
@@ -132,17 +135,18 @@ Memory::Memory(vp::ComponentConf &config)
     this->memcheck_itf.set_sync_meth(&Memory::memcheck_sync);
     new_slave_port("memcheck", &this->memcheck_itf);
 
-    js::Config *js_config = get_js_config()->get("power_trigger");
-    this->power_trigger = js_config != NULL && js_config->get_bool();
+    this->power_trigger = this->cfg.power_trigger;
 
-    power.new_power_source("leakage", &background_power, this->get_js_config()->get("**/background"));
-    power.new_power_source("access_byte", &access_byte_power, this->get_js_config()->get("**/access_byte"));
+    vp::new_power_source_from_config(power, "leakage", &background_power,
+        this->cfg.power.background);
+    vp::new_power_source_from_config(power, "access_byte", &access_byte_power,
+        this->cfg.power.access_byte);
 
-    this->size = this->get_js_config()->get("size")->get_int();
-    this->check = get_js_config()->get_child_bool("check");
-    this->width_bits = get_js_config()->get_child_int("width_bits");
-    this->latency = get_js_config()->get_child_int("latency");
-    int align = get_js_config()->get_child_int("align");
+    this->size = this->cfg.size;
+    this->check = this->cfg.check;
+    this->width_bits = this->cfg.width_bits;
+    this->latency = this->cfg.latency;
+    int align = this->cfg.align;
 
     trace.msg("Building Memory (size: 0x%x, check: %d)\n", size, check);
 
@@ -171,19 +175,19 @@ Memory::Memory(vp::ComponentConf &config)
         this->memcheck_data = (uint8_t *)calloc(size, 1);
         if (this->memcheck_data == NULL) throw std::bad_alloc();
 
-        int memcheck_id = this->get_js_config()->get_child_int("memcheck_id");
+        int memcheck_id = this->cfg.memcheck_id;
         if (memcheck_id != -1)
         {
             this->new_service("memcheck_memory" + std::to_string(memcheck_id),
                 new MemoryMemcheck((void *)this));
 
-            this->memcheck_expansion_factor = this->get_js_config()->get_child_int("memcheck_expansion_factor");
+            this->memcheck_expansion_factor = this->cfg.memcheck_expansion_factor;
             int memcheck_size = size * this->memcheck_expansion_factor;
             this->memcheck_valid_flags = (uint8_t *)calloc((memcheck_size + 7) / 8, 1);
             if (this->memcheck_valid_flags == NULL) throw std::bad_alloc();
 
-            this->memcheck_base = this->get_js_config()->get_child_int("memcheck_base");
-            this->memcheck_virtual_base = this->get_js_config()->get_child_int("memcheck_virtual_base");
+            this->memcheck_base = this->cfg.memcheck_base;
+            this->memcheck_virtual_base = this->cfg.memcheck_virtual_base;
         }
     }
 
@@ -196,10 +200,9 @@ Memory::Memory(vp::ComponentConf &config)
     }
 
     // Preload the Memory
-    js::Config *stim_file_conf = this->get_js_config()->get("stim_file");
-    if (stim_file_conf != NULL)
+    if (this->cfg.stim_file != NULL)
     {
-        string path = stim_file_conf->get_str();
+        string path = this->cfg.stim_file;
         if (path != "")
         {
             trace.msg("Preloading Memory with stimuli file (path: %s)\n", path.c_str());

@@ -15,6 +15,22 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class MemPoolDmaConfig(Config):
+    """Parameters of the MemPool DMA, shared by its front-end, middle-ends and back-ends."""
+
+    transfer_queue_size: int = cfg_field(default=0, desc="Number of transfer requests which can be queued to the DMA")
+    burst_queue_size: int = cfg_field(default=0, desc="Maximum number of outstanding burst requests")
+    burst_size: int = cfg_field(default=0, desc="Maximum burst size, in bytes, 0 for unconstrained")
+    loc_base: int = cfg_field(default=0, fmt="hex", desc="Base address of the local area")
+    loc_size: int = cfg_field(default=0, fmt="hex", desc="Size of the local area")
+    tcdm_width: int = cfg_field(default=0, desc="Width of the local interconnect, in bytes")
+    nb_groups: int = cfg_field(default=0, desc="Number of groups")
+    nb_dmas_per_group: int = cfg_field(default=0, desc="Number of DMA back-ends per group")
+    be_width: int = cfg_field(default=0, desc="Size of the region handled by one back-end, in bytes")
+
 
 class MemPoolDma(gvsoc.systree.Component):
     """
@@ -51,7 +67,10 @@ class MemPoolDma(gvsoc.systree.Component):
             nb_dmas_per_group: int=1,
             be_width: int=1024):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=MemPoolDmaConfig(transfer_queue_size=transfer_queue_size,
+            burst_queue_size=burst_queue_size, burst_size=burst_size, loc_base=loc_base,
+            loc_size=loc_size, tcdm_width=tcdm_width, nb_groups=nb_groups,
+            nb_dmas_per_group=nb_dmas_per_group, be_width=be_width))
 
         self.add_sources([
             'pulp/mempool/idma/mempool_dma.cpp',
@@ -63,18 +82,6 @@ class MemPoolDma(gvsoc.systree.Component):
             'pulp/mempool/idma/be/idma_be_axi.cpp',
             'pulp/mempool/idma/be/idma_be_tcdm.cpp',
         ])
-
-        self.add_properties({
-            "transfer_queue_size": transfer_queue_size,
-            "burst_queue_size": burst_queue_size,
-            "burst_size" : burst_size,
-            "loc_base": loc_base,
-            "loc_size": loc_size,
-            "tcdm_width": tcdm_width,
-            "nb_groups": nb_groups,
-            "nb_dmas_per_group": nb_dmas_per_group,
-            "be_width": be_width,
-        })
 
     def i_OFFLOAD(self) -> gvsoc.systree.SlaveItf:
         """Returns the offload port.

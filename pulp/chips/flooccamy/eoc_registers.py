@@ -15,19 +15,24 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class EocRegistersConfig(Config):
+    """Configuration of the Flooccamy end-of-computation registers."""
+
+    eoc_entry: int = cfg_field(default=0, fmt="hex", dump=True, desc="Address polled for the end of computation")
+    interval: int = cfg_field(default=10000, dump=True, desc="Polling interval, in cycles")
+
 
 class EoC_Registers(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, eoc_entry: int, interval: int=10000):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=EocRegistersConfig(
+            eoc_entry=eoc_entry, interval=interval))
 
         self.add_sources(['pulp/chips/flooccamy/eoc_registers.cpp'])
-
-        self.add_properties({
-            'eoc_entry'   : eoc_entry,
-            'interval'    : interval,
-        })
 
     def o_OUTPUT(self, itf: gvsoc.systree.SlaveItf):
         self.itf_bind('output', itf, signature='io')

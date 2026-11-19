@@ -17,16 +17,23 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class L1NocEndpointRouterConfig(Config):
+    req_mode: bool = cfg_field(default=False, desc="True if the router routes requests, false for responses")
+    nb_tiles_per_group: int = cfg_field(default=0, desc="Number of tiles per group")
+    num_banks_per_tile: int = cfg_field(default=0, desc="Number of banks per tile")
+    byte_offset: int = cfg_field(default=0, desc="Number of address bits of the byte offset in a bank word")
+
 
 class L1NocEndpointRouter(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, req_mode: bool=True, nb_tiles_per_group: int=16, num_banks_per_tile: int = 0, byte_offset: int=2):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=L1NocEndpointRouterConfig(req_mode=req_mode,
+            nb_tiles_per_group=nb_tiles_per_group, num_banks_per_tile=num_banks_per_tile,
+            byte_offset=byte_offset))
 
         self.add_sources(['pulp/teranoc/l1_interconnect/l1_noc_endpoint_router.cpp'])
 
-        self.add_property("req_mode", req_mode)
-        self.add_property("nb_tiles_per_group", nb_tiles_per_group)
-        self.add_property("num_banks_per_tile", num_banks_per_tile)
-        self.add_property("byte_offset", byte_offset)

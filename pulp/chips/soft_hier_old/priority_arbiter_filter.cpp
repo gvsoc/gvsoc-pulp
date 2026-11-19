@@ -19,11 +19,13 @@
  */
 
 #include <vp/vp.hpp>
+#include <pulp/chips/soft_hier_old/priority_arbiter_filter/priority_arbiter_filter_config.hpp>
 #include <vp/itf/io.hpp>
 #include <math.h>
 
 class PriorityArbiterFilter : public vp::Component
 {
+    PriorityArbiterFilterConfig cfg;
 
 public:
     PriorityArbiterFilter(vp::ComponentConf &config);
@@ -42,10 +44,10 @@ private:
 };
 
 PriorityArbiterFilter::PriorityArbiterFilter(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
-    int bank_width = this->get_js_config()->get_child_int("bank_width");
+    int bank_width = this->cfg.bank_width;
     this->bank_width = bank_width;
     this->last_access_cycle = 0;
     this->acc_latency = 0;

@@ -145,8 +145,8 @@ def make_board():
                 self.set_parameter('exit_signal', 'tb_pulp.exit_status')
             super().configure()
             if self._elf is not None and os.path.exists(self._elf):
-                self.verilator.add_property(
-                    'plusargs', list(self.verilator.properties.get('plusargs', [])) +
+                self.verilator.set_plusargs(
+                    self.verilator.get_plusargs() +
                     plusargs(self._elf, self.work_dir))
 
         def elf(self):

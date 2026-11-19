@@ -16,6 +16,7 @@
  */
 
 #include <vector>
+#include <pulp/snitch/snitch_cluster/cluster_registers/snitch_cluster_registers_config.hpp>
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
@@ -30,6 +31,8 @@ class ClusterRegisters : public vp::Component
 {
 
 public:
+    SnitchClusterRegistersConfig cfg;
+
 
     ClusterRegisters(vp::ComponentConf &config);
 
@@ -59,15 +62,15 @@ private:
 };
 
 ClusterRegisters::ClusterRegisters(vp::ComponentConf &config)
-: vp::Component(config), regmap(*this, "regmap")
+: vp::Component(config, this->cfg), regmap(*this, "regmap")
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
 
     this->in.set_req_meth(&ClusterRegisters::req);
     this->new_slave_port("input", &this->in);
 
-    this->bootaddr = this->get_js_config()->get("boot_addr")->get_int();
-    this->nb_cores = this->get_js_config()->get("nb_cores")->get_int();
+    this->bootaddr = this->cfg.boot_addr;
+    this->nb_cores = this->cfg.nb_cores;
 
     this->barrier_req_itf.resize(this->nb_cores);
     for (int i=0; i<this->nb_cores; i++)

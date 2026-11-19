@@ -15,19 +15,24 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class SoftHierCtrlConfig(Config):
+    """Configuration of the SoftHier control registers."""
+
+    num_cluster: int = cfg_field(default=0, dump=True, desc="Number of clusters")
+    num_core_per_cluster: int = cfg_field(default=0, dump=True, desc="Number of cores per cluster")
+
 
 class SoftHierCtrl(gvsoc.systree.Component):
 
     def __init__(self, parent: gvsoc.systree.Component, name: str, num_cluster: int, num_core_per_cluster: int):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=SoftHierCtrlConfig(
+            num_cluster=num_cluster, num_core_per_cluster=num_core_per_cluster))
 
         self.add_sources(['pulp/chips/softhier/common/softhier_ctrl.cpp'])
-
-        self.add_properties({
-            'num_cluster': num_cluster,
-            'num_core_per_cluster': num_core_per_cluster,
-        })
 
     def i_INPUT(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'input', signature='io')

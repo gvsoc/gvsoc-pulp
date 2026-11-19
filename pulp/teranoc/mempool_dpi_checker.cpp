@@ -28,6 +28,7 @@
 #include <string>
 #include <vector>
 
+#include <pulp/teranoc/mempool_dpi_checker/mempool_dpi_checker_config.hpp>
 #include <vp/vp.hpp>
 #include <vp/itf/wire.hpp>
 
@@ -48,6 +49,8 @@ enum
 class MempoolDpiChecker : public vp::Component
 {
 public:
+    MempoolDpiCheckerConfig cfg;
+
     MempoolDpiChecker(vp::ComponentConf &config);
 
 private:
@@ -100,20 +103,20 @@ private:
 
 
 MempoolDpiChecker::MempoolDpiChecker(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
     this->input_itf.set_sync_back_meth(&MempoolDpiChecker::check_sync_back);
     this->new_slave_port("input", &this->input_itf);
 
-    this->nb_banks = this->get_js_config()->get_child_int("nb_banks");
-    this->bank_width = this->get_js_config()->get_child_int("bank_width");
-    this->interleave = this->get_js_config()->get_child_int("interleave");
-    this->l2_base = this->get_js_config()->get_uint("l2_base");
-    this->l2_size = this->get_js_config()->get_uint("l2_size");
-    this->check_count_addr = this->get_js_config()->get_uint("check_count_addr");
-    this->check_table_addr = this->get_js_config()->get_uint("check_table_addr");
+    this->nb_banks = this->cfg.nb_banks;
+    this->bank_width = this->cfg.bank_width;
+    this->interleave = this->cfg.interleave;
+    this->l2_base = this->cfg.l2_base;
+    this->l2_size = this->cfg.l2_size;
+    this->check_count_addr = this->cfg.check_count_addr;
+    this->check_table_addr = this->cfg.check_table_addr;
 
     if (this->nb_banks == 0 || this->bank_width == 0 || this->interleave == 0)
     {

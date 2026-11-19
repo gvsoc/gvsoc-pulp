@@ -23,6 +23,7 @@
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 #include "../idma.hpp"
+#include <pulp/chips/soft_hier_old/idma/snitch_dma/snitch_dma_config.hpp>
 #include "idma_be.hpp"
 
 /**
@@ -41,7 +42,7 @@ public:
      * @param itf_name Name of the TCDM interface where the back-end should send requests.
      * @param be The top back-end.
      */
-    IDmaBeTcdm(vp::Component *idma, std::string itf_name, IdmaBeProducer *be);
+    IDmaBeTcdm(vp::Component *idma, const SnitchDmaConfig &cfg, std::string itf_name, IdmaBeProducer *be);
 
     void reset(bool active) override;
 

@@ -24,6 +24,7 @@
 #include <vp/itf/wire.hpp>
 #include <stdio.h>
 #include <string.h>
+#include <pulp/chips/chimera/apb_soc_ctrl/apb_soc_ctrl_config.hpp>
 
 #include "archi/apb_soc.h"
 
@@ -62,10 +63,12 @@ private:
   uint32_t rtc_freq;
 
   vp::reg_32     jtag_reg_ext;
+
+  ApbSocCtrlConfig cfg;
 };
 
 apb_soc_ctrl::apb_soc_ctrl(vp::ComponentConf &config)
-: vp::Component(config)
+: vp::Component(config, this->cfg)
 {
   traces.new_trace("trace", &trace, vp::DEBUG);
   in.set_req_meth(&apb_soc_ctrl::req);
@@ -91,7 +94,7 @@ apb_soc_ctrl::apb_soc_ctrl(vp::ComponentConf &config)
   core_status = 0;
   this->bootsel = 0;
   this->jtag_reg_ext.set(0);
-  this->rtc_freq = this->get_js_config()->get_child_int("rtc_freq");
+  this->rtc_freq = this->cfg.rtc_freq;
 
 
 }

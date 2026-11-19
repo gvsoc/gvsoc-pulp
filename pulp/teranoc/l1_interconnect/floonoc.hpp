@@ -23,6 +23,7 @@
 #pragma once
 
 #include <vp/vp.hpp>
+#include <pulp/teranoc/l1_interconnect/floonoc/floo_noc2d_mesh_narrow_config.hpp>
 
 class Router;
 class NetworkInterface;
@@ -50,6 +51,8 @@ class NetworkInterface;
 class FlooNoc : public vp::Component
 {
 public:
+    FlooNoc2dMeshNarrowConfig cfg;
+
     FlooNoc(vp::ComponentConf &config);
 
     void reset(bool active);

@@ -15,6 +15,14 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class SequencerConfig(Config):
+    """Configuration of the SoftHier (old) FPU sequencer."""
+
+    latency: int = cfg_field(default=0, dump=True, desc="Latency applied to all incoming requests")
+
 
 class Sequencer(gvsoc.systree.Component):
     """Interconnect sequencer
@@ -36,9 +44,7 @@ class Sequencer(gvsoc.systree.Component):
         Global latency applied to all incoming requests. This impacts the start time of the burst.
     """
     def __init__(self, parent: gvsoc.systree.Component, name: str, latency: int=0):
-        super(Sequencer, self).__init__(parent, name)
+        super(Sequencer, self).__init__(parent, name, config=SequencerConfig(latency=latency))
 
-        self.set_component('pulp.chips.soft_hier_old.snitch.sequencer')
-
-        self.add_property('latency', latency)
+        self.add_sources(['pulp/chips/soft_hier_old/snitch/sequencer.cpp'])
 

@@ -15,6 +15,21 @@
 #
 
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class SnitchDmaConfig(Config):
+    """Configuration of the SoftHier (old) Snitch DMA, shared by its front-end, middle-end
+    and back-ends."""
+
+    transfer_queue_size: int = cfg_field(default=0, dump=True, desc=(
+        "Number of transfer requests which can be queued to the DMA"))
+    burst_queue_size: int = cfg_field(default=0, dump=True, desc=(
+        "Maximum number of outstanding burst requests"))
+    loc_base: int = cfg_field(default=0, fmt="hex", dump=True, desc="Base address of the local area")
+    loc_size: int = cfg_field(default=0, fmt="hex", dump=True, desc="Size of the local area")
+    tcdm_width: int = cfg_field(default=0, dump=True, desc="Width of the local interconnect, in bytes")
+
 
 class SnitchDma(gvsoc.systree.Component):
     """
@@ -47,7 +62,9 @@ class SnitchDma(gvsoc.systree.Component):
             loc_size: int=0,
             tcdm_width: int=0):
 
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=SnitchDmaConfig(
+            transfer_queue_size=transfer_queue_size, burst_queue_size=burst_queue_size,
+            loc_base=loc_base, loc_size=loc_size, tcdm_width=int(tcdm_width)))
 
         self.add_sources([
             'pulp/chips/soft_hier_old/idma/snitch_dma.cpp',
@@ -57,14 +74,6 @@ class SnitchDma(gvsoc.systree.Component):
             'pulp/chips/soft_hier_old/idma/be/idma_be_axi.cpp',
             'pulp/chips/soft_hier_old/idma/be/idma_be_tcdm.cpp',
         ])
-
-        self.add_properties({
-            "transfer_queue_size": transfer_queue_size,
-            "burst_queue_size": burst_queue_size,
-            "loc_base": loc_base,
-            "loc_size": loc_size,
-            "tcdm_width": tcdm_width,
-        })
 
     def i_OFFLOAD(self) -> gvsoc.systree.SlaveItf:
         """Returns the offload port.

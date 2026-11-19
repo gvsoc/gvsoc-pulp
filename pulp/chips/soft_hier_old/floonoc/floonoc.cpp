@@ -27,62 +27,60 @@
 
 
 FlooNoc::FlooNoc(vp::ComponentConf &config)
-    : vp::Component(config)
+    : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
 
     // Get properties from generator
-    this->width = get_js_config()->get("width")->get_int();
-    this->dim_x = get_js_config()->get_int("dim_x");
-    this->dim_y = get_js_config()->get_int("dim_y");
-    this->router_input_queue_size = get_js_config()->get_int("router_input_queue_size");
-    this->atomics = get_js_config()->get_int("atomics");
-    this->collective = get_js_config()->get_int("collective");
-    this->edge_node_alias = get_js_config()->get_int("edge_node_alias");
-    this->edge_node_alias_start_bit = get_js_config()->get_int("edge_node_alias_start_bit");
-    this->interleave_enable = get_js_config()->get_int("interleave_enable");
-    this->interleave_region_base = get_js_config()->get_int("interleave_region_base");
-    this->interleave_region_size = get_js_config()->get_int("interleave_region_size");
-    this->interleave_granularity = get_js_config()->get_int("interleave_granularity");
-    this->interleave_bit_start = get_js_config()->get_int("interleave_bit_start");
-    this->interleave_bit_width = get_js_config()->get_int("interleave_bit_width");
+    this->width = this->cfg.width;
+    this->dim_x = this->cfg.dim_x;
+    this->dim_y = this->cfg.dim_y;
+    this->router_input_queue_size = this->cfg.router_input_queue_size;
+    this->atomics = this->cfg.atomics;
+    this->collective = this->cfg.collective;
+    this->edge_node_alias = this->cfg.edge_node_alias;
+    this->edge_node_alias_start_bit = this->cfg.edge_node_alias_start_bit;
+    this->interleave_enable = this->cfg.interleave_enable;
+    this->interleave_region_base = this->cfg.interleave_region_base;
+    this->interleave_region_size = this->cfg.interleave_region_size;
+    this->interleave_granularity = this->cfg.interleave_granularity;
+    this->interleave_bit_start = this->cfg.interleave_bit_start;
+    this->interleave_bit_width = this->cfg.interleave_bit_width;
 
     // Reserve the array for the target. We may have one target at each node.
     this->targets.resize(this->dim_x * this->dim_y);
 
     // Go through the mappings to create one master IO interface for each target
-    js::Config *mappings = get_js_config()->get("mappings");
-    if (mappings != NULL)
     {
         // For now entries are stored in a classic array. When a request is received, we will
         // to compare to each entry which may be slow when having lots of target.
         // We could optimize it by using a tree.
-        this->entries.resize(mappings->get_childs().size());
+        this->entries.resize(this->cfg.mappings_count);
         int id = 0;
-        for (auto& mapping: mappings->get_childs())
+        for (size_t i = 0; i < this->cfg.mappings_count; i++)
         {
             // For each mapping we create the master interface where we'll forward request to the
             // target
-            js::Config *config = mapping.second;
+            const FlooNocMappingConfig *mapping = &this->cfg.mappings[i];
 
             vp::IoMaster *itf = new vp::IoMaster();
 
             itf->set_resp_meth(&FlooNoc::response);
             itf->set_grant_meth(&FlooNoc::grant);
-            this->new_master_port(mapping.first, itf);
+            this->new_master_port(mapping->name, itf);
 
             // And we add an entry so that we can turn an address into a target position
-            this->entries[id].base = config->get_uint("base");
-            this->entries[id].size = config->get_uint("size");
-            this->entries[id].x = config->get_int("x");
-            this->entries[id].y = config->get_int("y");
+            this->entries[id].base = mapping->base;
+            this->entries[id].size = mapping->size;
+            this->entries[id].x = mapping->x;
+            this->entries[id].y = mapping->y;
 
             // Once a request reaches the right position, the target will be retrieved through
             // this array indexed by the position
             this->targets[this->entries[id].y * this->dim_x + this->entries[id].x] = itf;
 
             this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding target (name: %s, base: 0x%llx, size: 0x%llx, x: %d, y: %d)\n",
-                mapping.first.c_str(), this->entries[id].base, this->entries[id].size, this->entries[id].x, this->entries[id].y);
+                mapping->name, this->entries[id].base, this->entries[id].size, this->entries[id].x, this->entries[id].y);
 
             id++;
         }
@@ -90,13 +88,11 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
 
     // Create the array of networks interfaces
     this->network_interfaces.resize(this->dim_x * this->dim_y);
-    js::Config *network_interfaces = get_js_config()->get("network_interfaces");
-    if (network_interfaces != NULL)
     {
-        for (js::Config *network_interface: network_interfaces->get_elems())
+        for (size_t i = 0; i < this->cfg.network_interfaces_count; i++)
         {
-            int x = network_interface->get_elem(0)->get_int();
-            int y = network_interface->get_elem(1)->get_int();
+            int x = this->cfg.network_interfaces[i].x;
+            int y = this->cfg.network_interfaces[i].y;
 
             this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding network interface (x: %d, y: %d)\n", x, y);
 
@@ -104,15 +100,13 @@ FlooNoc::FlooNoc(vp::ComponentConf &config)
         }
     }
 
-    // Create the array of routers
+    // Create the array of routers, one at each network interface
     this->routers.resize(this->dim_x * this->dim_y);
-    js::Config *routers = get_js_config()->get("network_interfaces");
-    if (routers != NULL)
     {
-        for (js::Config *router: routers->get_elems())
+        for (size_t i = 0; i < this->cfg.network_interfaces_count; i++)
         {
-            int x = router->get_elem(0)->get_int();
-            int y = router->get_elem(1)->get_int();
+            int x = this->cfg.network_interfaces[i].x;
+            int y = this->cfg.network_interfaces[i].y;
 
             this->trace.msg(vp::Trace::LEVEL_DEBUG, "Adding router (x: %d, y: %d)\n", x, y);
 

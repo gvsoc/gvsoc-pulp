@@ -188,3 +188,34 @@ def component_model_metadata(component: str, tech_node: str) -> Dict[str, Any]:
     """Return a copy of one node's normalized data for reports/tests."""
 
     return json.loads(json.dumps(_node_spec(component, tech_node)))
+
+
+def power_source_config(name: str, source: Dict[str, Any]):
+    """Convert one power source table built above into a ``PowerSourceConfig``.
+
+    The tables built by :func:`light_redmule_power_source` and
+    :func:`memory_power_sources` follow the GVSoC power-table schema; the
+    models take them from their compiled config instead of JSON, through
+    ``vp::new_power_source_from_config``.
+    """
+
+    from vp.power_config import PowerSourceConfig, PowerValue
+
+    config = PowerSourceConfig(name=name)
+    for table_name, table in source.items():
+        values = []
+        for temp, volt_table in table["values"].items():
+            for volt, freq_table in volt_table.items():
+                for freq, value in freq_table.items():
+                    values.append(PowerValue(
+                        temp=float(temp), volt=float(volt),
+                        freq=-1.0 if str(freq) == "any" else float(freq),
+                        value=float(value)))
+        if table_name == "dynamic":
+            config.dynamic_unit = table["unit"]
+            config.dynamic = values
+        elif table_name == "leakage":
+            config.leakage = values
+        else:
+            raise ValueError(f"unknown table {table_name!r} in power source {name!r}")
+    return config

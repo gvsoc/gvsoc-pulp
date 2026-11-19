@@ -28,18 +28,24 @@ import gvsoc.gui
 import regmap.regmap
 import regmap.regmap_hjson
 import regmap.regmap_c_header
+from typing import Annotated
+from config_tree import Config, cfg_field
+from gvrun.runtime import Runtime
+
+
+class SpatzClusterRegistersV2Config(Config):
+    # Taken from the entry point of the binary, known at run time
+    boot_addr: Annotated[int, Runtime] = cfg_field(default=0, fmt="hex", desc=(
+        "Boot address of the cluster cores"))
+    nb_cores: int = cfg_field(default=0, desc="Number of cores of the cluster")
+
 
 class ClusterRegisters(gvsoc.systree.Component):
 
     def __init__(self, parent, name, boot_addr=0, nb_cores=1, binary=None):
-        super(ClusterRegisters, self).__init__(parent, name)
+        super().__init__(parent, name, config=SpatzClusterRegistersV2Config(boot_addr=boot_addr, nb_cores=nb_cores))
 
         self.add_sources(['pulp/snitch/snitch_cluster/spatz/cluster_registers_v2.cpp'])
-
-        self.add_properties({
-            'boot_addr': boot_addr,
-            'nb_cores': nb_cores
-        })
 
     def gen(self, builddir, installdir):
         comp_path = 'pulp/snitch/snitch_cluster/spatz'

@@ -79,9 +79,10 @@ def attach(component, vlen, nb_lanes, use_spatz=False, spatz_nb_ports=None, lane
         "cpu/iss/src/vector.cpp",
     ])
 
-    component.add_property('vu/nb_lanes', nb_lanes)
-    component.add_property('vu/lsu_width', lane_width)
-    component.add_property('vu/compute_width', lane_width)
+    vu = component.get_config().vu
+    vu.nb_lanes = nb_lanes
+    vu.lsu_width = lane_width
+    vu.compute_width = lane_width
     if use_spatz:
-        component.add_property('vu/nb_ports', nb_lanes if spatz_nb_ports is None else spatz_nb_ports)
-        component.add_property('vu/nb_outstanding_reqs', 8)
+        vu.nb_ports = nb_lanes if spatz_nb_ports is None else spatz_nb_ports
+        vu.nb_outstanding_reqs = 8
