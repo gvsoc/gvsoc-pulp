@@ -41,6 +41,7 @@ static inline void stamp_collective_payload(vp::IoReq *req, IdmaTransfer *transf
     {
         payload[1 + i] = (uint8_t)(mask >> (8 * i));
     }
+    req->set_payload_valid(true);
 }
 
 
