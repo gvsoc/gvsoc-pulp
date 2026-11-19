@@ -145,7 +145,8 @@ void NetworkQueue::enqueue_router_req(vp::IoReq *req, bool is_address,
         *router_req->arg_get(FlooNoc::REQ_PEND_KIDS) = (void *)(long)0;
         *router_req->arg_get(FlooNoc::REQ_IS_REDUCTION_ACK) = (void *)false;
 
-        if (is_req && this->ni.noc->collective_policy != NULL)
+        if (is_req && this->ni.noc->collective_policy != NULL &&
+            req->get_payload_valid())
         {
             // Read the sideband collective descriptor from the burst:
             // 1 byte op code + 8 bytes mask
