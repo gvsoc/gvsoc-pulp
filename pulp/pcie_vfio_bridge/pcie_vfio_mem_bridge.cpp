@@ -18,7 +18,6 @@
  * Authors: Lorenzo Zuolo, Chips-IT (lorenzo.zuolo@chips.it)
  */
 
-#include <pulp/pcie_vfio_bridge/pcie_vfio_mem_bridge/pcie_vfio_mem_bridge_config.hpp>
 #include <vp/vp.hpp>
 #include <vp/itf/io.hpp>
 #include <vp/itf/wire.hpp>
@@ -54,8 +53,6 @@ extern "C" {
 class PCIeVfioMemBridge : public vp::Component
 {
 public:
-    PcieVfioMemBridgeConfig cfg;
-
     PCIeVfioMemBridge(vp::ComponentConf &conf);
     ~PCIeVfioMemBridge() override;
 
@@ -234,8 +231,8 @@ private:
 };
 
 /* Build the bridge component, expose GVSoC interfaces and initialize software-visible state. */
-PCIeVfioMemBridge::PCIeVfioMemBridge(vp::ComponentConf &config)
-: vp::Component(config, this->cfg)
+PCIeVfioMemBridge::PCIeVfioMemBridge(vp::ComponentConf &conf)
+: vp::Component(conf)
 {
     this->traces.new_trace("trace", &this->trace, vp::DEBUG);
 
@@ -247,9 +244,9 @@ PCIeVfioMemBridge::PCIeVfioMemBridge(vp::ComponentConf &config)
     this->new_master_port("fetch_en", &this->fetch_enable_itf);
     this->new_master_port("entry_addr", &this->entry_addr_itf);
 
-    this->socket_path = this->cfg.socket_path;
-    this->bar0_size = this->cfg.bar0_size;
-    this->dma_chunk_bytes = static_cast<uint32_t>(this->cfg.dma_chunk_bytes);
+    this->socket_path = this->get_js_config()->get_child_str("socket_path");
+    this->bar0_size = this->get_js_config()->get_child_int("bar0_size");
+    this->dma_chunk_bytes = static_cast<uint32_t>(this->get_js_config()->get_child_int("dma_chunk_bytes"));
 
     if (this->bar0_size < 0x100) {
         throw std::runtime_error("bar0_size must be at least 0x100 for DMA control/MSI-X registers");

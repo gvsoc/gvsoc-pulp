@@ -18,13 +18,6 @@
 
 import gvsoc.systree
 from gvsoc.signature import IoV2SingleReq
-from config_tree import Config, cfg_field
-
-
-class PcieVfioMemBridgeV2Config(Config):
-    socket_path: str = cfg_field(default="", desc="Path of the vfio-user socket QEMU connects to")
-    bar0_size: int = cfg_field(default=0, fmt="hex", desc="Size of the BAR0 register area")
-    dma_chunk_bytes: int = cfg_field(default=0, desc="Size of the requests a DMA is split into")
 
 
 class PCIeVfioMemBridgeV2(gvsoc.systree.Component):
@@ -42,14 +35,15 @@ class PCIeVfioMemBridgeV2(gvsoc.systree.Component):
                 bar0_size: int,
                 dma_chunk_bytes: int=4096):
 
-        super().__init__(parent, name, config=PcieVfioMemBridgeV2Config(socket_path=socket_path,
-            bar0_size=bar0_size, dma_chunk_bytes=dma_chunk_bytes))
+        super().__init__(parent, name)
 
-        self.add_sources(['pulp/pcie_vfio_bridge/pcie_vfio_mem_bridge_v2.cpp'])
-        # libvfio-user, installed in /usr/local
-        self.add_c_flags(['-I/usr/local/include'])
-        self.add_libraries(['-L/usr/local/lib/x86_64-linux-gnu', '-Wl,--no-as-needed',
-            '-Wl,--no-undefined', 'vfio-user'])
+        self.add_properties({
+            'socket_path': socket_path,
+            'bar0_size': bar0_size,
+            'dma_chunk_bytes': dma_chunk_bytes,
+        })
+
+        self.set_component('pulp.pcie_vfio_bridge.pcie_vfio_mem_bridge_v2')
 
     def i_IRQ_DONE(self) -> gvsoc.systree.SlaveItf:
         return gvsoc.systree.SlaveItf(self, 'done_irq', signature='wire<bool>')

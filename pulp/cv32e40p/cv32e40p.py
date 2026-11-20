@@ -318,3 +318,11 @@ class Cv32e40p(RiscvCommon):
         super().__init__(parent, name, config=config, isa=isa_instance,
                          misa=misa, zfinx=zfinx, modules=modules,
                          debug_handler=config.debug_handler)
+        # Read by Cv32e40pException.
+        self.add_properties({
+            'debug_exception_handler': config.debug_exception_handler,
+            # Read by Cv32e40pIrq: mtvec base at boot until the port is driven.
+            'mtvec_addr': config.mtvec_addr,
+            # Checked by cv32e40p_cosim_acquire_v1 before it casts the component.
+            'cv32e40p_cosim': True,
+        })

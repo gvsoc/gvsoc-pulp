@@ -4,7 +4,6 @@
 //
 // Authors: Marco Paci (marco.paci@chips.it)
 
-#include <unordered_set>
 #include <algorithm>
 #include <cstddef>
 #include <cstdio>
@@ -814,10 +813,6 @@ void Cv32e40pCosimModel::wfi_wake()
     this->boundary_end(this->iss.exec.current_insn);
 }
 
-// CV32E40P cores of this library, the only components cv32e40p_cosim_acquire_v1
-// accepts.
-static std::unordered_set<vp::Component *> cv32e40p_cosim_cores;
-
 extern "C" Cv32e40pCosim *cv32e40p_cosim_acquire_v1(void *component, uint32_t major,
     uint32_t *minor)
 {
@@ -825,11 +820,11 @@ extern "C" Cv32e40pCosim *cv32e40p_cosim_acquire_v1(void *component, uint32_t ma
     {
         return NULL;
     }
-    // Every iss_v2 core defines a class named Iss, so only cast the
-    // components registered by Cv32e40pExec::start, which are CV32E40P
-    // cores built from this library.
+    // Every iss_v2 core defines a class named Iss, so check a property that
+    // only the CV32E40P recipe sets before the cast.
     vp::Component *comp = (vp::Component *)component;
-    if (cv32e40p_cosim_cores.count(comp) == 0)
+    js::Config *config = comp->get_js_config()->get("cv32e40p_cosim");
+    if (config == NULL || !config->get_bool())
     {
         return NULL;
     }
@@ -847,7 +842,6 @@ void Cv32e40pExec::start()
     // Created here, once every slot is built, because the model reads their
     // configuration.
     this->cosim = new Cv32e40pCosimModel(this->iss);
-    cv32e40p_cosim_cores.insert(&this->iss);
     // The engine keeps model symbols private, so clients find the entry point as a service.
     this->iss.new_service(CV32E40P_COSIM_ACQUIRE, (void *)cv32e40p_cosim_acquire_v1);
 }
