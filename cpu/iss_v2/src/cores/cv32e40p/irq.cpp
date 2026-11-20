@@ -13,6 +13,7 @@
 #include <cpu/iss_v2/include/cores/cv32e40p/irq.hpp>
 #include <cpu/iss_v2/include/iss.hpp>
 #include <cpu/iss_v2/include/cores/cv32e40p/cosim_model.hpp>
+#include <pulp/cv32e40p/cv32e40p_config/cv32e40p_config.hpp>
 
 /* RTL priority, from irq[31] down to irq[16], then MEI(11), MSI(3) and
  * MTI(7). pending has at least one bit of IRQ_MASK set. */
@@ -39,9 +40,14 @@ Cv32e40pIrq::Cv32e40pIrq(Iss &iss) : IrqRiscv(iss)
     this->iss.new_master_port("irq_ack", &this->irq_ack_itf);
 
     // mtvec base at boot of a chip tying mtvec_addr_i to a constant; the
-    // mtvec_addr port, when driven, overrides it.
-    js::Config *mtvec_conf = iss.get_js_config()->get("mtvec_addr");
-    if (mtvec_conf != NULL) this->mtvec_addr = (uint32_t)mtvec_conf->get_int();
+    // mtvec_addr port, when driven, overrides it. It is in the full
+    // Cv32e40pConfig of the core, Iss::cfg only holds its RiscvConfig prefix.
+    const Cv32e40pConfig *config = iss.get_tree_config<Cv32e40pConfig>();
+    if (config == nullptr)
+    {
+        iss.get_trace()->fatal("CV32E40P core has no compiled tree config\n");
+    }
+    this->mtvec_addr = (uint32_t)config->mtvec_addr;
 
     // Take over the lines registered by IrqRiscv, to see them while the core
     // sleeps on a cv.elw.

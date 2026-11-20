@@ -6,15 +6,22 @@
 
 #include <cpu/iss_v2/include/iss.hpp>
 #include <cpu/iss_v2/include/cores/cv32e40p/cosim_model.hpp>
+#include <pulp/cv32e40p/cv32e40p_config/cv32e40p_config.hpp>
 
 Cv32e40pException::Cv32e40pException(Iss &iss)
 : Exception(iss), iss(iss)
 {
+    // The core-specific fields are in the full Cv32e40pConfig of the core,
+    // Iss::cfg only holds its RiscvConfig prefix
+    const Cv32e40pConfig *config = iss.get_tree_config<Cv32e40pConfig>();
+    if (config == nullptr)
+    {
+        iss.get_trace()->fatal("CV32E40P core has no compiled tree config\n");
+    }
+
     /* Entry of the exceptions taken in debug mode (RTL dm_exception_addr_i),
      * set by the core recipe. */
-    js::Config *conf = iss.get_js_config()->get("debug_exception_handler");
-    this->debug_exception_handler_addr =
-        conf != NULL ? (iss_addr_t)conf->get_int() : this->debug_handler_addr;
+    this->debug_exception_handler_addr = (iss_addr_t)config->debug_exception_handler;
 }
 
 void Cv32e40pException::raise(iss_reg_t pc, int id)
