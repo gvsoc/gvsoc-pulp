@@ -1,4 +1,11 @@
 import gvsoc.systree
+from config_tree import Config, cfg_field
+
+
+class PcieVfioMemBridgeConfig(Config):
+    socket_path: str = cfg_field(default="", desc="Path of the vfio-user socket QEMU connects to")
+    bar0_size: int = cfg_field(default=0, fmt="hex", desc="Size of the BAR0 register area")
+    dma_chunk_bytes: int = cfg_field(default=0, desc="Size of the requests a DMA is split into")
 
 
 class PCIeVfioMemBridge(gvsoc.systree.Component):
@@ -10,13 +17,8 @@ class PCIeVfioMemBridge(gvsoc.systree.Component):
                 bar0_size: int,
                 dma_chunk_bytes: int=4096):
 
-        super().__init__(parent, name)
-
-        self.add_properties({
-            'socket_path': socket_path,
-            'bar0_size': bar0_size,
-            'dma_chunk_bytes': dma_chunk_bytes,
-        })
+        super().__init__(parent, name, config=PcieVfioMemBridgeConfig(socket_path=socket_path,
+            bar0_size=bar0_size, dma_chunk_bytes=dma_chunk_bytes))
 
         self.set_component('pulp.pcie_vfio_bridge.pcie_vfio_mem_bridge')
 
