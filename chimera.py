@@ -346,6 +346,9 @@ class ChimeraBoard(gvsoc.systree.Component):
 
 
 class Target(gvsoc.runner.Target):
+    # Every component is configured from the compiled platform tree
+    json_config = False
+
 
     gapy_description = "Chimera virtual board"
     model = ChimeraBoard

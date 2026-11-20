@@ -266,6 +266,9 @@ class SnitchSystem(st.Component):
 
 
 class Target(gvsoc.Target):
+    # Every component is configured from the compiled platform tree
+    json_config = False
+
 
     gapy_description="Snitch virtual board"
     model = SnitchSystem

@@ -39,6 +39,9 @@ def _rtl_simulator(args):
 
 
 class Target(gvsoc.Target):
+    # Every component is configured from the compiled platform tree
+    json_config = False
+
 
     gapy_description="Pulp-open virtual board"
     model = Pulp_open_board

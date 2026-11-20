@@ -19,6 +19,9 @@ from pulp.chips.chimera_v2.chimera_v2 import ChimeraBoard
 
 
 class Target(gvsoc.runner.Target):
+    # Every component is configured from the compiled platform tree
+    json_config = False
+
 
     gapy_description = "Chimera virtual board (io_v2 stack)"
     model = ChimeraBoard

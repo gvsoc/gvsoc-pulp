@@ -148,6 +148,9 @@ class Cva6tbChip(st.Component):
 
 
 class Target(gvsoc.Target):
+    # Every component is configured from the compiled platform tree
+    json_config = False
+
 
     gapy_description = "CVA6 standalone testbench board (pulp-platform/cva6 test/)"
     model = Cva6tbChip

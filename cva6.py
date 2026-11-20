@@ -139,6 +139,9 @@ class Cva6Chip(st.Component):
 
 
 class Target(gvsoc.Target):
+    # Every component is configured from the compiled platform tree
+    json_config = False
+
 
     gapy_description="CVA6 virtual board"
     model = Cva6Chip

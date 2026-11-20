@@ -32,6 +32,9 @@ def _is_rtl(args) -> bool:
 
 
 class Target(gvsoc.runner.Target):
+    # Every component is configured from the compiled platform tree
+    json_config = False
+
 
     gapy_description: str = "Ri5ky testbench"
     model: type[Component] = Ri5kyTestbenchBoard

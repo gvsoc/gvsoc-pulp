@@ -13,6 +13,9 @@ from pulp.chips.pulp_open_v2.pulp_open_v2 import PulpOpenNnV2Board
 
 
 class Target(gvsoc.runner.Target):
+    # Every component is configured from the compiled platform tree
+    json_config = False
+
 
     gapy_description = "Pulp-open virtual board with pulpNN (io_v2 and iss_v2)"
     model = PulpOpenNnV2Board

@@ -20,6 +20,9 @@ import gvsoc.runner as gvsoc
 GAPY_TARGET = True
 
 class Target(gvsoc.Target):
+    # Every component is configured from the compiled platform tree
+    json_config = False
+
 
     gapy_description = "MempoolSystem"
     model = MempoolSystem

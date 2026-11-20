@@ -148,6 +148,9 @@ class Rv64(st.Component):
 
 
 class Target(gvsoc.Target):
+    # Every component is configured from the compiled platform tree
+    json_config = False
+
 
     gapy_description="RV64 virtual board"
     model = Rv64

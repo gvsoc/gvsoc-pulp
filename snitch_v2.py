@@ -18,6 +18,9 @@ import gvsoc.runner
 from pulp.chips.snitch.snitch_v2_board import SnitchBoard
 
 class Target(gvsoc.runner.Target):
+    # Every component is configured from the compiled platform tree
+    json_config = False
+
 
     gapy_description="Snitch virtual board (iss_v2 core, io_v2 stack)"
     model = SnitchBoard

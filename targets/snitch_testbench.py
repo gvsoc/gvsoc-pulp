@@ -26,6 +26,9 @@ from pulp.snitch.snitch_testbench import SnitchTestbenchBoard
 
 
 class Target(gvsoc.runner.Target):
+    # Every component is configured from the compiled platform tree
+    json_config = False
+
 
     gapy_description: str = "Snitch testbench"
     model: type[Component] = SnitchTestbenchBoard

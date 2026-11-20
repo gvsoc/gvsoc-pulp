@@ -22,6 +22,9 @@ import gvsoc.runner
 from pulp.chips.snitch.spatz_v3 import SpatzBoard
 
 class Target(gvsoc.runner.Target):
+    # Every component is configured from the compiled platform tree
+    json_config = False
+
 
     gapy_description="Spatz virtual board (v3, io_v2 stack)"
     model = SpatzBoard

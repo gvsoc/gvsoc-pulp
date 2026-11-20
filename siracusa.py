@@ -19,6 +19,9 @@ from pulp.chips.siracusa.board import SiracusaBoard
 
 
 class Target(gvsoc.runner.Target):
+    # Every component is configured from the compiled platform tree
+    json_config = False
+
 
     gapy_description = "Siracusa virtual board (io_v2 and iss_v2)"
     model = SiracusaBoard

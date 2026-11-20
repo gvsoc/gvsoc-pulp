@@ -7,5 +7,8 @@ class Platform(SoftHierPlatform):
 
 
 class Target(SoftHierTargetBase):
+    # Every component is configured from the compiled platform tree
+    json_config = False
+
     model = Platform
     name = "2d_mesh"

@@ -331,6 +331,9 @@ class OccamyBoard(gvsoc.systree.Component):
 
 
 class Target(gvsoc.runner.Target):
+    # Every component is configured from the compiled platform tree
+    json_config = False
+
 
     gapy_description="Occamy virtual board"
     model = OccamyBoard
