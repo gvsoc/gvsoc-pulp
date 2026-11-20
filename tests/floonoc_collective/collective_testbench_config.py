@@ -18,7 +18,7 @@ from config_tree import Config, cfg_field
 
 
 class CollectiveTestbenchConfig(Config):
-    """Configuration of the floonoc_flex collective testbench (test.cpp)."""
+    """Configuration of the FlooNoC collective testbench (test.cpp)."""
 
     dim: int = cfg_field(default=0, desc="Dimension of the square mesh")
     node_size: int = cfg_field(default=0, fmt="hex", desc="Size of the memory of each node")

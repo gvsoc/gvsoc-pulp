@@ -29,91 +29,72 @@
 #include <vp/itf/io.hpp>
 #include <vp/vp.hpp>
 
-FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
+FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config, this->cfg)
 {
     this->traces.new_trace("trace", &trace, vp::DEBUG);
     // Get properties from generator
-    this->wide_width = get_js_config()->get("wide_width")->get_int();
-    this->narrow_width = get_js_config()->get("narrow_width")->get_int();
-    this->nb_nodes = get_js_config()->get_int("nb_nodes");
-    this->router_input_queue_size =
-        get_js_config()->get_int("router_input_queue_size");
+    this->wide_width = this->cfg.wide_width;
+    this->narrow_width = this->cfg.narrow_width;
+    this->nb_nodes = this->cfg.nb_nodes;
+    this->router_input_queue_size = this->cfg.router_input_queue_size;
 
     // Reserve the array for the target. We may have one target at each node.
     this->itf_names.resize(this->nb_nodes);
 
-    this->nb_nodes = get_js_config()->get_int("nb_nodes");
-    this->router_degrees = get_js_config()->get_int("router_degrees");
+    this->router_degrees = this->cfg.router_degrees;
 
-    js::Config *links_cfg = get_js_config()->get("links");
-    if (links_cfg != NULL)
+    for (size_t i = 0; i < this->cfg.noc_links_count; i++)
     {
-        for (js::Config *link_cfg : links_cfg->get_elems())
-        {
-            std::vector<int> link;
-            for (js::Config *elem : link_cfg->get_elems())
-            {
-                link.push_back(elem->get_int());
-            }
-            this->links.push_back(link);
-        }
+        const FlooNocLinkConfig &link_cfg = this->cfg.noc_links[i];
+        this->links.push_back({(int)link_cfg.src, (int)link_cfg.dst, (int)link_cfg.latency});
     }
 
-    // Go through the mappings to create one master IO interface for each target
-    js::Config *mappings = get_js_config()->get("mappings");
-    if (mappings != NULL)
+    // Go through the mappings to create one master IO interface for each target.
+    // For now entries are stored in a classic array. When a request is
+    // received, we will to compare to each entry which may be slow when
+    // having lots of target. We could optimize it by using a tree.
+    this->entries.resize(this->cfg.noc_mappings_count);
+    for (size_t id = 0; id < this->cfg.noc_mappings_count; id++)
     {
-        // For now entries are stored in a classic array. When a request is
-        // received, we will to compare to each entry which may be slow when
-        // having lots of target. We could optimize it by using a tree.
-        this->entries.resize(mappings->get_childs().size());
-        int id = 0;
-        for (auto &mapping : mappings->get_childs())
+        // For each mapping we create the master interface where we'll
+        // forward request to the target
+        const FlooNocMappingConfig &mapping = this->cfg.noc_mappings[id];
+
+        uint64_t base = mapping.base;
+        uint64_t size = mapping.size;
+        uint64_t remove_offset = mapping.remove_offset;
+        int node_id = mapping.node_id;
+
+        if (size > 0)
         {
-            // For each mapping we create the master interface where we'll
-            // forward request to the target
-            js::Config *config = mapping.second;
+            // And we add an entry so that we can turn an address into a
+            // target position
+            this->entries[id].base = base;
+            this->entries[id].size = size;
+            this->entries[id].node_id = node_id;
+            this->entries[id].remove_offset = remove_offset;
+        }
 
-            uint64_t base = config->get_uint("base");
-            uint64_t size = config->get_uint("size");
-            uint64_t remove_offset = config->get_uint("remove_offset");
-            int node_id = config->get_int("node_id");
+        if (node_id >= 0 && node_id < this->nb_nodes)
+        {
+            // Once a request reaches the right position, the target will be
+            // retrieved through this array indexed by the position
+            this->itf_names[node_id] = mapping.itf_name;
 
-            if (size > 0)
-            {
-                // And we add an entry so that we can turn an address into a
-                // target position
-                this->entries[id].base = base;
-                this->entries[id].size = size;
-                this->entries[id].node_id = node_id;
-                this->entries[id].remove_offset = remove_offset;
-            }
-
-            if (node_id >= 0 && node_id < this->nb_nodes)
-            {
-                // Once a request reaches the right position, the target will be
-                // retrieved through this array indexed by the position
-                this->itf_names[node_id] = mapping.first;
-
-                this->trace.msg(
-                    vp::Trace::LEVEL_DEBUG,
-                    "Adding target (name: %s, base: 0x%x, "
-                    "size: 0x%x, node_id: %d, remove_offset: 0x%x)\n",
-                    mapping.first.c_str(), base, size, node_id, remove_offset);
-            }
-
-            id++;
+            this->trace.msg(
+                vp::Trace::LEVEL_DEBUG,
+                "Adding target (name: %s, base: 0x%x, "
+                "size: 0x%x, node_id: %d, remove_offset: 0x%x)\n",
+                mapping.itf_name, base, size, node_id, remove_offset);
         }
     }
 
     // Create the array of network interfaces (initialize empty slots to NULL)
     this->network_interfaces.resize(this->nb_nodes, NULL);
-    js::Config *network_interfaces = get_js_config()->get("network_interfaces");
-    if (network_interfaces != NULL)
     {
-        for (js::Config *network_interface : network_interfaces->get_elems())
+        for (size_t i = 0; i < this->cfg.noc_network_interfaces_count; i++)
         {
-            int node_id = network_interface->get_elem(0)->get_int();
+            int node_id = this->cfg.noc_network_interfaces[i].node_id;
 
             this->trace.msg(vp::Trace::LEVEL_DEBUG,
                             "Adding network interface (node_id: %d)\n",
@@ -129,13 +110,11 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
     this->rsp_routers.resize(this->nb_nodes, NULL);
     this->wide_routers.resize(this->nb_nodes, NULL);
 
-    js::Config *routers = get_js_config()->get("routers");
-    if (routers != NULL)
     {
-        for (js::Config *router : routers->get_elems())
+        for (size_t i = 0; i < this->cfg.noc_routers_count; i++)
         {
-            int node_id = router->get_elem(0)->get_int();
-            int num_queues = router->get_elem(1)->get_int();
+            int node_id = this->cfg.noc_routers[i].node_id;
+            int num_queues = this->cfg.noc_routers[i].num_queues;
 
             this->trace.msg(
                 vp::Trace::LEVEL_DEBUG,
@@ -175,58 +154,52 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
         }
     }
 
-    // Parse routing tables
-    js::Config *routing_tables_cfg = get_js_config()->get("routing_tables");
-    if (routing_tables_cfg != NULL)
+    // Parse routing tables, entries which are not given are -1
+    if (this->cfg.has_routing_tables)
     {
+        std::vector<std::vector<int>> r_tables(this->nb_nodes,
+            std::vector<int>(this->nb_nodes, -1));
+        for (size_t i = 0; i < this->cfg.noc_routes_count; i++)
+        {
+            const FlooNocRouteConfig &route = this->cfg.noc_routes[i];
+            if (route.router >= 0 && route.router < this->nb_nodes &&
+                route.dest >= 0 && route.dest < this->nb_nodes)
+            {
+                r_tables[route.router][route.dest] = route.next_hop;
+            }
+        }
+
         for (int i = 0; i < this->nb_nodes; i++)
         {
-            js::Config *router_table_cfg =
-                routing_tables_cfg->get(std::to_string(i));
-            std::vector<int> r_table(this->nb_nodes, -1);
-
-            if (router_table_cfg != NULL)
-            {
-                for (int dest = 0; dest < this->nb_nodes; dest++)
-                {
-                    js::Config *hop =
-                        router_table_cfg->get(std::to_string(dest));
-                    if (hop)
-                        r_table[dest] = hop->get_int();
-                }
-            }
-
             if (this->req_routers[i])
-                this->req_routers[i]->set_routing_table(r_table);
+                this->req_routers[i]->set_routing_table(r_tables[i]);
             if (this->rsp_routers[i])
-                this->rsp_routers[i]->set_routing_table(r_table);
+                this->rsp_routers[i]->set_routing_table(r_tables[i]);
             if (this->wide_routers[i])
-                this->wide_routers[i]->set_routing_table(r_table);
+                this->wide_routers[i]->set_routing_table(r_tables[i]);
         }
     }
 
-    // Parse direction-relative routing to support default-mesh o_MAP_DIR. Each entry is
-    // [node_id, right_id, left_id, up_id, down_id], -1 where no neighbour exists in that direction.
-    js::Config *direction_links_cfg = get_js_config()->get("direction_links");
-    if (direction_links_cfg != NULL)
+    // Parse direction-relative routing to support default-mesh o_MAP_DIR: the neighbour of
+    // each router in each direction (right, left, up, down), -1 where there is none.
+    for (size_t i = 0; i < this->cfg.noc_direction_links_count; i++)
     {
-        for (js::Config *entry : direction_links_cfg->get_elems())
+        const FlooNocDirectionLinkConfig &entry = this->cfg.noc_direction_links[i];
+        int node_id = entry.node_id;
+        int neighbours[4] = { (int)entry.right, (int)entry.left, (int)entry.up, (int)entry.down };
+        for (int dir_index = 0; dir_index < 4; dir_index++)
         {
-            int node_id = entry->get_elem(0)->get_int();
-            for (int dir_index = 0; dir_index < 4; dir_index++)
+            int neighbor_id = neighbours[dir_index];
+            if (neighbor_id < 0)
             {
-                int neighbor_id = entry->get_elem(1 + dir_index)->get_int();
-                if (neighbor_id < 0)
-                {
-                    continue;
-                }
-                if (this->req_routers[node_id])
-                    this->req_routers[node_id]->set_direction_neighbour(dir_index, neighbor_id);
-                if (this->rsp_routers[node_id])
-                    this->rsp_routers[node_id]->set_direction_neighbour(dir_index, neighbor_id);
-                if (this->wide_routers[node_id])
-                    this->wide_routers[node_id]->set_direction_neighbour(dir_index, neighbor_id);
+                continue;
             }
+            if (this->req_routers[node_id])
+                this->req_routers[node_id]->set_direction_neighbour(dir_index, neighbor_id);
+            if (this->rsp_routers[node_id])
+                this->rsp_routers[node_id]->set_direction_neighbour(dir_index, neighbor_id);
+            if (this->wide_routers[node_id])
+                this->wide_routers[node_id]->set_direction_neighbour(dir_index, neighbor_id);
         }
     }
 
@@ -287,23 +260,16 @@ FlooNoc::FlooNoc(vp::ComponentConf &config) : vp::Component(config)
     }
 
     // Topology-specific collective fan-out policy
-    std::string collective_route_algo =
-        get_js_config()->get("collective_route_algo")->get_str();
+    std::string collective_route_algo = this->cfg.collective_route_algo;
 
     if (collective_route_algo != "none")
     {
         std::unordered_map<int, std::pair<int, int>> node_coords;
-        js::Config *coords_cfg = get_js_config()->get("collective_coords");
-        if (coords_cfg != NULL)
+        // Build a map of node_id -> (x, y) coordinates for the collective routing
+        for (size_t i = 0; i < this->cfg.collective_node_coords_count; i++)
         {
-            // Build a map of node_id -> (x, y) coordinates for the collective routingy
-            for (js::Config *entry : coords_cfg->get_elems())
-            {
-                int node_id = entry->get_elem(0)->get_int();
-                int x = entry->get_elem(1)->get_int();
-                int y = entry->get_elem(2)->get_int();
-                node_coords[node_id] = {x, y};
-            }
+            const FlooNocCoordConfig &entry = this->cfg.collective_node_coords[i];
+            node_coords[entry.node_id] = {(int)entry.x, (int)entry.y};
         }
 
         if (collective_route_algo == "xy_mesh")

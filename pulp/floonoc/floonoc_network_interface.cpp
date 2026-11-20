@@ -375,8 +375,7 @@ NetworkInterface::NetworkInterface(FlooNoc *noc, int node_id,
     noc->new_slave_port("wide_input_" + std::to_string(node_id),
                         &this->wide_input_itf, this);
 
-    this->ni_outstanding_reqs =
-        this->noc->get_js_config()->get("ni_outstanding_reqs")->get_int();
+    this->ni_outstanding_reqs = this->noc->cfg.ni_outstanding_reqs;
 
     std::string stat_prefix = this->get_name() + "/";
     noc->stats.register_stat(&this->stat_injected_packets,

@@ -16,12 +16,99 @@
 
 from enum import IntEnum
 import gvsoc.systree
+from config_tree import Config, cfg_field
 import os
 import yaml
 from pathlib import Path
 
 from floogen.config_parser import parse_config
 from floogen.model.network import Network
+
+
+class FlooNocMappingConfig(Config):
+    """One memory-mapped target of the NoC."""
+
+    itf_name: str = cfg_field(default='', desc="Name of the mapping, also the name of the target interface")
+    base: int = cfg_field(default=0, fmt="hex", desc="Base address of the mapping")
+    size: int = cfg_field(default=0, fmt="hex", desc="Size of the mapping")
+    node_id: int = cfg_field(default=0, desc="ID of the node of the target")
+    remove_offset: int = cfg_field(default=0, fmt="hex", desc="Offset removed from the address of the requests")
+
+
+class FlooNocRouterConfig(Config):
+    """One router of the NoC."""
+
+    node_id: int = cfg_field(default=0, desc="ID of the router node")
+    num_queues: int = cfg_field(default=0, desc="Number of queues (degree) of the router")
+
+
+class FlooNocNetworkInterfaceConfig(Config):
+    """One network interface of the NoC."""
+
+    node_id: int = cfg_field(default=0, desc="ID of the network interface node")
+
+
+class FlooNocLinkConfig(Config):
+    """One bidirectional link of the NoC."""
+
+    src: int = cfg_field(default=0, desc="ID of the source node")
+    dst: int = cfg_field(default=0, desc="ID of the destination node")
+    latency: int = cfg_field(default=0, desc="Latency of the link, in cycles")
+
+
+class FlooNocRouteConfig(Config):
+    """One entry of a routing table: the next hop from a router towards a destination."""
+
+    router: int = cfg_field(default=0, desc="ID of the router")
+    dest: int = cfg_field(default=0, desc="ID of the destination node")
+    next_hop: int = cfg_field(default=0, desc="ID of the next node")
+
+
+class FlooNocCoordConfig(Config):
+    """Mesh coordinates of a router, for the collective fan-out."""
+
+    node_id: int = cfg_field(default=0, desc="ID of the router")
+    x: int = cfg_field(default=0, desc="X coordinate")
+    y: int = cfg_field(default=0, desc="Y coordinate")
+
+
+class FlooNocDirectionLinkConfig(Config):
+    """Neighbours of a router of the default mesh in each direction, for o_MAP_DIR."""
+
+    node_id: int = cfg_field(default=0, desc="ID of the router")
+    right: int = cfg_field(default=-1, desc="ID of the right neighbour, -1 if none")
+    left: int = cfg_field(default=-1, desc="ID of the left neighbour, -1 if none")
+    up: int = cfg_field(default=-1, desc="ID of the up neighbour, -1 if none")
+    down: int = cfg_field(default=-1, desc="ID of the down neighbour, -1 if none")
+
+
+class FlooNocConfig(Config):
+    """Configuration of the FlooNoC. The lists are built from the topology given to the
+    generator, see FlooNoc."""
+
+    narrow_width: int = cfg_field(default=0, desc="Width in bytes of the narrow network")
+    wide_width: int = cfg_field(default=0, desc="Width in bytes of the wide network")
+    nb_nodes: int = cfg_field(default=0, desc="Number of nodes of the network")
+    router_degrees: int = cfg_field(default=0, desc="Degree of all the routers, 0 if they differ")
+    ni_outstanding_reqs: int = cfg_field(default=0, desc=(
+        "Number of outstanding requests each network interface can inject to the routers"))
+    router_input_queue_size: int = cfg_field(default=0, desc="Size of the routers input queues")
+    collective_route_algo: str = cfg_field(default='none', desc=(
+        "Collective fan-out policy: none, xy_mesh or yx_mesh"))
+    noc_mappings: list[FlooNocMappingConfig] = cfg_field(default_factory=list, desc=(
+        "Memory-mapped targets, sorted by name"))
+    noc_routers: list[FlooNocRouterConfig] = cfg_field(default_factory=list, desc="Routers")
+    noc_network_interfaces: list[FlooNocNetworkInterfaceConfig] = cfg_field(
+        default_factory=list, desc="Network interfaces")
+    noc_links: list[FlooNocLinkConfig] = cfg_field(default_factory=list, desc="Links")
+    has_routing_tables: bool = cfg_field(default=False, desc=(
+        "True if routing tables were generated, given by noc_routes"))
+    noc_routes: list[FlooNocRouteConfig] = cfg_field(default_factory=list, desc=(
+        "Routing table entries, the missing ones are -1"))
+    collective_node_coords: list[FlooNocCoordConfig] = cfg_field(default_factory=list, desc=(
+        "Mesh coordinates of the routers, for the collective fan-out"))
+    noc_direction_links: list[FlooNocDirectionLinkConfig] = cfg_field(default_factory=list,
+        desc="Neighbours of each router of the default mesh in each direction")
 
 
 class FlooNoc(gvsoc.systree.Component):
@@ -53,7 +140,11 @@ class FlooNoc(gvsoc.systree.Component):
             router_degrees: int=0, nb_nodes: int=0, ni_outstanding_reqs: int=8, router_input_queue_size: int=2,
             network_path: str | None = None, routing_path: str | None = None,
             default_link_latency: int=1, link_latencies_path: str | None = None):
-        super().__init__(parent, name)
+        super().__init__(parent, name, config=FlooNocConfig())
+
+        # Parameters of the NoC, given to the model through its config, built from
+        # them in configure()
+        self._noc_props = {}
 
         self.add_sources([
             'pulp/floonoc/floonoc.cpp',
@@ -63,20 +154,20 @@ class FlooNoc(gvsoc.systree.Component):
             'cpu/iss/flexfloat/flexfloat.c',
         ])
 
-        self.add_property('mappings', {})
-        self.add_property('routers', [])
-        self.add_property('network_interfaces', [])
-        self.add_property('ni_outstanding_reqs', ni_outstanding_reqs)
-        self.add_property('narrow_width', narrow_width)
-        self.add_property('wide_width', wide_width)
-        self.add_property('router_input_queue_size', router_input_queue_size)
+        self._set_noc_prop('mappings', {})
+        self._set_noc_prop('routers', [])
+        self._set_noc_prop('network_interfaces', [])
+        self._set_noc_prop('ni_outstanding_reqs', ni_outstanding_reqs)
+        self._set_noc_prop('narrow_width', narrow_width)
+        self._set_noc_prop('wide_width', wide_width)
+        self._set_noc_prop('router_input_queue_size', router_input_queue_size)
 
-        self.add_property('nb_nodes', nb_nodes)
-        self.add_property('links', [])
-        self.add_property('router_degrees', router_degrees)
-        self.add_property('collective_enable', False)
-        self.add_property('collective_route_algo', 'none')
-        self.add_property('collective_coords', [])
+        self._set_noc_prop('nb_nodes', nb_nodes)
+        self._set_noc_prop('links', [])
+        self._set_noc_prop('router_degrees', router_degrees)
+        self._set_noc_prop('collective_enable', False)
+        self._set_noc_prop('collective_route_algo', 'none')
+        self._set_noc_prop('collective_coords', [])
         self.id_map = {}
         # floogen's own schema has no per-link timing field, so per-link
         # latencies are sourced from an optional side file keyed
@@ -86,8 +177,70 @@ class FlooNoc(gvsoc.systree.Component):
         if network_path is not None:
             self.id_map = self.load_from_floogen(network_path, routing_path, link_latencies_path)
 
+    def _set_noc_prop(self, name, value):
+        self._noc_props[name] = value
+
+    def _get_noc_prop(self, name):
+        return self._noc_props.get(name)
+
+    def finalize(self):
+        super().finalize()
+        # The topology is complete only now: the subclasses build it in their own
+        # finalize, before calling this one
+        self._build_config()
+
+    def _build_config(self):
+        props = self._noc_props
+        config = self.get_config()
+        for name in ['narrow_width', 'wide_width', 'nb_nodes', 'router_degrees',
+                'ni_outstanding_reqs', 'router_input_queue_size', 'collective_route_algo']:
+            setattr(config, name, props[name])
+        # Sorted by name, the order in which the model used to get them
+        mappings = props['mappings']
+        config.noc_mappings = [FlooNocMappingConfig(itf_name=name, **mappings[name])
+            for name in sorted(mappings)]
+        config.noc_routers = [FlooNocRouterConfig(node_id=node_id, num_queues=num_queues)
+            for node_id, num_queues in props['routers']]
+        config.noc_network_interfaces = [FlooNocNetworkInterfaceConfig(node_id=ni[0])
+            for ni in props['network_interfaces']]
+        config.noc_links = [FlooNocLinkConfig(src=src, dst=dst, latency=latency)
+            for src, dst, latency in props['links']]
+        routing_tables = props.get('routing_tables')
+        config.has_routing_tables = routing_tables is not None
+        config.noc_routes = []
+        if routing_tables is not None:
+            for router, table in routing_tables.items():
+                for dest, next_hop in table.items():
+                    if next_hop is not None and next_hop != -1:
+                        config.noc_routes.append(FlooNocRouteConfig(router=int(router),
+                            dest=int(dest), next_hop=int(next_hop)))
+        config.collective_node_coords = [FlooNocCoordConfig(node_id=node_id, x=x, y=y)
+            for node_id, x, y in props['collective_coords']]
+        config.noc_direction_links = [FlooNocDirectionLinkConfig(node_id=entry[0],
+                right=entry[1], left=entry[2], up=entry[3], down=entry[4])
+            for entry in props.get('direction_links', [])]
+
     def _add_mapping(self, name: str, base: int, size: int, node_id: int, remove_offset:int =0):
-        self.get_property('mappings')[name] =  {'base': base, 'size': size, 'node_id': node_id, 'remove_offset':remove_offset}
+        self.add_mapping(name, base=base, size=size, node_id=node_id, remove_offset=remove_offset)
+
+    def add_mapping(self, name: str, base: int, size: int, node_id: int, remove_offset: int=0):
+        """Add a memory-mapped target, replacing any mapping of the same name.
+
+        Parameters
+        ----------
+        name: str
+            Name of the mapping, also the name of the interface of the target.
+        base: int
+            Base address of the mapping.
+        size: int
+            Size of the mapping.
+        node_id: int
+            ID of the node of the target.
+        remove_offset: int
+            Offset removed from the address of the requests.
+        """
+        self._get_noc_prop('mappings')[name] = {'base': base, 'size': size, 'node_id': node_id,
+            'remove_offset': remove_offset}
 
     def add_router(self, node_id: int, num_queues: int):
         """Instantiate a router in the grid.
@@ -97,7 +250,7 @@ class FlooNoc(gvsoc.systree.Component):
         node_id: int
             ID of the router node
         """
-        self.get_property('routers').append([node_id, num_queues])
+        self._get_noc_prop('routers').append([node_id, num_queues])
 
     def add_network_interface(self, node_id: int):
         """Instantiate a network interface in the grid.
@@ -110,7 +263,7 @@ class FlooNoc(gvsoc.systree.Component):
         node_id: int
             ID of the network interface node
         """
-        self.get_property('network_interfaces').append([node_id])
+        self._get_noc_prop('network_interfaces').append([node_id])
 
     def add_link(self, src_node_id: int, dest_node_id: int, latency: int = 1):
         """Add a link between two nodes
@@ -124,7 +277,7 @@ class FlooNoc(gvsoc.systree.Component):
         latency: int
             Latency of the link in cycles
         """
-        self.get_property('links').append([src_node_id, dest_node_id, latency])
+        self._get_noc_prop('links').append([src_node_id, dest_node_id, latency])
 
     def o_NARROW_MAP(self, itf: gvsoc.systree.SlaveItf, base: int, size: int,
         node_id: int, name: str=None, rm_base: bool=False, remove_offset:int =0):
@@ -211,9 +364,9 @@ class FlooNoc(gvsoc.systree.Component):
         unused node id), which only surfaces as a fatal error in the C++
         model once traffic actually targets that NI.
         """
-        routers = set(r[0] for r in self.get_property('routers'))
-        nis = set(n[0] for n in self.get_property('network_interfaces'))
-        links = self.get_property('links')
+        routers = set(r[0] for r in self._get_noc_prop('routers'))
+        nis = set(n[0] for n in self._get_noc_prop('network_interfaces'))
+        links = self._get_noc_prop('links')
 
         ni_to_router = {}
         for link in links:
@@ -236,11 +389,11 @@ class FlooNoc(gvsoc.systree.Component):
         Generates routing tables based on the shortest path between
         all nodes using BFS.
         """
-        nb_nodes = self.get_property('nb_nodes')
-        links = self.get_property('links')
+        nb_nodes = self._get_noc_prop('nb_nodes')
+        links = self._get_noc_prop('links')
 
-        routers = [r[0] for r in self.get_property('routers')]
-        nis = [n[0] for n in self.get_property('network_interfaces')]
+        routers = [r[0] for r in self._get_noc_prop('routers')]
+        nis = [n[0] for n in self._get_noc_prop('network_interfaces')]
 
         routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
 
@@ -293,7 +446,7 @@ class FlooNoc(gvsoc.systree.Component):
                 else:
                     routing_tables[str(src)][str(dst)] = src
 
-        self.add_property('routing_tables', routing_tables)
+        self._set_noc_prop('routing_tables', routing_tables)
 
     def generate_routing_tables_deadlock_free(self):
         """
@@ -301,11 +454,11 @@ class FlooNoc(gvsoc.systree.Component):
         It is however not minimal in terms of hops and therefore sacrifices BW/Latency.
         To be used in topologies with deadlocks.
         """
-        nb_nodes = self.get_property('nb_nodes')
-        links = self.get_property('links')
+        nb_nodes = self._get_noc_prop('nb_nodes')
+        links = self._get_noc_prop('links')
 
-        routers = [r[0] for r in self.get_property('routers')]
-        nis = [n[0] for n in self.get_property('network_interfaces')]
+        routers = [r[0] for r in self._get_noc_prop('routers')]
+        nis = [n[0] for n in self._get_noc_prop('network_interfaces')]
 
         routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
 
@@ -384,17 +537,17 @@ class FlooNoc(gvsoc.systree.Component):
                 else:
                     routing_tables[str(src)][str(dst)] = src
 
-        self.add_property('routing_tables', routing_tables)
+        self._set_noc_prop('routing_tables', routing_tables)
 
     def generate_routing_tables_hexamesh(self):
         """
         Generates routing tables for a HexaMesh topology using Axial Dimension Order Routing.
         """
-        nb_nodes = self.get_property('nb_nodes')
-        links = self.get_property('links')
+        nb_nodes = self._get_noc_prop('nb_nodes')
+        links = self._get_noc_prop('links')
 
-        routers = sorted([r[0] for r in self.get_property('routers')])
-        nis = [n[0] for n in self.get_property('network_interfaces')]
+        routers = sorted([r[0] for r in self._get_noc_prop('routers')])
+        nis = [n[0] for n in self._get_noc_prop('network_interfaces')]
         num_routers = len(routers)
 
         routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
@@ -465,19 +618,19 @@ class FlooNoc(gvsoc.systree.Component):
 
                 routing_tables[str(src)][str(dst)] = next_hop_router
 
-        self.add_property('routing_tables', routing_tables)
+        self._set_noc_prop('routing_tables', routing_tables)
 
     def generate_routing_tables_folded_hexatorus(self):
         """
         Generates routing tables using Multiple Spanning Trees.
         Can be faster than simple Up/Down.
         """
-        nb_nodes = self.get_property('nb_nodes')
-        links = self.get_property('links')
+        nb_nodes = self._get_noc_prop('nb_nodes')
+        links = self._get_noc_prop('links')
         num_trees = 4
 
-        routers = sorted([r[0] for r in self.get_property('routers')])
-        nis = [n[0] for n in self.get_property('network_interfaces')]
+        routers = sorted([r[0] for r in self._get_noc_prop('routers')])
+        nis = [n[0] for n in self._get_noc_prop('network_interfaces')]
 
         routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
 
@@ -580,17 +733,17 @@ class FlooNoc(gvsoc.systree.Component):
                 else:
                     routing_tables[str(src)][str(dst)] = src
 
-        self.add_property('routing_tables', routing_tables)
+        self._set_noc_prop('routing_tables', routing_tables)
 
     def generate_routing_tables_arc_model(self, dim_x: int, dim_y: int):
         """
         Implementation of Algorithm 3 from 'Developing Deadlock-Free Routing Algorithms in Torus NoC'
         Uses (EWs + WEs + NSe + SN FirstHop) arcs combined with XY routing.
         """
-        nb_nodes = self.get_property('nb_nodes')
-        links = self.get_property('links')
-        routers = [r[0] for r in self.get_property('routers')]
-        nis = [n[0] for n in self.get_property('network_interfaces')]
+        nb_nodes = self._get_noc_prop('nb_nodes')
+        links = self._get_noc_prop('links')
+        routers = [r[0] for r in self._get_noc_prop('routers')]
+        nis = [n[0] for n in self._get_noc_prop('network_interfaces')]
 
         routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
 
@@ -670,7 +823,7 @@ class FlooNoc(gvsoc.systree.Component):
 
                 routing_tables[str(src)][str(dst)] = next_hop
 
-        self.add_property('routing_tables', routing_tables)
+        self._set_noc_prop('routing_tables', routing_tables)
 
     def generate_routing_tables_dimension_order(self, node_to_id: dict, first_axis: str):
         """
@@ -700,15 +853,15 @@ class FlooNoc(gvsoc.systree.Component):
                 coords[r] = (x, y)
             return coords
 
-        nb_nodes = self.get_property('nb_nodes')
-        links = self.get_property('links')
-        routers = [r[0] for r in self.get_property('routers')]
-        nis = [n[0] for n in self.get_property('network_interfaces')]
+        nb_nodes = self._get_noc_prop('nb_nodes')
+        links = self._get_noc_prop('links')
+        routers = [r[0] for r in self._get_noc_prop('routers')]
+        nis = [n[0] for n in self._get_noc_prop('network_interfaces')]
         id_to_name = {v: k for k, v in node_to_id.items()}
 
         id_to_coord = _parse_router_coords()
         if id_to_coord is None:
-            if self.get_property('collective_enable'):
+            if self._get_noc_prop('collective_enable'):
                 raise ValueError(
                     "routing.collective is enabled but router node names "
                     "don't carry parseable '_x_y' coordinates")
@@ -724,8 +877,8 @@ class FlooNoc(gvsoc.systree.Component):
             elif node_b in nis and node_a in routers:
                 ni_to_router[node_b] = node_a
 
-        if self.get_property('collective_enable'):
-            self.add_property('collective_coords',
+        if self._get_noc_prop('collective_enable'):
+            self._set_noc_prop('collective_coords',
                 [[node_id, x, y] for node_id, (x, y) in id_to_coord.items()])
 
         routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
@@ -752,7 +905,7 @@ class FlooNoc(gvsoc.systree.Component):
                     return
                 routing_tables[str(src)][str(dst)] = next_hop
 
-        self.add_property('routing_tables', routing_tables)
+        self._set_noc_prop('routing_tables', routing_tables)
 
     def load_from_floogen(self, network_path: str, routing_path: str = None, link_latencies_path: str = None):
             """
@@ -790,7 +943,7 @@ class FlooNoc(gvsoc.systree.Component):
                 self.add_network_interface(current_id)
                 current_id += 1
 
-            self.add_property('nb_nodes', current_id)
+            self._set_noc_prop('nb_nodes', current_id)
             self.id_map = node_to_id
 
             added_links = set()
@@ -827,8 +980,8 @@ class FlooNoc(gvsoc.systree.Component):
                         f"'{algo_name}'. Currently only support plain 'XY'/'YX' "
                         f"dimension-order mesh routing")
 
-                self.add_property('collective_enable', True)
-                self.add_property('collective_route_algo',
+                self._set_noc_prop('collective_enable', True)
+                self._set_noc_prop('collective_route_algo',
                     'xy_mesh' if algo_name == 'XY' else 'yx_mesh')
 
             match algo_name:
@@ -861,8 +1014,8 @@ class FlooNoc(gvsoc.systree.Component):
             with open(routing_path, 'r') as f:
                 custom_yaml = yaml.safe_load(f)
 
-            nb_nodes = self.get_property('nb_nodes')
-            routers = [r[0] for r in self.get_property('routers')]
+            nb_nodes = self._get_noc_prop('nb_nodes')
+            routers = [r[0] for r in self._get_noc_prop('routers')]
 
             # Initialize an empty table for all routers
             routing_tables = {str(r): {str(dst): -1 for dst in range(nb_nodes)} for r in routers}
@@ -891,7 +1044,7 @@ class FlooNoc(gvsoc.systree.Component):
 
                     routing_tables[str(src_id)][str(dst_id)] = next_hop_id
 
-            self.add_property('routing_tables', routing_tables)
+            self._set_noc_prop('routing_tables', routing_tables)
 
 
 class FlooNocDirection(IntEnum):
@@ -1088,8 +1241,6 @@ class FlooNoc2dMeshNarrowWide(FlooNoc):
 
         RIGHT < LEFT < UP < DOWN < LOCAL ordering holds for every router in the mesh
         """
-        super().finalize()
-
         added_links = set()
 
         def add_link_once(node_a, node_b):
@@ -1140,7 +1291,7 @@ class FlooNoc2dMeshNarrowWide(FlooNoc):
                 if neighbour_id is not None:
                     dirs[dir_index] = neighbour_id
 
-        self.add_property('direction_links',
+        self._set_noc_prop('direction_links',
             [[node_id] + dirs for node_id, dirs in direction_links.items()])
 
         # Routing table: rows are routers, columns are every registered NI
@@ -1157,15 +1308,18 @@ class FlooNoc2dMeshNarrowWide(FlooNoc):
                     next_hop_id = self._neighbour_at(nx, ny)
                 table[str(dst_id)] = next_hop_id
             routing_tables[str(src_id)] = table
-        self.add_property('routing_tables', routing_tables)
+        self._set_noc_prop('routing_tables', routing_tables)
 
         if self._collective_enable:
             if not self._router_id:
                 raise ValueError(
                     "collective_enable is set but no router was added to the mesh")
-            self.add_property('collective_route_algo', 'xy_mesh')
-            self.add_property('collective_coords',
+            self._set_noc_prop('collective_route_algo', 'xy_mesh')
+            self._set_noc_prop('collective_coords',
                 [[node_id, x, y] for (x, y), node_id in self._router_id.items()])
+
+        # Last, so that the config of the model is built from the complete topology
+        super().finalize()
 
 
 class FlooNocClusterGridNarrowWide(FlooNoc2dMeshNarrowWide):

@@ -25,6 +25,8 @@
 #pragma once
 
 #include "floonoc_collective_policy.hpp"
+#include <vp/vp.hpp>
+#include <pulp/floonoc/floonoc/floo_noc_config.hpp>
 #include <cpu/iss/flexfloat/flexfloat.h>
 #include <unordered_map>
 #include <vector>
@@ -90,6 +92,8 @@ class Entry
 class FlooNoc : public vp::Component
 {
   public:
+    FlooNocConfig cfg;
+
     FlooNoc(vp::ComponentConf &config);
     ~FlooNoc();
 
