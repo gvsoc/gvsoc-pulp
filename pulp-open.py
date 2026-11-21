@@ -82,7 +82,9 @@ class Target(gvsoc.Target):
                 raise RuntimeError(
                     'pulp-open (rtl, gvsoc_svsim): gvsoc_svsim plugin not found (set GVSOC_SVSIM_PLUGIN, '
                     'or build the SDK with tools/hdlsim: <install>/lib/libgvsoc_elab.so)')
-            design = self.model.get_parameter('design') or rtl.svsim_design()
+            cluster = self.model.get_attributes().cluster
+            design = self.model.get_parameter('design') or rtl.svsim_design(
+                int(cluster.nb_fpu), int(cluster.fp32_latency))
             if not os.path.exists(os.path.join(design, 'manifest')):
                 raise RuntimeError(f'pulp-open (rtl, gvsoc_svsim): no compiled design at {design}; '
                                    'build it with: make test.build.pulp-rtl')

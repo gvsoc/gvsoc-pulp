@@ -118,7 +118,13 @@ void SnitchFpSs::start()
         desc->block_id = kind | (bypass ? SNITCH_FPSS_BYPASS : 0);
         desc->stub_handler = &SnitchFpSs::offload_stub<false>;
         desc->stub_fast_handler = &SnitchFpSs::offload_stub<true>;
-        desc->resource_latency = CONFIG_GVSOC_ISS_SNITCH_FMA_LATENCY;
+        // The FPU pipeline depth of the format of the operation (RTL
+        // lat_comp_fp64 / lat_comp_fp32): an FP32 computational instruction
+        // ends with .s (scalar, or the vectorial vf*.s)
+        size_t label_len = strlen(desc->label);
+        bool is_fp32 = label_len > 2 && strcmp(desc->label + label_len - 2, ".s") == 0;
+        desc->resource_latency = kind == SNITCH_FPSS_COMPUTE && is_fp32 ?
+            CONFIG_GVSOC_ISS_SNITCH_FMA_LATENCY_FP32 : CONFIG_GVSOC_ISS_SNITCH_FMA_LATENCY;
         desc->resource_bandwidth = 0;
     }
 

@@ -60,7 +60,7 @@ from ips.pulp.idma_v3.snitch_dma import SnitchDmaV3
 from interco.fifo_v2 import Fifo, FifoConfig
 from ips.pulp.idma_v3.snitch_dma_config import SnitchDmaV3Config
 
-from gvrun.attribute import Tree, Area
+from gvrun.attribute import Tree, Area, Value
 
 
 class ClusterArch(Tree):
@@ -69,6 +69,15 @@ class ClusterArch(Tree):
     Matches the RTL ``spatz_cluster.default.dram.hjson`` configuration:
     2 cores (core 0 owns the iDMA), 128 KiB TCDM in 16 word-interleaved
     banks of 8 B, 4 Spatz FUs / memory ports per core, VLEN 512.
+
+    The number of cores (``nb_core``) and of Spatz FUs / memory ports per core
+    (``nb_lanes``) are attributes, e.g. 1 core with 8 lanes for the
+    ``spatz_cluster.single_core.hjson`` configuration.
+
+    ``fp32`` selects the FP32-only cluster (``spatz_cluster.single_core.hjson``
+    of FondazioneChipsIT spatz lc/spatz_fdiv_32bit): RV32IMAF core, so
+    ELEN 32: 32-bit FPUs, VLSU ports and TCDM banks (spatz_pkg DataWidth),
+    and a 32-bit core data port (data_width 32).
     """
 
     def __init__(self, parent, name, base, first_hartid, auto_fetch=False,
@@ -76,7 +85,18 @@ class ClusterArch(Tree):
             isa='rv32imfdcav'):
         super().__init__(parent, name)
 
-        self.nb_core = nb_core_per_cluster
+        self.nb_core_attr = Value(self, 'nb_core', nb_core_per_cluster, cast=int,
+            description='Number of cores of the cluster (core 0 owns the iDMA)')
+        self.nb_lanes_attr = Value(self, 'nb_lanes', spatz_nb_lanes, cast=int,
+            description='Number of Spatz FUs and VLSU memory ports per core')
+        self.fp32 = Value(self, 'fp32', 0, cast=int,
+            description='FP32-only cluster (no D: ELEN 32, 32-bit data width), 0 or 1')
+        if self.fp32:
+            isa = isa.replace('d', '')
+        # ELEN in bytes: the width of the Spatz FUs, VLSU ports and TCDM banks
+        self.elen_bytes = 4 if self.fp32 else 8
+        self.nb_core = self.nb_core_attr
+        spatz_nb_lanes = self.nb_lanes_attr
         self.base = base
         self.first_hartid = first_hartid
 
@@ -85,7 +105,8 @@ class ClusterArch(Tree):
         self.barrier_irq = 19
 
         self.tcdm          = ClusterArch.Tcdm(self, 'tcdm', base,
-            nb_masters=self.nb_core * (spatz_nb_lanes + 1) + 1)
+            nb_masters=self.nb_core * (spatz_nb_lanes + 1) + 1,
+            bank_width=self.elen_bytes)
         self.peripheral    = Area(self, 'peripheral', base + 0x0002_0000, 0x0001_0000, 'peripheral range')
         self.zero_mem      = Area(self, 'zero_mem', base + 0x0003_0000, 0x0001_0000, 'zero mem range')
         # The only region the PMA marks cacheable for the icaches: the DRAM
@@ -96,12 +117,12 @@ class ClusterArch(Tree):
         self.isa = isa
 
     class Tcdm(Tree):
-        def __init__(self, parent, name, base, nb_masters):
+        def __init__(self, parent, name, base, nb_masters, bank_width=8):
             super().__init__(parent, name)
             self.area = Area(self, 'tcdm', base + 0x0000_0000, 0x0002_0000, 'TCDM range')
-            # RTL: NrBanks = 16, DataWidth = 64 bits, TCDMDepth = 1024 words
+            # RTL: NrBanks = 16, DataWidth = ELEN (64 bits, 32 FP32 only)
             self.nb_banks = 16
-            self.bank_width = 8
+            self.bank_width = bank_width
             self.bank_size = self.area.size // self.nb_banks
             # RTL MemoryMacroLatency: 1 cycle between grant and response
             self.latency = 1
@@ -204,9 +225,9 @@ class SnitchCluster(gvsoc.systree.Component):
         for core_id in range(0, arch.nb_core):
             config = SpatzConfig(isa=arch.isa, fetch_enable=arch.auto_fetch,
                 boot_addr=arch.boot_addr, hart_id=arch.first_hartid + core_id,
-                htif=True, nb_lanes=arch.spatz_nb_lanes, lane_width=8,
+                htif=True, nb_lanes=arch.spatz_nb_lanes, lane_width=arch.elen_bytes,
                 vlsu_v2=True, nb_outstanding_reqs=arch.spatz_nb_outstanding_reqs,
-                lsu_nb_outstanding=5, lsu_width=8,
+                lsu_nb_outstanding=5, lsu_width=arch.elen_bytes,
                 nb_ipus=1, muldiv_offload=True, fetch_size=4)
             cores.append(Spatz(self, f'pe{core_id}', config=config))
             # Per-core demux (RTL reqrsp_demux in spatz_cc): TCDM accesses

@@ -24,6 +24,11 @@
 #include "pulp_iss_wrapper.hpp"
 #include <cpu/iss/include/iss_core.hpp>
 
+// The FPUs the cluster cores share (attribute cluster/nb_fpu of the cluster)
+#ifndef CONFIG_GVSOC_ISS_PULP_NB_FPU
+#define CONFIG_GVSOC_ISS_PULP_NB_FPU 4
+#endif
+
 pulp_iss_wrapper::pulp_iss_wrapper(vp::ComponentConf &config)
 : IssWrapper(config)
 {
@@ -120,11 +125,12 @@ pulp_iss_wrapper::pulp_iss_wrapper(vp::ComponentConf &config)
     }
     else
     {
-        // Share the FPU instances at the cluster level
+        // Share the FPU instances at the cluster level, core i on FPU
+        // i % CONFIG_GVSOC_ISS_PULP_NB_FPU (attribute cluster/nb_fpu)
         std::string path = this->get_parent()->get_path();
-        iss_resource_declare(&this->iss, path, fpu_base, 4);
+        iss_resource_declare(&this->iss, path, fpu_base, CONFIG_GVSOC_ISS_PULP_NB_FPU);
         iss_resource_declare(&this->iss, path, fpu_div, 1);
-        iss_resource_assign_instance(&this->iss, path, fpu_base, core_id % 4);
+        iss_resource_assign_instance(&this->iss, path, fpu_base, core_id % CONFIG_GVSOC_ISS_PULP_NB_FPU);
         iss_resource_assign_instance(&this->iss, path, fpu_div, 0);
     }
 }

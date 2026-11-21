@@ -25,10 +25,26 @@ import memory.dramsys
 import memory.pim_component
 from gvrun.attribute import Tree, Area, Value
 
+class ClusterAttr(Tree):
+    """Attributes of the cluster which the RTL platform also needs."""
+    def __init__(self, parent, name):
+        super().__init__(parent, name)
+        # The FPUs of the cluster: pulp-platform/pulp has 4, shared by the 8
+        # cores, with a combinational FP32 FMA. On the RTL platform, the design
+        # compiled with the same FPUs (flist.py --nb-fpu, --fp32-latency).
+        self.nb_fpu = Value(self, 'nb_fpu', 4, cast=int,
+            description='Number of FPUs of the cluster, shared by the cores (core i on FPU '
+                'i % nb_fpu): 4, or 8 for one per core')
+        self.fp32_latency = Value(self, 'fp32_latency', 0, cast=int,
+            description='Pipeline registers of the FP32 FMA unit of the FPUs (FP32 add, mul, '
+                'FMA): an instruction using the result waits as many cycles')
+
+
 class PulpOpenAttr(Tree):
     def __init__(self, parent):
         super().__init__(parent)
         self.soc = SocAttr(self, 'soc')
+        self.cluster = ClusterAttr(self, 'cluster')
 
 class Pulp_open(st.Component):
 
@@ -65,7 +81,8 @@ class Pulp_open(st.Component):
         clusters = []
         for cid in range(0, nb_cluster):
             cluster_name = get_cluster_name(cid)
-            clusters.append(Cluster(self, cluster_name, config_file=cluster_config_file, cid=cid, pulpnn=pulpnn))
+            clusters.append(Cluster(self, cluster_name, config_file=cluster_config_file, cid=cid, pulpnn=pulpnn,
+                nb_fpu=int(attr.cluster.nb_fpu), fp32_latency=int(attr.cluster.fp32_latency)))
 
         # Soc
         soc = Soc(self, 'soc', attr.soc, parser, config_file=soc_config_file, chip=self, cluster=clusters[0], pim_support=pim_support,pulpnn=pulpnn)

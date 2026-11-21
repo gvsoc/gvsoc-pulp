@@ -29,6 +29,16 @@ class SnitchSsr;
 #define SNITCH_SSR_REG_RPTR    24
 #define SNITCH_SSR_REG_WPTR    28
 
+// Width in bytes of the words the data movers access (RTL DataWidth of the
+// core complex: 8 on the 64-bit cluster, 4 on an FP32 one). Elements narrower
+// than a word are read from their word and shifted, written with their bytes.
+#ifndef CONFIG_GVSOC_ISS_SNITCH_SSR_DATA_WIDTH
+#define CONFIG_GVSOC_ISS_SNITCH_SSR_DATA_WIDTH 8
+#endif
+#define SNITCH_SSR_WORD      CONFIG_GVSOC_ISS_SNITCH_SSR_DATA_WIDTH
+#define SNITCH_SSR_WORD_LOG2 (SNITCH_SSR_WORD == 8 ? 3 : SNITCH_SSR_WORD == 4 ? 2 : -1)
+static_assert(SNITCH_SSR_WORD_LOG2 >= 0, "SSR data width must be 4 or 8 bytes");
+
 // Index words fetched and not consumed yet of an indirect stream (RTL
 // IndexCredits)
 #define SNITCH_SSR_INDEX_CREDITS 3

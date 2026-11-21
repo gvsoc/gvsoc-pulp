@@ -76,7 +76,13 @@ class SnitchV2Config(RiscvConfig):
         "file (offload response cut)."
     ))
     fma_latency: int = cfg_field(default=3, dump=True, desc=(
-        "Pipeline depth of the FPU add / mul / fma / dot-product operations."
+        "Pipeline depth of the FPU add / mul / fma / dot-product operations "
+        "(RTL lat_comp_fp64; the FP32 ones have their own)."
+    ))
+    fma_latency_fp32: int = cfg_field(default=2, dump=True, desc=(
+        "Pipeline depth of the FP32 add / mul / fma operations (RTL "
+        "lat_comp_fp32: 2 in cfg/default.json, 1 in the FP32_xdiv.json of the "
+        "PULP-SNITCH-SPATZ comparison)."
     ))
     noncomp_latency: int = cfg_field(default=1, dump=True, desc=(
         "Pipeline depth of the FPU non-computational operations (sign "
@@ -101,6 +107,11 @@ class SnitchV2Config(RiscvConfig):
     ))
     ssr_fifo_depth: int = cfg_field(default=4, dump=True, desc=(
         "Data FIFO depth of each stream semantic register."
+    ))
+    ssr_data_width: int = cfg_field(default=8, dump=True, desc=(
+        "Width in bytes of the words the stream semantic registers access "
+        "(RTL core complex DataWidth / 8): 8 on the 64-bit cluster, 4 on an "
+        "FP32 one."
     ))
 
 
@@ -129,6 +140,7 @@ class ArchSnitchV2(Arch):
             'RESULT_LATENCY': config.result_latency,
             'RESP_LATENCY': config.resp_latency,
             'FMA_LATENCY': config.fma_latency,
+            'FMA_LATENCY_FP32': config.fma_latency_fp32,
             'NONCOMP_LATENCY': config.noncomp_latency,
             'CONV_LATENCY': config.conv_latency,
             'DIVSQRT_LATENCY': config.divsqrt_latency,
@@ -136,6 +148,7 @@ class ArchSnitchV2(Arch):
             'CAQ_DEPTH': config.caq_depth,
             'NB_SSRS': config.nb_ssrs,
             'SSR_FIFO_DEPTH': config.ssr_fifo_depth,
+            'SSR_DATA_WIDTH': config.ssr_data_width,
         }
         for name, value in defines.items():
             iss.isa.add_define(f'CONFIG_GVSOC_ISS_SNITCH_{name}', value)
@@ -202,9 +215,10 @@ class SnitchV2(RiscvCommon):
         # The parameters are compiled into the ISS through the ISA header
         isa_key = config.isa + '_' + '_'.join(str(v) for v in [config.seq_buffer_size,
             config.frep_nest_depth, config.offload_latency, config.result_latency,
-            config.resp_latency, config.fma_latency, config.noncomp_latency,
+            config.resp_latency, config.fma_latency, config.fma_latency_fp32,
+            config.noncomp_latency,
             config.conv_latency, config.divsqrt_latency, config.fp_lsu_nb_outstanding,
-            config.caq_depth, config.nb_ssrs, config.ssr_fifo_depth,
+            config.caq_depth, config.nb_ssrs, config.ssr_fifo_depth, config.ssr_data_width,
             config.lsu_nb_outstanding, config.lsu_nb_outstanding_loads, config.lsu_width])
         isa_instance: Isa | None = _isa_instances.get(isa_key)
 

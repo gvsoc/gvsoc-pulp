@@ -83,7 +83,8 @@ class Cluster(st.Component):
 
     """
 
-    def __init__(self, parent, name, config_file, cid: int=0, pulpnn=False):
+    def __init__(self, parent, name, config_file, cid: int=0, pulpnn=False, nb_fpu=4,
+            fp32_latency=0):
         super(Cluster, self).__init__(parent, name, config=ClusterConfig())
 
         #
@@ -153,7 +154,8 @@ class Cluster(st.Component):
         # Cores
         pes = []
         for i in range(0, nb_pe):
-            pes.append(iss.ClusterCore(self, 'pe%d' % i, cluster_id=cid, core_id=i, pulpnn=pulpnn))
+            pes.append(iss.ClusterCore(self, 'pe%d' % i, cluster_id=cid, core_id=i, pulpnn=pulpnn,
+                nb_fpu=nb_fpu, fp32_latency=fp32_latency))
 
         # Icache
         icache = Hierarchical_cache(self, 'icache', cluster_conf.get_property('icache/config'))

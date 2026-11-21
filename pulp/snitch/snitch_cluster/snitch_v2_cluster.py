@@ -53,6 +53,7 @@ from memory.memory_v3 import MemoryV3Config
 import interco.router_v2 as router_v2
 from interco.fifo_v2 import Fifo, FifoConfig
 from interco.rw_splitter_v2 import RwSplitter, RwSplitterConfig
+from interco.splitter_v2 import Splitter, SplitterConfig
 from interco.router_v2 import RouterConfig, RouterMapping, KIND_UNTIMED, KIND_BEAT
 from pulp.snitch.snitch_cluster.spatz.spatz_tcdm_interco import (
     SpatzTcdmInterco, SpatzTcdmIntercoConfig)
@@ -82,6 +83,25 @@ class ClusterArch(Tree):
         self.boot_addr = boot_addr
         self.auto_fetch = auto_fetch
         self.barrier_irq = 19
+        # FP32 cluster (snitch_cluster FondazioneChipsIT snitch_FP32): cores
+        # without the D extension (FLEN 32) and a 32-bit data width
+        # (cfg data_width: 32), which is the width of the TCDM banks, of the
+        # narrow path and of the core data ports and SSRs. The 64-bit cluster
+        # otherwise.
+        self.fp32 = Value(self, 'fp32', 0, cast=int,
+            description='FP32 cluster (FLEN 32, 32-bit data width), 0 or 1')
+        if self.fp32:
+            isa = isa.replace('d', '')
+        self.data_width = 4 if self.fp32 else 8
+        # Timing of the FP32_xdiv.json of the PULP-SNITCH-SPATZ comparison
+        # (snitch_FP32 ce53383): 16 TCDM banks, FP32 FMA with one pipeline
+        # register (lat_comp_fp32 1), an 8 KiB L1 icache. The default
+        # configuration otherwise (32 banks, lat_comp_fp32 2, 16 KiB).
+        self.paper = Value(self, 'paper', 0, cast=int,
+            description='Timing of the PULP-SNITCH-SPATZ comparison cluster '
+                '(16 banks, 1-cycle FP32 FMA pipeline, 8 KiB icache), 0 or 1')
+        self.fma_latency_fp32 = 1 if self.paper else 2
+        self.icache_size = 8 * 1024 if self.paper else 16 * 1024
         self.isa = isa
         # The last core is the DMA core, it has no SSR
         self.dma_core = self.nb_core - 1
@@ -91,10 +111,19 @@ class ClusterArch(Tree):
         # Its wide inputs: the DMA reads, the DMA writes (the axi_to_mem_split
         # of the RTL gives them a TCDM port each), then the alias.
         nb_masters = (self.nb_core - 1) * self.nb_ssrs + 1 + 1
+        # The narrow crossbar is 64-bit: on a 32-bit data width, its accesses
+        # to the TCDM (and its alias) go through a 64-to-32 bit bridge, whose
+        # upper lane gets an input more, after the others.
+        nb_narrow = 1 + (1 if alias_base is not None else 0)
+        nb_upper = nb_narrow if self.data_width < 8 else 0
         self.tcdm          = ClusterArch.Tcdm(self, 'tcdm', base,
-            nb_masters + (1 if alias_base is not None else 0),
-            3 if alias_base is not None else 2)
+            nb_masters + nb_narrow - 1 + nb_upper,
+            3 if alias_base is not None else 2, bank_width=self.data_width,
+            nb_banks=16 if self.paper else 32)
         self.tcdm.narrow_port = nb_masters - 1
+        # Upper lane inputs of the TCDM and alias narrow paths, if any
+        self.tcdm.narrow_upper_ports = [nb_masters + nb_narrow - 1 + i
+            for i in range(0, nb_upper)]
         # Cluster alias of the current RTL (AliasRegionBase): the TCDM is also
         # at this address, on the narrow and the wide crossbars. The RTL
         # crossbars decode it to the same TCDM port; the model has a TCDM
@@ -122,12 +151,14 @@ class ClusterArch(Tree):
             description='L1 icache serial lookup (SERIAL_LOOKUP), 0 or 1')
 
     class Tcdm(Tree):
-        def __init__(self, parent, name, base, nb_masters, nb_wide_masters=1):
+        def __init__(self, parent, name, base, nb_masters, nb_wide_masters=1, bank_width=8,
+                nb_banks=32):
             super().__init__(parent, name)
             self.area = Area(self, 'tcdm', base + 0x0000_0000, 0x0002_0000, 'TCDM range')
-            # RTL: 32 banks of 64 bits
-            self.nb_banks = 32
-            self.bank_width = 8
+            # RTL: 32 banks (16 in the comparison's cluster) of the cluster
+            # data width (64 bits, 32 on FP32)
+            self.nb_banks = nb_banks
+            self.bank_width = bank_width
             self.bank_size = self.area.size // self.nb_banks
             self.latency = 1
             self.nb_masters = nb_masters
@@ -205,7 +236,8 @@ class SnitchCluster(gvsoc.systree.Component):
             l0_caches.append(SnitchIcacheL0(self, f'l0_icache_{core_id}',
                 line_count=8, line_width=512, cacheable_base=arch.cacheable.base,
                 cacheable_size=arch.cacheable.size))
-        l1_icache = SnitchIcacheL1(self, 'l1_icache', line_count=128, way_count=2,
+        # 2 ways of 512-bit lines, icache_size in all
+        l1_icache = SnitchIcacheL1(self, 'l1_icache', line_count=arch.icache_size // (2 * 64), way_count=2,
             line_width=512, nr_fetch_ports=arch.nb_core, num_axi_outstanding=2,
             serial_lookup=bool(arch.icache_serial_lookup), cacheable_base=arch.cacheable.base, cacheable_size=arch.cacheable.size)
 
@@ -214,7 +246,8 @@ class SnitchCluster(gvsoc.systree.Component):
         for core_id in range(0, arch.nb_core):
             config = SnitchV2Config(isa=arch.isa, fetch_enable=arch.auto_fetch,
                 boot_addr=arch.boot_addr, hart_id=arch.first_hartid + core_id, htif=True,
-                nb_ssrs=arch.nb_ssrs)
+                nb_ssrs=arch.nb_ssrs, lsu_width=arch.data_width,
+                ssr_data_width=arch.data_width, fma_latency_fp32=arch.fma_latency_fp32)
             cores.append(SnitchV2(self, f'pe{core_id}', config=config))
             # Per-core TCDM port 0, shared by the core data port, the FP LSU
             # and SSR 0. Everything outside the TCDM exits on the narrow AXI.
@@ -254,11 +287,24 @@ class SnitchCluster(gvsoc.systree.Component):
             max_pending_bursts=2, full_registered=True, max_pending_per_dir=3,
             rw_exclusive=True), name='axi')
         self.o_NARROW_INPUT(narrow_axi.i_INPUT(1))
-        narrow_axi.o_MAP(tcdm.i_INPUT(arch.tcdm.narrow_port),
+        # On a 32-bit data width, a 64-to-32 bit bridge between the narrow
+        # crossbar and each of its TCDM inputs: an access is split into its
+        # 32-bit halves, each on the TCDM input of its lane.
+        def narrow_tcdm_input(index, name):
+            port = tcdm.i_INPUT(arch.tcdm.narrow_port + index)
+            if arch.data_width >= 8:
+                return port
+            bridge = Splitter(self, f'{name}_bridge', config=SplitterConfig(
+                input_width=8, output_width=arch.data_width, lane_by_address=True))
+            bridge.o_OUTPUT(0, port)
+            bridge.o_OUTPUT(1, tcdm.i_INPUT(arch.tcdm.narrow_upper_ports[index]))
+            return bridge.i_INPUT()
+
+        narrow_axi.o_MAP(narrow_tcdm_input(0, 'narrow_tcdm'),
             RouterMapping(base=arch.tcdm.area.base, size=arch.tcdm.area.size,
                 remove_base=False), name='tcdm')
         if arch.alias is not None:
-            narrow_axi.o_MAP(tcdm.i_INPUT(arch.tcdm.narrow_port + 1),
+            narrow_axi.o_MAP(narrow_tcdm_input(1, 'narrow_tcdm_alias'),
                 RouterMapping(base=arch.alias.base, size=arch.alias.size,
                     remove_offset=arch.alias.base, add_offset=arch.tcdm.area.base),
                 name='tcdm_alias')

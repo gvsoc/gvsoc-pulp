@@ -147,11 +147,11 @@ bool SnitchSsrStreamer::cfg_write(int reg, iss_reg_t value)
             job.idx_base = this->idx_base;
             job.idx_size = this->idx_cfg & 0x3;
             job.idx_shift = (this->idx_cfg >> 8) & 0xFF;
-            job.idx_byteoff = value & 7;
-            job.idx_fetch_ptr = value & ~(iss_reg_t)7;
+            job.idx_byteoff = value & (SNITCH_SSR_WORD - 1);
+            job.idx_fetch_ptr = value & ~(iss_reg_t)(SNITCH_SSR_WORD - 1);
             // Index words spanned by the indices
             int64_t nb_bytes = job.idx_byteoff + (nb_elems << job.idx_size);
-            job.idx_words_left = (nb_bytes + 7) / 8;
+            job.idx_words_left = (nb_bytes + SNITCH_SSR_WORD - 1) / SNITCH_SSR_WORD;
             job.addr_remaining = nb_elems;
         }
 
@@ -298,7 +298,7 @@ bool SnitchSsrStreamer::addr_peek(SnitchSsrJob &job, int64_t cycle, iss_reg_t &a
     int size = 1 << job.idx_size;
     uint64_t index = word.data >> (job.idx_byteoff * 8);
     if (size < 8) index &= (1ULL << (size * 8)) - 1;
-    addr = job.idx_base + ((index << 3) << job.idx_shift);
+    addr = job.idx_base + ((index << SNITCH_SSR_WORD_LOG2) << job.idx_shift);
     return true;
 }
 
@@ -317,14 +317,14 @@ void SnitchSsrStreamer::idx_fetch(SnitchSsrJob &job)
 
     req->req.prepare();
     req->req.set_addr(job.idx_fetch_ptr);
-    req->req.set_size(8);
+    req->req.set_size(SNITCH_SSR_WORD);
     req->req.set_opcode(vp::IoReqOpcode::READ);
     req->req.set_data((uint8_t *)&req->data);
     req->req.set_resp_status(vp::IO_RESP_OK);
 
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Index fetch (addr: 0x%lx)\n", job.idx_fetch_ptr);
 
-    job.idx_fetch_ptr += 8;
+    job.idx_fetch_ptr += SNITCH_SSR_WORD;
     job.idx_words_left--;
 
     this->nb_pending_reqs++;
@@ -338,7 +338,7 @@ bool SnitchSsrStreamer::addr_next(SnitchSsrJob &job)
         // Next index, the word is consumed once its last index is used
         job.idx_byteoff += 1 << job.idx_size;
         job.addr_remaining--;
-        if (job.idx_byteoff >= 8 || job.addr_remaining == 0)
+        if (job.idx_byteoff >= SNITCH_SSR_WORD || job.addr_remaining == 0)
         {
             job.idx_byteoff = 0;
             this->idx_head = (this->idx_head + 1) % SNITCH_SSR_INDEX_CREDITS;
@@ -430,9 +430,10 @@ bool SnitchSsrStreamer::handle(int64_t cycle)
     this->last_was_idx = false;
 
     SnitchSsrReq *req;
-    // The data movers access 64-bit words. A 32-bit aligned element is read
-    // from its word and shifted, written with only its bytes.
-    int offset = addr & 7;
+    // The data movers access SNITCH_SSR_WORD-byte words. An element narrower
+    // than a word is read from its word and shifted, written from its
+    // offset to the end of its word.
+    int offset = addr & (SNITCH_SSR_WORD - 1);
 
     if (job->is_write)
     {
@@ -447,7 +448,7 @@ bool SnitchSsrStreamer::handle(int64_t cycle)
 
         req->req.prepare();
         req->req.set_addr(addr);
-        req->req.set_size(8 - offset);
+        req->req.set_size(SNITCH_SSR_WORD - offset);
         req->req.set_opcode(vp::IoReqOpcode::WRITE);
     }
     else
@@ -462,7 +463,7 @@ bool SnitchSsrStreamer::handle(int64_t cycle)
 
         req->req.prepare();
         req->req.set_addr(addr - offset);
-        req->req.set_size(8);
+        req->req.set_size(SNITCH_SSR_WORD);
         req->req.set_opcode(vp::IoReqOpcode::READ);
         req->offset = offset;
     }

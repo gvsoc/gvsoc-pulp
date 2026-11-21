@@ -37,7 +37,7 @@ def _build_fc_isa(name, pulpnn=False, pulpv2=True):
 
     return isa
 
-def _build_cluster_isa(name, pulpnn=False, pulpv2=True):
+def _build_cluster_isa(name, pulpnn=False, pulpv2=True, fp32_latency=0):
 
     extensions = [ Xf16(), Xf16alt(), Xf8(), Xfvec(), Xfaux() ]
 
@@ -49,13 +49,23 @@ def _build_cluster_isa(name, pulpnn=False, pulpv2=True):
 
     isa = cpu.iss.isa_gen.isa_riscv_gen.RiscvIsa(name, 'rv32imfc', extensions=extensions)
 
+    if fp32_latency != 0:
+        # Pipeline registers in the FP32 FMA unit (C_LAT_FP32 of the core): an
+        # instruction depending on an FP32 add / mul / FMA gets its result as
+        # many cycles later than from the combinational FMA of pulp-platform/pulp
+        # (measured on the RTL with 1: 2 cycles from one to the next one using
+        # it, independent ones still one per cycle)
+        for insn in isa.get_insns():
+            if insn.label.endswith('.s') and any(tag in insn.tags for tag in ('fmadd', 'fadd', 'fmul')):
+                insn.set_latency(fp32_latency)
+
     return isa
 
 
 
 
 
-_cluster_isa = None
+_cluster_isa = {}
 _fc_isa = None
 
 
@@ -86,14 +96,19 @@ class PulpCore(cpu.iss.riscv.RiscvCommon):
 
 class ClusterCore(PulpCore):
 
-    def __init__(self, parent, name, cluster_id: int=None, core_id: int=None, pulpv2=True, pulpnn=True):
+    def __init__(self, parent, name, cluster_id: int=None, core_id: int=None, pulpv2=True, pulpnn=True,
+            nb_fpu=4, fp32_latency=0):
 
-        global _cluster_isa
+        # The ISA is generated once per FP32 latency (its timing is compiled in)
+        if fp32_latency not in _cluster_isa:
+            _cluster_isa[fp32_latency] = _build_cluster_isa(
+                'pulp_cluster' if fp32_latency == 0 else f'pulp_cluster_fp32lat{fp32_latency}',
+                pulpv2=pulpv2, pulpnn=pulpnn, fp32_latency=fp32_latency)
 
-        if _cluster_isa is None:
-            _cluster_isa = _build_cluster_isa('pulp_cluster', pulpv2=pulpv2, pulpnn=pulpnn)
+        super().__init__(parent, name, isa=_cluster_isa[fp32_latency], cluster_id=cluster_id, core_id=core_id, external_pccr=True)
 
-        super().__init__(parent, name, isa=_cluster_isa, cluster_id=cluster_id, core_id=core_id, external_pccr=True)
+        # The FPUs of the cluster the cores share, core i on FPU i % nb_fpu
+        self.add_c_flags([f'-DCONFIG_GVSOC_ISS_PULP_NB_FPU={nb_fpu}'])
 
 
 
