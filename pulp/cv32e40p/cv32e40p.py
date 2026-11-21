@@ -12,7 +12,7 @@ behaviour is in slot classes under cpu/iss_v2/*/cores/cv32e40p, as for Ri5ky.
 
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Callable, Iterable
 from typing_extensions import override
 from gvsoc.systree import Component
 from cpu.iss_v2.riscv import RiscvCommon, IssModule, ExecInOrder, LsuV2, Hwloop
@@ -241,7 +241,7 @@ class Cv32e40p(RiscvCommon):
     isa_name: str = 'cv32e40p'
 
     def __init__(self, parent: Component, name: str, config: Cv32e40pConfig,
-                 extra_extensions: Iterable[IsaSubset] = ()):
+                 extra_extensions: Iterable[Callable[[], IsaSubset]] = ()):
 
         fpu = 'f' in config.isa[4:]
         zfinx = config.zfinx
@@ -263,8 +263,10 @@ class Cv32e40p(RiscvCommon):
         isa_instance: Isa | None = isa_instances.get(cache_key)
 
         if isa_instance is None:
+            # The extra extensions are given by the functions creating them (or
+            # their classes), only called here, when the ISA is not cached yet
             extensions: list[IsaSubset] = [
-                *extra_extensions,
+                *(make() for make in extra_extensions),
             ]
             if pulp:
                 extensions.append(CoreV2(elw=cluster))

@@ -17,7 +17,7 @@ class SiracusaRi5ky(Ri5ky):
     isa_name = 'ri5ky_siracusa'
 
     def __init__(self, parent, name: str, config: Ri5kyConfig):
-        super().__init__(parent, name, config=config, extra_extensions=[Xf8(), Xfaux()])
+        super().__init__(parent, name, config=config, extra_extensions=[Xf8, Xfaux])
 
         # RI5CY does not gate the FPU on mstatus.FS, and the SDK cluster boot
         # code writes mstatus with FS off before running float code

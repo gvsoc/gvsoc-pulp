@@ -42,4 +42,4 @@ class CV32PulpCore(Cv32e40p):
         # Xf16 has to come before Xf16alt, whose handlers use the float
         # helpers rvXf16.hpp includes
         super().__init__(parent, name, config=config,
-            extra_extensions=[Xf16(), Xf16alt()])
+            extra_extensions=[Xf16, Xf16alt])

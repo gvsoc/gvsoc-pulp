@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Callable, Iterable
 from typing_extensions import override
 from gvsoc.systree import Component
 from cpu.iss_v2.riscv import (RiscvCommon, IrqExternal, IssModule, ExecInOrder, Regfile, Arch, LsuV2, Hwloop)
@@ -90,7 +90,7 @@ class Ri5ky(RiscvCommon):
     isa_name: str = 'ri5ky'
 
     def __init__(self, parent: Component, name: str, config: Ri5kyConfig,
-                 extra_extensions: Iterable[IsaSubset] = (),
+                 extra_extensions: Iterable[Callable[[], IsaSubset]] = (),
                  exec_module: IssModule | None = None,
                  arch_module: IssModule | None = None,
                  lsu_module: IssModule | None = None):
@@ -106,9 +106,11 @@ class Ri5ky(RiscvCommon):
             # `rvXf16.hpp` pulls in `cpu/iss_v2/include/isa_lib/macros.h`,
             # so the smallfloats extensions are listed before PulpV2 to
             # satisfy that dependency.
+            # The extra extensions are given by the functions creating them (or
+            # their classes), only called here, when the ISA is not cached yet
             extensions: list[IsaSubset] = [
                 Xf16(), Xf16alt(), Xfvec(),
-                *extra_extensions,
+                *(make() for make in extra_extensions),
                 PulpV2(),
             ]
 
@@ -142,6 +144,13 @@ class Ri5ky(RiscvCommon):
                          stack_checker=True)
 
 
+def _pulp_nn() -> IsaSubset:
+    """The PULP-NN extension, with the header of its handlers."""
+    pulpnn = PulpNn()
+    pulpnn.includes = ['<cpu/iss_v2/include/isa/pulp_nn.hpp>']
+    return pulpnn
+
+
 class Ri5kyNn(Ri5ky):
     """Ri5ky with the PULP-NN extension (XpulpNN: SIMD on nibbles and crumbs,
     mac-load, quantization), whose special-purpose registers are held by its
@@ -150,11 +159,9 @@ class Ri5kyNn(Ri5ky):
     isa_name = 'ri5ky_nn'
 
     def __init__(self, parent: Component, name: str, config: Ri5kyConfig,
-                 extra_extensions: Iterable[IsaSubset] = ()):
-        pulpnn = PulpNn()
-        pulpnn.includes = ['<cpu/iss_v2/include/isa/pulp_nn.hpp>']
+                 extra_extensions: Iterable[Callable[[], IsaSubset]] = ()):
         super().__init__(parent, name, config=config,
-                         extra_extensions=[pulpnn, *extra_extensions],
+                         extra_extensions=[_pulp_nn, *extra_extensions],
                          arch_module=Arch('Ri5kyNn',
                              source='cpu/iss_v2/src/cores/ri5kynn/ri5kynn.cpp'),
                          lsu_module=Ri5kyNnLsu(nb_outstanding=1))
