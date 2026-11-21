@@ -215,26 +215,26 @@ void NetworkQueueV2::enqueue_router_req(vp::IoReq *req, bool is_address, bool wi
                 this->ni.narrow_read_pending_burst_nb_req++;
         }
 
-        EntryV2 *entry = this->ni.get_entry(burst_base, size);
+        const FloonocMappingV2 *entry = this->ni.get_entry(burst_base, size);
 
         if (entry == NULL)
         {
             this->trace.msg(vp::Trace::LEVEL_ERROR, "No entry found for base 0x%x\n", burst_base);
             return;
         }
-        uint64_t entry_end = entry->base + entry->size;
+        uint64_t entry_end = (uint64_t)entry->base + (uint64_t)entry->size;
         uint64_t max_size = entry_end - burst_base;
         size = std::min(max_size, size);
 
         this->trace.msg(vp::Trace::LEVEL_TRACE,
             "Enqueue request to router (req: %p, base: 0x%x, size: 0x%x, "
             "destination: %d)\n",
-            router_req, burst_base, size, entry->node_id);
+            router_req, burst_base, size, (int)entry->node_id);
 
         router_req->set_size(size);
-        router_req->set_addr(burst_base - entry->remove_offset);
+        router_req->set_addr(burst_base - (uint64_t)entry->remove_offset);
         router_req->initiator_addr = burst_base;
-        router_req->dest_id = entry->node_id;
+        router_req->dest_id = (int)entry->node_id;
 
         // Beat encapsulation: a W flit that covers its WHOLE beat carries
         // beat ownership — the destination hands the beat itself to the
@@ -266,7 +266,7 @@ void NetworkQueueV2::enqueue_router_req(vp::IoReq *req, bool is_address, bool wi
         // leaking a lock on an output the tail flit — bound elsewhere — never
         // releases. is_first opens a run when the dest changes; is_last closes
         // it when the burst ends or the next flit would cross into a new entry.
-        bool dest_changed = (entry->node_id != prev_dest_id);
+        bool dest_changed = ((int)entry->node_id != prev_dest_id);
         bool reached_entry_end = (burst_base + size >= entry_end);
         bool burst_ends = (burst_size <= size);
         router_req->is_first = dest_changed;
@@ -278,7 +278,7 @@ void NetworkQueueV2::enqueue_router_req(vp::IoReq *req, bool is_address, bool wi
             router_req->is_first = is_address;
             router_req->is_last = !is_address && burst_ends && req->is_last;
         }
-        prev_dest_id = entry->node_id;
+        prev_dest_id = (int)entry->node_id;
 
         this->inputs[input].push(router_req);
 
@@ -452,21 +452,6 @@ NetworkInterfaceV2::NetworkInterfaceV2(vp::ComponentConf &config)
         this->new_slave_port(std::string(nw_names[i]) + "_link_in", &this->link_in[i]);
     }
 
-    // Every NI receives the full memory map so it can translate addresses to
-    // destination nodes on its own.
-    this->entries.reserve(this->cfg.mappings_count);
-    for (size_t i = 0; i < this->cfg.mappings_count; i++)
-    {
-        const FloonocMappingV2 &mapping = this->cfg.mappings[i];
-
-        EntryV2 entry;
-        entry.base = mapping.base;
-        entry.size = mapping.size;
-        entry.node_id = mapping.node_id;
-        entry.remove_offset = mapping.remove_offset;
-        this->entries.push_back(entry);
-    }
-
     // AXI-style burst legality: a burst may not cross a max_burst_size boundary
     // (the 4KB rule), so it always targets a single mesh position and every
     // wormhole packet is single-destination. For that to hold, no two targets
@@ -477,29 +462,34 @@ NetworkInterfaceV2::NetworkInterfaceV2(vp::ComponentConf &config)
     // active (not just in asserts builds).
     if (this->max_burst_size > 0)
     {
-        for (EntryV2 &e : this->entries)
+        for (size_t i = 0; i < this->cfg.mappings_count; i++)
         {
-            if (e.size == 0)
+            const FloonocMappingV2 &e = this->cfg.mappings[i];
+            uint64_t e_base = (uint64_t)e.base, e_size = (uint64_t)e.size;
+            if (e_size == 0)
             {
                 continue;
             }
-            if (e.base % this->max_burst_size != 0 || e.size % this->max_burst_size != 0)
+            if (e_base % this->max_burst_size != 0 || e_size % this->max_burst_size != 0)
             {
                 this->trace.fatal("Target (node %d) [0x%lx..0x%lx] is not aligned to and a "
                     "multiple of max_burst_size=0x%lx; targets must not share a page so a "
-                    "burst always lands in one target\n", e.node_id, e.base,
-                    e.base + e.size - 1, this->max_burst_size);
+                    "burst always lands in one target\n", (int)e.node_id, e_base,
+                    e_base + e_size - 1, this->max_burst_size);
             }
         }
     }
 }
 
-EntryV2 *NetworkInterfaceV2::get_entry(uint64_t base, uint64_t size)
+// Entry of the memory map containing base. The map is the one of the NoC
+// (cfg.mappings), shared by all its NIs; the first matching entry wins.
+const FloonocMappingV2 *NetworkInterfaceV2::get_entry(uint64_t base, uint64_t size)
 {
-    for (int i=0; i<this->entries.size(); i++)
+    for (size_t i = 0; i < this->cfg.mappings_count; i++)
     {
-        EntryV2 *entry = &this->entries[i];
-        if (entry->size > 0 && base >= entry->base && base < entry->base + entry->size)
+        const FloonocMappingV2 *entry = &this->cfg.mappings[i];
+        uint64_t entry_base = (uint64_t)entry->base, entry_size = (uint64_t)entry->size;
+        if (entry_size > 0 && base >= entry_base && base < entry_base + entry_size)
         {
             return entry;
         }
@@ -802,9 +792,9 @@ vp::IoReqStatus NetworkInterfaceV2::handle_req(vp::IoReq *req, bool wide)
     // No reorder buffer: a new burst of an ID with bursts in flight to
     // another destination waits for them (RTL floo_rob_wrapper NoRoB).
     bool is_write = req->get_is_write();
-    EntryV2 *id_entry = wr_continuation ? NULL : this->get_entry(req->get_addr(), req->get_size());
+    const FloonocMappingV2 *id_entry = wr_continuation ? NULL : this->get_entry(req->get_addr(), req->get_size());
     if (id_entry != NULL && this->id_txns[wide][is_write] > 0 &&
-        this->id_dest[wide][is_write] != id_entry->node_id)
+        this->id_dest[wide][is_write] != (int)id_entry->node_id)
     {
         this->owes_id_retry[wide][is_write] = true;
         return vp::IO_REQ_DENIED;
@@ -827,7 +817,7 @@ vp::IoReqStatus NetworkInterfaceV2::handle_req(vp::IoReq *req, bool wide)
             if (id_entry != NULL)
             {
                 this->id_txns[wide][is_write]++;
-                this->id_dest[wide][is_write] = id_entry->node_id;
+                this->id_dest[wide][is_write] = (int)id_entry->node_id;
             }
         }
 

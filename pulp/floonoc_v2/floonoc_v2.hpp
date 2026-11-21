@@ -207,14 +207,3 @@ private:
 };
 
 
-/**
- * Memory-map entry: range -> destination node.
- */
-class EntryV2
-{
-public:
-    uint64_t base;
-    uint64_t size;
-    int node_id;
-    uint64_t remove_offset;
-};

@@ -171,7 +171,23 @@ class FloonocNetworkInterfaceV2Config(Config):
         "(asserts builds). 0 disables the checks"
     ))
     mappings: list[FloonocMappingV2] = cfg_field(default_factory=list, init=False, desc=(
-        "Memory map: every NI holds the full table"
+        "Memory map of the NoC, the same list for all its NIs (FloonocMemoryMapV2)"
+    ))
+
+    def set_memory_map(self, memory_map: 'FloonocMemoryMapV2'):
+        """Make the NI use the memory map of its NoC, shared with the other NIs
+        (the compiled tree holds it once)."""
+        self.mappings = memory_map.mappings
+
+
+class FloonocMemoryMapV2(Config):
+    """Memory map of a NoC: address range -> destination node, built once by the
+    NoC and shared by all its NIs."""
+
+    _defer_parent_init: ClassVar[bool] = True
+
+    mappings: list[FloonocMappingV2] = cfg_field(default_factory=list, init=False, desc=(
+        "Mappings, in the order the NIs look them up (the first matching one wins)"
     ))
 
     def add_mapping(self, name: str, base: int, size: int, node_id: int, remove_offset: int=0):
@@ -502,18 +518,20 @@ class FlooNocV2MeshFabric:
                     router.router_config.router_min_x = min_x
                     router.router_config.router_max_x = max_x
 
-        # Every NI holds the full memory map so it can translate addresses to
-        # mesh positions on its own. Distributed here so callers can keep
-        # adding mappings after construction. Entries are sorted by name: the
-        # NI takes the first matching one, and callers rely on this order.
-        # A negative x is a FlooNocV2Direction: the target is reached by
-        # leaving the mesh in that direction.
+        # Every NI uses the full memory map so it can translate addresses to
+        # mesh positions on its own. The map is built once, here so callers can
+        # keep adding mappings after construction, and shared by all the NIs.
+        # Entries are sorted by name: the NI takes the first matching one, and
+        # callers rely on this order. A negative x is a FlooNocV2Direction: the
+        # target is reached by leaving the mesh in that direction.
+        memory_map = FloonocMemoryMapV2()
+        for name, mapping in sorted(self.mappings.items()):
+            x, y = mapping['x'], mapping['y']
+            node_id = x if x < 0 else xy_node_id(x, y)
+            memory_map.add_mapping(name, base=mapping['base'], size=mapping['size'],
+                node_id=node_id, remove_offset=mapping['remove_offset'])
         for ni, _tile in self._nis.values():
-            for name, mapping in sorted(self.mappings.items()):
-                x, y = mapping['x'], mapping['y']
-                node_id = x if x < 0 else xy_node_id(x, y)
-                ni.get_config().add_mapping(name, base=mapping['base'], size=mapping['size'],
-                    node_id=node_id, remove_offset=mapping['remove_offset'])
+            ni.get_config().set_memory_map(memory_map)
 
         # Router meshes: bind each router's directional outputs to the
         # matching input of the neighbouring router of the same network.
@@ -918,13 +936,16 @@ class FlooNocV2GraphFabric:
         self.routes = floonoc_v2_routing.check_routes(topo, tables,
             allow_deadlock=self.allow_deadlock)
 
-        for node_id, ni in self._nis.items():
-            for name, mapping in sorted(self.mappings.items()):
-                if mapping['node_id'] not in self._nis:
-                    raise RuntimeError(f'Mapping {name} targets node {mapping["node_id"]}, '
-                        'which is not an NI')
-                ni.get_config().add_mapping(name, base=mapping['base'], size=mapping['size'],
-                    node_id=mapping['node_id'], remove_offset=mapping['remove_offset'])
+        # One memory map for the whole NoC, shared by all the NIs
+        memory_map = FloonocMemoryMapV2()
+        for name, mapping in sorted(self.mappings.items()):
+            if mapping['node_id'] not in self._nis:
+                raise RuntimeError(f'Mapping {name} targets node {mapping["node_id"]}, '
+                    'which is not an NI')
+            memory_map.add_mapping(name, base=mapping['base'], size=mapping['size'],
+                node_id=mapping['node_id'], remove_offset=mapping['remove_offset'])
+        for ni in self._nis.values():
+            ni.get_config().set_memory_map(memory_map)
 
         # One port per link, in port order, named after the neighbour (the
         # links are bound in add_link() through these names). The table maps

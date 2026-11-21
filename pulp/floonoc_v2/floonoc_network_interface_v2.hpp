@@ -172,7 +172,7 @@ private:
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
     int get_req_nw(bool is_wide, bool is_write);
     int get_rsp_nw(bool is_wide, bool is_write);
-    EntryV2 *get_entry(uint64_t base, uint64_t size);
+    const FloonocMappingV2 *get_entry(uint64_t base, uint64_t size);
 
     FloonocNetworkInterfaceV2Config cfg;
 
@@ -182,10 +182,6 @@ private:
     uint64_t max_burst_size;
     uint64_t narrow_width;
     uint64_t wide_width;
-
-    // Memory map, address range -> destination node. Every NI holds the full
-    // table.
-    std::vector<EntryV2> entries;
 
     vp::IoMaster wide_output_itf;
     vp::IoMaster narrow_output_itf;
