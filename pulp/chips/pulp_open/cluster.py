@@ -85,7 +85,8 @@ class Cluster(st.Component):
 
     def __init__(self, parent, name, config_file, cid: int=0, pulpnn=False, nb_fpu=4,
             fp32_latency=0):
-        super(Cluster, self).__init__(parent, name, config=ClusterConfig())
+        config = ClusterConfig()
+        super(Cluster, self).__init__(parent, name, config=config)
 
         #
         # Properties
@@ -102,7 +103,7 @@ class Cluster(st.Component):
 
         # The attribute overrides the chip description, which is what makes it possible to run the
         # same chip with both models and compare them.
-        dma_model = self.get_property('dma_model') or dma_model
+        dma_model = config.dma_model or dma_model
 
         if dma_model not in ['mchan', 'idma']:
             raise RuntimeError(f'Unknown cluster DMA model: {dma_model}')
@@ -134,7 +135,7 @@ class Cluster(st.Component):
         first_external_pcer = 12
         has_ne16 = False       # Because RedMulE is alternative to NE16!!
 
-        has_redmule = self.get_property('has_redmule')
+        has_redmule = config.has_redmule
 
         # How many banks one TCDM access of the DMA spans, as mem_to_banks does in the RTL. The
         # DMA interleaver of the L1 subsystem takes care of the split, so here it only sets the

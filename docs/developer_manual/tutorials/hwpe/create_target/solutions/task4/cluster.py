@@ -78,7 +78,8 @@ class Cluster(st.Component):
     """
 
     def __init__(self, parent, name, config_file, cid: int=0, pulpnn=False):
-        super(Cluster, self).__init__(parent, name, config=ClusterConfig())
+        config = ClusterConfig()
+        super(Cluster, self).__init__(parent, name, config=config)
 
         #
         # Properties
@@ -102,7 +103,7 @@ class Cluster(st.Component):
         first_external_pcer = 12
         has_ne16 = False       # Because RedMulE is alternative to NE16!!
 
-        has_redmule = self.get_property('has_redmule')
+        has_redmule = config.has_redmule
 
         #
         # Components

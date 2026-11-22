@@ -62,7 +62,8 @@ class SocConfig(Config):
 class Soc(st.Component):
 
     def __init__(self, parent, name, attr: SocAttr, parser, config_file, chip, cluster, pim_support=False, pulpnn=False):
-        super(Soc, self).__init__(parent, name, config=SocConfig())
+        soc_config = SocConfig()
+        super(Soc, self).__init__(parent, name, config=soc_config)
 
         #
         # Properties
@@ -78,7 +79,7 @@ class Soc(st.Component):
         udma_conf = self.load_property_file(udma_conf_path)
         fc_events = soc_conf.get_property('peripherals/fc_itc/irq')
 
-        fic = self.get_property('fic')
+        fic = soc_config.fic
 
 
         TargetParameter(
