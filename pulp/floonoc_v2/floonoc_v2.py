@@ -178,6 +178,19 @@ class FloonocNetworkInterfaceV2Config(Config):
         """Make the NI use the memory map of its NoC, shared with the other NIs
         (the compiled tree holds it once)."""
         self.mappings = memory_map.mappings
+        self._shared_memory_map = True
+
+    def add_mapping(self, name: str, base: int, size: int, node_id: int, remove_offset: int=0):
+        """Add a mapping to the memory map of this NI only, for an NI used
+        outside of a NoC (e.g. a test bench). The NIs of a NoC get its shared
+        map with set_memory_map instead."""
+        if getattr(self, '_shared_memory_map', False):
+            raise RuntimeError('Cannot add a mapping to an NI using the shared memory '
+                'map of its NoC, add it to the NoC instead')
+        mapping = FloonocMappingV2(name=name, base=base, size=size, node_id=node_id,
+            remove_offset=remove_offset)
+        mapping.adopt(self)
+        self.mappings.append(mapping)
 
 
 class FloonocMemoryMapV2(Config):
