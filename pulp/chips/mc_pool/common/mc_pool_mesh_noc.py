@@ -16,13 +16,13 @@
 
 # Author: Chi Zhang <chizhang@ethz.ch>
 
-from pulp.floonoc_flex.floonoc_flex import FlooNocFlex
+from pulp.floonoc.floonoc import FlooNoc
 import gvsoc.systree
 
-class McPoolMeshNoc(FlooNocFlex):
-    """FlooNoc Flex instance for a grid of clusters
+class McPoolMeshNoc(FlooNoc):
+    """FlooNoc instance for a grid of clusters
 
-    This instantiates a 2D mesh of FlooNoc Flex routers for a grid of clusters, with XY routing.
+    This instantiates a 2D mesh of FlooNoc routers for a grid of clusters, with XY routing.
     It contains:
      - one router and one network interface for each cluster
      - one network interface on each border position, next to the border routers, for the targets
@@ -100,7 +100,7 @@ class McPoolMeshNoc(FlooNocFlex):
         for src, dst in links:
             self.add_link(src, dst, latency=link_latency)
 
-        self.add_property('nb_nodes', len(node_to_id))
+        self._set_noc_prop('nb_nodes', len(node_to_id))
         self.id_map = node_to_id
         self.generate_routing_tables_dimension_order(node_to_id, first_axis='x')
 
@@ -120,10 +120,8 @@ class McPoolMeshNoc(FlooNocFlex):
 
         The base address is removed from the requests going to the target.
         """
-        name = itf.component.name
-        self.get_property('mappings')[f'wide_{name}'] = {
-            'base': base, 'size': size, 'node_id': node_id, 'remove_offset': base
-        }
+        self.add_mapping(f'wide_{itf.component.name}', base=base, size=size, node_id=node_id,
+            remove_offset=base)
         self.o_WIDE_BIND(itf, node_id)
 
     def o_NARROW_MAP(self, itf: gvsoc.systree.SlaveItf, base: int, size: int, node_id: int):
