@@ -206,6 +206,7 @@ class ClusterUnit(gvsoc.systree.Component):
 
         # Binary Loader
         loader = utils.loader.loader.ElfLoader(self, 'loader', binary=binary, entry=arch.insn_area.base)
+        self.loader = loader
 
         # Originally part of the L3 instruction memory logic in soft_hier/cluster_unit.py
         # L2 Memory

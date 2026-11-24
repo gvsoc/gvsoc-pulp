@@ -31,6 +31,8 @@ from pulp.chips.mc_pool.flex_mesh_noc import FlexMeshNoC
 from pulp.chips.mc_pool.hbm_ctrl import hbm_ctrl
 import memory.dramsys
 import math
+import os
+from gvrun.parameter import TargetParameter
 
 GAPY_TARGET = True
 
@@ -57,14 +59,22 @@ class FlexClusterSystem(gvsoc.systree.Component):
         num_hbm_ctrl_x  = arch.num_cluster_x // arch.num_node_per_ctrl
         num_hbm_ctrl_y  = arch.num_cluster_y // arch.num_node_per_ctrl
 
-        # Get Binary
+        # Get Binary. With the legacy gvsoc launcher, configure() is never called and the binary
+        # comes from the command line, so it must be resolved now. With gvrun, it comes from the
+        # binary parameter and is handled in configure().
+        _ = TargetParameter(
+            self, name='binary', value=None, description='Binary to be loaded and started',
+            cast=str
+        )
         binary = None
         preload_binary = None
         has_preload_binary = 0
-        if parser is not None:
+        if os.environ.get('USE_GVRUN') is None and parser is not None:
             parser.add_argument("--preload", type=str, help="Path to the HBM preload binary file")
             [args, otherArgs] = parser.parse_known_args()
-            binary = args.binary
+            # No --binary when the platform is generated at build time (gvrun
+            # without USE_GVRUN): the binary then comes from the parameter
+            binary = getattr(args, 'binary', None)
             preload_binary = args.preload
             if preload_binary is not None:
                 has_preload_binary = 1
@@ -148,6 +158,7 @@ class FlexClusterSystem(gvsoc.systree.Component):
 
             cluster_list.append(ClusterUnit(self,f'cluster_{cluster_id}', cluster_arch, binary, parser))
             pass
+        self.cluster_list = cluster_list
 
         #Virtual router, just for debugging and non-performance-critical jobs (eg, Printf, EoC, Check HBM stored value)
         virtual_interco = router.Router(self, 'virtual_interco', bandwidth=8)
@@ -329,6 +340,19 @@ class FlexClusterSystem(gvsoc.systree.Component):
             self.bind(hbm_ctrl_list_south[ctrl_id], f'out_{chan_id % ctrl_chan_south}', hbm_chan_list_south[chan_id], 'input')
             pass
 
+        self.register_binary_handler(self.handle_binary)
+
+    def configure(self) -> None:
+        # The binary parameter can be set from the command line or from the build process
+        binary = self.get_parameter('binary')
+        if binary is not None:
+            for cluster in self.cluster_list:
+                cluster.loader.set_binary(binary)
+
+    def handle_binary(self, binary: str):
+        # Called when an executable is attached to a hierarchy of components containing this one
+        self.set_parameter('binary', binary)
+
 
 
 class FlexClusterBoard(gvsoc.systree.Component):
@@ -344,6 +368,10 @@ class FlexClusterBoard(gvsoc.systree.Component):
 
 class Target(gvsoc.runner.Target):
 
-    def __init__(self, parser, options):
+    gapy_description = "Multi-cluster MemPool virtual board"
+    model = FlexClusterBoard
+    name = "mc_pool"
+
+    def __init__(self, parser, options=None, name=None):
         super(Target, self).__init__(parser, options,
-            model=FlexClusterBoard, description="Flex Cluster virtual board")
+            model=FlexClusterBoard, description="Multi-cluster MemPool virtual board", name=name)
