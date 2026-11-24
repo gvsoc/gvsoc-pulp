@@ -839,14 +839,10 @@ G - The flexible FlooNoC: a 3D mesh from a floogen config
 ....................................................................
 Folder: ``G_flexible_floonoc_floogen``
 
-The original FlooNoC's shape (2D mesh, uniform link latency) used to be
-hardcoded in a separate model. FlooNoC and FlooNoC-Flex have since been
-merged: the same ``pulp.floonoc.floonoc.FlooNoc`` class now covers both -
-with no arguments it builds the familiar fixed default 2D mesh (what
-``FlooNocClusterGridNarrowWide`` from section F is built on top of), and
-with a ``network_path`` it instead loads the topology description from a
-`floogen <https://pypi.org/project/floogen/>`_ YAML description. With this,
-you can describe any graph floogen can express, with per-link routing and
+The FlooNoC ``pulp.floonoc.floonoc.FlooNoc`` class covers both the default
+2D mesh (with no arguments) and a flexible topology (with a ``network_path``,
+ it instead loads the topology description from a `floogen <https://pypi.org/project/floogen/>`_
+ YAML description). With this, you can describe any graph floogen can express, with per-link routing and
 timing that a config file controls instead of a hardcoded formula.
 
 .. admonition:: Information - floogen configuration files
