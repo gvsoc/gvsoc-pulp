@@ -839,11 +839,14 @@ G - The flexible FlooNoC: a 3D mesh from a floogen config
 ....................................................................
 Folder: ``G_flexible_floonoc_floogen``
 
-The original FlooNoC's shape (2D mesh, uniform link latency) is hardcoded in
-the GVSoC model. Instead, the flexible FlooNoC model,
-``pulp.FlooNoC_flex.FlooNoC_flex.FlooNoCFlex`` loads the topology description
-from a `floogen <https://pypi.org/project/floogen/>`_ YAML
-description. With this, you can describe any graph floogen can express, with per-link routing and
+The original FlooNoC's shape (2D mesh, uniform link latency) used to be
+hardcoded in a separate model. FlooNoC and FlooNoC-Flex have since been
+merged: the same ``pulp.floonoc.floonoc.FlooNoc`` class now covers both -
+with no arguments it builds the familiar fixed default 2D mesh (what
+``FlooNocClusterGridNarrowWide`` from section F is built on top of), and
+with a ``network_path`` it instead loads the topology description from a
+`floogen <https://pypi.org/project/floogen/>`_ YAML description. With this,
+you can describe any graph floogen can express, with per-link routing and
 timing that a config file controls instead of a hardcoded formula.
 
 .. admonition:: Information - floogen configuration files
@@ -903,7 +906,7 @@ timing that a config file controls instead of a hardcoded formula.
 
    - Nodes are addressed by an integer ``node_id``, looked up by generated
      name in ``noc.id_map`` (e.g. ``noc.id_map['cluster_0_0_0_ni']``).
-   - ``FlooNocFlex(..., network_path=..., routing_path=..., link_latencies_path=...)``
+   - ``FlooNoc(..., network_path=..., routing_path=..., link_latencies_path=...)``
      loads and validates the three YAML files at construction time.
    - ``_mirror(x, y, z)`` returns ``(1-x, 1-y, 1-z)``. Since ``DIM_Z`` is
      only 2, the ``z`` coordinate always flips between a tile and its

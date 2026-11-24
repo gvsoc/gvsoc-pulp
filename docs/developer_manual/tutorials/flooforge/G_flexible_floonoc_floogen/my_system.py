@@ -5,7 +5,7 @@ import gvsoc.systree
 import gvsoc.runner
 
 import vp.clock_domain
-import pulp.floonoc_flex.floonoc_flex
+import pulp.floonoc.floonoc
 import interco.traffic.generator
 from memory.memory import Memory
 
@@ -32,7 +32,7 @@ _ROUTER_RE = re.compile(r'^router_(\d+)_(\d+)_(\d+)$')
 
 
 def _mesh_dims(id_map):
-    """Derives (dim_x, dim_y, dim_z) from the router node names FlooNocFlex
+    """Derives (dim_x, dim_y, dim_z) from the router node names FlooNoc
     parsed out of the generated topology, instead of hardcoding them."""
     coords = [tuple(int(v) for v in m.groups())
         for m in (_ROUTER_RE.match(name) for name in id_map) if m]
@@ -59,7 +59,7 @@ class Soc(gvsoc.systree.Component):
     def __init__(self, parent: gvsoc.systree.Component, name: str):
         super().__init__(parent, name)
 
-        noc = pulp.floonoc_flex.floonoc_flex.FlooNocFlex(
+        noc = pulp.floonoc.floonoc.FlooNoc(
             self, 'noc', narrow_width=8, wide_width=8, ni_outstanding_reqs=32,
             router_input_queue_size=2,
             network_path=os.path.join(TOPOLOGY_DIR, f'{TOPOLOGY_NAME}.floogen.yml'),
