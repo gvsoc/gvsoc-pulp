@@ -20,6 +20,9 @@ import gvsoc.runner
 from pulp.chips.magia_v4.board import MagiaV4Board
 
 class Target(gvsoc.runner.Target):
+    # Every component is configured from the compiled platform tree
+    json_config = False
+
 
     gapy_description="Magia v4 (memory mapped with pulp cluster) board"
     model = MagiaV4Board
