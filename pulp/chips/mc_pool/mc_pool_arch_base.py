@@ -133,7 +133,8 @@ class McPoolArchTensorPool(McPoolArchBase):
         self.cluster_tcdm_size       = (self.num_core_per_cluster * self.bank_factor *
                                         self.bank_size)
         self.axi_data_width          = 64
-        self.dma_burst_queue_size    = 32
+        # Outstanding AXI bursts per DMA back-end
+        self.dma_burst_queue_size    = 8
         self.nb_axi_masters_per_group = 4
         self.instruction_mem_size    = 0x400000
         self.nb_l2_banks             = 4
