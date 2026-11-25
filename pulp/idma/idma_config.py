@@ -55,3 +55,12 @@ class IdmaConfig(Config):
         "Number of transfers of one stream accepted before the middle-end takes them over "
         "(reg32_3d front-end)"
     ))
+    nb_groups: int = cfg_field(default=0, desc=(
+        "Number of groups of back-ends (distributed iDMA)"
+    ))
+    nb_dmas_per_group: int = cfg_field(default=0, desc=(
+        "Number of back-ends per group (distributed iDMA)"
+    ))
+    be_width: int = cfg_field(default=0, desc=(
+        "Size in bytes of the local region handled by one back-end (distributed iDMA)"
+    ))

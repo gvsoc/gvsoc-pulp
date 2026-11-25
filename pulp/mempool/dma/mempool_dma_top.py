@@ -15,7 +15,7 @@
 #
 
 import gvsoc.systree
-from pulp.mempool.idma.mempool_dma import MemPoolDma
+from pulp.idma.distributed_dma import DistributedDma
 from pulp.mempool.dma.mempool_dma_ctrl import MemPoolDmaCtrl
 
 class MemPoolDmaTop(gvsoc.systree.Component):
@@ -34,7 +34,7 @@ class MemPoolDmaTop(gvsoc.systree.Component):
         super().__init__(parent, name)
 
         self.mempool_dma_ctrl = MemPoolDmaCtrl(self, 'mempool_dma_ctrl')
-        self.mempool_dma = MemPoolDma(self, 'mempool_dma', transfer_queue_size=transfer_queue_size, burst_queue_size=burst_queue_size, \
+        self.mempool_dma = DistributedDma(self, 'mempool_dma', transfer_queue_size=transfer_queue_size, burst_queue_size=burst_queue_size, \
                                       burst_size=burst_size, loc_base=loc_base, loc_size=loc_size, tcdm_width=tcdm_width, \
                                       nb_groups=nb_groups, nb_dmas_per_group=nb_dmas_per_group, be_width=be_width)
 

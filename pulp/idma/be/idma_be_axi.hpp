@@ -52,6 +52,8 @@ public:
     ~IDmaBeAxi();
 
     void reset(bool active) override;
+    // Set the top back-end, when it is created after this one
+    void set_be(IdmaBeProducer *be) { this->be = be; }
 
     void update();
     void read_burst(IdmaTransfer *transfer, uint64_t base, uint64_t size) override;
@@ -68,6 +70,8 @@ private:
     static void fsm_handler(vp::Block *__this, vp::ClockEvent *event);
     // Called when an asynchronous response is received from AXI
     static void axi_response(vp::Block *__this, vp::IoReq *req);
+    // Called when a denied request is granted, read bursts can be sent again
+    static void axi_grant(vp::Block *__this, vp::IoReq *req);
     // Once a read burst is finished, it can be enqueued with this function so that it is
     // notified after the latency has elapsed
     void read_handle_req_end(vp::IoReq *req);
@@ -92,9 +96,15 @@ private:
     // Available bursts. Bursts can be allocated until this queue is empty
     std::queue<vp::IoReq *> free_bursts;
 
-    // Bursts which received a response but are waiting proper timestamp to take into
-    // account the returned latency
+    // Read bursts sent to AXI, in order. Their data is pushed to the destination in this order,
+    // once they got their response and its latency has elapsed, since the destination consumes
+    // the data sequentially
     std::queue<vp::IoReq *> read_waiting_bursts;
+    // For each burst, tells if its read response has been received
+    std::vector<bool> read_responded;
+    // True when a read burst was denied by the interconnect: no read burst is sent until it is
+    // granted
+    bool stalled;
     // Bursts sent to destination backend are enqueued here until they are acknowledged and
     // released
     std::queue<vp::IoReq *> read_bursts_waiting_ack;

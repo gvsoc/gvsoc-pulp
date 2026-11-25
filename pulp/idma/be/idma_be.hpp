@@ -230,11 +230,15 @@ public:
      * @param loc_be The local backend, selected when an address falls into the local range.
      * @param ext_be The external backend, selected when an address does not fall into the local
      *  range.
+     * @param name The name of this block, to tell the back-ends apart when there are several.
      */
     IDmaBe(vp::Component *idma, const IdmaConfig &cfg, IdmaTransferProducer *me,
-        IdmaBeConsumer *loc_be_read, IdmaBeConsumer *loc_be_write, IdmaBeConsumer *ext_be_read, IdmaBeConsumer *ext_be_write);
+        IdmaBeConsumer *loc_be_read, IdmaBeConsumer *loc_be_write, IdmaBeConsumer *ext_be_read, IdmaBeConsumer *ext_be_write,
+        std::string name="be");
 
     void reset(bool active);
+    // Set the previous stage, when it is created after this one
+    void set_me(IdmaTransferProducer *me) { this->me = me; }
 
     bool can_accept_transfer() override;
     void enqueue_transfer(IdmaTransfer *transfer) override;

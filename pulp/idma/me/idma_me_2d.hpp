@@ -57,6 +57,8 @@ public:
     void enqueue_transfer(IdmaTransfer *transfer) override;
     void update() override;
     void ack_transfer(IdmaTransfer *transfer) override;
+    // Set the next stage, when it is created after this one
+    void set_be(IdmaTransferConsumer *be) { this->be = be; }
 
 
 private:

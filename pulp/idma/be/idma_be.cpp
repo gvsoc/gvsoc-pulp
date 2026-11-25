@@ -25,8 +25,8 @@
 
 IDmaBe::IDmaBe(vp::Component *idma, const IdmaConfig &cfg, IdmaTransferProducer *me,
     IdmaBeConsumer *loc_be_read, IdmaBeConsumer *loc_be_write,
-    IdmaBeConsumer *ext_be_read, IdmaBeConsumer *ext_be_write)
-:   Block(idma, "be"),
+    IdmaBeConsumer *ext_be_read, IdmaBeConsumer *ext_be_write, std::string name)
+:   Block(idma, name),
     fsm_event(this, &IDmaBe::fsm_handler),
     be_state(*this, "be_state", 32, true, BE_IDLE)
 {

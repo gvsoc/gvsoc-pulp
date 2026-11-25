@@ -46,6 +46,8 @@ public:
 
     void update() override;
     void ack_transfer(IdmaTransfer *transfer) override;
+    // Set the next stage, when it is created after this one
+    void set_me(IdmaTransferConsumer *me) { this->me = me; }
 
 private:
     // Method for offload interface, called when the core is offloading an xdma instruction
