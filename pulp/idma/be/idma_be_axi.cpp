@@ -46,16 +46,23 @@ static inline void stamp_collective_payload(vp::IoReq *req, IdmaTransfer *transf
 
 
 
-IDmaBeAxi::IDmaBeAxi(vp::Component *idma, const IdmaConfig &cfg, std::string itf_name, IdmaBeProducer *be)
+IDmaBeAxi::IDmaBeAxi(vp::Component *idma, const IdmaConfig &cfg, std::string itf_name, IdmaBeProducer *be,
+    bool wait_grant, bool in_order_reads)
 :   Block(idma, itf_name),
     fsm_event(this, &IDmaBeAxi::fsm_handler)
 {
     // Backend will be used later for interaction
     this->be = be;
 
+    this->wait_grant = wait_grant;
+    this->in_order_reads = in_order_reads;
+
     // Declare master port to AXI interface
     this->ico_itf.set_resp_meth(&IDmaBeAxi::axi_response);
-    this->ico_itf.set_grant_meth(&IDmaBeAxi::axi_grant);
+    if (this->wait_grant)
+    {
+        this->ico_itf.set_grant_meth(&IDmaBeAxi::axi_grant);
+    }
     idma->new_master_port(itf_name, &this->ico_itf, this);
 
     // Declare our own trace so that we can individually activate traces
@@ -221,9 +228,12 @@ void IDmaBeAxi::send_read_burst_to_axi()
     // Reinit timings
     req->prepare();
 
-    // Queued in issue order, its data is pushed once its response is there
-    this->read_responded[req->id] = false;
-    this->read_waiting_bursts.push(req);
+    if (this->in_order_reads)
+    {
+        // Queued in issue order, its data is pushed once its response is there
+        this->read_responded[req->id] = false;
+        this->read_waiting_bursts.push(req);
+    }
 
     // Send to AXI interface
     vp::IoReqStatus status = this->ico_itf.req(req);
@@ -239,7 +249,7 @@ void IDmaBeAxi::send_read_burst_to_axi()
         trace.force_warning("Invalid access during AXI read burst (base: 0x%lx, size: 0x%lx)\n",
             req->get_addr(), req->get_size());
     }
-    else if (status == vp::IoReqStatus::IO_REQ_DENIED)
+    else if (status == vp::IoReqStatus::IO_REQ_DENIED && this->wait_grant)
     {
         // The response will come later, but no other read burst can be sent before the grant
         this->stalled = true;
@@ -258,7 +268,16 @@ void IDmaBeAxi::read_handle_req_end(vp::IoReq *req)
     // Remember at which timestamp the burst must be notified
     this->trace.msg(vp::Trace::LEVEL_TRACE, "Handling end of read request (req: %p, latency %d)\n", req, req->get_latency());
     this->read_timestamps[req->id] = this->clock.get_cycles() + req->get_latency();
-    this->read_responded[req->id] = true;
+    if (this->in_order_reads)
+    {
+        // Already queued when it was sent
+        this->read_responded[req->id] = true;
+    }
+    else
+    {
+        // Queue the requests, they will be notified in order.
+        this->read_waiting_bursts.push(req);
+    }
     // Enqueue fsm event at desired timestamp in case the event is not already enqueued before
     this->fsm_event.enqueue(std::max(req->get_latency(), (uint64_t)1));
 }
@@ -431,7 +450,7 @@ void IDmaBeAxi::fsm_handler(vp::Block *__this, vp::ClockEvent *event)
     // In case we have pending read bursts waiting for pushing data, only do it if the backend
     // is ready to accept the data in case the destination is not ready
     if (_this->read_waiting_bursts.size() != 0 &&
-        _this->read_responded[_this->read_waiting_bursts.front()->id] &&
+        (!_this->in_order_reads || _this->read_responded[_this->read_waiting_bursts.front()->id]) &&
         _this->be->is_ready_to_accept_data((IdmaTransfer *)*_this->read_waiting_bursts.front()->arg_get(0)))
     {
         vp::IoReq *req = _this->read_waiting_bursts.front();

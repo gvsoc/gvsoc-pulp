@@ -109,8 +109,12 @@ DistributedDma::DistributedDma(vp::ComponentConf &config)
         {
             int idx = i * nb_dmas_per_group + j;
             std::string suffix = "_" + std::to_string(i) + "_" + std::to_string(j);
-            this->be_axi_read[idx] = new IDmaBeAxi(this, this->cfg, "axi_read" + suffix, nullptr);
-            this->be_axi_write[idx] = new IDmaBeAxi(this, this->cfg, "axi_write" + suffix, nullptr);
+            // As the MemPool DMA: wait for the grant after a denied read burst, and push the read
+            // data in issue order, since the bursts of the back-ends may complete out of order
+            this->be_axi_read[idx] = new IDmaBeAxi(this, this->cfg, "axi_read" + suffix, nullptr,
+                true, true);
+            this->be_axi_write[idx] = new IDmaBeAxi(this, this->cfg, "axi_write" + suffix, nullptr,
+                true, true);
             this->be_tcdm_read[idx] = new IDmaBeTcdm(this, this->cfg, "tcdm_read" + suffix, nullptr);
             this->be_tcdm_write[idx] = new IDmaBeTcdm(this, this->cfg, "tcdm_write" + suffix, nullptr);
             this->be[idx] = new IDmaBe(this, this->cfg, this->me_group_dist[i],
