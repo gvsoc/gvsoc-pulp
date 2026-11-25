@@ -208,7 +208,14 @@ class ClusterUnit(gvsoc.systree.Component):
         data_dumpper_input_size = arch.tcdm_size
 
         # DMA
-        dma = McPoolDma(self, 'dma', loc_base=arch.base, loc_size=arch.tcdm_size + data_dumpper_input_size, tcdm_width=arch.axi_data_width,
+        # Distributed as in the single-cluster MemPool model (and the RTL idma_distributed_midend):
+        # one back-end per DMA port of the MemPool cluster, each owning a region of
+        # 4 x banks-per-group / dmas-per-group bytes of the L1, i.e. the banks of its tiles.
+        nb_banks_per_group = arch.total_cores * arch.bank_factor // arch.nb_groups
+        dma_be_width = 4 * nb_banks_per_group // nb_dmas_per_group
+        dma = McPoolDma(self, 'dma', loc_base=arch.base, loc_size=arch.tcdm_size + data_dumpper_input_size,
+                             burst_size=dma_be_width, tcdm_width=dma_be_width, be_width=dma_be_width,
+                             nb_groups=arch.nb_groups, nb_dmas_per_group=nb_dmas_per_group,
                              burst_queue_size=arch.dma_burst_queue_size)
 
         # Binary Loader
@@ -305,9 +312,9 @@ class ClusterUnit(gvsoc.systree.Component):
         self.bind(cluster_csr, 'cluster_eoc', narrow_axi, 'input')
 
         #DMA data
-        # The TCDM accesses of the DMA and of remote clusters are split over the DMA ports of the
-        # MemPool cluster: L1 is interleaved over the tiles every 32-bit x banks-per-tile bytes,
-        # so each DMA port (sub-group of a group) owns consecutive blocks of its banks.
+        # The TCDM accesses of remote clusters are split over the DMA ports of the MemPool
+        # cluster: L1 is interleaved over the tiles every 32-bit x banks-per-tile bytes, so each
+        # DMA port (sub-group of a group) owns consecutive blocks of its banks.
         nb_dma_ports = arch.nb_groups * nb_dmas_per_group
         banks_per_dma_port = arch.total_cores * arch.bank_factor // nb_dma_ports
         dma_tcdm_split = Interleaver(self, 'dma_tcdm_split', nb_slaves=nb_dma_ports, nb_masters=1,
@@ -316,14 +323,17 @@ class ClusterUnit(gvsoc.systree.Component):
             for j in range(nb_dmas_per_group):
                 self.bind(dma_tcdm_split, f'out_{i * nb_dmas_per_group + j}', mempool_cluster, f'dma_tcdm_{i}_{j}')
 
-        #To emulate distributed backends in groups
-        data_dumpper_arbiter = router.Router(self, 'data_dumpper_arbiter')
-        data_dumpper_arbiter.add_mapping('dma_tcdm')
-        data_dumpper_arbiter.add_mapping('data_dumpper_input', base=data_dumpper_input_base, remove_offset=data_dumpper_input_base, size=data_dumpper_input_size)
-        self.bind(data_dumpper_arbiter, 'dma_tcdm', dma_tcdm_split, 'input')
-        self.bind(data_dumpper_arbiter, 'data_dumpper_input', data_dumpper, 'input')
-        self.bind(dma, 'tcdm_read', data_dumpper_arbiter, 'input')
-        self.bind(dma, 'tcdm_write', data_dumpper_arbiter, 'input')
+        # Each DMA back-end goes to its own DMA port, so that they access their tiles in parallel,
+        # or to the data dumpper, whose window follows the L1 in the local area of the DMA
+        for i in range(arch.nb_groups):
+            for j in range(nb_dmas_per_group):
+                data_dumpper_arbiter = router.Router(self, f'data_dumpper_arbiter_{i}_{j}')
+                data_dumpper_arbiter.add_mapping('dma_tcdm')
+                data_dumpper_arbiter.add_mapping('data_dumpper_input', base=data_dumpper_input_base, remove_offset=data_dumpper_input_base, size=data_dumpper_input_size)
+                self.bind(data_dumpper_arbiter, 'dma_tcdm', mempool_cluster, f'dma_tcdm_{i}_{j}')
+                self.bind(data_dumpper_arbiter, 'data_dumpper_input', data_dumpper, 'input')
+                self.bind(dma, f'tcdm_read_{i}_{j}', data_dumpper_arbiter, 'input')
+                self.bind(dma, f'tcdm_write_{i}_{j}', data_dumpper_arbiter, 'input')
 
         # Wire router for incoming remote cluster TCDM accesses via data NoC
         wide_axi_goto_tcdm = router.Router(self, 'wide_axi_goto_tcdm')
@@ -334,8 +344,10 @@ class ClusterUnit(gvsoc.systree.Component):
         # Wide SoC path for remote cluster TCDM and HBM accesses via data NoC
         wide_axi_from_idma = router.Router(self, 'wide_axi_from_idma')
         wide_axi_from_idma.o_MAP(self.i_WIDE_SOC())
-        self.bind(dma, 'axi_read', wide_axi_from_idma, 'input')
-        self.bind(dma, 'axi_write', wide_axi_from_idma, 'input')
+        for i in range(arch.nb_groups):
+            for j in range(nb_dmas_per_group):
+                self.bind(dma, f'axi_read_{i}_{j}', wide_axi_from_idma, 'input')
+                self.bind(dma, f'axi_write_{i}_{j}', wide_axi_from_idma, 'input')
 
         ################
         ## SYNC BUS   ##
