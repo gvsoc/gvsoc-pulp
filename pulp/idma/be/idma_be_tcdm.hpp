@@ -45,6 +45,8 @@ public:
     IDmaBeTcdm(vp::Component *idma, const IdmaConfig &cfg, std::string itf_name, IdmaBeProducer *be);
 
     void reset(bool active) override;
+    // Set the top back-end, when it is created after this one
+    void set_be(IdmaBeProducer *be) { this->be = be; }
 
     void update();
     void read_burst(IdmaTransfer *transfer, uint64_t base, uint64_t size) override;

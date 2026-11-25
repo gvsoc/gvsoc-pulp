@@ -194,6 +194,8 @@ uint32_t IDmaFeXdma::enqueue_copy(uint32_t config, uint32_t size, bool &granted)
 void IDmaFeXdma::ack_transfer(IdmaTransfer *transfer)
 {
     this->completed_id.inc(1);
+    this->trace.msg(vp::Trace::LEVEL_TRACE, "Transfer completed (id: %d)\n",
+        this->completed_id.get());
     delete transfer;
 }
 
